@@ -54,7 +54,7 @@ Fonte: DOC-004 §3.
 
 ---
 
-## 2. O que já existe hoje (Sprints 1-3, validado)
+## 2. O que já existe hoje (Sprints 1-5, validado)
 
 Isto é 100% real e testado — não é plano, é o que está implementado e a
 correr contra Postgres real.
@@ -267,6 +267,52 @@ Notas importantes para o frontend:
   `backend/OPEN_DECISIONS.md#S03-ELIGIBILITY-001`. Não construir UI que
   assuma um significado clínico específico para estes dois estados ainda.
 
+### 2.6 Sprint 4-5 (Pricing Engine, validado)
+
+Também 100% real e testado (`backend/tests/pricing/`), a correr contra
+Postgres real — não é plano.
+
+- **Rating tables (S4-01):** `POST /api/v1/rating-tables` (`q360.admin` +
+  `pricing-config:manage`), `POST
+  /api/v1/configuration/rating-table/{id}/publish`. Versionado, imutável
+  após publicar.
+- **Motor de pricing (S4-02):** `POST /api/v1/pricing/calculate`
+  (`q360.write` + `quote:calculate`). Determinístico (mesma entrada → mesmo
+  resultado), decimal exacto (nunca float), devolve `PricingResponse` com
+  `components[]` (breakdown) e `versions{}` (rastreio de qual
+  RatingTable/PricingParameterSet/RuleVersion/política de rounding foi
+  usada).
+  ⚠️ **`context` precisa de `ratingTableCode` e `parameterSetCode`** — são
+  obrigatórios (não fazem parte do schema formal do ART-006, que deixa
+  `context` livre) porque nenhum documento associa um Plan a uma
+  RatingTable/PricingParameterSet específica. Ver
+  `backend/OPEN_DECISIONS.md#S04-PRICING-CONTEXT-001` antes de construir
+  qualquer UI que assuma outra forma de resolver isto.
+  ⚠️ **A política de rounding é um placeholder** (`OD-002` continua em
+  aberto) — `roundingPolicyCode`/`roundingPolicyVersion` em `versions{}`
+  identificam exactamente qual, para nunca reinterpretar silenciosamente um
+  cálculo antigo. Ver `backend/OPEN_DECISIONS.md#S04-ROUNDING-001`.
+- **Explainability (S4-04):** `GET /api/v1/pricing/{pricingRunId}/explanation`
+  (`q360.read`) — passos ordenados (`steps[]`) de como o preço foi montado.
+- **Regras de pricing (S5-01):** `RuleVersion` com `ruleDomain: PRICING`
+  (mesmos endpoints `/api/v1/rule-versions` do Sprint 3) pode alimentar
+  ajustes opcionais no cálculo via `context.ruleVersionCode`. ⚠️ Não existe
+  `POST /api/v1/rules/evaluate` (DOC-003 menciona-o, mas não está no
+  ART-006 — DOC-004 §2 dá precedência ao ART-006). ⚠️ "Four-eyes" na
+  publicação de regras está **bloqueado por falta de contrato** — ver
+  `backend/OPEN_DECISIONS.md#S05-RULE-FOUR-EYES-001`.
+- **Cenários de simulação (S5-02):** `POST /api/v1/pricing/scenarios`
+  (`q360.write` + `quote:calculate`) — recalcula com `overrides` sem tocar
+  no `pricingRunId` base.
+- **Validação (S5-03):** o próprio `/pricing/calculate` rejeita
+  configuração ausente (`PRICING-CONFIG`, 422) e resultados
+  negativos/overflow (`PRICING-FAILED`, 422) — não há endpoint nem evento
+  próprios, são estados do mesmo fluxo.
+
+Consola de teste manual disponível no frontend em `/dev/api-console`
+(`src/domains/devconsole/DevApiConsolePage.tsx`) — não é uma página de
+negócio, é só para clicar e ver respostas reais destes endpoints.
+
 ---
 
 ## 3. O que ainda NÃO existe (não construir contra isto ainda)
@@ -276,7 +322,6 @@ fecha o respectivo Gate):
 
 | Sprint | Área desbloqueada | Gate |
 |---|---|---|
-| S4–S5 | Pricing determinístico + regras | G3 |
 | S6 | Cotação (`/api/v1/quotes/...`) | — |
 | S7 | Workflow de subscrição (review/approve/reject) | — |
 | S8 | Documentos/proposta | G4 |

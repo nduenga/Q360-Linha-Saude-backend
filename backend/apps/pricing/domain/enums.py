@@ -15,3 +15,24 @@ class VersionedConfigStatus(str, Enum):
     DRAFT = "DRAFT"
     PUBLISHED = "PUBLISHED"
     RETIRED = "RETIRED"
+
+
+class PricingRunStatus(str, Enum):
+    """ART-012 V015 `ck_pricing_status`; ART-009 PricingRun state machine."""
+
+    REQUESTED = "REQUESTED"
+    CALCULATING = "CALCULATING"
+    CALCULATED = "CALCULATED"
+    FAILED = "FAILED"
+
+
+class PricingComponentType(str, Enum):
+    """ART-012 V016 `ck_pricing_component_type`; ART-006 `PricingComponent.type`."""
+
+    BASE = "BASE"
+    FACTOR = "FACTOR"
+    ADJUSTMENT = "ADJUSTMENT"
+    FEE = "FEE"
+    TAX = "TAX"
+    TOTAL = "TOTAL"
+    OTHER = "OTHER"

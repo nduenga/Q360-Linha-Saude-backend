@@ -1,0 +1,398 @@
+"""Deterministic pricing engine (Q360-S4-02), explainability (Q360-S4-04)
+and scenario simulation (Q360-S5-02).
+
+ART-009 PricingRun state machine: REQUESTED -> CALCULATING ->
+CALCULATED | FAILED (ART-012 V015 `ck_pricing_status`, enforced here by
+always writing REQUESTED then CALCULATING then the terminal state in that
+order, inside one transaction per run).
+
+OPEN DECISION — see OPEN_DECISIONS.md#S04-PRICING-CONTEXT-001: ART-006's
+`PricingCalculateRequest.context` is `additionalProperties: true` with no
+sub-fields fixed by any artifact, and neither `Plan` nor `ProductVersion`
+carries a field naming which `RatingTable`/`PricingParameterSet` applies
+to it. This module therefore requires the caller to name them explicitly
+inside `context` (`ratingTableCode`, `parameterSetCode`, optionally
+`ruleVersionCode`, optionally `members: {<memberId>: {<dimension>: ...}}`)
+— a deliberate, documented convention, not an invented business rule.
+
+OPEN DECISION — see OPEN_DECISIONS.md#S04-ROUNDING-001 (OD-002): the
+rating/rounding *mechanism* below (BASE -> chain of FACTORs, multiplying;
+optional PRICING-rule ADJUSTMENTs, additive; rounded to 2dp at every step)
+is this module's own documented convention for combining the generic
+schema fields (BASE/FACTOR/ADJUSTMENT/FEE/TAX/TOTAL) — no artifact defines
+the actuarial formula, and none is invented: `BASE_PREMIUM` and all
+`RatingFactor`/`PricingRuleConfig` values are test/fixture data (same
+posture as ART-013's GT-PRICE-005 "technical fixture" golden test), never
+real Angolan tariffs (OD-001, still BLOCKED-SPEC).
+"""
+from __future__ import annotations
+
+import datetime
+import uuid
+from decimal import Decimal
+from typing import Any
+
+from django.db import transaction
+from django.utils import timezone
+
+from apps.client.infrastructure.models import InsuredMember
+from apps.foundation.application.audit_service import AuditService
+from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
+from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
+from apps.pricing.domain.enums import PricingComponentType, PricingRunStatus
+from apps.pricing.domain.errors import (
+    PricingCalculationFailedError,
+    PricingConfigError,
+    ReferencedEntityNotFoundError,
+)
+from apps.pricing.domain.money import (
+    PLACEHOLDER_ROUNDING_POLICY_CODE,
+    PLACEHOLDER_ROUNDING_POLICY_VERSION,
+    round_amount,
+)
+from apps.pricing.infrastructure.models import PricingComponent, PricingRun, PricingScenario, PricingTrace
+from apps.pricing.infrastructure.parameter_repository import resolve_decimal_parameter, resolve_pricing_parameter_set
+from apps.pricing.infrastructure.rule_repository import parse_pricing_config, resolve_pricing_rule_version
+from apps.pricing.application.rating_table_service import resolve_factor, resolve_rating_table
+from apps.product.infrastructure.models import Plan, ProductVersion
+
+_audit = AuditService(DjangoAuditRepositoryAdapter())
+
+_BASE_PREMIUM_PARAMETER_CODE = "BASE_PREMIUM"
+
+
+def calculate_pricing(
+    *,
+    product_version_id: uuid.UUID,
+    plan_id: uuid.UUID,
+    effective_date: datetime.date,
+    member_ids: list[uuid.UUID],
+    context: dict[str, Any],
+    correlation_id: str | None,
+) -> PricingRun:
+    request_snapshot = {
+        "productVersionId": str(product_version_id),
+        "planId": str(plan_id),
+        "effectiveDate": effective_date.isoformat(),
+        "memberIds": [str(m) for m in member_ids],
+        "context": context,
+    }
+    return _execute(request_snapshot=request_snapshot, correlation_id=correlation_id)
+
+
+def create_pricing_scenario(
+    *,
+    base_pricing_run: PricingRun,
+    name: str,
+    overrides: dict[str, Any],
+    correlation_id: str | None,
+) -> PricingScenario:
+    """Q360-S5-02: re-runs the calculation with `overrides` merged on top
+    of the base run's original request — never mutates `base_pricing_run`
+    itself ("Não altera quote oficial")."""
+    tenant_id = CurrentTenantProvider.require()
+    actor = CurrentActorProvider.get()
+
+    merged_snapshot = dict(base_pricing_run.input_snapshot_json)
+    for key in ("productVersionId", "planId", "effectiveDate", "memberIds"):
+        if key in overrides:
+            merged_snapshot[key] = overrides[key]
+    if "context" in overrides and isinstance(overrides["context"], dict):
+        merged_snapshot["context"] = {**merged_snapshot.get("context", {}), **overrides["context"]}
+
+    result_run = _execute(request_snapshot=merged_snapshot, correlation_id=correlation_id)
+
+    scenario = PricingScenario.objects.create(
+        tenant_id=tenant_id.value,
+        base_pricing_run=base_pricing_run,
+        name=name,
+        input_override_json=overrides,
+        result_pricing_run=result_run,
+        created_by=actor.actor_id if actor else "unknown",
+    )
+
+    _audit.record(
+        action="pricing_scenario.created",
+        entity_type="PricingScenario",
+        entity_id=str(scenario.id),
+        metadata={
+            "basePricingRunId": str(base_pricing_run.id),
+            "resultPricingRunId": str(result_run.id),
+        },
+    )
+    return scenario
+
+
+def get_pricing_run(pricing_run_id: uuid.UUID) -> PricingRun | None:
+    return PricingRun.objects.filter(id=pricing_run_id).first()
+
+
+def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) -> PricingRun:
+    tenant_id = CurrentTenantProvider.require()
+
+    product_version_id = uuid.UUID(str(request_snapshot["productVersionId"]))
+    plan_id = uuid.UUID(str(request_snapshot["planId"]))
+    effective_date = datetime.date.fromisoformat(str(request_snapshot["effectiveDate"]))
+    member_ids = [uuid.UUID(str(m)) for m in request_snapshot["memberIds"]]
+    context: dict[str, Any] = request_snapshot.get("context") or {}
+
+    rating_table_code = context.get("ratingTableCode")
+    parameter_set_code = context.get("parameterSetCode")
+    if not rating_table_code or not parameter_set_code:
+        raise ReferencedEntityNotFoundError(
+            "context.ratingTableCode and context.parameterSetCode are required "
+            "(see apps/pricing/application/pricing_engine.py OPEN DECISION)"
+        )
+
+    product_version = ProductVersion.objects.filter(id=product_version_id).first()
+    plan = Plan.objects.filter(id=plan_id, product_version_id=product_version_id).first()
+    if product_version is None or plan is None:
+        raise ReferencedEntityNotFoundError("Referenced productVersionId or planId does not exist for this tenant")
+
+    if not member_ids:
+        raise ReferencedEntityNotFoundError("memberIds must contain at least one member")
+    members = list(InsuredMember.objects.filter(id__in=member_ids))
+    members_by_id = {str(m.id): m for m in members}
+    missing = [str(m) for m in member_ids if str(m) not in members_by_id]
+    if missing:
+        raise ReferencedEntityNotFoundError(f"Unknown memberIds: {', '.join(missing)}")
+
+    rating_table = resolve_rating_table(code=rating_table_code, effective_date=effective_date)
+    if rating_table is None:
+        raise PricingConfigError(f"No published RatingTable '{rating_table_code}' effective on {effective_date}")
+    if not rating_table.currency_code:
+        raise PricingConfigError(f"RatingTable '{rating_table_code}' has no currencyCode")
+
+    parameter_set = resolve_pricing_parameter_set(code=parameter_set_code, effective_date=effective_date)
+    if parameter_set is None:
+        raise PricingConfigError(
+            f"No published PricingParameterSet '{parameter_set_code}' effective on {effective_date}"
+        )
+    base_premium = resolve_decimal_parameter(parameter_set, _BASE_PREMIUM_PARAMETER_CODE)
+    if base_premium is None:
+        raise PricingConfigError(
+            f"PricingParameterSet '{parameter_set_code}' has no DECIMAL parameter '{_BASE_PREMIUM_PARAMETER_CODE}'"
+        )
+
+    rule_version = None
+    rule_config = None
+    rule_version_code = context.get("ruleVersionCode")
+    if rule_version_code:
+        rule_version = resolve_pricing_rule_version(code=rule_version_code, effective_date=effective_date)
+        if rule_version is None:
+            raise PricingConfigError(f"No published PRICING RuleVersion '{rule_version_code}' effective on {effective_date}")
+        rule_config = parse_pricing_config(rule_version)
+
+    per_member_context: dict[str, dict[str, Any]] = context.get("members") or {}
+
+    pricing_run = PricingRun.objects.create(
+        tenant_id=tenant_id.value,
+        product_version=product_version,
+        plan=plan,
+        rating_table=rating_table,
+        parameter_set=parameter_set,
+        rule_version=rule_version,
+        status=PricingRunStatus.REQUESTED.value,
+        effective_date=effective_date,
+        currency_code=rating_table.currency_code,
+        rounding_policy_code=PLACEHOLDER_ROUNDING_POLICY_CODE,
+        rounding_policy_version=PLACEHOLDER_ROUNDING_POLICY_VERSION,
+        input_snapshot_json=request_snapshot,
+        correlation_id=correlation_id,
+    )
+
+    try:
+        with transaction.atomic():
+            PricingRun.objects.filter(id=pricing_run.id).update(
+                status=PricingRunStatus.CALCULATING.value, started_at=timezone.now()
+            )
+            total_amount = _run_calculation(
+                pricing_run=pricing_run,
+                tenant_id=tenant_id.value,
+                members=members,
+                member_ids=member_ids,
+                per_member_context=per_member_context,
+                rating_table_code=rating_table_code,
+                base_premium=base_premium,
+                rule_config=rule_config,
+            )
+            PricingRun.objects.filter(id=pricing_run.id).update(
+                status=PricingRunStatus.CALCULATED.value,
+                total_amount=total_amount,
+                completed_at=timezone.now(),
+            )
+    except PricingCalculationFailedError as exc:
+        PricingRun.objects.filter(id=pricing_run.id).update(
+            status=PricingRunStatus.FAILED.value,
+            failure_code=exc.problem_code,
+            failure_message_safe=str(exc),
+            completed_at=timezone.now(),
+        )
+        _audit.record(
+            action="pricing_run.failed",
+            entity_type="PricingRun",
+            entity_id=str(pricing_run.id),
+            metadata={"failureCode": exc.problem_code},
+        )
+        raise
+
+    pricing_run.refresh_from_db()
+    _audit.record(
+        action="pricing_run.calculated",
+        entity_type="PricingRun",
+        entity_id=str(pricing_run.id),
+        metadata={"totalAmount": str(pricing_run.total_amount), "currencyCode": pricing_run.currency_code},
+    )
+    return pricing_run
+
+
+def _run_calculation(
+    *,
+    pricing_run: PricingRun,
+    tenant_id,
+    members: list[InsuredMember],
+    member_ids: list[uuid.UUID],
+    per_member_context: dict[str, dict[str, Any]],
+    rating_table_code: str,
+    base_premium: Decimal,
+    rule_config,
+) -> Decimal:
+    members_by_id = {str(m.id): m for m in members}
+    order = 0
+    trace_seq = 0
+    total_amount = Decimal("0")
+
+    def trace(step_code: str, *, rule_code: str | None = None, input_data=None, output_data=None, message=None):
+        nonlocal trace_seq
+        PricingTrace.objects.create(
+            tenant_id=tenant_id,
+            pricing_run=pricing_run,
+            sequence_no=trace_seq,
+            step_code=step_code,
+            rule_code=rule_code,
+            input_json=input_data,
+            output_json=output_data,
+            message=message,
+        )
+        trace_seq += 1
+
+    trace(
+        "CONTEXT_RESOLVED",
+        output_data={"ratingTableCode": rating_table_code, "basePremium": str(base_premium)},
+    )
+
+    # Preserve the caller's requested memberIds order for determinism
+    # (same input -> same component order -> same output, S4-02 AC).
+    for member_id in member_ids:
+        member = members_by_id[str(member_id)]
+        member_context = per_member_context.get(str(member_id), {})
+
+        running_amount = round_amount(base_premium)
+        _guard_amount(running_amount)
+        PricingComponent.objects.create(
+            tenant_id=tenant_id,
+            pricing_run=pricing_run,
+            member=member,
+            component_order=order,
+            component_code=_BASE_PREMIUM_PARAMETER_CODE,
+            component_type=PricingComponentType.BASE.value,
+            base_amount=running_amount,
+            result_amount=running_amount,
+        )
+        trace(
+            "BASE_APPLIED",
+            input_data={"memberId": str(member_id), "basePremium": str(base_premium)},
+            output_data={"resultAmount": str(running_amount)},
+        )
+        order += 1
+
+        factor_codes = sorted(
+            pricing_run.rating_table.factors.values_list("factor_code", flat=True).distinct()
+        )
+        for factor_code in factor_codes:
+            factor = resolve_factor(
+                rating_table=pricing_run.rating_table, factor_code=factor_code, context=member_context
+            )
+            if factor is None:
+                continue
+            running_amount = round_amount(running_amount * factor.factor_value)
+            _guard_amount(running_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id,
+                pricing_run=pricing_run,
+                member=member,
+                component_order=order,
+                component_code=factor_code,
+                component_type=PricingComponentType.FACTOR.value,
+                factor_value=factor.factor_value,
+                result_amount=running_amount,
+                source_code=pricing_run.rating_table.code,
+                source_version=str(pricing_run.rating_table.version_no),
+            )
+            trace(
+                "FACTOR_APPLIED",
+                rule_code=factor_code,
+                input_data={"memberId": str(member_id), "factorValue": str(factor.factor_value)},
+                output_data={"resultAmount": str(running_amount)},
+            )
+            order += 1
+
+        if rule_config is not None:
+            for adjustment in rule_config.adjustments:
+                if not adjustment.matches(member_context):
+                    continue
+                running_amount = round_amount(running_amount + adjustment.amount)
+                _guard_amount(running_amount)
+                PricingComponent.objects.create(
+                    tenant_id=tenant_id,
+                    pricing_run=pricing_run,
+                    member=member,
+                    component_order=order,
+                    component_code=adjustment.code,
+                    component_type=PricingComponentType.ADJUSTMENT.value,
+                    adjustment_amount=adjustment.amount,
+                    result_amount=running_amount,
+                    source_code=pricing_run.rule_version.rule_set.code if pricing_run.rule_version else None,
+                    source_version=str(pricing_run.rule_version.version_no) if pricing_run.rule_version else None,
+                )
+                trace(
+                    "ADJUSTMENT_APPLIED",
+                    rule_code=adjustment.code,
+                    input_data={"memberId": str(member_id), "amount": str(adjustment.amount)},
+                    output_data={"resultAmount": str(running_amount)},
+                )
+                order += 1
+
+        total_amount += running_amount
+
+    total_amount = round_amount(total_amount)
+    PricingComponent.objects.create(
+        tenant_id=tenant_id,
+        pricing_run=pricing_run,
+        member=None,
+        component_order=order,
+        component_code="TOTAL",
+        component_type=PricingComponentType.TOTAL.value,
+        result_amount=total_amount,
+    )
+    trace("TOTAL_COMPUTED", output_data={"totalAmount": str(total_amount)})
+    return total_amount
+
+
+#: `pricing_run.total_amount`/`pricing_component.*_amount` are
+#: `numeric(30,8)` (ART-012 V015/V016) — up to 22 integer digits. This
+#: ceiling is a deliberately conservative safety guard well inside that
+#: capacity, not a business limit: catching a runaway multiplication
+#: before it reaches actual column overflow (Q360-S5-03 "overflow").
+_OVERFLOW_GUARD = Decimal("1000000000000")  # 10^12
+
+
+def _guard_amount(amount: Decimal) -> None:
+    """Q360-S5-03 validation pipeline: a negative running amount can never
+    be a valid premium contribution, and an amount beyond `_OVERFLOW_GUARD`
+    signals a runaway calculation (e.g. a misconfigured factor chain) —
+    both fail the run rather than persist or return a bad price."""
+    if amount < 0:
+        raise PricingCalculationFailedError("Calculation produced a negative amount")
+    if amount > _OVERFLOW_GUARD:
+        raise PricingCalculationFailedError("Calculation exceeded the safety overflow guard")

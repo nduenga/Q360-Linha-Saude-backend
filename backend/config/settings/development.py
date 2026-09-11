@@ -9,4 +9,15 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 # ports ART-012 DDL verbatim (schemas, jsonb, CHECK constraints) and cannot
 # run on SQLite — a SQLite fallback would let `migrate` "succeed" against a
 # schema that silently diverges from ART-005/ART-012, which is exactly what
-# DOC-000 s3 P-08 forbids. Run `docker compose up db` for a local instance.
+# DOC-000 s3 P-08 forbids.
+#
+# Fast local dev does NOT require Docker: a native PostgreSQL install on
+# the host (POSTGRES_HOST=localhost, POSTGRES_PORT=5432 in .env) works
+# identically, since the schema/DDL is the same either way. `docker compose
+# up db` remains available for anyone who prefers a disposable container
+# instead - see ../../DEV_SETUP.md.
+
+# Vite's default dev server port. Overridable/extendable via
+# CORS_ALLOWED_ORIGINS in .env without touching this file.
+if not CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]

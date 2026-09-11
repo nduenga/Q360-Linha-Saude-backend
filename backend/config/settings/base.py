@@ -3,7 +3,17 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+# Fast local dev (no Docker): loads backend/.env into the process so
+# `manage.py runserver` picks up POSTGRES_*/OIDC_*/CORS_* without having to
+# export them by hand every session - see DEV_SETUP.md. `override=False`
+# (the default) means real environment variables set by docker-compose or
+# a production host always win; this is a convenience layered underneath
+# them, never a replacement.
+load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
@@ -18,6 +28,7 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "rest_framework",
+    "corsheaders",
     "apps.foundation",
     "apps.product",
     "apps.client",
@@ -28,11 +39,33 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Must run before CommonMiddleware (django-cors-headers requirement).
+    # Not an ART-006 concern: the contract is silent on browser origins, this
+    # is pure local/deployment wiring so the separately-built React frontend
+    # (a different origin in dev: Vite on :5173 vs Django on :8000) can call
+    # the API at all. CORS_ALLOWED_ORIGINS is empty by default (nothing
+    # allowed) unless an environment explicitly sets it - see development.py
+    # and production.py.
+    "corsheaders.middleware.CorsMiddleware",
     "apps.foundation.interfaces.middleware.CorrelationIdMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.foundation.interfaces.middleware.ActorContextCleanupMiddleware",
+]
+
+CORS_ALLOWED_ORIGINS = [
+    origin for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if origin
+]
+# The frontend sends Authorization/Idempotency-Key/X-Correlation-Id, none of
+# which are in the CORS-safelisted header set, so they must be listed
+# explicitly or the browser preflight (OPTIONS) rejects the real request.
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "idempotency-key",
+    "x-correlation-id",
 ]
 
 # The `q360` schema (ART-005/ART-012) owns all business tables. `public` is

@@ -150,3 +150,102 @@
   **Action needed:** Product Owner/Actuarial to define real referral/warning
   criteria semantics before Sprint 7 (where REFERRAL feeds manual
   underwriting review) depends on this being more than a placeholder.
+
+- **S04-ROUNDING-001 — OPEN (OD-002, ART-006 `x-q360-open-decisions`):** no
+  approved document fixes the official currency/rounding policy. ART-013's
+  only "official" pricing golden test (`golden/PENDING_OD_pricing_template.json`,
+  caseId `GT-PRICE-OFFICIAL-001`) is itself `status: PENDING_OD`, blocked on
+  OD-001/OD-002 — confirming this is genuinely unresolved, not an oversight.
+  `apps/pricing/domain/money.py` implements an explicit, versioned,
+  swappable placeholder (`OD-002-PLACEHOLDER-HALF-UP-2DP`, `ROUND_HALF_UP`
+  to 2dp, applied at every component, not just the final total — so
+  `PricingResponse.totalAmount` always reconciles exactly against the sum
+  of visible components) instead of an implicit float truncation, satisfying
+  Q360-S4-03's actual acceptance criteria ("rounding mode explícito", "total
+  reconcilia") without pretending a business decision has been made. Every
+  `PricingRun` records the policy code+version it used, so a future real
+  policy never silently reinterprets a past run.
+  **Action needed:** Product Owner/Actuarial must approve OD-001 (tariffs)
+  and OD-002 (rounding) before any real (non-fixture) pricing output can be
+  trusted; `BASE_PREMIUM`/`RatingFactor`/`PricingAdjustment` values used in
+  tests are all fixture data (same posture as ART-013's GT-PRICE-005
+  "technical fixture" golden test), never real Angolan tariffs.
+
+- **S04-PRICING-CONTEXT-001 — judgment call, not pinned by any document
+  (Q360-S4-02):** ART-006's `PricingCalculateRequest.context` is
+  `additionalProperties: true` with no sub-fields fixed by any artifact, and
+  neither `Plan` nor `ProductVersion` carries a field naming which
+  `RatingTable`/`PricingParameterSet` applies to it — there is no other way
+  to resolve them. `apps/pricing/application/pricing_engine.py` requires the
+  caller to name them explicitly inside `context`: `ratingTableCode`
+  (required), `parameterSetCode` (required), `ruleVersionCode` (optional,
+  rule_domain=PRICING), `members: {<memberId>: {<dimension>: value}}`
+  (optional, per-member factor-matching dimensions, e.g. `{"ageBand":
+  "30-39"}`). Missing `ratingTableCode`/`parameterSetCode` is rejected as
+  `VALIDATION-400` before any `PricingRun` row is created.
+  Also **this module's own convention, not an invented business rule**: the
+  rating chain is BASE (`PricingParameterSet` parameter code
+  `BASE_PREMIUM`, DECIMAL) → each distinct `RatingFactor.factor_code` on the
+  resolved `RatingTable`, applied multiplicatively in code order → optional
+  PRICING `RuleVersion` adjustments (additive) — see S05-PRICING-RULES-001.
+  **Action needed:** if/when ART-006 or DOC-003 defines a fixed way to
+  associate a Plan with its RatingTable/PricingParameterSet, replace this
+  `context`-based convention with that instead of maintaining both.
+
+- **S04-CROSS-MODULE-001 — pre-existing pattern, extended, not newly
+  introduced (Q360-S4-02):** DOC-004 s3 states "Não introduzir dependência
+  entre módulos através de tabelas/repositórios internos de outro módulo;
+  usar application ports/contracts" — strictly, this calls for a
+  port/adapter per module boundary. `apps.eligibility.application.use_cases`
+  already imports `apps.product.infrastructure.models` (`Plan`,
+  `ProductVersion`) and `apps.client.infrastructure.models` (`InsuredMember`,
+  `Proposer`) directly (Sprint 3, already shipped and audited). The pricing
+  engine (`apps/pricing/application/pricing_engine.py`,
+  `apps/pricing/infrastructure/models.py`) does the same for the same
+  entities plus `apps.product.infrastructure.models.PricingParameterSet`,
+  for consistency with the already-shipped pattern rather than introducing
+  a second, inconsistent style (ports for pricing, direct imports for
+  eligibility) without a broader refactor.
+  **Action needed:** a future pass could introduce real
+  `application/ports.py` contracts for these cross-module reads across both
+  `eligibility` and `pricing` together — flagged as technical debt, not
+  blocking any current story.
+
+- **S05-PRICING-RULES-001 — judgment call, mirrors S03-ELIGIBILITY-001
+  (Q360-S5-01):** no approved artifact defines what a "Drools rule" actually
+  contains for pricing. DOC-003's S5-01 says "Drools integration + rule
+  resolver", but ART-006's `RuleSetVersionRequest` only ever carries an
+  opaque `artifactRef`/`artifactChecksum` pointer (`artifactType`: DRL /
+  DECISION_TABLE / JSON / INTERNAL) — no artifact ships an executable rule
+  DSL or its semantics. `apps/pricing/domain/pricing_rules.py`
+  (`PricingRuleConfig`/`PricingAdjustment`) is this repo's own minimal,
+  generic, additive-adjustment placeholder — same posture and same
+  transparency as `EligibilityRuleConfig`/`Criterion`. A published PRICING
+  RuleVersion's `artifact_ref` (artifact_type=JSON) is parsed as
+  `{"adjustments": [{"code", "when": {dims}, "amount": "decimal-string"}]}`;
+  an adjustment applies (additively) when its `when` dict is satisfied by
+  the member's calculation context.
+  **Action needed:** Product/Actuarial to define the real pricing rule
+  semantics (and, separately, whether an actual Drools/DMN engine is even
+  in scope for V1) before this placeholder is asked to carry real business
+  logic.
+
+- **S05-RULE-FOUR-EYES-001 — OPEN, structurally blocked (Q360-S5-01
+  Security/Observability AC "Four-eyes para publicação"):** ART-012 V013
+  already has `rule_version.approved_by` and a `CHECK
+  (approved_by IS NULL OR published_by IS NULL OR approved_by <>
+  published_by)` — the schema anticipates a maker-checker flow. However
+  ART-006's `POST /api/v1/configuration/{configType}/{configId}/publish`
+  (the only publish endpoint, shared by rating-table/pricing-parameter-set/
+  rule-version) has **no request body at all** — no field exists anywhere
+  in ART-006 to convey "who approved this" separately from "who is
+  publishing this now", and no second endpoint (e.g. a distinct `/approve`
+  step) exists either. `publish_rule_version`
+  (`apps/foundation/application/rule_service.py`) therefore never populates
+  `approved_by` (it stays `NULL`, which the CHECK permits) — implementing a
+  real two-actor gate would mean inventing an undocumented request field or
+  endpoint, which DOC-000's golden rule and DOC-004 s2 ("ART-006 é
+  autoridade final do HTTP") both forbid.
+  **Action needed:** Product Owner/Tech Lead must raise a Change Request
+  against ART-006 (new field on the publish request, or a distinct approval
+  endpoint) before four-eyes can be enforced for RuleVersion publication.
