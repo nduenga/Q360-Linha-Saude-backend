@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+*.egg-info/
+
+# Django
+backend/media/
+staticfiles/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Editors
+.idea/
+.vscode/
+
+# Node / frontend (owned by another repo/person; ignored here defensively
+# in case it is ever added under this same root)
+node_modules/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db

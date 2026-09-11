@@ -1,0 +1,17 @@
+{
+  "caseId": "GT-WF-003",
+  "checksum": "77d03cb2edcc489dc9c485698ca358fdde59c63d39e1622541cbfaaa33bf0e56",
+  "expected": {
+    "businessEffects": 0,
+    "code": "SEC-403",
+    "httpStatus": 403,
+    "quoteState": "IN_REVIEW"
+  },
+  "inputSnapshot": {
+    "decidedBy": "actor-001",
+    "decision": "APPROVE",
+    "quoteState": "IN_REVIEW",
+    "submittedBy": "actor-001"
+  },
+  "type": "workflow-security"
+}

@@ -1,0 +1,22 @@
+{
+  "caseId": "GT-PRICE-OFFICIAL-001",
+  "status": "PENDING_OD",
+  "requires": [
+    "OD-001",
+    "OD-002"
+  ],
+  "inputSnapshot": {
+    "REPLACE_WITH_APPROVED_INPUT": true
+  },
+  "versions": {
+    "productVersionId": "REQUIRED",
+    "ratingTableId": "REQUIRED",
+    "parameterSetId": "REQUIRED",
+    "ruleVersionId": "REQUIRED",
+    "roundingPolicyVersion": "REQUIRED"
+  },
+  "currency": "REQUIRED_APPROVED_VALUE",
+  "expectedComponents": "REQUIRED_APPROVED_VALUES",
+  "expectedTotal": "REQUIRED_APPROVED_VALUE",
+  "expectedEvidence": "REQUIRED_APPROVED_RULE_EVIDENCE"
+}

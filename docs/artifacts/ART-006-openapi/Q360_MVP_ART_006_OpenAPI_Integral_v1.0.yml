@@ -1,0 +1,3180 @@
+openapi: 3.1.0
+info:
+  title: Q360 Health Underwriting & Pricing Core API
+  version: 1.0.0
+  description: Q360-MVP-ART-006 — contrato HTTP normativo do V1. Não inclui funcionalidades V2 nem valores comerciais não
+    aprovados.
+servers:
+- url: https://api.example.invalid/q360
+  description: Placeholder; substituir por endpoint aprovado por ambiente
+tags:
+- name: Identity
+- name: Products
+- name: Plans
+- name: Configuration
+- name: Clients
+- name: Population
+- name: Eligibility
+- name: Pricing
+- name: Quotes
+- name: Underwriting
+- name: Documents
+- name: Audit
+security:
+- oauth2:
+  - q360.read
+paths:
+  /api/v1/me:
+    get:
+      tags:
+      - Identity
+      operationId: getCurrentActor
+      summary: Obter actor, tenant, roles e permissões
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActorContext'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+  /api/v1/products:
+    get:
+      tags:
+      - Products
+      operationId: listProducts
+      summary: Listar produtos
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPage'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+    post:
+      tags:
+      - Products
+      operationId: createProduct
+      summary: Criar produto
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreateRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/products/{productId}:
+    get:
+      tags:
+      - Products
+      operationId: getProduct
+      summary: Obter produto
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: productId
+        in: path
+        required: true
+        schema: &id001
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+    put:
+      tags:
+      - Products
+      operationId: updateProduct
+      summary: Actualizar produto
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: productId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductUpdateRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/products/{productId}/versions:
+    post:
+      tags:
+      - Products
+      operationId: createProductVersion
+      summary: Criar versão de produto
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: productId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductVersion'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductVersionCreateRequest'
+      security:
+      - oauth2:
+        - q360.admin
+  /api/v1/product-versions/{versionId}/publish:
+    post:
+      tags:
+      - Products
+      operationId: publishProductVersion
+      summary: Publicar versão de produto
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: versionId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductVersion'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.admin
+  /api/v1/plans:
+    get:
+      tags:
+      - Plans
+      operationId: listPlans
+      summary: Listar planos
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/Size'
+      - name: productVersionId
+        in: query
+        schema: *id001
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanPage'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+    post:
+      tags:
+      - Plans
+      operationId: createPlan
+      summary: Criar plano
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanCreateRequest'
+      security:
+      - oauth2:
+        - q360.admin
+  /api/v1/plans/{planId}:
+    get:
+      tags:
+      - Plans
+      operationId: getPlan
+      summary: Obter plano
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: planId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Plan'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+  /api/v1/pricing-parameter-sets:
+    post:
+      tags:
+      - Configuration
+      operationId: createPricingParameterSet
+      summary: Criar PricingParameterSet
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedConfigHeader'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricingParameterSetRequest'
+      security:
+      - oauth2:
+        - q360.admin
+  /api/v1/rating-tables:
+    post:
+      tags:
+      - Configuration
+      operationId: createRatingTable
+      summary: Criar RatingTable
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedConfigHeader'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RatingTableRequest'
+      security:
+      - oauth2:
+        - q360.admin
+  /api/v1/rule-versions:
+    post:
+      tags:
+      - Configuration
+      operationId: createRuleVersion
+      summary: Criar RuleVersion
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedConfigHeader'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuleSetVersionRequest'
+      security:
+      - oauth2:
+        - q360.admin
+  /api/v1/configuration/{configType}/{configId}/publish:
+    post:
+      tags:
+      - Configuration
+      operationId: publishConfiguration
+      summary: Publicar configuração versionada
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: configType
+        in: path
+        required: true
+        schema:
+          enum:
+          - pricing-parameter-set
+          - rating-table
+          - rule-version
+      - name: configId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedConfigHeader'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.admin
+  /api/v1/proposers:
+    get:
+      tags:
+      - Clients
+      operationId: listProposers
+      summary: Listar proponentes
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/Size'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProposerPage'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+    post:
+      tags:
+      - Clients
+      operationId: createProposer
+      summary: Criar proponente
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposer'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposerCreateRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/proposers/{proposerId}:
+    get:
+      tags:
+      - Clients
+      operationId: getProposer
+      summary: Obter proponente
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: proposerId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposer'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+    put:
+      tags:
+      - Clients
+      operationId: updateProposer
+      summary: Actualizar proponente
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: proposerId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Proposer'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposerUpdateRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/members:
+    get:
+      tags:
+      - Population
+      operationId: listMembers
+      summary: Listar membros
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/Size'
+      - name: proposerId
+        in: query
+        schema: *id001
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberPage'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+    post:
+      tags:
+      - Population
+      operationId: createMember
+      summary: Criar membro
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberCreateRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/members/{memberId}:
+    get:
+      tags:
+      - Population
+      operationId: getMember
+      summary: Obter membro
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: memberId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+    put:
+      tags:
+      - Population
+      operationId: updateMember
+      summary: Actualizar membro
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: memberId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberUpdateRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/member-imports:
+    post:
+      tags:
+      - Population
+      operationId: uploadMemberImport
+      summary: Carregar população para validação
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - file
+              properties:
+                proposerId: *id001
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '202':
+          description: Aceite
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJob'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/member-imports/{importId}:
+    get:
+      tags:
+      - Population
+      operationId: getMemberImport
+      summary: Consultar estado da importação
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: importId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJob'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+  /api/v1/member-imports/{importId}/commit:
+    post:
+      tags:
+      - Population
+      operationId: commitMemberImport
+      summary: Confirmar importação validada
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: importId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Aceite
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportJob'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportCommitRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/eligibility/evaluate:
+    post:
+      tags:
+      - Eligibility
+      operationId: evaluateEligibility
+      summary: Avaliar elegibilidade V1
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EligibilityResponse'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EligibilityRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/pricing/calculate:
+    post:
+      tags:
+      - Pricing
+      operationId: calculatePricing
+      summary: Executar pricing determinístico
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingResponse'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricingCalculateRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/pricing/{pricingRunId}/explanation:
+    get:
+      tags:
+      - Pricing
+      operationId: getPricingExplanation
+      summary: Obter explainability do cálculo
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: pricingRunId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingExplanation'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+  /api/v1/pricing/scenarios:
+    post:
+      tags:
+      - Pricing
+      operationId: createPricingScenario
+      summary: Criar cenário de simulação
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingResponse'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PricingScenarioRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/quotes:
+    get:
+      tags:
+      - Quotes
+      operationId: listQuotes
+      summary: Listar cotações
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/Size'
+      - name: status
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotePage'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+    post:
+      tags:
+      - Quotes
+      operationId: createQuote
+      summary: Criar cotação DRAFT
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteCreateRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/quotes/{quoteId}:
+    get:
+      tags:
+      - Quotes
+      operationId: getQuote
+      summary: Obter cotação
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+    put:
+      tags:
+      - Quotes
+      operationId: updateQuote
+      summary: Actualizar campos permitidos da cotação
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteUpdateRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/quotes/{quoteId}/members:
+    post:
+      tags:
+      - Quotes
+      operationId: addQuoteMember
+      summary: Adicionar membro à cotação
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteMemberRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/quotes/{quoteId}/members/{memberId}:
+    delete:
+      tags:
+      - Quotes
+      operationId: removeQuoteMember
+      summary: Remover membro da cotação
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      - name: memberId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Removido
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/quotes/{quoteId}/price:
+    post:
+      tags:
+      - Quotes
+      operationId: priceQuote
+      summary: Calcular/recalcular cotação e criar snapshot
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PricingResponse'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuotePriceRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/quotes/{quoteId}/submit:
+    post:
+      tags:
+      - Underwriting
+      operationId: submitQuote
+      summary: Submeter cotação para revisão
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteSubmitRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/quotes/{quoteId}/review:
+    get:
+      tags:
+      - Underwriting
+      operationId: getQuoteReview
+      summary: Obter tarefa de revisão
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewTask'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+  /api/v1/quotes/{quoteId}/decision:
+    post:
+      tags:
+      - Underwriting
+      operationId: decideQuote
+      summary: Aprovar, rejeitar ou devolver; four-eyes obrigatório
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+      security:
+      - oauth2:
+        - q360.approve
+  /api/v1/quotes/{quoteId}/history:
+    get:
+      tags:
+      - Underwriting
+      operationId: getQuoteHistory
+      summary: Obter histórico de estados
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StateHistoryItem'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+  /api/v1/quotes/{quoteId}/proposal:
+    post:
+      tags:
+      - Documents
+      operationId: generateQuoteProposal
+      summary: Solicitar geração da proposta a partir de snapshot autorizado
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '202':
+          description: Aceite
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.write
+    get:
+      tags:
+      - Documents
+      operationId: getQuoteProposal
+      summary: Consultar documento da proposta
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.read
+  /api/v1/quotes/{quoteId}/cancel:
+    post:
+      tags:
+      - Quotes
+      operationId: cancelQuote
+      summary: Cancelar cotação quando a state machine permitir
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: quoteId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelQuoteRequest'
+      security:
+      - oauth2:
+        - q360.write
+  /api/v1/reviews:
+    get:
+      tags:
+      - Underwriting
+      operationId: listReviews
+      summary: Listar fila de revisão
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/Size'
+      - name: status
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewTaskPage'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.approve
+  /api/v1/audit-events:
+    get:
+      tags:
+      - Audit
+      operationId: listAuditEvents
+      summary: Consultar trilho de auditoria
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/Size'
+      - name: entityType
+        in: query
+        schema:
+          type: string
+      - name: entityId
+        in: query
+        schema:
+          type: string
+      - name: correlationId
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEventPage'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.audit
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      description: OIDC/OAuth2. Issuer, client IDs e claims finais dependem da OD-009.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://idp.example.invalid/oauth2/authorize
+          tokenUrl: https://idp.example.invalid/oauth2/token
+          scopes:
+            q360.read: Leitura Q360
+            q360.write: Alteração Q360
+            q360.approve: Decisões de subscrição
+            q360.admin: Configuração controlada
+            q360.audit: Consulta de auditoria
+  parameters:
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      schema:
+        type: string
+        maxLength: 100
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 200
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    Size:
+      name: size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 20
+  responses:
+    BadRequest:
+      description: Pedido inválido
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    Unauthorized:
+      description: Não autenticado
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    Forbidden:
+      description: Sem autorização
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    NotFound:
+      description: Recurso não encontrado no âmbito do tenant
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    Conflict:
+      description: Conflito de estado, versão ou idempotência
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    Unprocessable:
+      description: Regra/configuração impede processamento
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    TooManyRequests:
+      description: Limite de pedidos excedido
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    InternalError:
+      description: Erro interno seguro
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+  schemas:
+    ProblemDetail:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        detail:
+          type: string
+        instance:
+          type: string
+        correlationId:
+          type: string
+        fieldErrors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              code:
+                type: string
+              message:
+                type: string
+            required:
+            - field
+            - code
+            additionalProperties: false
+      additionalProperties: false
+      required:
+      - title
+      - status
+      - code
+      - correlationId
+    PageMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+      additionalProperties: false
+      required:
+      - page
+      - size
+      - totalElements
+      - totalPages
+    ActorContext:
+      type: object
+      properties:
+        actorId:
+          type: string
+        tenantId: *id001
+        roles:
+          type: array
+          items:
+            type: string
+        permissions:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+      required:
+      - actorId
+      - tenantId
+      - roles
+      - permissions
+    Product:
+      type: object
+      properties:
+        id: *id001
+        code:
+          type: string
+          maxLength: 60
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type:
+          - string
+          - 'null'
+        status:
+          enum:
+          - DRAFT
+          - ACTIVE
+          - INACTIVE
+          - ARCHIVED
+        rowVersion:
+          type: integer
+      additionalProperties: false
+      required:
+      - id
+      - code
+      - name
+      - status
+      - rowVersion
+    ProductCreateRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 60
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type:
+          - string
+          - 'null'
+      additionalProperties: false
+      required:
+      - code
+      - name
+    ProductUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type:
+          - string
+          - 'null'
+        rowVersion:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+      required:
+      - name
+      - rowVersion
+    ProductVersion:
+      type: object
+      properties:
+        id: *id001
+        productId: *id001
+        versionNo:
+          type: integer
+          minimum: 1
+        effectiveFrom: &id002
+          type: string
+          format: date
+        effectiveTo:
+          anyOf:
+          - *id002
+          - type: 'null'
+        status:
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - RETIRED
+        checksum:
+          type:
+          - string
+          - 'null'
+      additionalProperties: false
+      required:
+      - id
+      - productId
+      - versionNo
+      - effectiveFrom
+      - status
+    ProductVersionCreateRequest:
+      type: object
+      properties:
+        effectiveFrom: *id002
+        effectiveTo:
+          anyOf:
+          - *id002
+          - type: 'null'
+      additionalProperties: false
+      required:
+      - effectiveFrom
+    Plan:
+      type: object
+      properties:
+        id: *id001
+        productVersionId: *id001
+        code:
+          type: string
+          maxLength: 60
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type:
+          - string
+          - 'null'
+        status:
+          enum:
+          - ACTIVE
+          - INACTIVE
+        rowVersion:
+          type: integer
+      additionalProperties: false
+      required:
+      - id
+      - productVersionId
+      - code
+      - name
+      - status
+      - rowVersion
+    PlanCreateRequest:
+      type: object
+      properties:
+        productVersionId: *id001
+        code:
+          type: string
+          minLength: 1
+          maxLength: 60
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type:
+          - string
+          - 'null'
+      additionalProperties: false
+      required:
+      - productVersionId
+      - code
+      - name
+    VersionedConfigHeader:
+      type: object
+      properties:
+        id: *id001
+        code:
+          type: string
+        versionNo:
+          type: integer
+          minimum: 1
+        effectiveFrom: *id002
+        effectiveTo:
+          anyOf:
+          - *id002
+          - type: 'null'
+        status:
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - RETIRED
+        checksum:
+          type:
+          - string
+          - 'null'
+      additionalProperties: false
+      required:
+      - id
+      - code
+      - versionNo
+      - effectiveFrom
+      - status
+    PricingParameterValue:
+      type: object
+      properties:
+        code:
+          type: string
+        valueType:
+          enum:
+          - DECIMAL
+          - INTEGER
+          - BOOLEAN
+          - TEXT
+          - JSON
+        value: {}
+      additionalProperties: false
+      required:
+      - code
+      - valueType
+    PricingParameterSetRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        effectiveFrom: *id002
+        effectiveTo:
+          anyOf:
+          - *id002
+          - type: 'null'
+        parameters:
+          type: array
+          items:
+            $ref: '#/components/schemas/PricingParameterValue'
+      additionalProperties: false
+      required:
+      - code
+      - effectiveFrom
+      - parameters
+    RatingFactor:
+      type: object
+      properties:
+        factorCode:
+          type: string
+        dimensions:
+          type: object
+          additionalProperties: true
+        factorValue: &id004
+          type: string
+          pattern: ^-?\d+(\.\d+)?$
+          description: Decimal exacto serializado como string; nunca binary floating point.
+        priority:
+          type: integer
+          default: 0
+      additionalProperties: false
+      required:
+      - factorCode
+      - dimensions
+      - factorValue
+    RatingTableRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        effectiveFrom: *id002
+        effectiveTo:
+          anyOf:
+          - *id002
+          - type: 'null'
+        currencyCode:
+          type:
+          - string
+          - 'null'
+          pattern: ^[A-Z]{3}$
+        factors:
+          type: array
+          items:
+            $ref: '#/components/schemas/RatingFactor'
+      additionalProperties: false
+      required:
+      - code
+      - name
+      - effectiveFrom
+      - factors
+    RuleSetVersionRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        ruleDomain:
+          enum:
+          - ELIGIBILITY
+          - PRICING
+          - WORKFLOW
+          - VALIDATION
+        effectiveFrom: *id002
+        effectiveTo:
+          anyOf:
+          - *id002
+          - type: 'null'
+        artifactType:
+          enum:
+          - DRL
+          - DECISION_TABLE
+          - JSON
+          - INTERNAL
+        artifactRef:
+          type:
+          - string
+          - 'null'
+        artifactChecksum:
+          type:
+          - string
+          - 'null'
+      additionalProperties: false
+      required:
+      - code
+      - name
+      - ruleDomain
+      - effectiveFrom
+      - artifactType
+    Proposer:
+      type: object
+      properties:
+        id: *id001
+        proposerType:
+          enum:
+          - INDIVIDUAL
+          - ORGANISATION
+        externalReference:
+          type:
+          - string
+          - 'null'
+        displayName:
+          type: string
+        registrationNumber:
+          type:
+          - string
+          - 'null'
+        attributes:
+          type: object
+          additionalProperties: true
+        status:
+          enum:
+          - ACTIVE
+          - INACTIVE
+        rowVersion:
+          type: integer
+      additionalProperties: false
+      required:
+      - id
+      - proposerType
+      - displayName
+      - status
+      - rowVersion
+      description: Campos exactos permanecem sujeitos à OD-003.
+    ProposerCreateRequest:
+      type: object
+      properties:
+        proposerType:
+          enum:
+          - INDIVIDUAL
+          - ORGANISATION
+        externalReference:
+          type:
+          - string
+          - 'null'
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 250
+        registrationNumber:
+          type:
+          - string
+          - 'null'
+        attributes:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+      required:
+      - proposerType
+      - displayName
+    ProposerUpdateRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 250
+        registrationNumber:
+          type:
+          - string
+          - 'null'
+        attributes:
+          type: object
+          additionalProperties: true
+        rowVersion:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+      required:
+      - displayName
+      - rowVersion
+    Member:
+      type: object
+      properties:
+        id: *id001
+        proposerId: *id001
+        externalReference:
+          type:
+          - string
+          - 'null'
+        relationshipCode:
+          type: string
+        firstName:
+          type:
+          - string
+          - 'null'
+        lastName:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          anyOf:
+          - *id002
+          - type: 'null'
+        sexCode:
+          type:
+          - string
+          - 'null'
+        attributes:
+          type: object
+          additionalProperties: true
+        status:
+          enum:
+          - ACTIVE
+          - INACTIVE
+        rowVersion:
+          type: integer
+      additionalProperties: false
+      required:
+      - id
+      - proposerId
+      - relationshipCode
+      - status
+      - rowVersion
+      description: OD-003 controla campos finais.
+    MemberCreateRequest:
+      type: object
+      properties:
+        proposerId: *id001
+        externalReference:
+          type:
+          - string
+          - 'null'
+        relationshipCode:
+          type: string
+          minLength: 1
+          maxLength: 40
+        firstName:
+          type:
+          - string
+          - 'null'
+        lastName:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          anyOf:
+          - *id002
+          - type: 'null'
+        sexCode:
+          type:
+          - string
+          - 'null'
+        attributes:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+      required:
+      - proposerId
+      - relationshipCode
+    MemberUpdateRequest:
+      type: object
+      properties:
+        relationshipCode:
+          type: string
+        firstName:
+          type:
+          - string
+          - 'null'
+        lastName:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          anyOf:
+          - *id002
+          - type: 'null'
+        sexCode:
+          type:
+          - string
+          - 'null'
+        attributes:
+          type: object
+          additionalProperties: true
+        rowVersion:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+      required:
+      - relationshipCode
+      - rowVersion
+    ImportJob:
+      type: object
+      properties:
+        id: *id001
+        proposerId:
+          anyOf:
+          - *id001
+          - type: 'null'
+        status:
+          enum:
+          - UPLOADED
+          - VALIDATING
+          - VALIDATED
+          - COMMITTING
+          - COMPLETED
+          - FAILED
+        totalRows:
+          type: integer
+        validRows:
+          type: integer
+        invalidRows:
+          type: integer
+        createdAt: &id003
+          type: string
+          format: date-time
+      additionalProperties: false
+      required:
+      - id
+      - status
+      - totalRows
+      - validRows
+      - invalidRows
+      - createdAt
+    ImportCommitRequest:
+      type: object
+      properties:
+        confirm:
+          const: true
+      additionalProperties: false
+      required:
+      - confirm
+    EligibilityRequest:
+      type: object
+      properties:
+        proposerId:
+          anyOf:
+          - *id001
+          - type: 'null'
+        memberId:
+          anyOf:
+          - *id001
+          - type: 'null'
+        productVersionId: *id001
+        planId: *id001
+        effectiveDate: *id002
+        context:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+      required:
+      - productVersionId
+      - planId
+      - effectiveDate
+      - context
+    EligibilityResponse:
+      type: object
+      properties:
+        evaluationId: *id001
+        decision:
+          enum:
+          - ELIGIBLE
+          - WARNING
+          - REFERRAL
+          - HARD_STOP
+          - CONFIG_ERROR
+        ruleVersionId:
+          anyOf:
+          - *id001
+          - type: 'null'
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              severity:
+                enum:
+                - INFO
+                - WARNING
+                - ERROR
+              message:
+                type: string
+            required:
+            - code
+            - severity
+            - message
+            additionalProperties: false
+        evaluatedAt: *id003
+      additionalProperties: false
+      required:
+      - evaluationId
+      - decision
+      - messages
+      - evaluatedAt
+    PricingCalculateRequest:
+      type: object
+      properties:
+        productVersionId: *id001
+        planId: *id001
+        effectiveDate: *id002
+        memberIds:
+          type: array
+          items: *id001
+        context:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+      required:
+      - productVersionId
+      - planId
+      - effectiveDate
+      - memberIds
+    PricingComponent:
+      type: object
+      properties:
+        order:
+          type: integer
+        code:
+          type: string
+        type:
+          enum:
+          - BASE
+          - FACTOR
+          - ADJUSTMENT
+          - FEE
+          - TAX
+          - TOTAL
+          - OTHER
+        baseAmount:
+          anyOf:
+          - *id004
+          - type: 'null'
+        factorValue:
+          anyOf:
+          - *id004
+          - type: 'null'
+        adjustmentAmount:
+          anyOf:
+          - *id004
+          - type: 'null'
+        resultAmount: *id004
+        sourceCode:
+          type:
+          - string
+          - 'null'
+        sourceVersion:
+          type:
+          - string
+          - 'null'
+      additionalProperties: false
+      required:
+      - order
+      - code
+      - type
+      - resultAmount
+    PricingResponse:
+      type: object
+      properties:
+        pricingRunId: *id001
+        status:
+          enum:
+          - CALCULATED
+        currencyCode:
+          type: string
+          pattern: ^[A-Z]{3}$
+        totalAmount: *id004
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/PricingComponent'
+        versions:
+          type: object
+          properties:
+            productVersionId: *id001
+            ratingTableId: *id001
+            parameterSetId: *id001
+            ruleVersionId:
+              anyOf:
+              - *id001
+              - type: 'null'
+            roundingPolicyCode:
+              type: string
+            roundingPolicyVersion:
+              type: integer
+          additionalProperties: false
+          required:
+          - productVersionId
+          - ratingTableId
+          - parameterSetId
+          - roundingPolicyCode
+          - roundingPolicyVersion
+        calculatedAt: *id003
+      additionalProperties: false
+      required:
+      - pricingRunId
+      - status
+      - currencyCode
+      - totalAmount
+      - components
+      - versions
+      - calculatedAt
+    PricingExplanation:
+      type: object
+      properties:
+        pricingRunId: *id001
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              sequence:
+                type: integer
+              stepCode:
+                type: string
+              ruleCode:
+                type:
+                - string
+                - 'null'
+              message:
+                type:
+                - string
+                - 'null'
+              input:
+                type:
+                - object
+                - 'null'
+                additionalProperties: true
+              output:
+                type:
+                - object
+                - 'null'
+                additionalProperties: true
+            required:
+            - sequence
+            - stepCode
+            additionalProperties: false
+      additionalProperties: false
+      required:
+      - pricingRunId
+      - steps
+    PricingScenarioRequest:
+      type: object
+      properties:
+        basePricingRunId: *id001
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        overrides:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+      required:
+      - basePricingRunId
+      - name
+      - overrides
+    Quote:
+      type: object
+      properties:
+        id: *id001
+        quoteNumber:
+          type:
+          - string
+          - 'null'
+        proposerId: *id001
+        productVersionId: *id001
+        planId: *id001
+        status:
+          enum:
+          - DRAFT
+          - READY
+          - IN_REVIEW
+          - APPROVED
+          - REJECTED
+          - EXPIRED
+          - CANCELLED
+        effectiveDate: *id002
+        validUntil:
+          anyOf:
+          - *id002
+          - type: 'null'
+        currencyCode:
+          type:
+          - string
+          - 'null'
+        latestPricingRunId:
+          anyOf:
+          - *id001
+          - type: 'null'
+        rowVersion:
+          type: integer
+      additionalProperties: false
+      required:
+      - id
+      - proposerId
+      - productVersionId
+      - planId
+      - status
+      - effectiveDate
+      - rowVersion
+    QuoteCreateRequest:
+      type: object
+      properties:
+        proposerId: *id001
+        productVersionId: *id001
+        planId: *id001
+        effectiveDate: *id002
+      additionalProperties: false
+      required:
+      - proposerId
+      - productVersionId
+      - planId
+      - effectiveDate
+    QuoteUpdateRequest:
+      type: object
+      properties:
+        effectiveDate: *id002
+        rowVersion:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+      required:
+      - effectiveDate
+      - rowVersion
+    QuoteMemberRequest:
+      type: object
+      properties:
+        memberId: *id001
+      additionalProperties: false
+      required:
+      - memberId
+    QuotePriceRequest:
+      type: object
+      properties:
+        recalculate:
+          type: boolean
+          default: false
+      additionalProperties: false
+    QuoteSubmitRequest:
+      type: object
+      properties:
+        rowVersion:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+      required:
+      - rowVersion
+    DecisionRequest:
+      type: object
+      properties:
+        decision:
+          enum:
+          - APPROVE
+          - REJECT
+          - RETURN
+        reasonCode:
+          type: string
+          minLength: 1
+          maxLength: 100
+        reasonText:
+          type:
+          - string
+          - 'null'
+        rowVersion:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+      required:
+      - decision
+      - reasonCode
+      - rowVersion
+    StateHistoryItem:
+      type: object
+      properties:
+        fromStatus:
+          type:
+          - string
+          - 'null'
+        toStatus:
+          type: string
+        reasonCode:
+          type:
+          - string
+          - 'null'
+        reasonText:
+          type:
+          - string
+          - 'null'
+        changedBy:
+          type: string
+        changedAt: *id003
+      additionalProperties: false
+      required:
+      - toStatus
+      - changedBy
+      - changedAt
+    CancelQuoteRequest:
+      type: object
+      properties:
+        reasonCode:
+          type: string
+        reasonText:
+          type:
+          - string
+          - 'null'
+        rowVersion:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+      required:
+      - reasonCode
+      - rowVersion
+    ReviewTask:
+      type: object
+      properties:
+        id: *id001
+        quoteId: *id001
+        status:
+          enum:
+          - OPEN
+          - IN_PROGRESS
+          - DECIDED
+          - RETURNED
+        assignedTo:
+          type:
+          - string
+          - 'null'
+        createdAt: *id003
+      additionalProperties: false
+      required:
+      - id
+      - quoteId
+      - status
+      - createdAt
+    Document:
+      type: object
+      properties:
+        id: *id001
+        quoteId: *id001
+        documentType:
+          const: QUOTE_PROPOSAL
+        documentNumber:
+          type:
+          - string
+          - 'null'
+        status:
+          enum:
+          - REQUESTED
+          - GENERATED
+          - FAILED
+        generatedAt:
+          anyOf:
+          - *id003
+          - type: 'null'
+      additionalProperties: false
+      required:
+      - id
+      - quoteId
+      - documentType
+      - status
+    AuditEvent:
+      type: object
+      properties:
+        id: *id001
+        actorId:
+          type:
+          - string
+          - 'null'
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type:
+          - string
+          - 'null'
+        occurredAt: *id003
+        correlationId:
+          type:
+          - string
+          - 'null'
+        metadata:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+      required:
+      - id
+      - action
+      - entityType
+      - occurredAt
+    ProductPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      additionalProperties: false
+      required:
+      - items
+      - page
+    PlanPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Plan'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      additionalProperties: false
+      required:
+      - items
+      - page
+    ProposerPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Proposer'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      additionalProperties: false
+      required:
+      - items
+      - page
+    MemberPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      additionalProperties: false
+      required:
+      - items
+      - page
+    QuotePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Quote'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      additionalProperties: false
+      required:
+      - items
+      - page
+    ReviewTaskPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewTask'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      additionalProperties: false
+      required:
+      - items
+      - page
+    AuditEventPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEvent'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      additionalProperties: false
+      required:
+      - items
+      - page
+x-q360-document-id: Q360-MVP-ART-006
+x-q360-status: REVIEW
+x-q360-open-decisions:
+  OD-002: Moeda e política oficial de arredondamento
+  OD-003: Campos exactos de proponente/membro
+  OD-005: Limites de autoridade
+  OD-006: Template oficial da proposta
+  OD-007: Política de numeração
+  OD-008: Thresholds de performance/rate limits
+  OD-009: OIDC provider, issuer, audience e claims
+  OD-010: Topologia RabbitMQ
+x-q360-error-catalog:
+  AUTH-401: Não autenticado
+  AUTH-403: Sem autorização
+  SEC-403: Violação de segurança/tenant/four-eyes
+  VALIDATION-400: Pedido inválido
+  VERSION-CONFLICT: Optimistic/version conflict
+  QUOTE-STATE: Transição inválida
+  PRICING-CONFIG: Configuração de pricing ausente/inválida
+  PRICING-FAILED: Falha de cálculo
+  IDEMP-REPLAY: Idempotency key reutilizada com payload diferente
+  NOT-FOUND: Recurso não encontrado
+  CONFLICT: Conflito genérico
+  RATE-LIMIT: Limite excedido

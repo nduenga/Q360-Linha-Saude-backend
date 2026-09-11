@@ -1,0 +1,33 @@
+q360-web/
+├─ src/
+│  ├─ app/
+│  │  ├─ auth/
+│  │  ├─ layout/
+│  │  ├─ App.tsx
+│  │  ├─ providers.tsx
+│  │  └─ router.tsx
+│  ├─ api/
+│  │  ├─ generated/
+│  │  └─ core/
+│  │     ├─ httpClient.ts
+│  │     ├─ problemDetails.ts
+│  │     ├─ idempotency.ts
+│  │     └─ correlation.ts
+│  ├─ features/
+│  │  ├─ products/
+│  │  ├─ clients/
+│  │  ├─ population/
+│  │  ├─ eligibility/
+│  │  ├─ pricing/
+│  │  ├─ quotes/
+│  │  ├─ underwriting/
+│  │  ├─ documents/
+│  │  └─ audit/
+│  └─ shared/
+│     ├─ ui/
+│     ├─ forms/
+│     ├─ errors/
+│     ├─ format/
+│     └─ testing/
+└─ tests/
+   └─ e2e/

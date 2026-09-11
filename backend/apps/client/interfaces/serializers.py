@@ -1,0 +1,104 @@
+"""DTOs matching ART-006 schemas verbatim — see apps/product/interfaces/serializers.py
+for the "why plain Serializer, not ModelSerializer" rationale."""
+from __future__ import annotations
+
+from rest_framework import serializers
+
+from apps.client.domain.enums import ImportJobStatus, MemberStatus, ProposerStatus, ProposerType
+
+
+class ProposerSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    proposerType = serializers.ChoiceField(source="proposer_type", choices=[t.value for t in ProposerType])
+    externalReference = serializers.CharField(source="external_reference", allow_null=True)
+    displayName = serializers.CharField(source="display_name")
+    registrationNumber = serializers.CharField(source="registration_number", allow_null=True)
+    attributes = serializers.JSONField(source="attributes_json")
+    status = serializers.ChoiceField(choices=[s.value for s in ProposerStatus])
+    rowVersion = serializers.IntegerField(source="row_version")
+
+
+class ProposerCreateRequestSerializer(serializers.Serializer):
+    proposerType = serializers.ChoiceField(choices=[t.value for t in ProposerType])
+    externalReference = serializers.CharField(allow_null=True, required=False, default=None)
+    displayName = serializers.CharField(min_length=1, max_length=250)
+    registrationNumber = serializers.CharField(allow_null=True, required=False, default=None)
+    attributes = serializers.JSONField(required=False, default=dict)
+
+    def validate(self, attrs: dict) -> dict:
+        return {
+            "proposer_type": attrs["proposerType"],
+            "external_reference": attrs["externalReference"],
+            "display_name": attrs["displayName"],
+            "registration_number": attrs["registrationNumber"],
+            "attributes": attrs["attributes"],
+        }
+
+
+class ProposerUpdateRequestSerializer(serializers.Serializer):
+    displayName = serializers.CharField(min_length=1, max_length=250)
+    registrationNumber = serializers.CharField(allow_null=True, required=False, default=None)
+    attributes = serializers.JSONField(required=False, default=dict)
+    rowVersion = serializers.IntegerField(min_value=0)
+
+    def validate(self, attrs: dict) -> dict:
+        return {
+            "display_name": attrs["displayName"],
+            "registration_number": attrs["registrationNumber"],
+            "attributes": attrs["attributes"],
+            "row_version": attrs["rowVersion"],
+        }
+
+
+class MemberSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    proposerId = serializers.UUIDField(source="proposer_id")
+    externalReference = serializers.CharField(source="external_reference", allow_null=True)
+    relationshipCode = serializers.CharField(source="relationship_code")
+    firstName = serializers.CharField(source="first_name", allow_null=True)
+    lastName = serializers.CharField(source="last_name", allow_null=True)
+    dateOfBirth = serializers.DateField(source="date_of_birth", allow_null=True)
+    sexCode = serializers.CharField(source="sex_code", allow_null=True)
+    attributes = serializers.JSONField(source="attributes_json")
+    status = serializers.ChoiceField(choices=[s.value for s in MemberStatus])
+    rowVersion = serializers.IntegerField(source="row_version")
+
+
+class MemberCreateRequestSerializer(serializers.Serializer):
+    proposerId = serializers.UUIDField()
+    externalReference = serializers.CharField(allow_null=True, required=False, default=None)
+    relationshipCode = serializers.CharField(min_length=1, max_length=40)
+    firstName = serializers.CharField(allow_null=True, required=False, default=None)
+    lastName = serializers.CharField(allow_null=True, required=False, default=None)
+    dateOfBirth = serializers.DateField(allow_null=True, required=False, default=None)
+    sexCode = serializers.CharField(allow_null=True, required=False, default=None)
+    attributes = serializers.JSONField(required=False, default=dict)
+
+
+class MemberUpdateRequestSerializer(serializers.Serializer):
+    relationshipCode = serializers.CharField(min_length=1)
+    firstName = serializers.CharField(allow_null=True, required=False, default=None)
+    lastName = serializers.CharField(allow_null=True, required=False, default=None)
+    dateOfBirth = serializers.DateField(allow_null=True, required=False, default=None)
+    sexCode = serializers.CharField(allow_null=True, required=False, default=None)
+    attributes = serializers.JSONField(required=False, default=dict)
+    rowVersion = serializers.IntegerField(min_value=0)
+
+
+class ImportJobSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    proposerId = serializers.UUIDField(source="proposer_id", allow_null=True)
+    status = serializers.ChoiceField(choices=[s.value for s in ImportJobStatus])
+    totalRows = serializers.IntegerField(source="total_rows")
+    validRows = serializers.IntegerField(source="valid_rows")
+    invalidRows = serializers.IntegerField(source="invalid_rows")
+    createdAt = serializers.DateTimeField(source="created_at")
+
+
+class ImportCommitRequestSerializer(serializers.Serializer):
+    confirm = serializers.BooleanField()
+
+    def validate_confirm(self, value: bool) -> bool:
+        if value is not True:
+            raise serializers.ValidationError("confirm must be true.")
+        return value

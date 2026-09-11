@@ -1,0 +1,38 @@
+{
+  "caseId": "GT-PRICE-005",
+  "checksum": "82dedf28ea347c6fafc0f8da870c1443c0855ef23929eb297aa78d96a33c9636",
+  "currency": "TST",
+  "expectedComponents": [
+    {
+      "amount": "10.00",
+      "code": "A"
+    },
+    {
+      "amount": "5.00",
+      "code": "B"
+    }
+  ],
+  "expectedState": "CALCULATED",
+  "expectedTotal": "15.00",
+  "inputSnapshot": {
+    "syntheticComponents": [
+      {
+        "amount": "10.00",
+        "code": "A"
+      },
+      {
+        "amount": "5.00",
+        "code": "B"
+      }
+    ]
+  },
+  "note": "TST is a non-production test token, not an approved ISO production currency.",
+  "type": "pricing-reconciliation-technical",
+  "versions": {
+    "parameterSet": "TECHNICAL-FIXTURE",
+    "productVersion": "TECHNICAL-FIXTURE",
+    "ratingTable": "TECHNICAL-FIXTURE",
+    "roundingPolicy": "NO-ROUNDING-NEEDED-FOR-CASE",
+    "ruleVersion": "TECHNICAL-FIXTURE"
+  }
+}

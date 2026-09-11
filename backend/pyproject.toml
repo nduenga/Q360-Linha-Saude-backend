@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "q360-health-underwriting-pricing-core"
+version = "0.1.0"
+description = "Q360 Health Underwriting & Pricing Core backend"
+requires-python = ">=3.12"
+dependencies = [
+    "Django>=5.2,<7",
+    "djangorestframework>=3.15,<4",
+    "psycopg[binary]>=3.2,<4",
+    "PyJWT[crypto]>=2.9,<3",
+    "drf-spectacular>=0.28,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "pytest-django>=4.9,<5",
+    "testcontainers>=4.15,<5",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.testing"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+addopts = "-q"

@@ -1,0 +1,48 @@
+"""Domain errors for the product module.
+
+Each subclasses `apps.foundation.domain.problem.DomainProblem`, mapping to
+one of ART-006's `x-q360-error-catalog` codes generically (see
+`apps.foundation.interfaces.exception_handler`) — this reuse (not new
+catalog codes) is how DOC-003's illustrative `PROD-*`/`PLAN-*`/`PR-*` error
+prefixes are reconciled with ART-006's actual, closed catalog: ART-006 is
+the later, more specialised artefact and has no such codes (DOC-004 s2
+precedence rule), so these situations reuse the existing generic codes
+instead of inventing new ones.
+"""
+from __future__ import annotations
+
+from apps.foundation.domain.problem import DomainProblem
+
+
+class DuplicateCodeError(DomainProblem):
+    """A `code` that must be unique (per tenant, or per tenant+parent) is
+    already in use."""
+
+    http_status = 409
+    problem_code = "CONFLICT"
+
+
+class EffectiveDateOverlapError(DomainProblem):
+    """A new ProductVersion's [effectiveFrom, effectiveTo) range overlaps
+    an existing non-retired version of the same product (DOC-004 s7
+    invariant: "vigências incompatíveis não se sobrepõem")."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+class ImmutableVersionError(DomainProblem):
+    """An operation would mutate something DOC-004 s7 declares immutable
+    once published (adding a Plan to a non-DRAFT ProductVersion; publishing
+    a version that is not DRAFT)."""
+
+    http_status = 409
+    problem_code = "CONFLICT"
+
+
+class RowVersionMismatchError(DomainProblem):
+    """Optimistic-locking `rowVersion` supplied by the client does not
+    match the current persisted value."""
+
+    http_status = 409
+    problem_code = "VERSION-CONFLICT"

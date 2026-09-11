@@ -1,0 +1,39 @@
+from django.urls import path
+
+from apps.product.interfaces.views import (
+    ConfigurationPublishView,
+    PlanDetailView,
+    PlanListCreateView,
+    PricingParameterSetCreateView,
+    ProductDetailView,
+    ProductListCreateView,
+    ProductVersionCreateView,
+    ProductVersionPublishView,
+)
+
+urlpatterns = [
+    path("products", ProductListCreateView.as_view(), name="product-list-create"),
+    path("products/<uuid:product_id>", ProductDetailView.as_view(), name="product-detail"),
+    path(
+        "products/<uuid:product_id>/versions",
+        ProductVersionCreateView.as_view(),
+        name="product-version-create",
+    ),
+    path(
+        "product-versions/<uuid:version_id>/publish",
+        ProductVersionPublishView.as_view(),
+        name="product-version-publish",
+    ),
+    path("plans", PlanListCreateView.as_view(), name="plan-list-create"),
+    path("plans/<uuid:plan_id>", PlanDetailView.as_view(), name="plan-detail"),
+    path(
+        "pricing-parameter-sets",
+        PricingParameterSetCreateView.as_view(),
+        name="pricing-parameter-set-create",
+    ),
+    path(
+        "configuration/<str:config_type>/<uuid:config_id>/publish",
+        ConfigurationPublishView.as_view(),
+        name="configuration-publish",
+    ),
+]

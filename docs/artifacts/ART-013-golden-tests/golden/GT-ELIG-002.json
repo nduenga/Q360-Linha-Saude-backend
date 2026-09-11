@@ -1,0 +1,14 @@
+{
+  "caseId": "GT-ELIG-002",
+  "checksum": "5f5ace81a1fc054ebc4dd207103f17d614f8196219688d24e815b3e4ee1d9008",
+  "expected": {
+    "code": "ELIG-PRODUCT-DATE",
+    "decision": "HARD_STOP"
+  },
+  "inputSnapshot": {
+    "productEffectiveFrom": "2026-01-01",
+    "productEffectiveTo": "2026-12-31",
+    "quoteEffectiveDate": "2027-01-01"
+  },
+  "type": "eligibility-effective-date"
+}

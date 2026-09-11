@@ -1,0 +1,16 @@
+{
+  "caseId": "GT-IDEMP-002",
+  "checksum": "b2b7d3529b747c789c806c479cd3882fdc8e7c1cd906ccb6aea628ad67643fdc",
+  "expected": {
+    "businessEffects": 1,
+    "processedInboxRows": 1,
+    "secondDelivery": "ACK_NOOP"
+  },
+  "inputSnapshot": {
+    "consumer": "GoldenConsumer",
+    "deliveries": 2,
+    "eventId": "00000000-0000-7000-8000-000000009001",
+    "tenantId": "00000000-0000-7000-8000-000000000001"
+  },
+  "type": "consumer-idempotency"
+}
