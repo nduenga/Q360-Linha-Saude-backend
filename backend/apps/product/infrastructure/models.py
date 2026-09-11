@@ -39,7 +39,7 @@ class Product(TenantScopedModel):
     name = models.CharField(max_length=200)
     description = models.TextField(null=True, blank=True)
     status = models.CharField(
-        max_length=20, choices=[(s.value, s.value) for s in ProductStatus], default=ProductStatus.DRAFT
+        max_length=20, choices=[(s.value, s.value) for s in ProductStatus], default=ProductStatus.DRAFT.value
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -65,7 +65,7 @@ class ProductVersion(TenantScopedModel):
     status = models.CharField(
         max_length=20,
         choices=[(s.value, s.value) for s in VersionedConfigStatus],
-        default=VersionedConfigStatus.DRAFT,
+        default=VersionedConfigStatus.DRAFT.value,
     )
     published_at = models.DateTimeField(null=True, blank=True)
     published_by = models.CharField(max_length=200, null=True, blank=True)
@@ -92,7 +92,7 @@ class Plan(TenantScopedModel):
     name = models.CharField(max_length=200)
     description = models.TextField(null=True, blank=True)
     status = models.CharField(
-        max_length=20, choices=[(s.value, s.value) for s in PlanStatus], default=PlanStatus.ACTIVE
+        max_length=20, choices=[(s.value, s.value) for s in PlanStatus], default=PlanStatus.ACTIVE.value
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -116,7 +116,7 @@ class Benefit(TenantScopedModel):
     benefit_type = models.CharField(max_length=60, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     status = models.CharField(
-        max_length=20, choices=[(s.value, s.value) for s in BenefitStatus], default=BenefitStatus.ACTIVE
+        max_length=20, choices=[(s.value, s.value) for s in BenefitStatus], default=BenefitStatus.ACTIVE.value
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -156,7 +156,7 @@ class PricingParameterSet(TenantScopedModel):
     status = models.CharField(
         max_length=20,
         choices=[(s.value, s.value) for s in VersionedConfigStatus],
-        default=VersionedConfigStatus.DRAFT,
+        default=VersionedConfigStatus.DRAFT.value,
     )
     checksum = models.CharField(max_length=128, null=True, blank=True)
     published_at = models.DateTimeField(null=True, blank=True)

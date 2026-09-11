@@ -26,7 +26,7 @@ class Proposer(TenantScopedModel):
     registration_number = models.CharField(max_length=100, null=True, blank=True)
     attributes_json = models.JSONField(default=dict)
     status = models.CharField(
-        max_length=20, choices=[(s.value, s.value) for s in ProposerStatus], default=ProposerStatus.ACTIVE
+        max_length=20, choices=[(s.value, s.value) for s in ProposerStatus], default=ProposerStatus.ACTIVE.value
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -54,7 +54,7 @@ class InsuredMember(TenantScopedModel):
     sex_code = models.CharField(max_length=20, null=True, blank=True)
     attributes_json = models.JSONField(default=dict)
     status = models.CharField(
-        max_length=20, choices=[(s.value, s.value) for s in MemberStatus], default=MemberStatus.ACTIVE
+        max_length=20, choices=[(s.value, s.value) for s in MemberStatus], default=MemberStatus.ACTIVE.value
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -78,7 +78,7 @@ class ImportJob(TenantScopedModel):
     original_filename = models.CharField(max_length=255, null=True, blank=True)
     file_checksum = models.CharField(max_length=128, null=True, blank=True)
     status = models.CharField(
-        max_length=20, choices=[(s.value, s.value) for s in ImportJobStatus], default=ImportJobStatus.UPLOADED
+        max_length=20, choices=[(s.value, s.value) for s in ImportJobStatus], default=ImportJobStatus.UPLOADED.value
     )
     total_rows = models.IntegerField(default=0)
     valid_rows = models.IntegerField(default=0)

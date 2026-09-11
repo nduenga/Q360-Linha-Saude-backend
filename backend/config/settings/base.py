@@ -22,6 +22,7 @@ INSTALLED_APPS = [
     "apps.product",
     "apps.client",
     "apps.eligibility",
+    "apps.pricing",
     "drf_spectacular",
 ]
 
@@ -49,6 +50,7 @@ MIGRATION_MODULES = {
     "product": "apps.product.infrastructure.migrations",
     "client": "apps.client.infrastructure.migrations",
     "eligibility": "apps.eligibility.infrastructure.migrations",
+    "pricing": "apps.pricing.infrastructure.migrations",
 }
 
 ROOT_URLCONF = "config.urls"
