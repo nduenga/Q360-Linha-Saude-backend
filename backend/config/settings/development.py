@@ -17,7 +17,14 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 # up db` remains available for anyone who prefers a disposable container
 # instead - see ../../DEV_SETUP.md.
 
-# Vite's default dev server port. Overridable/extendable via
-# CORS_ALLOWED_ORIGINS in .env without touching this file.
-if not CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+# Vite's default port is 5173, but it silently picks the next free one
+# (5174, 5175...) whenever 5173 is already taken by another process - a
+# real, recurring source of "backend logs 200 but the browser shows a
+# generic fetch error" confusion (the CORS preflight itself always
+# succeeds; it's the *actual* request that the browser then blocks because
+# the concrete port isn't in the allow-list). A regex covering any
+# localhost port sidesteps that entirely for local dev - set
+# unconditionally (django-cors-headers ORs this together with
+# CORS_ALLOWED_ORIGINS, so a value set in .env still works too, it's just
+# no longer required).
+CORS_ALLOWED_ORIGIN_REGEXES = [r"^http://localhost:\d+$", r"^http://127\.0\.0\.1:\d+$"]
