@@ -184,3 +184,39 @@ def test_unknown_product_version_is_400_not_500(admin_client):
     )
     assert response.status_code == 400
     assert response.data["code"] == "VALIDATION-400"
+
+
+@pytest.mark.django_db
+def test_list_rule_versions_filters_by_domain(admin_client):
+    """Pragmatic V1 addition (OPEN_DECISIONS.md#S04-LISTING-GAPS-001):
+    ART-006 has no listRuleVersions."""
+    admin_client.post(
+        "/api/v1/rule-versions",
+        {
+            "code": "LIST-ELIG",
+            "name": "List Elig",
+            "ruleDomain": "ELIGIBILITY",
+            "effectiveFrom": "2026-01-01",
+            "artifactType": "JSON",
+            "artifactRef": "{}",
+        },
+        format="json",
+    )
+    admin_client.post(
+        "/api/v1/rule-versions",
+        {
+            "code": "LIST-PRICE",
+            "name": "List Price",
+            "ruleDomain": "PRICING",
+            "effectiveFrom": "2026-01-01",
+            "artifactType": "JSON",
+            "artifactRef": "{}",
+        },
+        format="json",
+    )
+
+    response = admin_client.get("/api/v1/rule-versions?ruleDomain=PRICING")
+    assert response.status_code == 200
+    codes = [item["code"] for item in response.data["items"]]
+    assert "LIST-PRICE" in codes
+    assert "LIST-ELIG" not in codes

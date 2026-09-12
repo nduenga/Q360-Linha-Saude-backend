@@ -1,5 +1,15 @@
 # OPEN DECISIONS
 
+> **2026-09-12: every entry below now has a pragmatic test/demo decision
+> in [`DECISIONS_TAKEN.md`](DECISIONS_TAKEN.md)**, taken at the Product
+> Owner's explicit request so Sprint 1-5 testing is not blocked by them.
+> This file keeps the original analysis (why each thing is genuinely
+> ambiguous); `DECISIONS_TAKEN.md` records what was decided for testing —
+> read both together. Real business-value decisions (OD-001 tariffs, the
+> official OD-002 rounding/currency policy, the real relationship-code
+> catalogue, the real Identity Provider) are still explicitly **not**
+> resolved — the test decisions never claim to be real approved values.
+
 - **S01-PERSISTENCE-001 — RESOLVED (2026-09-10):** PostgreSQL is mandatory in
   every environment, not optional. The foundation migration
   (`apps/foundation/infrastructure/migrations/0001_foundation_baseline.py`)

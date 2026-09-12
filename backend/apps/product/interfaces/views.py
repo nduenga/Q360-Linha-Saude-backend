@@ -16,7 +16,7 @@ from apps.product.application import product_service
 from apps.product.application.configuration import publish_configuration
 from apps.product.application.pricing_parameter_service import create_pricing_parameter_set
 from apps.product.application.use_cases import PublishProductVersionUseCase
-from apps.product.infrastructure.models import Plan, Product, ProductVersion
+from apps.product.infrastructure.models import Plan, PricingParameterSet, Product, ProductVersion
 from apps.product.interfaces.serializers import (
     PlanCreateRequestSerializer,
     PlanSerializer,
@@ -72,9 +72,22 @@ class ProductDetailView(APIView):
 
 
 class ProductVersionCreateView(APIView):
-    """ART-006 `/api/v1/products/{productId}/versions`: `createProductVersion` (POST)."""
+    """ART-006 `/api/v1/products/{productId}/versions`: `createProductVersion`
+    (POST). `GET` (list a product's versions) is a pragmatic V1 addition,
+    not in ART-006 — see OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md;
+    same shape/pagination as every other list endpoint, no invented field."""
 
-    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [require_scope(Scope.ADMIN)(), require_permission(Permission.PRODUCT_MANAGE)()]
+        return [require_scope(Scope.READ)()]
+
+    def get(self, request, product_id):
+        get_object_or_404(Product, id=product_id)
+        queryset = ProductVersion.objects.filter(product_id=product_id).order_by("-version_no")
+        paginator = Q360PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        return paginator.get_paginated_response(ProductVersionSerializer(page, many=True).data)
 
     def post(self, request, product_id):
         product = get_object_or_404(Product, id=product_id)
@@ -140,9 +153,23 @@ class PlanDetailView(APIView):
 
 
 class PricingParameterSetCreateView(APIView):
-    """ART-006 `/api/v1/pricing-parameter-sets`: `createPricingParameterSet` (POST)."""
+    """ART-006 `/api/v1/pricing-parameter-sets`: `createPricingParameterSet`
+    (POST). `GET` (list) is a pragmatic V1 addition, not in ART-006 — see
+    OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md."""
 
-    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRICING_CONFIG_MANAGE)]
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [require_scope(Scope.ADMIN)(), require_permission(Permission.PRICING_CONFIG_MANAGE)()]
+        return [require_scope(Scope.READ)()]
+
+    def get(self, request):
+        queryset = PricingParameterSet.objects.all().order_by("code", "-version_no")
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        paginator = Q360PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        return paginator.get_paginated_response(VersionedConfigHeaderSerializer(page, many=True).data)
 
     def post(self, request):
         body = PricingParameterSetRequestSerializer(data=request.data)

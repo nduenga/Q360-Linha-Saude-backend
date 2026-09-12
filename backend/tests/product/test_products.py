@@ -94,6 +94,24 @@ def test_create_and_publish_product_version(admin_client):
 
 
 @pytest.mark.django_db
+def test_list_product_versions(admin_client):
+    """Pragmatic V1 addition (OPEN_DECISIONS.md#S04-LISTING-GAPS-001):
+    ART-006 has no listProductVersions, but the frontend needs a way to
+    show a product's versions without a per-browser cache."""
+    product = admin_client.post("/api/v1/products", {"code": "VERLIST", "name": "VerList"}).data
+    admin_client.post(
+        f"/api/v1/products/{product['id']}/versions",
+        {"effectiveFrom": "2026-01-01", "effectiveTo": "2026-12-31"},
+    )
+    admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2027-01-01"})
+
+    response = admin_client.get(f"/api/v1/products/{product['id']}/versions")
+    assert response.status_code == 200
+    assert response.data["page"]["totalElements"] == 2
+    assert [v["versionNo"] for v in response.data["items"]] == [2, 1]
+
+
+@pytest.mark.django_db
 def test_second_version_no_is_incremented(admin_client):
     product = admin_client.post("/api/v1/products", {"code": "SEQ", "name": "Sequenced"}).data
     admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01", "effectiveTo": "2026-06-30"})

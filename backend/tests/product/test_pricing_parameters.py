@@ -80,11 +80,24 @@ def test_publish_pricing_parameter_set_via_generic_configuration_endpoint(admin_
 
 
 @pytest.mark.django_db
-def test_publish_not_yet_available_config_type_is_not_found(admin_client):
-    # rating-table (S4) does not exist yet — must read as NOT-FOUND, not a
-    # 500 or an invented "not implemented" response.
+def test_publish_unknown_config_id_is_not_found(admin_client):
     response = admin_client.post(
         "/api/v1/configuration/rating-table/11111111-1111-1111-1111-111111111111/publish"
     )
     assert response.status_code == 404
     assert response.data["code"] == "NOT-FOUND"
+
+
+@pytest.mark.django_db
+def test_list_pricing_parameter_sets(admin_client):
+    """Pragmatic V1 addition (OPEN_DECISIONS.md#S04-LISTING-GAPS-001):
+    ART-006 has no listPricingParameterSets."""
+    admin_client.post(
+        "/api/v1/pricing-parameter-sets",
+        {"code": "LIST-PS", "effectiveFrom": "2026-01-01", "parameters": [{"code": "X", "valueType": "INTEGER", "value": 1}]},
+        format="json",
+    )
+    response = admin_client.get("/api/v1/pricing-parameter-sets")
+    assert response.status_code == 200
+    assert response.data["page"]["totalElements"] >= 1
+    assert any(item["code"] == "LIST-PS" for item in response.data["items"])

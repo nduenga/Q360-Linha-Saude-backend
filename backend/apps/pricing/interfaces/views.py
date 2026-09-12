@@ -17,7 +17,7 @@ from apps.foundation.interfaces.middleware import get_correlation_id
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.pricing.application.pricing_engine import calculate_pricing, create_pricing_scenario, get_pricing_run
 from apps.pricing.application.rating_table_service import create_rating_table
-from apps.pricing.infrastructure.models import PricingRun
+from apps.pricing.infrastructure.models import PricingRun, RatingTable
 from apps.pricing.interfaces.serializers import (
     PricingCalculateRequestSerializer,
     PricingExplanationSerializer,
@@ -26,10 +26,26 @@ from apps.pricing.interfaces.serializers import (
     RatingTableRequestSerializer,
     VersionedConfigHeaderSerializer,
 )
+from shared.pagination import Q360PageNumberPagination
 
 
 class RatingTableCreateView(APIView):
-    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRICING_CONFIG_MANAGE)]
+    """`GET` (list) is a pragmatic V1 addition, not in ART-006 — see
+    OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md."""
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [require_scope(Scope.ADMIN)(), require_permission(Permission.PRICING_CONFIG_MANAGE)()]
+        return [require_scope(Scope.READ)()]
+
+    def get(self, request):
+        queryset = RatingTable.objects.all().order_by("code", "-version_no")
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        paginator = Q360PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        return paginator.get_paginated_response(VersionedConfigHeaderSerializer(page, many=True).data)
 
     def post(self, request):
         body = RatingTableRequestSerializer(data=request.data)

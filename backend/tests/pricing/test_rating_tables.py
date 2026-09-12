@@ -134,6 +134,20 @@ def test_resolve_factor_picks_most_specific_match(tenant, admin_client):
 
 
 @pytest.mark.django_db
+def test_list_rating_tables(admin_client):
+    """Pragmatic V1 addition (OPEN_DECISIONS.md#S04-LISTING-GAPS-001):
+    ART-006 has no listRatingTables."""
+    admin_client.post(
+        "/api/v1/rating-tables",
+        {"code": "LIST-TABLE", "name": "List", "effectiveFrom": "2026-01-01", "factors": _factors_payload()},
+        format="json",
+    )
+    response = admin_client.get("/api/v1/rating-tables")
+    assert response.status_code == 200
+    assert any(item["code"] == "LIST-TABLE" for item in response.data["items"])
+
+
+@pytest.mark.django_db
 def test_resolve_rating_table_ignores_draft(tenant, admin_client):
     import datetime
 
