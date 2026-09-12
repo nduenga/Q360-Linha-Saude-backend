@@ -249,3 +249,27 @@
   **Action needed:** Product Owner/Tech Lead must raise a Change Request
   against ART-006 (new field on the publish request, or a distinct approval
   endpoint) before four-eyes can be enforced for RuleVersion publication.
+
+- **S04-LISTING-GAPS-001 — OPEN, found while wiring the frontend to the real
+  backend (Q360 UI integration, 2026-09-12):** ART-006 has no
+  `listProductVersions`/`getProductVersion` for `ProductVersion`, and no
+  `listRatingTables`/`getRatingTable` or `listPricingParameterSets`/
+  `getPricingParameterSet` for those two versioned config types either —
+  only `POST` create and `POST .../publish` exist for all three. This means
+  a `ProductVersion`/`RatingTable`/`PricingParameterSet` can only ever be
+  obtained as the direct response of creating or publishing it; there is no
+  way to browse what already exists.
+  Consequences already visible in the frontend
+  (`Q360-Linha-Sa-de-frontend/src/domains/product/hooks/useKnownVersions.ts`):
+  the Products UI can only show versions the current browser itself
+  created/published or manually registered by pasting an id — a page
+  reload or a different browser/tester sees nothing, even though the data
+  is real and published server-side. The Pricing UI likewise cannot offer
+  a dropdown of existing RatingTable/PricingParameterSet codes — the
+  operator must know/type `ratingTableCode`/`parameterSetCode` directly
+  (see `Q360-Linha-Sa-de-frontend/src/domains/pricing/PricingPage.tsx`).
+  **Action needed:** Product Owner/Tech Lead should raise a Change Request
+  against ART-006 to add the missing list/get endpoints for these three
+  resources — this is a pure read-side gap (no business value to invent),
+  should be uncontroversial to approve, and would remove the local-cache
+  workaround entirely once available.
