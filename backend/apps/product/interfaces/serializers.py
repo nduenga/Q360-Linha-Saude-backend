@@ -46,6 +46,9 @@ class ProductUpdateRequestSerializer(serializers.Serializer):
     name = serializers.CharField(min_length=1, max_length=200)
     description = serializers.CharField(allow_null=True, required=False, default=None)
     rowVersion = serializers.IntegerField(source="row_version", min_value=0)
+    # Pragmatic V1 addition, not in ART-006's ProductUpdateRequest - see
+    # apps/product/application/product_service.update_product docstring.
+    status = serializers.ChoiceField(choices=[s.value for s in ProductStatus], required=False, default=None)
 
 
 class ProductVersionSerializer(serializers.Serializer):

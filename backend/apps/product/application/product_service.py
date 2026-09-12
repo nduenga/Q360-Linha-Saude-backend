@@ -40,14 +40,27 @@ def create_product(*, code: str, name: str, description: str | None) -> Product:
     return product
 
 
-def update_product(*, product: Product, name: str, description: str | None, row_version: int) -> Product:
+def update_product(
+    *, product: Product, name: str, description: str | None, row_version: int, status: str | None = None
+) -> Product:
     # DOC-004 s7 invariant enforcement via optimistic locking (ART-006
     # ProductUpdateRequest.rowVersion): an UPDATE that does not match the
     # currently persisted row_version affects zero rows, which is how we
     # detect the conflict without a separate SELECT ... FOR UPDATE race.
-    updated = Product.objects.filter(id=product.id, row_version=row_version).update(
-        name=name, description=description, row_version=row_version + 1
-    )
+    #
+    # `status` is a pragmatic V1 addition, not in ART-006's
+    # ProductUpdateRequest (see OPEN_DECISIONS.md#S04-LISTING-GAPS-001/
+    # DECISIONS_TAKEN.md#product-status-transition): the contract has no
+    # documented way to move a Product out of DRAFT at all, and ART-011's
+    # own seed data keeps its demo product in DRAFT forever by design
+    # (CHK-008 "Draft-only commercial shells") — publishing a
+    # ProductVersion never implicitly activates the parent Product, those
+    # are two independent lifecycle fields (ART-005). Optional and
+    # backward-compatible: omitted, behaviour is unchanged.
+    fields = {"name": name, "description": description, "row_version": row_version + 1}
+    if status is not None:
+        fields["status"] = status
+    updated = Product.objects.filter(id=product.id, row_version=row_version).update(**fields)
     if updated == 0:
         raise RowVersionMismatchError(
             f"Product {product.id} rowVersion {row_version} does not match the current version"

@@ -50,6 +50,29 @@ def test_update_product_with_correct_row_version_succeeds(admin_client):
 
 
 @pytest.mark.django_db
+def test_update_product_status(admin_client):
+    """Pragmatic V1 addition, not in ART-006's ProductUpdateRequest - see
+    DECISIONS_TAKEN.md#product-status-transition. Publishing a version never
+    implicitly changes this - it is set explicitly."""
+    product = admin_client.post("/api/v1/products", {"code": "ACTIVATE-ME", "name": "Activate"}).data
+    assert product["status"] == "DRAFT"
+
+    response = admin_client.put(
+        f"/api/v1/products/{product['id']}",
+        {"name": product["name"], "rowVersion": 0, "status": "ACTIVE"},
+    )
+    assert response.status_code == 200
+    assert response.data["status"] == "ACTIVE"
+
+    # Omitting `status` leaves it unchanged (backward compatible).
+    unchanged = admin_client.put(
+        f"/api/v1/products/{product['id']}",
+        {"name": "Still Active", "rowVersion": 1},
+    )
+    assert unchanged.data["status"] == "ACTIVE"
+
+
+@pytest.mark.django_db
 def test_update_product_with_stale_row_version_is_version_conflict(admin_client):
     product = admin_client.post("/api/v1/products", {"code": "STALE", "name": "Original"}).data
     admin_client.put(f"/api/v1/products/{product['id']}", {"name": "First update", "rowVersion": 0})

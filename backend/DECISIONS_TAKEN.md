@@ -134,6 +134,51 @@ Change Request ao ART-006 para os incluir formalmente no contrato — até
 lá, ficam documentados aqui como extensão V1, não como parte do contrato
 aprovado.
 
+## seed-data-from-art-011 — Uso dos dados oficiais de bootstrap (2026-09-12)
+
+**Decisão:** carregado `Q360_MVP_ART_011_Seed_Data_v1.0.sql` (o artefacto
+oficial de seed, que este projecto tinha lido mas nunca executado) na base
+de dados local, em vez de continuar a inventar tenants/produtos de teste
+ad-hoc. Isto cria:
+- Tenant `Q360-DEMO` (`00000000-0000-7000-8000-000000000001`).
+- 4 RuleSets técnicos (ELIGIBILITY_V1/PRICING_V1/WORKFLOW_V1/VALIDATION_V1)
+  com RuleVersions v1 em DRAFT (sem conteúdo de regras — o seed proíbe
+  explicitamente valores de negócio, ver PROH-005 no workbook ART-011).
+- Produto `HEALTH-DEMO` (DRAFT), versão 1 (DRAFT, `effective_from
+  2000-01-01`), plano `DEMO-BASE`, benefício `DEMO-BENEFIT`.
+- Shells vazios `DEMO-PARAMS` (parameter set) e `DEMO-RATING` (rating
+  table) — o seed tem uma verificação própria (`DO $$ ... RAISE
+  EXCEPTION`) que impede a existência de `rating_factor`/`pricing_parameter`
+  nestes IDs específicos, precisamente para nunca conter tarifas.
+Como esses dois shells ficam propositadamente vazios para sempre (por
+desenho do ART-011), os dados de teste reais (factores/parâmetros/membros)
+foram acrescentados como uma **v2** dos mesmos códigos
+(`DEMO-RATING`/`DEMO-PARAMS`), publicada, com valores não-redondos
+(ex.: prémio base `87.35`, factores `0.85`–`2.87`) para se distinguir
+claramente de coincidência com números redondos e demonstrar o
+arredondamento a funcionar. A versão 1 original do seed nunca é alterada.
+**Nota:** o tenant de teste `dev-tenant` criado antes desta sessão
+continua a existir e a funcionar — `Q360-DEMO` é agora o tenant
+recomendado para testes/demonstração daqui para a frente.
+
+## product-status-transition — Como activar um produto (2026-09-12)
+
+**Decisão:** `ProductUpdateRequest` (ART-006) não tem nenhum campo
+`status` — não existe **nenhuma** forma documentada de mover um Product
+para fora de `DRAFT`. Isto não é um bug: `Product.status` (ciclo de vida
+comercial) e `ProductVersion.status` (ciclo de vida de uma configuração
+concreta) são dois campos independentes em ART-005, e o próprio ART-011
+mantém o seu produto de demonstração em `DRAFT` propositadamente mesmo
+depois de a versão ser publicada (CHK-008 "Draft-only commercial
+shells") — publicar uma versão nunca deveria activar o produto
+implicitamente.
+Adicionado `status` como campo opcional e retrocompatível a
+`ProductUpdateRequestSerializer`/`update_product` (pragmático, não em
+ART-006 — mesma categoria que S04-LISTING-GAPS-001), exposto no frontend
+como um `<select>` na página de detalhe do produto.
+**Ainda em aberto para produção:** ART-006 deveria ganhar este campo (ou
+um endpoint de transição de estado dedicado) via Change Request.
+
 ## age-band-buckets — Faixas etárias calculadas automaticamente (2026-09-12)
 
 **Decisão de teste/demonstração** (não é uma tabela actuarial aprovada):
