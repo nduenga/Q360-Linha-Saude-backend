@@ -134,6 +134,28 @@ Change Request ao ART-006 para os incluir formalmente no contrato — até
 lá, ficam documentados aqui como extensão V1, não como parte do contrato
 aprovado.
 
+## age-band-buckets — Faixas etárias calculadas automaticamente (2026-09-12)
+
+**Decisão de teste/demonstração** (não é uma tabela actuarial aprovada):
+para que o utilizador da página Pricing nunca precise de escrever
+`{"ageBand": "30-39"}` à mão, a dimensão `ageBand` usada para resolver
+`RatingFactor` passa a ser **calculada automaticamente** a partir da data
+de nascimento real do membro (já existente em `insured_member`) e da data
+de referência do cálculo, usando estes escalões:
+
+`0-17`, `18-29`, `30-39`, `40-49`, `50-59`, `60-69`, `70+`
+
+Implementado em `Q360-Linha-Sa-de-frontend/src/domains/pricing/services/ageBand.ts`.
+Um membro sem data de nascimento não tem `ageBand` calculado (o factor
+correspondente só se aplica se a `RatingTable` tiver uma entrada de
+fallback com `dimensions: {}`, comportamento já existente e testado desde
+S4-01). Isto não altera o backend nem o contrato `context` — é só o
+frontend a deixar de pedir ao utilizador algo que já pode calcular
+sozinho.
+**Ainda em aberto para produção:** os escalões etários oficiais (se
+existirem regras actuariais específicas) são uma decisão do Product
+Owner/Actuarial.
+
 ## S05-PRICING-RULES-001 — Forma das regras de pricing
 
 **Decisão:** a forma `PricingRuleConfig`/`PricingAdjustment` (lista de
