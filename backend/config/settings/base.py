@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "apps.client",
     "apps.eligibility",
     "apps.pricing",
+    "apps.quote",
     "drf_spectacular",
 ]
 
@@ -84,6 +85,7 @@ MIGRATION_MODULES = {
     "client": "apps.client.infrastructure.migrations",
     "eligibility": "apps.eligibility.infrastructure.migrations",
     "pricing": "apps.pricing.infrastructure.migrations",
+    "quote": "apps.quote.infrastructure.migrations",
 }
 
 ROOT_URLCONF = "config.urls"
@@ -111,6 +113,11 @@ DATABASES = {
 # apps/client/application/import_service.py. Not exposed over HTTP
 # (no MEDIA_URL): read back only by the commit step, server-side.
 MEDIA_ROOT = BASE_DIR / "media"
+
+# OPEN DECISION (Q360-S6-01, DECISIONS_TAKEN.md#S06-QUOTE-001): no approved
+# document fixes the default quote validity period. Configurable per
+# environment rather than hardcoded in apps/quote/application/quote_service.py.
+QUOTE_DEFAULT_VALIDITY_DAYS = int(os.environ.get("QUOTE_DEFAULT_VALIDITY_DAYS", "30"))
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

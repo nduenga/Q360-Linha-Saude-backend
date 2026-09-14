@@ -219,6 +219,47 @@ campo/endpoint) antes de poder ser aplicado.
 
 ---
 
+## S06-QUOTE-001 — Judgment calls made building Quote Core (Sprint 6, 2026-09-14)
+
+ART-006/ART-009/ART-012 fix `Quote`'s schema, endpoints and state values
+precisely, but leave several mechanisms unspecified. Decisions taken to
+build a complete, working Sprint 6:
+
+1. **Becoming READY is automatic, not a manual command.** ART-006 has no
+   `/quotes/{id}/ready` endpoint, and ART-009's QT-001 guard ("valid
+   pricing exists") is exactly what a successful `priceQuote` produces.
+   `apps/quote/application/quote_service.price_quote` therefore promotes
+   DRAFT→READY as a side effect of a successful calculation whose
+   population has no `EXCLUDED` member, matching QT-001's stated guard
+   ("no HARD_STOP/CONFIG_ERROR"). Any member add/remove or `effectiveDate`
+   edit on a READY quote demotes it back to DRAFT (QT-002), per ART-009's
+   own "Atomic Side Effects" column.
+2. **Eligibility decision → `quote_member.status` mapping** (ART-012 V020
+   only has INCLUDED/EXCLUDED/REFERRAL, ART-006 doesn't define the
+   mapping): ELIGIBLE/WARNING → INCLUDED, REFERRAL → REFERRAL,
+   HARD_STOP/CONFIG_ERROR → EXCLUDED (fail-closed, consistent with
+   S03-ELIGIBILITY-001's own fail-closed posture). EXCLUDED members are
+   never sent to the pricing engine; REFERRAL members still are (a
+   provisional price while manual underwriting decides, not yet built —
+   Sprint 7).
+3. **Default quote validity** (`Quote.valid_until`, `QuoteCreateRequest`
+   has no such field — it's server-computed): `QUOTE_DEFAULT_VALIDITY_DAYS`
+   setting (env-configurable, default 30), not a business-approved value.
+4. **Quote numbering**: `quote_number` is left `NULL` at creation — no
+   numbering convention is invented (matches ART-011 PROH-008's own
+   prohibition on inventing one).
+5. **RatingTable/PricingParameterSet auto-resolution for Quote pricing**
+   (`QuotePriceRequest` is just `{recalculate: bool}` — no `context` at
+   all, so the client can never name a code): resolves the single
+   PUBLISHED code effective on the date, exactly mirroring the frontend's
+   own `resolveLatestPerCode` — see
+   `apps/pricing/application/auto_resolve.py`. Ambiguous/missing
+   configuration fails the same way as standalone pricing
+   (`PRICING-CONFIG`, 422).
+6. **`GET /quotes/{id}/members`** (pragmatic V1 addition, not in ART-006):
+   `Quote` itself has no population field, so there is no other way for
+   the frontend to show who is on the quote.
+
 ## Fora de âmbito desta resolução
 
 **OD-001 (tarifas/prémios reais)** não é resolvido aqui e não pode ser —
