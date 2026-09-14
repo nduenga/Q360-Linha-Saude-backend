@@ -23,6 +23,9 @@ from apps.foundation.infrastructure.tenant_scoping import TenantScopedModel
 from apps.pricing.infrastructure.models import PricingRun
 from apps.product.infrastructure.models import Plan, ProductVersion
 from apps.quote.domain.enums import (
+    DocumentStatus,
+    DocumentTemplateStatus,
+    DocumentType,
     QuoteDecisionType,
     QuoteMemberStatus,
     QuoteSnapshotType,
@@ -224,3 +227,76 @@ class QuoteDecision(TenantScopedModel):
     class Meta:
         managed = False
         db_table = "quote_decision"
+
+
+class DocumentTemplateVersion(TenantScopedModel):
+    """OD-006 ("template oficial da proposta") container — genuinely open,
+    see DECISIONS_TAKEN.md#S08-DOCUMENT-001. `storage_ref` is a pointer
+    (like `RuleVersion.artifact_ref`), never real legal/branded document
+    content."""
+
+    STATUS_CHOICES = [(s.value, s.value) for s in DocumentTemplateStatus]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    template_code = models.CharField(max_length=80)
+    version_no = models.IntegerField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=DocumentTemplateStatus.DRAFT.value)
+    storage_ref = models.TextField()
+    checksum = models.CharField(max_length=128)
+    effective_from = models.DateField()
+    effective_to = models.DateField(null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    published_by = models.CharField(max_length=200, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "document_template_version"
+
+
+class NumberingSequence(TenantScopedModel):
+    """OD-007/OD-008 ("política de numeração") — genuinely open, see
+    DECISIONS_TAKEN.md#S08-DOCUMENT-001. The atomic counter mechanism is
+    real; the prefix/suffix format is a placeholder until a real numbering
+    policy is approved."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    sequence_code = models.CharField(max_length=80)
+    period_key = models.CharField(max_length=40)
+    current_value = models.BigIntegerField(default=0)
+    prefix = models.CharField(max_length=50, null=True, blank=True)
+    suffix = models.CharField(max_length=50, null=True, blank=True)
+    row_version = models.BigIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = False
+        db_table = "numbering_sequence"
+
+
+class Document(TenantScopedModel):
+    TYPE_CHOICES = [(t.value, t.value) for t in DocumentType]
+    STATUS_CHOICES = [(s.value, s.value) for s in DocumentStatus]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    quote = models.ForeignKey(Quote, on_delete=models.DO_NOTHING, db_column="quote_id", related_name="documents")
+    snapshot = models.ForeignKey(QuoteSnapshot, on_delete=models.DO_NOTHING, db_column="snapshot_id")
+    template_version = models.ForeignKey(
+        DocumentTemplateVersion, on_delete=models.DO_NOTHING, db_column="template_version_id"
+    )
+    document_type = models.CharField(max_length=30, choices=TYPE_CHOICES, default=DocumentType.QUOTE_PROPOSAL.value)
+    document_number = models.CharField(max_length=100, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=DocumentStatus.REQUESTED.value)
+    storage_ref = models.TextField(null=True, blank=True)
+    checksum = models.CharField(max_length=128, null=True, blank=True)
+    failure_code = models.CharField(max_length=100, null=True, blank=True)
+    requested_by = models.CharField(max_length=200)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    generated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "document"

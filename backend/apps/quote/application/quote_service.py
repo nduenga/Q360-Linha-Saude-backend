@@ -513,3 +513,68 @@ def decide_quote(
         metadata={"reasonCode": reason_code, "decidedBy": actor_id},
     )
     return quote
+
+
+# ---------------------------------------------------------------------------
+# Q360-S8-03 — cancellation (user-initiated) and expiry (system scheduler).
+# Both allowed from the same source set per ART-009's Quote Machine
+# (QT-007..010 for CANCEL, QT-011..014 for EXPIRE): DRAFT, READY,
+# IN_REVIEW, APPROVED. REJECTED/EXPIRED/CANCELLED are terminal (ART-009
+# "Forbidden Transitions").
+# ---------------------------------------------------------------------------
+
+CANCELLABLE_QUOTE_STATUSES = (
+    QuoteStatus.DRAFT.value,
+    QuoteStatus.READY.value,
+    QuoteStatus.IN_REVIEW.value,
+    QuoteStatus.APPROVED.value,
+)
+
+
+def cancel_quote(*, quote: Quote, reason_code: str, reason_text: str | None, row_version: int, correlation_id: str | None) -> Quote:
+    if quote.status not in CANCELLABLE_QUOTE_STATUSES:
+        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; it cannot be cancelled from this state")
+
+    from_status = quote.status
+    updated = Quote.objects.filter(id=quote.id, status=from_status, row_version=row_version).update(
+        status=QuoteStatus.CANCELLED.value, cancellation_reason=reason_text or reason_code, row_version=row_version + 1
+    )
+    if updated == 0:
+        quote.refresh_from_db()
+        if quote.status not in CANCELLABLE_QUOTE_STATUSES:
+            raise QuoteStateError(f"Quote {quote.id} is {quote.status}; it cannot be cancelled from this state")
+        raise RowVersionMismatchError(f"Quote {quote.id} rowVersion {row_version} does not match the current version")
+    quote.refresh_from_db()
+
+    # QT-009's "Close/void active review task consistently" has no clean
+    # target status in ART-012's `ck_review_status` (only OPEN/IN_PROGRESS/
+    # DECIDED/RETURNED - none means "voided") - left untouched rather than
+    # forcing a semantically wrong value. See DECISIONS_TAKEN.md#S08-DOCUMENT-001.
+
+    _record_transition(
+        quote, from_status=from_status, to_status=QuoteStatus.CANCELLED.value, reason_code=reason_code,
+        reason_text=reason_text, correlation_id=correlation_id,
+    )
+    _audit.record(action="quote.cancelled", entity_type="Quote", entity_id=str(quote.id), metadata={"reasonCode": reason_code})
+    return quote
+
+
+def expire_quote(*, quote: Quote) -> Quote | None:
+    """QT-011..014, actor "System Scheduler" (ART-009 Commands & Authority:
+    "No user-supplied actor"). Called by `manage.py expire_quotes` (no
+    background task queue exists in this stack - a cron/scheduled-task
+    invocation of that command is the deployment's responsibility, same
+    "no messaging without a real consumer" posture as everywhere else in
+    this project). Returns None (no-op) if the quote isn't actually due."""
+    if quote.status not in CANCELLABLE_QUOTE_STATUSES or quote.valid_until is None or quote.valid_until >= datetime.date.today():
+        return None
+
+    from_status = quote.status
+    updated = Quote.objects.filter(id=quote.id, status=from_status).update(status=QuoteStatus.EXPIRED.value)
+    if updated == 0:
+        return None
+    quote.refresh_from_db()
+
+    _record_transition(quote, from_status=from_status, to_status=QuoteStatus.EXPIRED.value, reason_code="VALIDITY_ELAPSED")
+    _audit.record(action="quote.expired", entity_type="Quote", entity_id=str(quote.id))
+    return quote

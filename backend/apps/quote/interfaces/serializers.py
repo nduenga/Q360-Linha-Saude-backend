@@ -7,7 +7,14 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from apps.quote.domain.enums import QuoteDecisionType, QuoteStatus, ReviewTaskStatus
+from apps.quote.domain.enums import (
+    DocumentStatus,
+    DocumentTemplateStatus,
+    DocumentType,
+    QuoteDecisionType,
+    QuoteStatus,
+    ReviewTaskStatus,
+)
 
 
 class QuoteSerializer(serializers.Serializer):
@@ -82,3 +89,40 @@ class StateHistoryItemSerializer(serializers.Serializer):
     reasonText = serializers.CharField(source="reason_text", allow_null=True)
     changedBy = serializers.CharField(source="changed_by")
     changedAt = serializers.DateTimeField(source="changed_at")
+
+
+class CancelQuoteRequestSerializer(serializers.Serializer):
+    reasonCode = serializers.CharField(min_length=1, max_length=100, source="reason_code")
+    reasonText = serializers.CharField(source="reason_text", allow_null=True, required=False, default=None)
+    rowVersion = serializers.IntegerField(min_value=0)
+
+
+class DocumentSerializer(serializers.Serializer):
+    """DTO matching ART-006 `Document` verbatim."""
+
+    id = serializers.UUIDField()
+    quoteId = serializers.UUIDField(source="quote_id")
+    documentType = serializers.ChoiceField(source="document_type", choices=[t.value for t in DocumentType])
+    documentNumber = serializers.CharField(source="document_number", allow_null=True)
+    status = serializers.ChoiceField(choices=[s.value for s in DocumentStatus])
+    generatedAt = serializers.DateTimeField(source="generated_at", allow_null=True)
+
+
+class DocumentTemplateCreateRequestSerializer(serializers.Serializer):
+    """Pragmatic V1 addition, not in ART-006 (see
+    apps/quote/application/document_service.py module docstring)."""
+
+    templateCode = serializers.CharField(source="template_code")
+    storageRef = serializers.CharField(source="storage_ref")
+    effectiveFrom = serializers.DateField(source="effective_from")
+    effectiveTo = serializers.DateField(source="effective_to", allow_null=True, required=False, default=None)
+
+
+class DocumentTemplateHeaderSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    templateCode = serializers.CharField(source="template_code")
+    versionNo = serializers.IntegerField(source="version_no")
+    status = serializers.ChoiceField(choices=[s.value for s in DocumentTemplateStatus])
+    effectiveFrom = serializers.DateField(source="effective_from")
+    effectiveTo = serializers.DateField(source="effective_to", allow_null=True)
+    checksum = serializers.CharField(allow_null=True)

@@ -46,3 +46,27 @@ class QuoteDecisionType(str, Enum):
     APPROVE = "APPROVE"
     REJECT = "REJECT"
     RETURN = "RETURN"
+
+
+class DocumentTemplateStatus(str, Enum):
+    """ART-005 `ck_template_status` (ART-012 V024)."""
+
+    DRAFT = "DRAFT"
+    PUBLISHED = "PUBLISHED"
+    RETIRED = "RETIRED"
+
+
+class DocumentType(str, Enum):
+    """ART-005 `ck_document_type` (ART-012 V024); ART-006 `Document.documentType`
+    (currently a single fixed `const`)."""
+
+    QUOTE_PROPOSAL = "QUOTE_PROPOSAL"
+
+
+class DocumentStatus(str, Enum):
+    """ART-005 `ck_document_status` (ART-012 V024); ART-006 `Document.status`;
+    ART-009 "Document" row in the State Catalogue."""
+
+    REQUESTED = "REQUESTED"
+    GENERATED = "GENERATED"
+    FAILED = "FAILED"

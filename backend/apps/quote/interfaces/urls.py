@@ -1,6 +1,9 @@
 from django.urls import path
 
 from apps.quote.interfaces.views import (
+    DocumentTemplateListCreateView,
+    DocumentTemplatePublishView,
+    QuoteCancelView,
     QuoteDecisionView,
     QuoteDetailView,
     QuoteHistoryView,
@@ -8,6 +11,7 @@ from apps.quote.interfaces.views import (
     QuoteMemberDetailView,
     QuoteMemberListCreateView,
     QuotePriceView,
+    QuoteProposalView,
     QuoteReviewView,
     QuoteSubmitView,
     ReviewQueueView,
@@ -27,5 +31,13 @@ urlpatterns = [
     path("quotes/<uuid:quote_id>/review", QuoteReviewView.as_view(), name="quote-review"),
     path("quotes/<uuid:quote_id>/decision", QuoteDecisionView.as_view(), name="quote-decision"),
     path("quotes/<uuid:quote_id>/history", QuoteHistoryView.as_view(), name="quote-history"),
+    path("quotes/<uuid:quote_id>/cancel", QuoteCancelView.as_view(), name="quote-cancel"),
+    path("quotes/<uuid:quote_id>/proposal", QuoteProposalView.as_view(), name="quote-proposal"),
+    path("document-templates", DocumentTemplateListCreateView.as_view(), name="document-template-create"),
+    path(
+        "document-templates/<uuid:template_id>/publish",
+        DocumentTemplatePublishView.as_view(),
+        name="document-template-publish",
+    ),
     path("reviews", ReviewQueueView.as_view(), name="review-queue"),
 ]

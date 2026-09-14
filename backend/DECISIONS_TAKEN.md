@@ -295,6 +295,53 @@ build a complete, working Sprint 6:
    REJECT→`quote:reject`, RETURN→`quote:review`, all still gated by the
    single `q360.approve` OAuth2 scope ART-006 attaches to `decideQuote`.
 
+## S08-DOCUMENT-001 — Judgment calls made building documents/finalization (Sprint 8, 2026-09-14)
+
+1. **`DocumentTemplateVersion` gets its own dedicated create/publish
+   endpoints** (`POST /api/v1/document-templates`,
+   `POST /api/v1/document-templates/{id}/publish`), not the shared
+   `/configuration/{configType}/{configId}/publish` dispatcher used by
+   RatingTable/PricingParameterSet/RuleVersion — that endpoint's
+   `configType` is a **closed enum** in ART-006 (exactly those three
+   values); adding a fourth would silently violate the documented schema.
+   A dedicated pair is the only way to add this without either inventing
+   an enum value or reusing the shared one incorrectly.
+2. **"Generation" produces a placeholder JSON artifact, not a real PDF.**
+   OD-006 ("template oficial da proposta") is genuinely unresolved — no
+   approved template content/branding/legal text exists anywhere. The
+   generated file is a labeled JSON summary of the APPROVAL snapshot
+   (reproducible, checksummed, satisfies S8-01's own AC), explicitly
+   marked as a placeholder. `DEFAULT_TEMPLATE_CODE =
+   "QUOTE_PROPOSAL_DEFAULT"` is this module's own fixture convention (same
+   posture as pricing's `BASE_PREMIUM` parameter code) — an Admin must
+   create and publish one before any proposal can be generated at all
+   (fails closed with `NOT-FOUND` otherwise).
+3. **Numbering (OD-007/OD-008) mechanism is real, the format is a
+   placeholder.** `numbering_service.next_value` guarantees no duplicate
+   number under concurrency (proven with real threads, not just
+   sequential calls) using `select_for_update`; the actual prefix/suffix
+   policy is unset (empty) until a real numbering convention is approved.
+4. **`generateQuoteProposal` requires `Quote.status == APPROVED`** and an
+   existing APPROVAL `QuoteSnapshot` — neither ART-006 nor ART-009 states
+   this explicitly, but `Document` has no other defined trigger, and a
+   "proposal" logically reflects the approved snapshot the AC names
+   ("Documento reflecte snapshot").
+5. **Cancelling an `IN_REVIEW` quote leaves its `ReviewTask` untouched.**
+   QT-009's side effect ("Close/void active review task consistently")
+   has no matching value in `ck_review_status` (only OPEN/IN_PROGRESS/
+   DECIDED/RETURNED — none means "voided") — forcing one of those would
+   misrepresent what happened. Left as a known gap rather than invented.
+6. **Document template management reuses the `product:manage` DOC-001
+   permission** — no dedicated "document:manage" permission exists in
+   DOC-001's matrix, and `product:manage` already covers "Admin/Product
+   Configurator does config work" for every other versioned config
+   resource in this project.
+7. **`expire_quotes` is a management command, not a background job.** No
+   task queue exists in this stack (DOC-002 s4: "no messaging without a
+   real consumer") — an external scheduler (cron/Task Scheduler/CronJob)
+   is expected to invoke it periodically in deployment; it is idempotent
+   and safe to re-run.
+
 ## Fora de âmbito desta resolução
 
 **OD-001 (tarifas/prémios reais)** não é resolvido aqui e não pode ser —

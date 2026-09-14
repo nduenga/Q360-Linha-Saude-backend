@@ -18,11 +18,15 @@ from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import get_correlation_id
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.pricing.interfaces.serializers import PricingResponseSerializer
-from apps.quote.application import quote_service
+from apps.quote.application import document_service, quote_service
 from apps.quote.domain.enums import QuoteDecisionType
-from apps.quote.infrastructure.models import Quote, ReviewTask
+from apps.quote.infrastructure.models import DocumentTemplateVersion, Quote, ReviewTask
 from apps.quote.interfaces.serializers import (
+    CancelQuoteRequestSerializer,
     DecisionRequestSerializer,
+    DocumentSerializer,
+    DocumentTemplateCreateRequestSerializer,
+    DocumentTemplateHeaderSerializer,
     QuoteCreateRequestSerializer,
     QuoteMemberRequestSerializer,
     QuoteMemberSerializer,
@@ -213,6 +217,78 @@ class QuoteHistoryView(APIView):
         quote = get_object_or_404(Quote, id=quote_id)
         history = quote_service.get_quote_history(quote=quote)
         return Response(StateHistoryItemSerializer(history, many=True).data)
+
+
+class QuoteCancelView(APIView):
+    """ART-006 `/api/v1/quotes/{quoteId}/cancel`: `cancelQuote` (POST)."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_EDIT)]
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = CancelQuoteRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        updated = quote_service.cancel_quote(
+            quote=quote,
+            reason_code=data["reason_code"],
+            reason_text=data["reason_text"],
+            row_version=data["rowVersion"],
+            correlation_id=get_correlation_id(),
+        )
+        return Response(QuoteSerializer(updated).data)
+
+
+class QuoteProposalView(APIView):
+    """ART-006 `/api/v1/quotes/{quoteId}/proposal`: `generateQuoteProposal`
+    (POST, 202), `getQuoteProposal` (GET)."""
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [require_scope(Scope.WRITE)()]
+        return [require_scope(Scope.READ)()]
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        document = document_service.generate_quote_proposal(quote=quote)
+        return Response(DocumentSerializer(document).data, status=202)
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        document = document_service.get_quote_proposal(quote=quote)
+        if document is None:
+            raise Http404
+        return Response(DocumentSerializer(document).data)
+
+
+class DocumentTemplateListCreateView(APIView):
+    """Pragmatic V1 addition, not in ART-006 (see
+    apps/quote/application/document_service.py module docstring) — the
+    only way to make `generateQuoteProposal` succeed at all, since OD-006
+    has no approved template and ART-006 has no CRUD for this resource."""
+
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+    def post(self, request):
+        body = DocumentTemplateCreateRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        template = document_service.create_document_template(
+            template_code=data["template_code"],
+            storage_ref=data["storage_ref"],
+            effective_from=data["effective_from"],
+            effective_to=data["effective_to"],
+        )
+        return Response(DocumentTemplateHeaderSerializer(template).data, status=201)
+
+
+class DocumentTemplatePublishView(APIView):
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+    def post(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        published = document_service.publish_document_template(template)
+        return Response(DocumentTemplateHeaderSerializer(published).data)
 
 
 class ReviewQueueView(APIView):
