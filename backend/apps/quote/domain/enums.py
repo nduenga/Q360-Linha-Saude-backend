@@ -28,3 +28,21 @@ class QuoteSnapshotType(str, Enum):
     SUBMISSION = "SUBMISSION"
     APPROVAL = "APPROVAL"
     DOCUMENT = "DOCUMENT"
+
+
+class ReviewTaskStatus(str, Enum):
+    """ART-005 `ck_review_status` (ART-012 V022); ART-006 `ReviewTask.status`;
+    ART-009 "Review Machine" sheet."""
+
+    OPEN = "OPEN"
+    IN_PROGRESS = "IN_PROGRESS"
+    DECIDED = "DECIDED"
+    RETURNED = "RETURNED"
+
+
+class QuoteDecisionType(str, Enum):
+    """ART-005 `ck_quote_decision` (ART-012 V023); ART-006 `DecisionRequest.decision`."""
+
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+    RETURN = "RETURN"

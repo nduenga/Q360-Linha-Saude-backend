@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from apps.quote.domain.enums import QuoteStatus
+from apps.quote.domain.enums import QuoteDecisionType, QuoteStatus, ReviewTaskStatus
 
 
 class QuoteSerializer(serializers.Serializer):
@@ -54,3 +54,31 @@ class QuoteMemberSerializer(serializers.Serializer):
     memberId = serializers.UUIDField(source="member_id")
     status = serializers.CharField()
     eligibilityEvaluationId = serializers.UUIDField(source="eligibility_evaluation_id", allow_null=True)
+
+
+class QuoteSubmitRequestSerializer(serializers.Serializer):
+    rowVersion = serializers.IntegerField(min_value=0)
+
+
+class DecisionRequestSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(choices=[d.value for d in QuoteDecisionType])
+    reasonCode = serializers.CharField(min_length=1, max_length=100, source="reason_code")
+    reasonText = serializers.CharField(source="reason_text", allow_null=True, required=False, default=None)
+    rowVersion = serializers.IntegerField(min_value=0)
+
+
+class ReviewTaskSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    quoteId = serializers.UUIDField(source="quote_id")
+    status = serializers.ChoiceField(choices=[s.value for s in ReviewTaskStatus])
+    assignedTo = serializers.CharField(source="assigned_to", allow_null=True)
+    createdAt = serializers.DateTimeField(source="created_at")
+
+
+class StateHistoryItemSerializer(serializers.Serializer):
+    fromStatus = serializers.CharField(source="from_status", allow_null=True)
+    toStatus = serializers.CharField(source="to_status")
+    reasonCode = serializers.CharField(source="reason_code", allow_null=True)
+    reasonText = serializers.CharField(source="reason_text", allow_null=True)
+    changedBy = serializers.CharField(source="changed_by")
+    changedAt = serializers.DateTimeField(source="changed_at")

@@ -20,6 +20,7 @@ import uuid
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.utils.timezone import now as timezone_now
 
 from apps.client.infrastructure.models import InsuredMember, Proposer
 from apps.eligibility.application.use_cases import EvaluateEligibilityUseCase
@@ -31,9 +32,29 @@ from apps.pricing.application.auto_resolve import resolve_default_parameter_set_
 from apps.pricing.application.pricing_engine import calculate_pricing
 from apps.pricing.domain.age_band import compute_age_band
 from apps.product.infrastructure.models import Plan, ProductVersion
-from apps.quote.domain.enums import QuoteMemberStatus, QuoteSnapshotType, QuoteStatus
-from apps.quote.domain.errors import DuplicateMemberError, QuoteStateError, ReferencedEntityNotFoundError, RowVersionMismatchError
-from apps.quote.infrastructure.models import Quote, QuoteMember, QuoteSnapshot, QuoteStateHistory
+from apps.quote.domain.enums import (
+    QuoteDecisionType,
+    QuoteMemberStatus,
+    QuoteSnapshotType,
+    QuoteStatus,
+    ReviewTaskStatus,
+)
+from apps.quote.domain.errors import (
+    DuplicateMemberError,
+    QuoteStateError,
+    ReferencedEntityNotFoundError,
+    RowVersionMismatchError,
+    SegregationOfDutiesError,
+)
+from apps.quote.infrastructure.models import (
+    AuthorityPolicy,
+    Quote,
+    QuoteDecision,
+    QuoteMember,
+    QuoteSnapshot,
+    QuoteStateHistory,
+    ReviewTask,
+)
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 
@@ -295,3 +316,200 @@ def resolve_pricing_rule_version_optional(*, effective_date: datetime.date) -> s
     )
     distinct = sorted(set(codes))
     return distinct[0] if len(distinct) == 1 else None
+
+
+# ---------------------------------------------------------------------------
+# Q360-S7-01..03 — submission, review workspace, decision (approve/reject/
+# return). See ART-009 "Quote Machine" (QT-003..006) and "Review Machine"
+# (RV-001..005), and DECISIONS_TAKEN.md#S07-REVIEW-001 for the judgment
+# calls made here (no START_REVIEW/authority-policy endpoint in ART-006).
+# ---------------------------------------------------------------------------
+
+
+def _create_snapshot(*, quote: Quote, snapshot_type: str) -> QuoteSnapshot:
+    """Captures the quote's current (already-calculated) pricing reference
+    at a lifecycle milestone — SUBMISSION (QT-003) / APPROVAL (QT-004) —
+    without recalculating anything (the snapshot must reflect exactly what
+    was priced, not a fresh run)."""
+    actor = CurrentActorProvider.get()
+    snapshot_json = {
+        "status": quote.status,
+        "productVersionId": str(quote.product_version_id),
+        "planId": str(quote.plan_id),
+        "effectiveDate": quote.effective_date.isoformat(),
+        "latestPricingRunId": str(quote.latest_pricing_run_id) if quote.latest_pricing_run_id else None,
+    }
+    checksum = hashlib.sha256(json.dumps(snapshot_json, sort_keys=True).encode("utf-8")).hexdigest()
+    next_snapshot_no = (
+        QuoteSnapshot.objects.filter(quote=quote).order_by("-snapshot_no").values_list("snapshot_no", flat=True).first() or 0
+    ) + 1
+    return QuoteSnapshot.objects.create(
+        tenant_id=quote.tenant_id,
+        quote=quote,
+        snapshot_no=next_snapshot_no,
+        snapshot_type=snapshot_type,
+        pricing_run=quote.latest_pricing_run,
+        product_version=quote.product_version,
+        plan=quote.plan,
+        snapshot_json=snapshot_json,
+        checksum=checksum,
+        created_by=actor.actor_id if actor else "unknown",
+    )
+
+
+def submit_quote(*, quote: Quote, row_version: int, correlation_id: str | None) -> Quote:
+    """QT-003: READY -> IN_REVIEW. Guard ("valid pricing + immutable
+    submission snapshot + prerequisites satisfied") is exactly what
+    becoming READY already proved (see price_quote) - submit just requires
+    the quote to still be READY."""
+    if quote.status != QuoteStatus.READY.value:
+        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; only a READY quote can be submitted")
+
+    actor = CurrentActorProvider.get()
+    actor_id = actor.actor_id if actor else "unknown"
+    updated = Quote.objects.filter(id=quote.id, status=QuoteStatus.READY.value, row_version=row_version).update(
+        status=QuoteStatus.IN_REVIEW.value, submitted_by=actor_id, submitted_at=timezone_now(), row_version=row_version + 1
+    )
+    if updated == 0:
+        # Distinguish "someone else changed it" (VERSION-CONFLICT) from
+        # "it's no longer READY" (QUOTE-STATE) — re-check which happened.
+        quote.refresh_from_db()
+        if quote.status != QuoteStatus.READY.value:
+            raise QuoteStateError(f"Quote {quote.id} is {quote.status}; only a READY quote can be submitted")
+        raise RowVersionMismatchError(f"Quote {quote.id} rowVersion {row_version} does not match the current version")
+    quote.refresh_from_db()
+
+    ReviewTask.objects.create(tenant_id=quote.tenant_id, quote=quote, created_by=actor_id)
+    _create_snapshot(quote=quote, snapshot_type=QuoteSnapshotType.SUBMISSION.value)
+    _record_transition(
+        quote, from_status=QuoteStatus.READY.value, to_status=QuoteStatus.IN_REVIEW.value, correlation_id=correlation_id
+    )
+    _audit.record(action="quote.submitted", entity_type="Quote", entity_id=str(quote.id))
+    return quote
+
+
+def get_active_review_task(*, quote: Quote) -> ReviewTask | None:
+    return quote.review_tasks.order_by("-created_at").first()
+
+
+def get_quote_history(*, quote: Quote):
+    return quote.state_history.order_by("changed_at")
+
+
+def _resolve_authority_limit(*, effective_date: datetime.date) -> "tuple[AuthorityPolicy | None, str | None]":
+    """OD-005 — genuinely open, see DECISIONS_TAKEN.md#S07-REVIEW-001. No
+    PUBLISHED AuthorityPolicy means "no configured limit", not fail-closed
+    (unlike eligibility): scope (`q360.approve`) + DOC-001 `quote:approve`
+    already gate *who* may approve at all; this only narrows *how much*
+    once OD-005 names a real policy."""
+    from django.db.models import Q as _Q
+
+    policy = (
+        AuthorityPolicy.objects.filter(status="PUBLISHED", effective_from__lte=effective_date)
+        .filter(_Q(effective_to__isnull=True) | _Q(effective_to__gte=effective_date))
+        .order_by("-effective_from", "-version_no")
+        .first()
+    )
+    if policy is None:
+        return None, None
+    max_amount = policy.policy_json.get("maxApprovalAmount")
+    return policy, max_amount
+
+
+def decide_quote(
+    *,
+    quote: Quote,
+    decision: str,
+    reason_code: str,
+    reason_text: str | None,
+    row_version: int,
+    correlation_id: str | None,
+) -> Quote:
+    if quote.status != QuoteStatus.IN_REVIEW.value:
+        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; only an IN_REVIEW quote can be decided")
+
+    review_task = get_active_review_task(quote=quote)
+    if review_task is None or review_task.status not in (ReviewTaskStatus.OPEN.value, ReviewTaskStatus.IN_PROGRESS.value):
+        raise QuoteStateError(f"Quote {quote.id} has no active review task")
+
+    actor = CurrentActorProvider.get()
+    actor_id = actor.actor_id if actor else "unknown"
+
+    # Segregation of duties (Q360-S7-01 AC "Submitter não aprova"; ART-012
+    # V019 `ck_quote_four_eyes` / V023 `ck_decision_four_eyes` enforce this
+    # at the DB level for every decision type, not just APPROVE - checked
+    # here first for a clean SEC-403 instead of a raw IntegrityError.
+    if quote.submitted_by and quote.submitted_by == actor_id:
+        raise SegregationOfDutiesError(
+            f"Actor {actor_id} submitted quote {quote.id} and cannot decide on it (four-eyes)"
+        )
+
+    authority_policy = None
+    if decision == QuoteDecisionType.APPROVE.value:
+        authority_policy, max_amount = _resolve_authority_limit(effective_date=quote.effective_date)
+        if max_amount is not None and quote.latest_pricing_run and quote.latest_pricing_run.total_amount is not None:
+            from decimal import Decimal
+
+            if quote.latest_pricing_run.total_amount > Decimal(str(max_amount)):
+                raise SegregationOfDutiesError(
+                    f"Quote {quote.id} total exceeds the approval authority configured in policy {authority_policy.code}"
+                )
+
+    target_status = {
+        QuoteDecisionType.APPROVE.value: QuoteStatus.APPROVED.value,
+        QuoteDecisionType.REJECT.value: QuoteStatus.REJECTED.value,
+        QuoteDecisionType.RETURN.value: QuoteStatus.READY.value,
+    }[decision]
+    review_target_status = {
+        QuoteDecisionType.APPROVE.value: ReviewTaskStatus.DECIDED.value,
+        QuoteDecisionType.REJECT.value: ReviewTaskStatus.DECIDED.value,
+        QuoteDecisionType.RETURN.value: ReviewTaskStatus.RETURNED.value,
+    }[decision]
+
+    with transaction.atomic():
+        quote_fields = {"status": target_status, "row_version": row_version + 1}
+        if decision == QuoteDecisionType.APPROVE.value:
+            quote_fields.update(approved_by=actor_id, approved_at=timezone_now())
+        elif decision == QuoteDecisionType.REJECT.value:
+            quote_fields.update(rejected_by=actor_id, rejected_at=timezone_now())
+        updated = Quote.objects.filter(id=quote.id, status=QuoteStatus.IN_REVIEW.value, row_version=row_version).update(
+            **quote_fields
+        )
+        if updated == 0:
+            quote.refresh_from_db()
+            if quote.status != QuoteStatus.IN_REVIEW.value:
+                raise QuoteStateError(f"Quote {quote.id} is {quote.status}; only an IN_REVIEW quote can be decided")
+            raise RowVersionMismatchError(f"Quote {quote.id} rowVersion {row_version} does not match the current version")
+
+        ReviewTask.objects.filter(id=review_task.id).update(status=review_target_status, decided_at=timezone_now())
+        quote.refresh_from_db()
+
+        snapshot = None
+        if decision == QuoteDecisionType.APPROVE.value:
+            snapshot = _create_snapshot(quote=quote, snapshot_type=QuoteSnapshotType.APPROVAL.value)
+
+        QuoteDecision.objects.create(
+            tenant_id=quote.tenant_id,
+            quote=quote,
+            review_task=review_task,
+            authority_policy=authority_policy,
+            decision=decision,
+            reason_code=reason_code,
+            reason_text=reason_text,
+            decided_by=actor_id,
+            submitted_by=quote.submitted_by,
+            snapshot=snapshot,
+        )
+
+    from_status = QuoteStatus.IN_REVIEW.value
+    _record_transition(
+        quote, from_status=from_status, to_status=target_status, reason_code=reason_code, reason_text=reason_text,
+        correlation_id=correlation_id,
+    )
+    _audit.record(
+        action=f"quote.decision.{decision.lower()}",
+        entity_type="Quote",
+        entity_id=str(quote.id),
+        metadata={"reasonCode": reason_code, "decidedBy": actor_id},
+    )
+    return quote

@@ -22,7 +22,13 @@ from apps.foundation.infrastructure.models import Tenant
 from apps.foundation.infrastructure.tenant_scoping import TenantScopedModel
 from apps.pricing.infrastructure.models import PricingRun
 from apps.product.infrastructure.models import Plan, ProductVersion
-from apps.quote.domain.enums import QuoteMemberStatus, QuoteSnapshotType, QuoteStatus
+from apps.quote.domain.enums import (
+    QuoteDecisionType,
+    QuoteMemberStatus,
+    QuoteSnapshotType,
+    QuoteStatus,
+    ReviewTaskStatus,
+)
 
 
 class Quote(TenantScopedModel):
@@ -122,3 +128,99 @@ class QuoteStateHistory(TenantScopedModel):
     class Meta:
         managed = False
         db_table = "quote_state_history"
+
+
+class AuthorityPolicy(TenantScopedModel):
+    """OD-005 ("matriz de autoridade de aprovação") container — genuinely
+    open, see DECISIONS_TAKEN.md#S07-REVIEW-001. No CRUD/publish endpoint
+    is exposed in V1 (ART-006 has none for this resource, unlike
+    RatingTable/PricingParameterSet/RuleVersion) — the model exists only so
+    `quote_decision.authority_policy_id` (ART-012 V023) has something to
+    reference once OD-005 is resolved and a Change Request adds the
+    endpoint. Absence of a PUBLISHED policy is treated as "no configured
+    limit" (any actor with q360.approve + quote:approve may decide), not a
+    fail-closed block — see DECISIONS_TAKEN.md."""
+
+    STATUS_CHOICES = (("DRAFT", "DRAFT"), ("PUBLISHED", "PUBLISHED"), ("RETIRED", "RETIRED"))
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    code = models.CharField(max_length=80)
+    version_no = models.IntegerField()
+    effective_from = models.DateField()
+    effective_to = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="DRAFT")
+    policy_json = models.JSONField()
+    checksum = models.CharField(max_length=128, null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    published_by = models.CharField(max_length=200, null=True, blank=True)
+    approved_by = models.CharField(max_length=200, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "authority_policy"
+
+
+class ReviewTask(TenantScopedModel):
+    STATUS_CHOICES = [(s.value, s.value) for s in ReviewTaskStatus]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    quote = models.ForeignKey(Quote, on_delete=models.DO_NOTHING, db_column="quote_id", related_name="review_tasks")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=ReviewTaskStatus.OPEN.value)
+    assigned_to = models.CharField(max_length=200, null=True, blank=True)
+    created_by = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    row_version = models.BigIntegerField(default=0)
+
+    class Meta:
+        managed = False
+        db_table = "review_task"
+
+
+class ReviewNote(TenantScopedModel):
+    """ART-012 V023. No endpoint exposes this in ART-006 V1 (same posture
+    as apps.product's Benefit/PlanBenefit, see
+    OPEN_DECISIONS.md#S02-CONTRACT-001) — the table exists for schema
+    completeness only."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    review_task = models.ForeignKey(ReviewTask, on_delete=models.CASCADE, db_column="review_task_id", related_name="notes")
+    note_text = models.TextField()
+    created_by = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "review_note"
+
+
+class QuoteDecision(TenantScopedModel):
+    DECISION_CHOICES = [(d.value, d.value) for d in QuoteDecisionType]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    quote = models.ForeignKey(Quote, on_delete=models.DO_NOTHING, db_column="quote_id", related_name="decisions")
+    review_task = models.ForeignKey(
+        ReviewTask, on_delete=models.DO_NOTHING, db_column="review_task_id", null=True, blank=True
+    )
+    authority_policy = models.ForeignKey(
+        AuthorityPolicy, on_delete=models.DO_NOTHING, db_column="authority_policy_id", null=True, blank=True
+    )
+    decision = models.CharField(max_length=20, choices=DECISION_CHOICES)
+    reason_code = models.CharField(max_length=100)
+    reason_text = models.TextField(null=True, blank=True)
+    decided_by = models.CharField(max_length=200)
+    submitted_by = models.CharField(max_length=200, null=True, blank=True)
+    decided_at = models.DateTimeField(auto_now_add=True)
+    snapshot = models.ForeignKey(
+        QuoteSnapshot, on_delete=models.DO_NOTHING, db_column="snapshot_id", null=True, blank=True
+    )
+
+    class Meta:
+        managed = False
+        db_table = "quote_decision"

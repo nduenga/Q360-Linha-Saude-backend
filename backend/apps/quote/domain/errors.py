@@ -37,3 +37,13 @@ class DuplicateMemberError(DomainProblem):
 
     http_status = 409
     problem_code = "CONFLICT"
+
+
+class SegregationOfDutiesError(DomainProblem):
+    """The actor deciding (approve/reject/return) is the same actor who
+    submitted the quote — forbidden by `ck_quote_four_eyes`/
+    `ck_decision_four_eyes` (ART-012 V019/V023) and Q360-S7-01's own
+    acceptance criterion ("Submitter não aprova")."""
+
+    http_status = 403
+    problem_code = "SEC-403"

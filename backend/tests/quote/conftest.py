@@ -39,4 +39,8 @@ def make_client(*, tenant_id, roles: list[str], scope: str, actor_id: str = "act
 
 @pytest.fixture
 def admin_client(tenant):
-    return make_client(tenant_id=tenant.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin")
+    # ADMIN also carries q360.approve here (unlike other modules' fixtures)
+    # because Sprint 7's own tests need a single actor able to exercise
+    # every scope up to the point where segregation-of-duties or a missing
+    # DOC-001 permission is the thing actually being tested.
+    return make_client(tenant_id=tenant.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin q360.approve")

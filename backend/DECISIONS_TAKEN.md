@@ -260,6 +260,41 @@ build a complete, working Sprint 6:
    `Quote` itself has no population field, so there is no other way for
    the frontend to show who is on the quote.
 
+## S07-REVIEW-001 — Judgment calls made building the review workflow (Sprint 7, 2026-09-14)
+
+1. **No `START_REVIEW` endpoint.** ART-006 has no way to move a
+   `ReviewTask` OPEN→IN_PROGRESS (RV-001) — only `getQuoteReview`,
+   `decideQuote` and `listReviews` exist. `ReviewTask.status` therefore
+   goes straight OPEN→DECIDED/RETURNED; `assigned_to`/`started_at` remain
+   unset in V1. Not invented — genuinely absent from the contract.
+2. **Segregation of duties enforced for all three decisions, not just
+   APPROVE.** ART-009's "Commands & Authority" sheet marks "Four-eyes: Yes"
+   only for APPROVE, but ART-012's `ck_decision_four_eyes` CHECK
+   (`submitted_by IS NULL OR decided_by <> submitted_by`) applies
+   unconditionally to every `quote_decision` row regardless of `decision`
+   value. The stricter, DB-enforced rule was taken as authoritative
+   (DOC-000 P-08): the submitter can decide (approve/reject/return)
+   nothing about their own submission.
+3. **Authority policy (OD-005) absence = unrestricted, not fail-closed.**
+   `AuthorityPolicy` (ART-012 V022) has no CRUD/publish endpoint in
+   ART-006 at all, unlike RatingTable/PricingParameterSet/RuleVersion — so
+   there is no channel to configure a real limit yet. Scope (`q360.approve`)
+   + DOC-001 `quote:approve` already gate *who* may decide; absent a
+   policy, *how much* is left unrestricted rather than blocking every
+   approval on an OD that has no way to be resolved via the API. Once
+   OD-005 is closed and a Change Request adds the endpoint, this
+   automatically starts enforcing real limits (`_resolve_authority_limit`
+   already reads `policy_json.maxApprovalAmount` when a policy exists).
+4. **`review_note` (ART-012 V023) has no endpoint** — same posture as
+   `Benefit`/`PlanBenefit` (S02-CONTRACT-001): table exists, no API surface
+   in this version.
+5. **Decision-type → DOC-001 permission mapping** (Commands & Authority
+   sheet uses "underwriting:review"/"underwriting:decide", not present in
+   DOC-001's own matrix — that matrix already fixes `quote:approve`/
+   `quote:reject`/`quote:review`): APPROVE→`quote:approve`,
+   REJECT→`quote:reject`, RETURN→`quote:review`, all still gated by the
+   single `q360.approve` OAuth2 scope ART-006 attaches to `decideQuote`.
+
 ## Fora de âmbito desta resolução
 
 **OD-001 (tarifas/prémios reais)** não é resolvido aqui e não pode ser —

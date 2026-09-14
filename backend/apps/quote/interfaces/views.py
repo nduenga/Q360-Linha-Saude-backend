@@ -6,26 +6,40 @@ docs/artifacts/ART-006-openapi/ — plus DOC-001 s18 `quote:*` permissions
 """
 from __future__ import annotations
 
+from django.http import Http404
 from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.foundation.application.permission_evaluator import PermissionEvaluator
 from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import get_correlation_id
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.pricing.interfaces.serializers import PricingResponseSerializer
 from apps.quote.application import quote_service
-from apps.quote.infrastructure.models import Quote
+from apps.quote.domain.enums import QuoteDecisionType
+from apps.quote.infrastructure.models import Quote, ReviewTask
 from apps.quote.interfaces.serializers import (
+    DecisionRequestSerializer,
     QuoteCreateRequestSerializer,
     QuoteMemberRequestSerializer,
     QuoteMemberSerializer,
     QuotePriceRequestSerializer,
     QuoteSerializer,
+    QuoteSubmitRequestSerializer,
     QuoteUpdateRequestSerializer,
+    ReviewTaskSerializer,
+    StateHistoryItemSerializer,
 )
 from shared.pagination import Q360PageNumberPagination
+
+_DECISION_PERMISSION = {
+    QuoteDecisionType.APPROVE.value: Permission.QUOTE_APPROVE,
+    QuoteDecisionType.REJECT.value: Permission.QUOTE_REJECT,
+    QuoteDecisionType.RETURN.value: Permission.QUOTE_REVIEW,
+}
 
 
 class QuoteListCreateView(APIView):
@@ -129,3 +143,89 @@ class QuotePriceView(APIView):
             quote=quote, recalculate=body.validated_data["recalculate"], correlation_id=get_correlation_id()
         )
         return Response(PricingResponseSerializer(pricing_run).data)
+
+
+class QuoteSubmitView(APIView):
+    """ART-006 `/api/v1/quotes/{quoteId}/submit`: `submitQuote` (POST)."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_SUBMIT)]
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = QuoteSubmitRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        updated = quote_service.submit_quote(
+            quote=quote, row_version=body.validated_data["rowVersion"], correlation_id=get_correlation_id()
+        )
+        return Response(QuoteSerializer(updated).data)
+
+
+class QuoteReviewView(APIView):
+    """ART-006 `/api/v1/quotes/{quoteId}/review`: `getQuoteReview` (GET)."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        review_task = quote_service.get_active_review_task(quote=quote)
+        if review_task is None:
+            raise Http404
+        return Response(ReviewTaskSerializer(review_task).data)
+
+
+class QuoteDecisionView(APIView):
+    """ART-006 `/api/v1/quotes/{quoteId}/decision`: `decideQuote` (POST) —
+    handles APPROVE/REJECT/RETURN through one endpoint (`DecisionRequest`),
+    gated by scope `q360.approve` uniformly and by a DOC-001 s18 permission
+    that varies per decision (quote:approve/quote:reject/quote:review —
+    see Commands & Authority sheet, ART-009)."""
+
+    permission_classes = [require_scope(Scope.APPROVE)]
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = DecisionRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+
+        actor = getattr(getattr(request, "user", None), "actor", None)
+        required_permission = _DECISION_PERMISSION[data["decision"]]
+        if not PermissionEvaluator.is_authorised(actor, required_permission):
+            raise PermissionDenied(f"Actor lacks {required_permission.value} for decision {data['decision']}")
+
+        updated = quote_service.decide_quote(
+            quote=quote,
+            decision=data["decision"],
+            reason_code=data["reason_code"],
+            reason_text=data["reason_text"],
+            row_version=data["rowVersion"],
+            correlation_id=get_correlation_id(),
+        )
+        return Response(QuoteSerializer(updated).data)
+
+
+class QuoteHistoryView(APIView):
+    """ART-006 `/api/v1/quotes/{quoteId}/history`: `getQuoteHistory` (GET)."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        history = quote_service.get_quote_history(quote=quote)
+        return Response(StateHistoryItemSerializer(history, many=True).data)
+
+
+class ReviewQueueView(APIView):
+    """ART-006 `/api/v1/reviews`: `listReviews` (GET) — the reviewer/approver
+    worklist."""
+
+    permission_classes = [require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_REVIEW)]
+
+    def get(self, request):
+        queryset = ReviewTask.objects.all().order_by("created_at")
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        paginator = Q360PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        return paginator.get_paginated_response(ReviewTaskSerializer(page, many=True).data)
