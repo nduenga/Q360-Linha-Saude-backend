@@ -31,6 +31,11 @@ from django.urls import Resolver404, resolve
 CORRELATION_HEADER = "X-Correlation-Id"
 _IDEMPOTENCY_HEADER = "Idempotency-Key"
 _IDEMPOTENCY_ATTR = "_q360_requires_idempotency"
+# ART-006 only ever declares IdempotencyKey on mutating operations. The
+# decorator is applied at the class level (several views mix a GET list
+# with a POST create on the same class), so the middleware must not
+# enforce it for safe/read methods sharing that class.
+_IDEMPOTENCY_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 _correlation_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "q360_correlation_id", default=None
@@ -82,6 +87,9 @@ class IdempotencyMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if request.method in _IDEMPOTENCY_SAFE_METHODS:
+            return self.get_response(request)
+
         # `resolver_match` is assigned after ordinary new-style middleware
         # starts on some Django code paths. Resolve explicitly so this guard
         # cannot silently become a no-op (the old implementation did exactly
