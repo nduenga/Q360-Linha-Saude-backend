@@ -372,6 +372,30 @@ chamada momentos antes "não existe" na tabela `tenant`, em vez do
 pytest-django sob Testcontainers). Deixado a falhar ruidosamente (não
 marcado `skip`/`xfail`) para não ser esquecido — ver docstring do teste.
 
+## S09-OUTBOX-EVENT-FIELDS-001 — Gap de campos ART-007 em QUOTE.SUBMITTED/APPROVED (2026-09-18)
+
+**Contexto:** `tests/integration/test_outbox_event_catalog.py` (AC-5) provou
+que `QUOTE.SUBMITTED` e `QUOTE.APPROVED`/`REJECTED`/`RETURNED` são emitidos
+com `eventType` exacto e `aggregateType` correcto, mas os seus `payload`
+não incluem todos os campos que o catálogo ART-007 declara:
+- `QUOTE.SUBMITTED` declara `quoteId, snapshotId, reviewTaskId, submittedBy,
+  submittedAt, status` — `quote_service.submit_quote` só emite
+  `quoteId, submittedBy, submittedAt`.
+- `QUOTE.APPROVED`/`REJECTED`/`RETURNED` declaram `quoteId, snapshotId,
+  decisionId, decidedBy, decidedAt, status` — `quote_service.decide_quote`
+  emite `quoteId, decision, reasonCode, reasonText, decidedBy,
+  approvedAt|rejectedAt` (nomes e campos diferentes, `decision`/`reasonCode`/
+  `reasonText` não fazem parte do contrato para estes três eventos).
+
+**Decisão:** documentado como gap de fidelidade ao contrato, não corrigido
+nesta sessão (implicaria expor `snapshot.id`/`decision.id` até
+`quote_service.py`'s outbox call sites, que hoje não os têm à mão sem mais
+refactor). O teste de catálogo asserta apenas os campos realmente emitidos,
+com uma nota inline apontando para esta entrada. Nenhum consumidor real
+existe ainda (ART-007 Non-Goal para V1), pelo que não há impacto funcional
+imediato — mas qualquer consumidor futuro que dependa de `snapshotId`/
+`decisionId`/`status` nestes dois eventos vai falhar até isto ser corrigido.
+
 ## Fora de âmbito desta resolução
 
 **OD-001 (tarifas/prémios reais)** não é resolvido aqui e não pode ser —
