@@ -43,6 +43,17 @@ def test_same_key_same_body_is_replayed(admin_client):
 
 @pytest.mark.django_db
 def test_same_key_different_body_returns_409_idemp_replay(admin_client):
+    """KNOWN ISSUE (see DECISIONS_TAKEN.md#S09-IDEMPOTENCY-001): passes in
+    isolation but has been observed to fail intermittently when run after
+    another test in the same session — the second `admin_client.post()`
+    call's `IdempotencyRecord.all_tenants.create()` occasionally raises a
+    foreign-key violation claiming the *same* tenant used by the first
+    call moments earlier "is not present in table tenant", instead of the
+    expected unique-constraint IntegrityError. Root cause not yet isolated
+    (suspected Postgres connection/transaction-state interaction between
+    the nested `transaction.atomic()` in `IdempotencyService.begin()` and
+    pytest-django's per-test rollback wrapper under Testcontainers). Not
+    skipped outright so it keeps failing loudly in CI until root-caused."""
     key = str(uuid.uuid4())
     first_code = f"IDEMP-{uuid.uuid4().hex[:8]}"
     other_code = f"IDEMP-{uuid.uuid4().hex[:8]}"

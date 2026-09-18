@@ -342,6 +342,36 @@ build a complete, working Sprint 6:
    is expected to invoke it periodically in deployment; it is idempotent
    and safe to re-run.
 
+## S09-IDEMPOTENCY-001 — Tenant scoping do middleware de idempotência (2026-09-18)
+
+**Contexto:** `IdempotencyMiddleware` corre antes da autenticação DRF do
+`APIView` (é middleware Django puro, não um `authentication_class`), logo
+`CurrentTenantProvider` pode ainda não estar vinculado quando
+`IdempotencyService.begin/complete/fail` precisam de ler/escrever
+`idempotency_record`. Uma tentativa anterior "resolveu" isto enfraquecendo
+`TenantScopedManager.get_queryset()` de fail-closed (`CurrentTenantProvider.require()`)
+para fail-open (devolver todas as linhas sem tenant vinculado) — isto
+quebra o invariante de segurança usado por **todos** os outros modelos de
+negócio (DOC-001 s20) e foi revertido.
+
+**Decisão:** `TenantScopedManager` mantém-se fail-closed. `idempotency_service.py`
+usa explicitamente `IdempotencyRecord.all_tenants` (o escape-hatch já
+documentado em `tenant_scoping.py` para jobs que legitimamente precisam de
+funcionar sem contexto de tenant vinculado) e passa `tenant_id` como filtro
+explícito em cada query — nunca depende do filtro implícito do manager.
+
+**Known issue não resolvido:** `tests/foundation/test_idempotency.py::test_same_key_different_body_returns_409_idemp_replay`
+passa isoladamente mas foi observado a falhar intermitentemente quando
+corrido a seguir a outro teste na mesma sessão — a segunda chamada
+`IdempotencyRecord.all_tenants.create()` ocasionalmente levanta uma
+violação de foreign key a dizer que o *mesmo* tenant usado pela primeira
+chamada momentos antes "não existe" na tabela `tenant`, em vez do
+`IntegrityError` de unique-constraint esperado. Causa raiz não isolada
+(suspeita: interacção entre o `transaction.atomic()` aninhado em
+`IdempotencyService.begin()` e o wrapper de rollback por teste do
+pytest-django sob Testcontainers). Deixado a falhar ruidosamente (não
+marcado `skip`/`xfail`) para não ser esquecido — ver docstring do teste.
+
 ## Fora de âmbito desta resolução
 
 **OD-001 (tarifas/prémios reais)** não é resolvido aqui e não pode ser —
