@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from apps.foundation.application.rule_service import create_rule_version
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.infrastructure.models import RuleVersion
+from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_scope
 from apps.foundation.interfaces.rule_serializers import (
     RuleSetVersionRequestSerializer,
@@ -19,6 +20,7 @@ from apps.foundation.interfaces.rule_serializers import (
 from shared.pagination import Q360PageNumberPagination
 
 
+@requires_idempotency
 class RuleVersionCreateView(APIView):
     """`GET` (list, optional `?ruleDomain=`) is a pragmatic V1 addition,
     not in ART-006 — see OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md."""

@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 
 from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
+from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.product.application import product_service
 from apps.product.application.configuration import publish_configuration
@@ -31,6 +32,7 @@ from apps.product.interfaces.serializers import (
 from shared.pagination import Q360PageNumberPagination
 
 
+@requires_idempotency
 class ProductListCreateView(APIView):
     """ART-006 `/api/v1/products`: `listProducts` (GET), `createProduct` (POST)."""
 
@@ -51,6 +53,7 @@ class ProductListCreateView(APIView):
         return Response(ProductSerializer(product).data, status=201)
 
 
+@requires_idempotency
 class ProductDetailView(APIView):
     """ART-006 `/api/v1/products/{productId}`: `getProduct` (GET), `updateProduct` (PUT)."""
 
@@ -101,6 +104,7 @@ class ProductVersionCreateView(APIView):
         return Response(ProductVersionSerializer(version).data, status=201)
 
 
+@requires_idempotency
 class ProductVersionPublishView(APIView):
     """ART-006 `/api/v1/product-versions/{versionId}/publish`: `publishProductVersion` (POST)."""
 
@@ -152,6 +156,7 @@ class PlanDetailView(APIView):
         return Response(PlanSerializer(plan).data)
 
 
+@requires_idempotency
 class PricingParameterSetCreateView(APIView):
     """ART-006 `/api/v1/pricing-parameter-sets`: `createPricingParameterSet`
     (POST). `GET` (list) is a pragmatic V1 addition, not in ART-006 — see
@@ -184,6 +189,7 @@ class PricingParameterSetCreateView(APIView):
         return Response(VersionedConfigHeaderSerializer(parameter_set).data, status=201)
 
 
+@requires_idempotency
 class ConfigurationPublishView(APIView):
     """ART-006 `/api/v1/configuration/{configType}/{configId}/publish`:
     `publishConfiguration` (POST).

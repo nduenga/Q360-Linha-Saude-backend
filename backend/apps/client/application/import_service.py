@@ -28,12 +28,14 @@ from django.utils import timezone
 
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
+from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.client.domain.enums import ImportJobStatus, ImportType
 from apps.client.domain.errors import ImportCommitNotAllowedError
 from apps.client.infrastructure.models import ImportJob, ImportRowError, InsuredMember, Proposer
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
+_outbox = get_outbox_service()
 _EXPECTED_COLUMNS = ["relationshipCode", "firstName", "lastName", "dateOfBirth", "sexCode", "externalReference"]
 
 
@@ -104,7 +106,12 @@ def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFi
         import_job.status = ImportJobStatus.FAILED.value
         import_job.completed_at = timezone.now()
         import_job.save(update_fields=["status", "completed_at"])
-        _audit.record(action="member_import.failed", entity_type="ImportJob", entity_id=str(import_job.id))
+        _audit.record(
+            action="member_import.failed",
+            entity_type="ImportJob",
+            entity_id=str(import_job.id),
+            metadata={"result": "FAILURE", "reason": "CSV decode or parsing error"},
+        )
         return import_job
 
     ImportRowError.objects.bulk_create(
@@ -189,5 +196,17 @@ def commit_member_import(*, import_job: ImportJob, actor_id: str) -> ImportJob:
         entity_type="ImportJob",
         entity_id=str(import_job.id),
         metadata={"membersCreated": created},
+    )
+    _outbox.append(
+        aggregate_type="ImportJob",
+        aggregate_id=str(import_job.id),
+        event_type="MEMBER.IMPORT.COMPLETED",
+        payload={
+            "importJobId": str(import_job.id),
+            "proposerId": str(import_job.proposer_id) if import_job.proposer_id else None,
+            "membersCreated": created,
+            "totalRows": import_job.total_rows,
+            "completedAt": import_job.completed_at.isoformat() if import_job.completed_at else None,
+        },
     )
     return import_job

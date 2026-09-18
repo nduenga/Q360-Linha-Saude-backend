@@ -13,6 +13,7 @@ from django.db import IntegrityError, transaction
 
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
+from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.product.domain.enums import VersionedConfigStatus
 from apps.product.domain.errors import (
@@ -24,6 +25,7 @@ from apps.product.domain.errors import (
 from apps.product.infrastructure.models import Plan, Product, ProductVersion
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
+_outbox = get_outbox_service()
 
 
 def create_product(*, code: str, name: str, description: str | None) -> Product:
@@ -157,4 +159,15 @@ def create_plan(*, product_version: ProductVersion, code: str, name: str, descri
         ) from exc
 
     _audit.record(action="plan.created", entity_type="Plan", entity_id=str(plan.id))
+    _outbox.append(
+        aggregate_type="Plan",
+        aggregate_id=str(plan.id),
+        event_type="PLAN.CREATED",
+        payload={
+            "planId": str(plan.id),
+            "productVersionId": str(product_version.id),
+            "code": plan.code,
+            "name": plan.name,
+        },
+    )
     return plan

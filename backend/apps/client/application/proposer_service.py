@@ -7,11 +7,13 @@ from django.db import IntegrityError, transaction
 
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
+from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.client.domain.errors import DuplicateExternalReferenceError, RowVersionMismatchError
 from apps.client.infrastructure.models import Proposer
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
+_outbox = get_outbox_service()
 
 
 def create_proposer(
@@ -39,6 +41,17 @@ def create_proposer(
         ) from exc
 
     _audit.record(action="proposer.created", entity_type="Proposer", entity_id=str(proposer.id))
+    _outbox.append(
+        aggregate_type="Proposer",
+        aggregate_id=str(proposer.id),
+        event_type="PROPOSER.CREATED",
+        payload={
+            "proposerId": str(proposer.id),
+            "proposerType": proposer.proposer_type,
+            "displayName": proposer.display_name,
+            "externalReference": proposer.external_reference,
+        },
+    )
     return proposer
 
 
@@ -66,5 +79,15 @@ def update_proposer(
         entity_type="Proposer",
         entity_id=str(proposer.id),
         metadata={"rowVersion": proposer.row_version},
+    )
+    _outbox.append(
+        aggregate_type="Proposer",
+        aggregate_id=str(proposer.id),
+        event_type="PROPOSER.UPDATED",
+        payload={
+            "proposerId": str(proposer.id),
+            "displayName": proposer.display_name,
+            "rowVersion": proposer.row_version,
+        },
     )
     return proposer

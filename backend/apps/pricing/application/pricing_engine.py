@@ -38,6 +38,7 @@ from django.utils import timezone
 from apps.client.infrastructure.models import InsuredMember
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
+from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.pricing.domain.enums import PricingComponentType, PricingRunStatus
 from apps.pricing.domain.errors import (
@@ -57,6 +58,7 @@ from apps.pricing.application.rating_table_service import resolve_factor, resolv
 from apps.product.infrastructure.models import Plan, ProductVersion
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
+_outbox = get_outbox_service()
 
 _BASE_PREMIUM_PARAMETER_CODE = "BASE_PREMIUM"
 
@@ -116,6 +118,18 @@ def create_pricing_scenario(
         entity_type="PricingScenario",
         entity_id=str(scenario.id),
         metadata={
+            "basePricingRunId": str(base_pricing_run.id),
+            "resultPricingRunId": str(result_run.id),
+        },
+    )
+    _outbox.append(
+        aggregate_type="PricingScenario",
+        aggregate_id=str(scenario.id),
+        event_type="PRICING.SCENARIO.CREATED",
+        correlation_id=correlation_id,
+        payload={
+            "scenarioId": str(scenario.id),
+            "name": scenario.name,
             "basePricingRunId": str(base_pricing_run.id),
             "resultPricingRunId": str(result_run.id),
         },
@@ -232,7 +246,18 @@ def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) ->
             action="pricing_run.failed",
             entity_type="PricingRun",
             entity_id=str(pricing_run.id),
-            metadata={"failureCode": exc.problem_code},
+            metadata={"result": "FAILURE", "failureCode": exc.problem_code},
+        )
+        _outbox.append(
+            aggregate_type="PricingRun",
+            aggregate_id=str(pricing_run.id),
+            event_type="PRICING.FAILED",
+            correlation_id=correlation_id,
+            payload={
+                "pricingRunId": str(pricing_run.id),
+                "failureCode": exc.problem_code,
+                "failureMessage": str(exc),
+            },
         )
         raise
 
@@ -242,6 +267,20 @@ def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) ->
         entity_type="PricingRun",
         entity_id=str(pricing_run.id),
         metadata={"totalAmount": str(pricing_run.total_amount), "currencyCode": pricing_run.currency_code},
+    )
+    _outbox.append(
+        aggregate_type="PricingRun",
+        aggregate_id=str(pricing_run.id),
+        event_type="PRICING.CALCULATED",
+        correlation_id=correlation_id,
+        payload={
+            "pricingRunId": str(pricing_run.id),
+            "totalAmount": str(pricing_run.total_amount),
+            "currencyCode": pricing_run.currency_code,
+            "productVersionId": str(product_version_id),
+            "planId": str(plan_id),
+            "effectiveDate": effective_date.isoformat(),
+        },
     )
     return pricing_run
 

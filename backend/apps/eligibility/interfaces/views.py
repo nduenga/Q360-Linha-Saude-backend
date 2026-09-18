@@ -9,10 +9,11 @@ from rest_framework.views import APIView
 from apps.eligibility.application.use_cases import EvaluateEligibilityUseCase
 from apps.eligibility.interfaces.serializers import EligibilityRequestSerializer, EligibilityResponseSerializer
 from apps.foundation.domain.scopes import Scope
-from apps.foundation.interfaces.middleware import get_correlation_id
+from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.foundation.interfaces.permissions import require_scope
 
 
+@requires_idempotency
 class EligibilityEvaluateView(APIView):
     permission_classes = [require_scope(Scope.WRITE)]
 

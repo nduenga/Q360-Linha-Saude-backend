@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 
 from apps.foundation.application.context import CurrentActorProvider
 from apps.foundation.domain.scopes import Scope
+from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_scope
 from apps.client.application import import_service, member_service, proposer_service
 from apps.client.infrastructure.models import ImportJob, InsuredMember, Proposer
@@ -30,6 +31,7 @@ from apps.client.interfaces.serializers import (
 from shared.pagination import Q360PageNumberPagination
 
 
+@requires_idempotency
 class ProposerListCreateView(APIView):
     def get_permissions(self):
         scope = Scope.WRITE if self.request.method == "POST" else Scope.READ
@@ -47,6 +49,7 @@ class ProposerListCreateView(APIView):
         return Response(ProposerSerializer(proposer).data, status=201)
 
 
+@requires_idempotency
 class ProposerDetailView(APIView):
     def get_permissions(self):
         scope = Scope.WRITE if self.request.method == "PUT" else Scope.READ
@@ -64,6 +67,7 @@ class ProposerDetailView(APIView):
         return Response(ProposerSerializer(updated).data)
 
 
+@requires_idempotency
 class MemberListCreateView(APIView):
     def get_permissions(self):
         scope = Scope.WRITE if self.request.method == "POST" else Scope.READ
@@ -96,6 +100,7 @@ class MemberListCreateView(APIView):
         return Response(MemberSerializer(member).data, status=201)
 
 
+@requires_idempotency
 class MemberDetailView(APIView):
     def get_permissions(self):
         scope = Scope.WRITE if self.request.method == "PUT" else Scope.READ
@@ -123,6 +128,7 @@ class MemberDetailView(APIView):
         return Response(MemberSerializer(updated).data)
 
 
+@requires_idempotency
 class MemberImportUploadView(APIView):
     # ART-006 uploadMemberImport is the one operation with a
     # multipart/form-data body; every other endpoint is JSON-only
@@ -155,6 +161,7 @@ class MemberImportDetailView(APIView):
         return Response(ImportJobSerializer(import_job).data)
 
 
+@requires_idempotency
 class MemberImportCommitView(APIView):
     permission_classes = [require_scope(Scope.WRITE)]
 

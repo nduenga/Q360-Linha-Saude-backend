@@ -6,12 +6,14 @@ from django.utils import timezone
 
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentActorProvider
+from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.product.domain.enums import VersionedConfigStatus
 from apps.product.domain.errors import ImmutableVersionError
 from apps.product.infrastructure.models import ProductVersion
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
+_outbox = get_outbox_service()
 
 
 class PublishProductVersionUseCase:
@@ -47,5 +49,17 @@ class PublishProductVersionUseCase:
             entity_type="ProductVersion",
             entity_id=str(version.id),
             metadata={"productId": str(version.product_id), "versionNo": version.version_no},
+        )
+        _outbox.append(
+            aggregate_type="ProductVersion",
+            aggregate_id=str(version.id),
+            event_type="PRODUCT.VERSION.PUBLISHED",
+            payload={
+                "productVersionId": str(version.id),
+                "productId": str(version.product_id),
+                "versionNo": version.version_no,
+                "publishedAt": version.published_at.isoformat() if version.published_at else None,
+                "publishedBy": version.published_by,
+            },
         )
         return version

@@ -25,6 +25,7 @@ from django.utils import timezone
 
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
+from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.quote.application.numbering_service import next_value
 from apps.quote.domain.enums import DocumentStatus, DocumentTemplateStatus, DocumentType, QuoteSnapshotType, QuoteStatus
@@ -32,6 +33,7 @@ from apps.quote.domain.errors import QuoteStateError
 from apps.quote.infrastructure.models import Document, DocumentTemplateVersion, Quote, QuoteSnapshot
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
+_outbox = get_outbox_service()
 
 
 class DuplicateTemplateCodeError(QuoteStateError):
@@ -146,43 +148,89 @@ def generate_quote_proposal(*, quote: Quote) -> Document:
         requested_by=actor_id,
     )
 
-    # "Generation": a clearly-labeled placeholder artifact (JSON summary of
-    # the approved snapshot + template reference), not a real rendered
-    # proposal (OD-006). Reproducible: same snapshot + template always
-    # produces the same content/checksum.
-    payload = {
-        "documentId": str(document.id),
-        "quoteId": str(quote.id),
-        "templateCode": template.template_code,
-        "templateVersion": template.version_no,
-        "snapshotNo": approval_snapshot.snapshot_no,
-        "snapshot": approval_snapshot.snapshot_json,
-        "note": "OD-006 placeholder artifact - not an official branded/legal proposal document.",
-    }
-    content = json.dumps(payload, sort_keys=True, indent=2).encode("utf-8")
-    checksum = hashlib.sha256(content).hexdigest()
-
-    documents_dir = Path(settings.MEDIA_ROOT) / "documents"
-    documents_dir.mkdir(parents=True, exist_ok=True)
-    file_path = documents_dir / f"{document.id}.json"
-    file_path.write_bytes(content)
-
-    document_number = next_value(sequence_code="QUOTE_PROPOSAL", period_key=str(quote.effective_date.year))
-
-    Document.objects.filter(id=document.id).update(
-        status=DocumentStatus.GENERATED.value,
-        storage_ref=str(file_path),
-        checksum=checksum,
-        document_number=document_number,
-        generated_at=timezone.now(),
+    _outbox.append(
+        aggregate_type="Document",
+        aggregate_id=str(document.id),
+        event_type="DOCUMENT.GENERATION.REQUESTED",
+        payload={
+            "documentId": str(document.id),
+            "quoteId": str(quote.id),
+            "documentType": DocumentType.QUOTE_PROPOSAL.value,
+            "requestedBy": actor_id,
+        },
     )
-    document.refresh_from_db()
+
+    try:
+        payload = {
+            "documentId": str(document.id),
+            "quoteId": str(quote.id),
+            "templateCode": template.template_code,
+            "templateVersion": template.version_no,
+            "snapshotNo": approval_snapshot.snapshot_no,
+            "snapshot": approval_snapshot.snapshot_json,
+            "note": "OD-006 placeholder artifact - not an official branded/legal proposal document.",
+        }
+        content = json.dumps(payload, sort_keys=True, indent=2).encode("utf-8")
+        checksum = hashlib.sha256(content).hexdigest()
+
+        documents_dir = Path(settings.MEDIA_ROOT) / "documents"
+        documents_dir.mkdir(parents=True, exist_ok=True)
+        file_path = documents_dir / f"{document.id}.json"
+        file_path.write_bytes(content)
+
+        document_number = next_value(sequence_code="QUOTE_PROPOSAL", period_key=str(quote.effective_date.year))
+
+        Document.objects.filter(id=document.id).update(
+            status=DocumentStatus.GENERATED.value,
+            storage_ref=str(file_path),
+            checksum=checksum,
+            document_number=document_number,
+            generated_at=timezone.now(),
+        )
+        document.refresh_from_db()
+    except Exception as exc:
+        failure_str = str(exc)[:100]
+        Document.objects.filter(id=document.id).update(
+            status=DocumentStatus.FAILED.value,
+            failure_code=failure_str,
+            generated_at=timezone.now(),
+        )
+        document.refresh_from_db()
+        _audit.record(
+            action="document.generation_failed",
+            entity_type="Document",
+            entity_id=str(document.id),
+            metadata={"result": "FAILURE", "reason": failure_str},
+        )
+        _outbox.append(
+            aggregate_type="Document",
+            aggregate_id=str(document.id),
+            event_type="DOCUMENT.GENERATION.FAILED",
+            payload={
+                "documentId": str(document.id),
+                "quoteId": str(quote.id),
+                "failureCode": failure_str,
+            },
+        )
+        raise
 
     _audit.record(
         action="document.generated",
         entity_type="Document",
         entity_id=str(document.id),
         metadata={"quoteId": str(quote.id), "documentNumber": document_number},
+    )
+    _outbox.append(
+        aggregate_type="Document",
+        aggregate_id=str(document.id),
+        event_type="DOCUMENT.GENERATED",
+        payload={
+            "documentId": str(document.id),
+            "quoteId": str(quote.id),
+            "documentNumber": document_number,
+            "templateCode": template.template_code,
+            "generatedAt": document.generated_at.isoformat() if document.generated_at else None,
+        },
     )
     return document
 

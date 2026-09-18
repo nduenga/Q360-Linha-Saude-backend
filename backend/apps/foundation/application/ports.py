@@ -27,3 +27,22 @@ class AuditRepositoryPort(Protocol):
         source: str | None,
         metadata: dict[str, Any],
     ) -> None: ...
+
+
+class EventPublisher(Protocol):
+    """Port for the "publish" side of the Transactional Outbox.
+
+    The default adapter is `ValidatingNoopPublisher` (never touches a real
+    broker — the spec explicitly excludes connecting to RabbitMQ in V1).
+    A real RabbitMQ/Kafka adapter can be plugged in later without changing
+    any business-layer call sites. Implementation must raise `PublishError`
+    if the envelope cannot be accepted.
+    """
+
+    def publish(self, envelope: dict[str, Any]) -> None: ...
+
+
+class PublishError(Exception):
+    """Raised by `EventPublisher.publish` when the envelope cannot be
+    accepted (invalid shape, downstream broker unreachable, etc.). The
+    dispatcher converts this into a FAILED transition with backoff."""

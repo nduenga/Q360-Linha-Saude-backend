@@ -15,7 +15,7 @@ from rest_framework.views import APIView
 from apps.foundation.application.permission_evaluator import PermissionEvaluator
 from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
-from apps.foundation.interfaces.middleware import get_correlation_id
+from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.pricing.interfaces.serializers import PricingResponseSerializer
 from apps.quote.application import document_service, quote_service
@@ -46,6 +46,7 @@ _DECISION_PERMISSION = {
 }
 
 
+@requires_idempotency
 class QuoteListCreateView(APIView):
     """ART-006 `/api/v1/quotes`: `listQuotes` (GET), `createQuote` (POST)."""
 
@@ -76,6 +77,7 @@ class QuoteListCreateView(APIView):
         return Response(QuoteSerializer(quote).data, status=201)
 
 
+@requires_idempotency
 class QuoteDetailView(APIView):
     """ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT)."""
 
@@ -97,6 +99,7 @@ class QuoteDetailView(APIView):
         return Response(QuoteSerializer(updated).data)
 
 
+@requires_idempotency
 class QuoteMemberListCreateView(APIView):
     """ART-006 `/api/v1/quotes/{quoteId}/members`: `addQuoteMember` (POST).
     `GET` (list) is a pragmatic V1 addition, not in ART-006 — `Quote` has
@@ -123,6 +126,7 @@ class QuoteMemberListCreateView(APIView):
         return Response(QuoteSerializer(updated).data)
 
 
+@requires_idempotency
 class QuoteMemberDetailView(APIView):
     """ART-006 `/api/v1/quotes/{quoteId}/members/{memberId}`: `removeQuoteMember` (DELETE)."""
 
@@ -134,6 +138,7 @@ class QuoteMemberDetailView(APIView):
         return Response(status=204)
 
 
+@requires_idempotency
 class QuotePriceView(APIView):
     """ART-006 `/api/v1/quotes/{quoteId}/price`: `priceQuote` (POST)."""
 
@@ -149,6 +154,7 @@ class QuotePriceView(APIView):
         return Response(PricingResponseSerializer(pricing_run).data)
 
 
+@requires_idempotency
 class QuoteSubmitView(APIView):
     """ART-006 `/api/v1/quotes/{quoteId}/submit`: `submitQuote` (POST)."""
 
@@ -177,6 +183,7 @@ class QuoteReviewView(APIView):
         return Response(ReviewTaskSerializer(review_task).data)
 
 
+@requires_idempotency
 class QuoteDecisionView(APIView):
     """ART-006 `/api/v1/quotes/{quoteId}/decision`: `decideQuote` (POST) —
     handles APPROVE/REJECT/RETURN through one endpoint (`DecisionRequest`),
@@ -219,6 +226,7 @@ class QuoteHistoryView(APIView):
         return Response(StateHistoryItemSerializer(history, many=True).data)
 
 
+@requires_idempotency
 class QuoteCancelView(APIView):
     """ART-006 `/api/v1/quotes/{quoteId}/cancel`: `cancelQuote` (POST)."""
 
@@ -239,6 +247,7 @@ class QuoteCancelView(APIView):
         return Response(QuoteSerializer(updated).data)
 
 
+@requires_idempotency
 class QuoteProposalView(APIView):
     """ART-006 `/api/v1/quotes/{quoteId}/proposal`: `generateQuoteProposal`
     (POST, 202), `getQuoteProposal` (GET)."""
@@ -261,13 +270,26 @@ class QuoteProposalView(APIView):
         return Response(DocumentSerializer(document).data)
 
 
+@requires_idempotency
 class DocumentTemplateListCreateView(APIView):
     """Pragmatic V1 addition, not in ART-006 (see
     apps/quote/application/document_service.py module docstring) — the
     only way to make `generateQuoteProposal` succeed at all, since OD-006
-    has no approved template and ART-006 has no CRUD for this resource."""
+    has no approved template and ART-006 has no CRUD for this resource.
+    `GET` (list) is a further pragmatic addition (same rationale as
+    RuleVersionCreateView) so the admin/configurador UI has something to
+    render before publishing a new template version."""
 
     permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+    def get(self, request):
+        queryset = DocumentTemplateVersion.objects.order_by("template_code", "-version_no")
+        template_code = request.query_params.get("templateCode")
+        if template_code:
+            queryset = queryset.filter(template_code=template_code)
+        paginator = Q360PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        return paginator.get_paginated_response(DocumentTemplateHeaderSerializer(page, many=True).data)
 
     def post(self, request):
         body = DocumentTemplateCreateRequestSerializer(data=request.data)
@@ -282,6 +304,7 @@ class DocumentTemplateListCreateView(APIView):
         return Response(DocumentTemplateHeaderSerializer(template).data, status=201)
 
 
+@requires_idempotency
 class DocumentTemplatePublishView(APIView):
     permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
 

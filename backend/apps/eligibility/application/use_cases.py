@@ -15,8 +15,14 @@ from apps.eligibility.domain.errors import ReferencedEntityNotFoundError
 from apps.eligibility.domain.evaluation import EvaluationInput, PlanFacts, ProductVersionFacts, evaluate
 from apps.eligibility.infrastructure.models import EligibilityEvaluation
 from apps.eligibility.infrastructure.rule_repository import parse_config, resolve_eligibility_rule_version
+from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
+from apps.foundation.application.outbox_service import get_outbox_service
+from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.product.infrastructure.models import Plan, ProductVersion
+
+_audit = AuditService(DjangoAuditRepositoryAdapter())
+_outbox = get_outbox_service()
 
 
 class EvaluateEligibilityUseCase:
@@ -38,10 +44,6 @@ class EvaluateEligibilityUseCase:
         product_version = ProductVersion.objects.filter(id=product_version_id).first()
         plan = Plan.objects.filter(id=plan_id).first()
 
-        # ART-005 `eligibility_evaluation.product_version_id`/`plan_id` are
-        # NOT NULL: an evaluation cannot be persisted at all without both,
-        # so this is a request error (400), not a HARD_STOP decision to
-        # record — see domain/errors.py ReferencedEntityNotFoundError.
         if product_version is None or plan is None:
             raise ReferencedEntityNotFoundError(
                 "Referenced productVersionId or planId does not exist for this tenant"
@@ -85,5 +87,35 @@ class EvaluateEligibilityUseCase:
                 {"code": m.code, "severity": m.severity, "message": m.message} for m in messages
             ],
             correlation_id=correlation_id,
+        )
+
+        _audit.record(
+            action="eligibility.evaluated",
+            entity_type="EligibilityEvaluation",
+            entity_id=str(evaluation.id),
+            correlation_id=correlation_id,
+            metadata={
+                "decision": decision.value,
+                "memberId": str(member_id) if member_id else None,
+                "proposerId": str(proposer_id) if proposer_id else None,
+                "productVersionId": str(product_version_id),
+                "planId": str(plan_id),
+                "ruleVersionId": str(rule_version.id) if rule_version else None,
+            },
+        )
+        _outbox.append(
+            aggregate_type="EligibilityEvaluation",
+            aggregate_id=str(evaluation.id),
+            event_type="ELIGIBILITY.EVALUATED",
+            correlation_id=correlation_id,
+            payload={
+                "evaluationId": str(evaluation.id),
+                "decision": decision.value,
+                "memberId": str(member_id) if member_id else None,
+                "proposerId": str(proposer_id) if proposer_id else None,
+                "productVersionId": str(product_version_id),
+                "planId": str(plan_id),
+                "effectiveDate": effective_date.isoformat(),
+            },
         )
         return evaluation

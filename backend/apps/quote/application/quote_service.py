@@ -27,6 +27,7 @@ from apps.eligibility.application.use_cases import EvaluateEligibilityUseCase
 from apps.eligibility.domain.enums import EligibilityDecision
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
+from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.pricing.application.auto_resolve import resolve_default_parameter_set_code, resolve_default_rating_table_code
 from apps.pricing.application.pricing_engine import calculate_pricing
@@ -57,6 +58,7 @@ from apps.quote.infrastructure.models import (
 )
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
+_outbox = get_outbox_service()
 
 _ELIGIBILITY_TO_MEMBER_STATUS = {
     EligibilityDecision.ELIGIBLE.value: QuoteMemberStatus.INCLUDED.value,
@@ -125,6 +127,19 @@ def create_quote(
     )
     _record_transition(quote, from_status=None, to_status=QuoteStatus.DRAFT.value)
     _audit.record(action="quote.created", entity_type="Quote", entity_id=str(quote.id))
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.CREATED",
+        payload={
+            "quoteId": str(quote.id),
+            "proposerId": str(proposer_id),
+            "productVersionId": str(product_version_id),
+            "planId": str(plan_id),
+            "effectiveDate": effective_date.isoformat(),
+            "status": QuoteStatus.DRAFT.value,
+        },
+    )
     return quote
 
 
@@ -179,6 +194,19 @@ def add_quote_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str 
         entity_id=str(quote.id),
         metadata={"memberId": str(member_id), "eligibilityDecision": evaluation.decision, "quoteMemberStatus": member_status},
     )
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.POPULATION.UPDATED",
+        correlation_id=correlation_id,
+        payload={
+            "quoteId": str(quote.id),
+            "changeType": "MEMBER_ADDED",
+            "memberId": str(member_id),
+            "eligibilityDecision": evaluation.decision,
+            "quoteMemberStatus": member_status,
+        },
+    )
     quote.refresh_from_db()
     return quote
 
@@ -193,6 +221,16 @@ def remove_quote_member(*, quote: Quote, member_id: uuid.UUID) -> None:
 
     _demote_to_draft_if_ready(quote)
     _audit.record(action="quote.member_removed", entity_type="Quote", entity_id=str(quote.id), metadata={"memberId": str(member_id)})
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.POPULATION.UPDATED",
+        payload={
+            "quoteId": str(quote.id),
+            "changeType": "MEMBER_REMOVED",
+            "memberId": str(member_id),
+        },
+    )
 
 
 def update_quote(*, quote: Quote, effective_date: datetime.date, row_version: int) -> Quote:
@@ -211,6 +249,17 @@ def update_quote(*, quote: Quote, effective_date: datetime.date, row_version: in
     if was_ready:
         _record_transition(quote, from_status=QuoteStatus.READY.value, to_status=QuoteStatus.DRAFT.value, reason_code="MATERIAL_EDIT")
     _audit.record(action="quote.updated", entity_type="Quote", entity_id=str(quote.id), metadata={"rowVersion": quote.row_version})
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.POPULATION.UPDATED",
+        payload={
+            "quoteId": str(quote.id),
+            "changeType": "EFFECTIVE_DATE_UPDATED",
+            "effectiveDate": effective_date.isoformat(),
+            "rowVersion": quote.row_version,
+        },
+    )
     return quote
 
 
@@ -295,6 +344,20 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
         entity_type="Quote",
         entity_id=str(quote.id),
         metadata={"pricingRunId": str(pricing_run.id), "snapshotNo": next_snapshot_no, "status": quote.status},
+    )
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.PRICE.CALCULATED",
+        correlation_id=correlation_id,
+        payload={
+            "quoteId": str(quote.id),
+            "pricingRunId": str(pricing_run.id),
+            "totalAmount": str(pricing_run.total_amount),
+            "currencyCode": pricing_run.currency_code,
+            "snapshotNo": next_snapshot_no,
+            "status": quote.status,
+        },
     )
     return pricing_run
 
@@ -385,6 +448,17 @@ def submit_quote(*, quote: Quote, row_version: int, correlation_id: str | None) 
         quote, from_status=QuoteStatus.READY.value, to_status=QuoteStatus.IN_REVIEW.value, correlation_id=correlation_id
     )
     _audit.record(action="quote.submitted", entity_type="Quote", entity_id=str(quote.id))
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.SUBMITTED",
+        correlation_id=correlation_id,
+        payload={
+            "quoteId": str(quote.id),
+            "submittedBy": actor_id,
+            "submittedAt": quote.submitted_at.isoformat() if quote.submitted_at else None,
+        },
+    )
     return quote
 
 
@@ -512,6 +586,29 @@ def decide_quote(
         entity_id=str(quote.id),
         metadata={"reasonCode": reason_code, "decidedBy": actor_id},
     )
+    event_type_map = {
+        QuoteDecisionType.APPROVE.value: "QUOTE.APPROVED",
+        QuoteDecisionType.REJECT.value: "QUOTE.REJECTED",
+        QuoteDecisionType.RETURN.value: "QUOTE.RETURNED",
+    }
+    outbox_payload = {
+        "quoteId": str(quote.id),
+        "decision": decision,
+        "reasonCode": reason_code,
+        "reasonText": reason_text,
+        "decidedBy": actor_id,
+    }
+    if decision == QuoteDecisionType.APPROVE.value:
+        outbox_payload["approvedAt"] = quote.approved_at.isoformat() if quote.approved_at else None
+    elif decision == QuoteDecisionType.REJECT.value:
+        outbox_payload["rejectedAt"] = quote.rejected_at.isoformat() if quote.rejected_at else None
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type=event_type_map[decision],
+        correlation_id=correlation_id,
+        payload=outbox_payload,
+    )
     return quote
 
 
@@ -556,6 +653,17 @@ def cancel_quote(*, quote: Quote, reason_code: str, reason_text: str | None, row
         reason_text=reason_text, correlation_id=correlation_id,
     )
     _audit.record(action="quote.cancelled", entity_type="Quote", entity_id=str(quote.id), metadata={"reasonCode": reason_code})
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.CANCELLED",
+        correlation_id=correlation_id,
+        payload={
+            "quoteId": str(quote.id),
+            "reasonCode": reason_code,
+            "reasonText": reason_text,
+        },
+    )
     return quote
 
 
@@ -577,4 +685,14 @@ def expire_quote(*, quote: Quote) -> Quote | None:
 
     _record_transition(quote, from_status=from_status, to_status=QuoteStatus.EXPIRED.value, reason_code="VALIDITY_ELAPSED")
     _audit.record(action="quote.expired", entity_type="Quote", entity_id=str(quote.id))
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.EXPIRED",
+        payload={
+            "quoteId": str(quote.id),
+            "validUntil": quote.valid_until.isoformat() if quote.valid_until else None,
+            "fromStatus": from_status,
+        },
+    )
     return quote

@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 
 from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
-from apps.foundation.interfaces.middleware import get_correlation_id
+from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.pricing.application.pricing_engine import calculate_pricing, create_pricing_scenario, get_pricing_run
 from apps.pricing.application.rating_table_service import create_rating_table
@@ -29,6 +29,7 @@ from apps.pricing.interfaces.serializers import (
 from shared.pagination import Q360PageNumberPagination
 
 
+@requires_idempotency
 class RatingTableCreateView(APIView):
     """`GET` (list) is a pragmatic V1 addition, not in ART-006 — see
     OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md."""
@@ -62,6 +63,7 @@ class RatingTableCreateView(APIView):
         return Response(VersionedConfigHeaderSerializer(rating_table).data, status=201)
 
 
+@requires_idempotency
 class PricingCalculateView(APIView):
     """ART-006 `/api/v1/pricing/calculate` (Q360-S4-02), security ->
     oauth2: [q360.write]. Gated additionally by DOC-001 s18
@@ -99,6 +101,7 @@ class PricingExplanationView(APIView):
         return Response(PricingExplanationSerializer(pricing_run).data, status=200)
 
 
+@requires_idempotency
 class PricingScenarioView(APIView):
     """ART-006 `/api/v1/pricing/scenarios` (Q360-S5-02), security ->
     oauth2: [q360.write]. Gated by DOC-001 s18 `quote:calculate`, same as

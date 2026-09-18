@@ -146,3 +146,84 @@ class RuleVersion(TenantScopedModel):
 
     def __str__(self) -> str:  # pragma: no cover - debug helper
         return f"{self.rule_set_id}#v{self.version_no}"
+
+
+class OutboxEvent(TenantScopedModel):
+    STATUS_CHOICES = (
+        ("PENDING", "PENDING"),
+        ("PROCESSING", "PROCESSING"),
+        ("PUBLISHED", "PUBLISHED"),
+        ("FAILED", "FAILED"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id", related_name="outbox_events")
+    aggregate_type = models.CharField(max_length=100)
+    aggregate_id = models.CharField(max_length=200)
+    event_type = models.CharField(max_length=150)
+    schema_version = models.IntegerField(default=1)
+    payload_json = models.JSONField()
+    occurred_at = models.DateTimeField(auto_now_add=True)
+    correlation_id = models.CharField(max_length=100, null=True, blank=True)
+    causation_id = models.CharField(max_length=100, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
+    attempts = models.IntegerField(default=0)
+    next_attempt_at = models.DateTimeField(null=True, blank=True)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    locked_by = models.CharField(max_length=120, null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    last_error_safe = models.TextField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "outbox_event"
+
+    def __str__(self) -> str:  # pragma: no cover - debug helper
+        return f"{self.event_type} {self.aggregate_type}:{self.aggregate_id}"
+
+
+class IdempotencyRecord(TenantScopedModel):
+    STATUS_CHOICES = (
+        ("IN_PROGRESS", "IN_PROGRESS"),
+        ("COMPLETED", "COMPLETED"),
+        ("FAILED", "FAILED"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id", related_name="idempotency_records")
+    idempotency_key = models.CharField(max_length=200)
+    operation_code = models.CharField(max_length=120)
+    request_hash = models.CharField(max_length=128)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="IN_PROGRESS")
+    response_status = models.IntegerField(null=True, blank=True)
+    response_body_json = models.JSONField(null=True, blank=True)
+    resource_id = models.CharField(max_length=200, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "idempotency_record"
+
+    def __str__(self) -> str:  # pragma: no cover - debug helper
+        return f"{self.operation_code}:{self.idempotency_key}"
+
+
+class ConsumerInbox(TenantScopedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id", related_name="consumer_inbox")
+    event_id = models.UUIDField()
+    consumer_name = models.CharField(max_length=150)
+    event_type = models.CharField(max_length=150)
+    schema_version = models.IntegerField()
+    payload_checksum = models.CharField(max_length=128, null=True, blank=True)
+    processed_at = models.DateTimeField(auto_now_add=True)
+    correlation_id = models.CharField(max_length=100, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "consumer_inbox"
+
+    def __str__(self) -> str:  # pragma: no cover - debug helper
+        return f"{self.consumer_name}:{self.event_id}"

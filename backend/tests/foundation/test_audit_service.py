@@ -59,3 +59,19 @@ def test_record_forwards_actor_and_tenant():
     assert call["entity_id"] == "q-1"
     assert call["correlation_id"] == "corr-1"
     assert call["metadata"] == {"amount": 100}  # "token" key sanitised out
+
+
+def test_record_sanitises_nested_credentials():
+    actor = Actor(
+        actor_id="user-1",
+        tenant_id=TenantId.parse("11111111-1111-1111-1111-111111111111"),
+        roles=frozenset({Role.SUBSCRIBER}),
+    )
+    CurrentActorProvider.bind(actor)
+    repository = FakeAuditRepository()
+    AuditService(repository).record(
+        action="quote.failed",
+        entity_type="Quote",
+        metadata={"request": {"authorization": "Bearer leaked", "safe": "kept"}},
+    )
+    assert repository.calls[0]["metadata"] == {"request": {"safe": "kept"}}

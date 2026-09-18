@@ -49,11 +49,27 @@ MIDDLEWARE = [
     # and production.py.
     "corsheaders.middleware.CorsMiddleware",
     "apps.foundation.interfaces.middleware.CorrelationIdMiddleware",
+    "apps.foundation.interfaces.middleware.RequestTelemetryMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
+    "apps.foundation.interfaces.middleware.IdempotencyMiddleware",
+    "apps.foundation.interfaces.middleware.RateLimitMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.foundation.interfaces.middleware.ActorContextCleanupMiddleware",
 ]
+
+# Mutating API commands are protected by an Idempotency-Key in deployed
+# environments.  The isolated unit-test setting turns this off and the S9
+# integration tests explicitly turn it on, which keeps old domain tests
+# focused on their concern while exercising the real interceptor separately.
+IDEMPOTENCY_REQUIRED = os.environ.get("Q360_IDEMPOTENCY_REQUIRED", "true").lower() == "true"
+
+# A small, defensive application-level limit is deliberately configurable.
+# Deployments with a gateway/WAF can set the value to 0 and make that layer
+# authoritative; this guard still provides a safe default for direct access.
+RATE_LIMIT_REQUESTS = int(os.environ.get("Q360_RATE_LIMIT_REQUESTS", "120"))
+RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("Q360_RATE_LIMIT_WINDOW_SECONDS", "60"))
+RATE_LIMIT_EXEMPT_PATHS = {"/health/live", "/health/ready"}
 
 CORS_ALLOWED_ORIGINS = [
     origin for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if origin
@@ -145,6 +161,15 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "apps.foundation.interfaces.exception_handler.q360_exception_handler",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+
+# OpenTelemetry is optional at import time so a local developer can still run
+# the project before installing the observability extra.  In production the
+# dependency is installed and this flag enables API/service spans and OTLP
+# export; no request body, Authorization header or business payload is ever
+# recorded as a span attribute.
+Q360_OTEL_ENABLED = os.environ.get("Q360_OTEL_ENABLED", "false").lower() == "true"
+Q360_OTEL_SERVICE_NAME = os.environ.get("Q360_OTEL_SERVICE_NAME", "q360-core")
+Q360_OTEL_EXPORTER_OTLP_ENDPOINT = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
 
 # drf-spectacular introspects the Django code to render a browsable API
 # doc — useful to see what is ACTUALLY implemented so far during

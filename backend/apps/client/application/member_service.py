@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
+from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.client.domain.errors import (
     DuplicateExternalReferenceError,
@@ -28,6 +29,7 @@ from apps.client.domain.errors import (
 from apps.client.infrastructure.models import InsuredMember, Proposer
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
+_outbox = get_outbox_service()
 
 
 def _check_date_of_birth_coherent(date_of_birth: datetime.date | None) -> None:
@@ -67,6 +69,19 @@ def create_member(
         ) from exc
 
     _audit.record(action="member.created", entity_type="InsuredMember", entity_id=str(member.id))
+    _outbox.append(
+        aggregate_type="InsuredMember",
+        aggregate_id=str(member.id),
+        event_type="MEMBER.CREATED",
+        payload={
+            "memberId": str(member.id),
+            "proposerId": str(proposer.id),
+            "relationshipCode": member.relationship_code,
+            "firstName": member.first_name,
+            "lastName": member.last_name,
+            "externalReference": member.external_reference,
+        },
+    )
     return member
 
 
@@ -101,5 +116,17 @@ def update_member(
         entity_type="InsuredMember",
         entity_id=str(member.id),
         metadata={"rowVersion": member.row_version},
+    )
+    _outbox.append(
+        aggregate_type="InsuredMember",
+        aggregate_id=str(member.id),
+        event_type="MEMBER.UPDATED",
+        payload={
+            "memberId": str(member.id),
+            "relationshipCode": member.relationship_code,
+            "firstName": member.first_name,
+            "lastName": member.last_name,
+            "rowVersion": member.row_version,
+        },
     )
     return member

@@ -25,8 +25,18 @@ from typing import Any
 
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
 from apps.foundation.application.ports import AuditRepositoryPort
+from apps.foundation.interfaces.middleware import get_correlation_id
 
-_FORBIDDEN_METADATA_KEYS = {"token", "password", "secret", "authorization"}
+_FORBIDDEN_METADATA_KEYS = {
+    "token",
+    "password",
+    "secret",
+    "authorization",
+    "access_token",
+    "refresh_token",
+    "jwt",
+    "api_key",
+}
 
 
 class AuditService:
@@ -48,18 +58,32 @@ class AuditService:
         if actor is None:
             raise LookupError("AuditService.record requires an authenticated actor")
         tenant_id = CurrentTenantProvider.require()
+        effective_correlation_id = correlation_id if correlation_id is not None else get_correlation_id()
+        effective_metadata: dict[str, Any] = dict(metadata or {})
         self._repository.record(
             tenant_id=tenant_id,
             actor=actor,
             action=action,
             entity_type=entity_type,
             entity_id=entity_id,
-            correlation_id=correlation_id,
+            correlation_id=effective_correlation_id,
             trace_id=trace_id,
             source=source,
-            metadata=_sanitise(metadata or {}),
+            metadata=_sanitise(effective_metadata),
         )
 
 
 def _sanitise(metadata: dict[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in metadata.items() if k.lower() not in _FORBIDDEN_METADATA_KEYS}
+    """Recursively remove credentials from nested audit metadata too."""
+    def clean(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: clean(item)
+                for key, item in value.items()
+                if not isinstance(key, str) or key.lower() not in _FORBIDDEN_METADATA_KEYS
+            }
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+        return value
+
+    return clean(metadata)

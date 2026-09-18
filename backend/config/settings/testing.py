@@ -2,6 +2,13 @@ from .base import *
 
 DEBUG = False
 
+# Existing focused domain tests predate S9's HTTP idempotency contract.  The
+# S9 integration suite enables this setting explicitly to validate the real
+# middleware behaviour without forcing every unit fixture to manufacture an
+# HTTP retry key.
+IDEMPOTENCY_REQUIRED = False
+RATE_LIMIT_REQUESTS = 0
+
 # REST_FRAMEWORK["DEFAULT_PARSER_CLASSES"] is JSONParser only (matches
 # ART-006: every requestBody is `application/json`) — APIClient must match
 # that in tests instead of defaulting to multipart. This key is read from

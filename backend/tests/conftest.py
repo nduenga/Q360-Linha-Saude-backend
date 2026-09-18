@@ -26,6 +26,12 @@ import pytest
 def django_db_modify_db_settings(django_db_modify_db_settings_parallel_suffix):
     if os.environ.get("Q360_TEST_POSTGRES", "").lower() == "true":
         return  # POSTGRES_* env vars already point at a running instance.
+    if os.environ.get("Q360_TEST_SKIP_TESTCONTAINERS", "").lower() == "true":
+        return  # Fallback to whatever the settings module already declares
+        # (typically SQLite in `testing.py`). Useful when no Docker daemon is
+        # available. Note: tests that exercise Postgres-only features (the
+        # foundation baseline RunSQL migrations, JSONB, CHECK constraints)
+        # will NOT pass in this mode.
 
     from django.conf import settings
     from testcontainers.community.postgres import PostgresContainer
