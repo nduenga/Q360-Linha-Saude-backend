@@ -1755,6 +1755,122 @@ paths:
       security:
       - oauth2:
         - q360.read
+  /api/v1/document-templates:
+    get:
+      tags:
+      - Documents
+      operationId: listDocumentTemplates
+      summary: Listar versões de template de documento (pragmático V1, ver DECISIONS_TAKEN.md#S08-DOCUMENT-001)
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/Size'
+      - name: templateCode
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentTemplateHeaderPage'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.admin
+    post:
+      tags:
+      - Documents
+      operationId: createDocumentTemplate
+      summary: Criar versão de template de documento (pragmático V1 — OD-006 não tem template oficial aprovado)
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentTemplateHeader'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentTemplateCreateRequest'
+      security:
+      - oauth2:
+        - q360.admin
+  /api/v1/document-templates/{templateId}/publish:
+    post:
+      tags:
+      - Documents
+      operationId: publishDocumentTemplate
+      summary: Publicar versão de template de documento (pragmático V1)
+      parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - name: templateId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentTemplateHeader'
+          headers:
+            X-Correlation-Id:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+      security:
+      - oauth2:
+        - q360.admin
   /api/v1/quotes/{quoteId}/cancel:
     post:
       tags:
@@ -3148,6 +3264,66 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AuditEvent'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      additionalProperties: false
+      required:
+      - items
+      - page
+    DocumentTemplateCreateRequest:
+      type: object
+      properties:
+        templateCode:
+          type: string
+        storageRef:
+          type: string
+        effectiveFrom: *id002
+        effectiveTo:
+          anyOf:
+          - *id002
+          - type: 'null'
+      additionalProperties: false
+      required:
+      - templateCode
+      - storageRef
+      - effectiveFrom
+    DocumentTemplateHeader:
+      type: object
+      properties:
+        id: *id001
+        templateCode:
+          type: string
+        versionNo:
+          type: integer
+          minimum: 1
+        status:
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - RETIRED
+        effectiveFrom: *id002
+        effectiveTo:
+          anyOf:
+          - *id002
+          - type: 'null'
+        checksum:
+          type:
+          - string
+          - 'null'
+      additionalProperties: false
+      required:
+      - id
+      - templateCode
+      - versionNo
+      - status
+      - effectiveFrom
+    DocumentTemplateHeaderPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentTemplateHeader'
         page:
           $ref: '#/components/schemas/PageMeta'
       additionalProperties: false

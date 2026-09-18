@@ -109,6 +109,21 @@ def test_generate_proposal_full_flow(admin_client, tenant):
 
 
 @pytest.mark.django_db
+def test_list_document_templates(admin_client):
+    _publish_default_template(admin_client, code_suffix="list-1")
+    resp = admin_client.get("/api/v1/document-templates")
+    assert resp.status_code == 200
+    from apps.quote.application.document_service import DEFAULT_TEMPLATE_CODE
+
+    codes = {item["templateCode"] for item in resp.data["items"]}
+    assert DEFAULT_TEMPLATE_CODE in codes
+
+    filtered = admin_client.get(f"/api/v1/document-templates?templateCode={DEFAULT_TEMPLATE_CODE}")
+    assert filtered.status_code == 200
+    assert all(item["templateCode"] == DEFAULT_TEMPLATE_CODE for item in filtered.data["items"])
+
+
+@pytest.mark.django_db
 def test_cancel_draft_quote_requires_reason(admin_client):
     plan_ref = _plan(admin_client, product_code="DOC-PROD-4")
     proposer_id = admin_client.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "H"}).data["id"]

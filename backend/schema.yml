@@ -7,7 +7,7 @@ info:
 paths:
   /api/v1/audit-events:
     get:
-      operationId: audit_events_retrieve
+      operationId: v1_audit_events_retrieve
       description: |-
         ART-006 `/api/v1/audit-events`, operationId `listAuditEvents`.
 
@@ -16,13 +16,13 @@ paths:
         here because the contract does not describe it. Tenant scoping is
         applied by the model's default manager via `TenantScopedModel`.
       tags:
-      - audit-events
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/configuration/{config_type}/{config_id}/publish:
     post:
-      operationId: configuration_publish_create
+      operationId: v1_configuration_publish_create
       description: |-
         ART-006 `/api/v1/configuration/{configType}/{configId}/publish`:
         `publishConfiguration` (POST).
@@ -45,26 +45,44 @@ paths:
           type: string
         required: true
       tags:
-      - configuration
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/document-templates:
-    post:
-      operationId: document_templates_create
+    get:
+      operationId: v1_document_templates_retrieve
       description: |-
         Pragmatic V1 addition, not in ART-006 (see
         apps/quote/application/document_service.py module docstring) — the
         only way to make `generateQuoteProposal` succeed at all, since OD-006
         has no approved template and ART-006 has no CRUD for this resource.
+        `GET` (list) is a further pragmatic addition (same rationale as
+        RuleVersionCreateView) so the admin/configurador UI has something to
+        render before publishing a new template version.
       tags:
-      - document-templates
+      - v1
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_document_templates_create
+      description: |-
+        Pragmatic V1 addition, not in ART-006 (see
+        apps/quote/application/document_service.py module docstring) — the
+        only way to make `generateQuoteProposal` succeed at all, since OD-006
+        has no approved template and ART-006 has no CRUD for this resource.
+        `GET` (list) is a further pragmatic addition (same rationale as
+        RuleVersionCreateView) so the admin/configurador UI has something to
+        render before publishing a new template version.
+      tags:
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/document-templates/{template_id}/publish:
     post:
-      operationId: document_templates_publish_create
+      operationId: v1_document_templates_publish_create
       parameters:
       - in: path
         name: template_id
@@ -73,24 +91,24 @@ paths:
           format: uuid
         required: true
       tags:
-      - document-templates
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/eligibility/evaluate:
     post:
-      operationId: eligibility_evaluate_create
+      operationId: v1_eligibility_evaluate_create
       tags:
-      - eligibility
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/health/live:
     get:
-      operationId: health_live_retrieve
+      operationId: v1_health_live_retrieve
       description: 'Unauthenticated liveness probe: process is able to answer HTTP.'
       tags:
-      - health
+      - v1
       security:
       - {}
       responses:
@@ -98,10 +116,10 @@ paths:
           description: No response body
   /api/v1/health/ready:
     get:
-      operationId: health_ready_retrieve
+      operationId: v1_health_ready_retrieve
       description: 'Readiness probe: verifies the configured database accepts a query.'
       tags:
-      - health
+      - v1
       security:
       - {}
       responses:
@@ -109,23 +127,23 @@ paths:
           description: No response body
   /api/v1/me:
     get:
-      operationId: me_retrieve
+      operationId: v1_me_retrieve
       tags:
-      - me
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/member-imports:
     post:
-      operationId: member_imports_create
+      operationId: v1_member_imports_create
       tags:
-      - member-imports
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/member-imports/{import_id}:
     get:
-      operationId: member_imports_retrieve
+      operationId: v1_member_imports_retrieve
       parameters:
       - in: path
         name: import_id
@@ -134,13 +152,13 @@ paths:
           format: uuid
         required: true
       tags:
-      - member-imports
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/member-imports/{import_id}/commit:
     post:
-      operationId: member_imports_commit_create
+      operationId: v1_member_imports_commit_create
       parameters:
       - in: path
         name: import_id
@@ -149,28 +167,28 @@ paths:
           format: uuid
         required: true
       tags:
-      - member-imports
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/members:
     get:
-      operationId: members_retrieve
+      operationId: v1_members_retrieve
       tags:
-      - members
+      - v1
       responses:
         '200':
           description: No response body
     post:
-      operationId: members_create
+      operationId: v1_members_create
       tags:
-      - members
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/members/{member_id}:
     get:
-      operationId: members_retrieve_2
+      operationId: v1_members_retrieve_2
       parameters:
       - in: path
         name: member_id
@@ -179,12 +197,12 @@ paths:
           format: uuid
         required: true
       tags:
-      - members
+      - v1
       responses:
         '200':
           description: No response body
     put:
-      operationId: members_update
+      operationId: v1_members_update
       parameters:
       - in: path
         name: member_id
@@ -193,30 +211,30 @@ paths:
           format: uuid
         required: true
       tags:
-      - members
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/plans:
     get:
-      operationId: plans_retrieve
+      operationId: v1_plans_retrieve
       description: 'ART-006 `/api/v1/plans`: `listPlans` (GET), `createPlan` (POST).'
       tags:
-      - plans
+      - v1
       responses:
         '200':
           description: No response body
     post:
-      operationId: plans_create
+      operationId: v1_plans_create
       description: 'ART-006 `/api/v1/plans`: `listPlans` (GET), `createPlan` (POST).'
       tags:
-      - plans
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/plans/{plan_id}:
     get:
-      operationId: plans_retrieve_2
+      operationId: v1_plans_retrieve_2
       description: 'ART-006 `/api/v1/plans/{planId}`: `getPlan` (GET).'
       parameters:
       - in: path
@@ -226,36 +244,36 @@ paths:
           format: uuid
         required: true
       tags:
-      - plans
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/pricing-parameter-sets:
     get:
-      operationId: pricing_parameter_sets_retrieve
+      operationId: v1_pricing_parameter_sets_retrieve
       description: |-
         ART-006 `/api/v1/pricing-parameter-sets`: `createPricingParameterSet`
         (POST). `GET` (list) is a pragmatic V1 addition, not in ART-006 — see
         OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
       tags:
-      - pricing-parameter-sets
+      - v1
       responses:
         '200':
           description: No response body
     post:
-      operationId: pricing_parameter_sets_create
+      operationId: v1_pricing_parameter_sets_create
       description: |-
         ART-006 `/api/v1/pricing-parameter-sets`: `createPricingParameterSet`
         (POST). `GET` (list) is a pragmatic V1 addition, not in ART-006 — see
         OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
       tags:
-      - pricing-parameter-sets
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/pricing/{pricing_run_id}/explanation:
     get:
-      operationId: pricing_explanation_retrieve
+      operationId: v1_pricing_explanation_retrieve
       description: |-
         ART-006 `/api/v1/pricing/{pricingRunId}/explanation` (Q360-S4-04),
         security -> oauth2: [q360.read]. No DOC-001 permission cleanly maps to
@@ -270,38 +288,38 @@ paths:
           format: uuid
         required: true
       tags:
-      - pricing
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/pricing/calculate:
     post:
-      operationId: pricing_calculate_create
+      operationId: v1_pricing_calculate_create
       description: |-
         ART-006 `/api/v1/pricing/calculate` (Q360-S4-02), security ->
         oauth2: [q360.write]. Gated additionally by DOC-001 s18
         `quote:calculate` — the same permission DOC-001 grants the Subscritor
         persona for "Calcular prémio determinístico".
       tags:
-      - pricing
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/pricing/scenarios:
     post:
-      operationId: pricing_scenarios_create
+      operationId: v1_pricing_scenarios_create
       description: |-
         ART-006 `/api/v1/pricing/scenarios` (Q360-S5-02), security ->
         oauth2: [q360.write]. Gated by DOC-001 s18 `quote:calculate`, same as
         `PricingCalculateView` — a scenario is a variant calculation.
       tags:
-      - pricing
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/product-versions/{version_id}/publish:
     post:
-      operationId: product_versions_publish_create
+      operationId: v1_product_versions_publish_create
       description: 'ART-006 `/api/v1/product-versions/{versionId}/publish`: `publishProductVersion`
         (POST).'
       parameters:
@@ -312,32 +330,32 @@ paths:
           format: uuid
         required: true
       tags:
-      - product-versions
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/products:
     get:
-      operationId: products_retrieve
+      operationId: v1_products_retrieve
       description: 'ART-006 `/api/v1/products`: `listProducts` (GET), `createProduct`
         (POST).'
       tags:
-      - products
+      - v1
       responses:
         '200':
           description: No response body
     post:
-      operationId: products_create
+      operationId: v1_products_create
       description: 'ART-006 `/api/v1/products`: `listProducts` (GET), `createProduct`
         (POST).'
       tags:
-      - products
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/products/{product_id}:
     get:
-      operationId: products_retrieve_2
+      operationId: v1_products_retrieve_2
       description: 'ART-006 `/api/v1/products/{productId}`: `getProduct` (GET), `updateProduct`
         (PUT).'
       parameters:
@@ -348,12 +366,12 @@ paths:
           format: uuid
         required: true
       tags:
-      - products
+      - v1
       responses:
         '200':
           description: No response body
     put:
-      operationId: products_update
+      operationId: v1_products_update
       description: 'ART-006 `/api/v1/products/{productId}`: `getProduct` (GET), `updateProduct`
         (PUT).'
       parameters:
@@ -364,13 +382,13 @@ paths:
           format: uuid
         required: true
       tags:
-      - products
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/products/{product_id}/versions:
     get:
-      operationId: products_versions_retrieve
+      operationId: v1_products_versions_retrieve
       description: |-
         ART-006 `/api/v1/products/{productId}/versions`: `createProductVersion`
         (POST). `GET` (list a product's versions) is a pragmatic V1 addition,
@@ -384,12 +402,12 @@ paths:
           format: uuid
         required: true
       tags:
-      - products
+      - v1
       responses:
         '200':
           description: No response body
     post:
-      operationId: products_versions_create
+      operationId: v1_products_versions_create
       description: |-
         ART-006 `/api/v1/products/{productId}/versions`: `createProductVersion`
         (POST). `GET` (list a product's versions) is a pragmatic V1 addition,
@@ -403,28 +421,28 @@ paths:
           format: uuid
         required: true
       tags:
-      - products
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/proposers:
     get:
-      operationId: proposers_retrieve
+      operationId: v1_proposers_retrieve
       tags:
-      - proposers
+      - v1
       responses:
         '200':
           description: No response body
     post:
-      operationId: proposers_create
+      operationId: v1_proposers_create
       tags:
-      - proposers
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/proposers/{proposer_id}:
     get:
-      operationId: proposers_retrieve_2
+      operationId: v1_proposers_retrieve_2
       parameters:
       - in: path
         name: proposer_id
@@ -433,12 +451,12 @@ paths:
           format: uuid
         required: true
       tags:
-      - proposers
+      - v1
       responses:
         '200':
           description: No response body
     put:
-      operationId: proposers_update
+      operationId: v1_proposers_update
       parameters:
       - in: path
         name: proposer_id
@@ -447,30 +465,30 @@ paths:
           format: uuid
         required: true
       tags:
-      - proposers
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/quotes:
     get:
-      operationId: quotes_retrieve
+      operationId: v1_quotes_retrieve
       description: 'ART-006 `/api/v1/quotes`: `listQuotes` (GET), `createQuote` (POST).'
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
     post:
-      operationId: quotes_create
+      operationId: v1_quotes_create
       description: 'ART-006 `/api/v1/quotes`: `listQuotes` (GET), `createQuote` (POST).'
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/quotes/{quote_id}:
     get:
-      operationId: quotes_retrieve_2
+      operationId: v1_quotes_retrieve_2
       description: 'ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote`
         (PUT).'
       parameters:
@@ -481,12 +499,12 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
     put:
-      operationId: quotes_update
+      operationId: v1_quotes_update
       description: 'ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote`
         (PUT).'
       parameters:
@@ -497,13 +515,13 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/quotes/{quote_id}/cancel:
     post:
-      operationId: quotes_cancel_create
+      operationId: v1_quotes_cancel_create
       description: 'ART-006 `/api/v1/quotes/{quoteId}/cancel`: `cancelQuote` (POST).'
       parameters:
       - in: path
@@ -513,13 +531,13 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/quotes/{quote_id}/decision:
     post:
-      operationId: quotes_decision_create
+      operationId: v1_quotes_decision_create
       description: |-
         ART-006 `/api/v1/quotes/{quoteId}/decision`: `decideQuote` (POST) —
         handles APPROVE/REJECT/RETURN through one endpoint (`DecisionRequest`),
@@ -534,13 +552,13 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/quotes/{quote_id}/history:
     get:
-      operationId: quotes_history_retrieve
+      operationId: v1_quotes_history_retrieve
       description: 'ART-006 `/api/v1/quotes/{quoteId}/history`: `getQuoteHistory`
         (GET).'
       parameters:
@@ -551,13 +569,13 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/quotes/{quote_id}/members:
     get:
-      operationId: quotes_members_retrieve
+      operationId: v1_quotes_members_retrieve
       description: |-
         ART-006 `/api/v1/quotes/{quoteId}/members`: `addQuoteMember` (POST).
         `GET` (list) is a pragmatic V1 addition, not in ART-006 — `Quote` has
@@ -570,12 +588,12 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
     post:
-      operationId: quotes_members_create
+      operationId: v1_quotes_members_create
       description: |-
         ART-006 `/api/v1/quotes/{quoteId}/members`: `addQuoteMember` (POST).
         `GET` (list) is a pragmatic V1 addition, not in ART-006 — `Quote` has
@@ -588,13 +606,13 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/quotes/{quote_id}/members/{member_id}:
     delete:
-      operationId: quotes_members_destroy
+      operationId: v1_quotes_members_destroy
       description: 'ART-006 `/api/v1/quotes/{quoteId}/members/{memberId}`: `removeQuoteMember`
         (DELETE).'
       parameters:
@@ -611,13 +629,13 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '204':
           description: No response body
   /api/v1/quotes/{quote_id}/price:
     post:
-      operationId: quotes_price_create
+      operationId: v1_quotes_price_create
       description: 'ART-006 `/api/v1/quotes/{quoteId}/price`: `priceQuote` (POST).'
       parameters:
       - in: path
@@ -627,13 +645,13 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/quotes/{quote_id}/proposal:
     get:
-      operationId: quotes_proposal_retrieve
+      operationId: v1_quotes_proposal_retrieve
       description: |-
         ART-006 `/api/v1/quotes/{quoteId}/proposal`: `generateQuoteProposal`
         (POST, 202), `getQuoteProposal` (GET).
@@ -645,12 +663,12 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
     post:
-      operationId: quotes_proposal_create
+      operationId: v1_quotes_proposal_create
       description: |-
         ART-006 `/api/v1/quotes/{quoteId}/proposal`: `generateQuoteProposal`
         (POST, 202), `getQuoteProposal` (GET).
@@ -662,13 +680,13 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/quotes/{quote_id}/review:
     get:
-      operationId: quotes_review_retrieve
+      operationId: v1_quotes_review_retrieve
       description: 'ART-006 `/api/v1/quotes/{quoteId}/review`: `getQuoteReview` (GET).'
       parameters:
       - in: path
@@ -678,13 +696,13 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/quotes/{quote_id}/submit:
     post:
-      operationId: quotes_submit_create
+      operationId: v1_quotes_submit_create
       description: 'ART-006 `/api/v1/quotes/{quoteId}/submit`: `submitQuote` (POST).'
       parameters:
       - in: path
@@ -694,60 +712,60 @@ paths:
           format: uuid
         required: true
       tags:
-      - quotes
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/rating-tables:
     get:
-      operationId: rating_tables_retrieve
+      operationId: v1_rating_tables_retrieve
       description: |-
         `GET` (list) is a pragmatic V1 addition, not in ART-006 — see
         OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
       tags:
-      - rating-tables
+      - v1
       responses:
         '200':
           description: No response body
     post:
-      operationId: rating_tables_create
+      operationId: v1_rating_tables_create
       description: |-
         `GET` (list) is a pragmatic V1 addition, not in ART-006 — see
         OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
       tags:
-      - rating-tables
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/reviews:
     get:
-      operationId: reviews_retrieve
+      operationId: v1_reviews_retrieve
       description: |-
         ART-006 `/api/v1/reviews`: `listReviews` (GET) — the reviewer/approver
         worklist.
       tags:
-      - reviews
+      - v1
       responses:
         '200':
           description: No response body
   /api/v1/rule-versions:
     get:
-      operationId: rule_versions_retrieve
+      operationId: v1_rule_versions_retrieve
       description: |-
         `GET` (list, optional `?ruleDomain=`) is a pragmatic V1 addition,
         not in ART-006 — see OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
       tags:
-      - rule-versions
+      - v1
       responses:
         '200':
           description: No response body
     post:
-      operationId: rule_versions_create
+      operationId: v1_rule_versions_create
       description: |-
         `GET` (list, optional `?ruleDomain=`) is a pragmatic V1 addition,
         not in ART-006 — see OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
       tags:
-      - rule-versions
+      - v1
       responses:
         '200':
           description: No response body
