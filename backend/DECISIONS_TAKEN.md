@@ -247,7 +247,15 @@ build a complete, working Sprint 6:
    setting (env-configurable, default 30), not a business-approved value.
 4. **Quote numbering**: `quote_number` is left `NULL` at creation — no
    numbering convention is invented (matches ART-011 PROH-008's own
-   prohibition on inventing one).
+   prohibition on inventing one). **Updated 2026-09-19
+   (ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 4, OD-ANGOLA-005):** at
+   **approval** it is now assigned a sequential number via the same
+   `numbering_service.next_value` already used for document numbers —
+   still explicitly a test/demo identifier (a simple incrementing string
+   per year), never a real ARSEG policy-number format, which PROH-008
+   still prohibits inventing. This exists only so "apólice" can mean
+   "the quoteNumber of an approved Quote" for the Épico 4 lookup-by-
+   number flow, without inventing a new `Policy` entity.
 5. **RatingTable/PricingParameterSet auto-resolution for Quote pricing**
    (`QuotePriceRequest` is just `{recalculate: bool}` — no `context` at
    all, so the client can never name a code): resolves the single

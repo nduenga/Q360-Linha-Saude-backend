@@ -33,6 +33,7 @@ from apps.pricing.application.auto_resolve import resolve_default_parameter_set_
 from apps.pricing.application.pricing_engine import calculate_pricing
 from apps.pricing.domain.age_band import compute_age_band
 from apps.product.infrastructure.models import Plan, ProductVersion
+from apps.quote.application.numbering_service import next_value
 from apps.quote.domain.enums import (
     QuoteDecisionType,
     QuoteMemberStatus,
@@ -544,6 +545,18 @@ def decide_quote(
         quote_fields = {"status": target_status, "row_version": row_version + 1}
         if decision == QuoteDecisionType.APPROVE.value:
             quote_fields.update(approved_by=actor_id, approved_at=timezone_now())
+            if not quote.quote_number:
+                # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 4 (OD-ANGOLA-005):
+                # "apólice" = quoteNumber of an approved Quote. Sequential
+                # test/demo number via the same safe, race-free
+                # numbering_service already used for document numbers
+                # (DECISIONS_TAKEN.md#S06-QUOTE-001 item 4) — NOT a real
+                # ARSEG policy-number format (ART-011 PROH-008 still
+                # prohibits inventing one), just enough of a stable,
+                # unique identifier for the lookup-by-number flow to work.
+                quote_fields["quote_number"] = next_value(
+                    sequence_code="QUOTE_NUMBER", period_key=str(quote.effective_date.year)
+                )
         elif decision == QuoteDecisionType.REJECT.value:
             quote_fields.update(rejected_by=actor_id, rejected_at=timezone_now())
         updated = Quote.objects.filter(id=quote.id, status=QuoteStatus.IN_REVIEW.value, row_version=row_version).update(

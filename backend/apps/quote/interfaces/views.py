@@ -60,6 +60,15 @@ class QuoteListCreateView(APIView):
         status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
+        # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 4 (OD-ANGOLA-005 resolved:
+        # "apólice" = quoteNumber of an approved Quote, no new Policy
+        # entity): a pragmatic filter, not in ART-006, so a caller (e.g.
+        # the eligibility lookup-by-policy screen) can resolve every field
+        # it needs (productVersionId/planId/proposerId/effectiveDate) from
+        # a single number instead of asking for each piece separately.
+        quote_number = request.query_params.get("quoteNumber")
+        if quote_number:
+            queryset = queryset.filter(quote_number=quote_number)
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(QuoteSerializer(page, many=True).data)
