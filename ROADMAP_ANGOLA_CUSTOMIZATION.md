@@ -118,84 +118,81 @@ em vez de partir do zero.
 
 ---
 
-## Épico 2 — Versionamento automático do produto
+## Épico 2 — Versionamento automático do produto ✅ Backend concluído (2026-09-19)
 
 **Pedido:** qualquer alteração ao produto (mesmo a mais básica) cria
 automaticamente uma nova versão; deixa de existir a opção "criar versão" —
 passa a ser sempre "editar produto".
 
-### Estado actual
+### Estado actual (antes desta implementação)
 
-Hoje coexistem **dois caminhos inconsistentes**:
+Coexistiam **dois caminhos inconsistentes**:
 - Editar nome/descrição no `ProductPage.tsx` cria e publica
   **silenciosamente** uma nova versão com um plano "Básico" hardcoded.
 - Um botão explícito "Criar versão", separado, com datas manuais, sem
   criação automática de plano.
 
-### Objectivo
+### Implementado
 
-Uma única acção "Editar Produto": qualquer alteração cria a próxima versão,
-**herdando** os planos/coberturas reais da versão anterior (nunca um
-"Básico" inventado). O botão "Criar versão" desaparece da UI.
+- `product_service.update_product()` chama agora `create_next_version()`
+  sempre que o produto já tem pelo menos uma versão não-retirada. Um
+  produto sem nenhuma versão ainda não tem nada para "avançar" — a
+  primeira versão continua a ser criada explicitamente (endpoint
+  `POST /products/{id}/versions`), só passa a acontecer uma vez.
+- `create_next_version()`: retira a versão actual, cria a próxima
+  (`effective_from=hoje`, `effective_to=None` — Épico 3), copia todos os
+  Planos e as suas coberturas (`PlanBenefit`) sem alteração, e publica-a
+  de imediato.
+- Testado com 5 casos novos (`tests/product/test_auto_versioning.py`):
+  retirada da versão antiga, herança de planos/coberturas, cotações
+  antigas continuam legíveis após a retirada, produto sem versão não
+  dispara nada, e edições sucessivas incrementam a versão de cada vez.
 
-### Tarefas
+### Open Decisions — resolvidas
 
-**Backend**
-- [ ] Serviço único que, a cada edição, cria a próxima `ProductVersion`
-      copiando planos/benefícios da versão anterior.
-- [ ] Rever a regra de não-sobreposição de datas de
-      `create_product_version` à luz do Épico 3 (datas deixam de ser
-      escolhidas manualmente).
-
-**Frontend**
-- [ ] Remover o botão "Criar versão" da página de detalhe do produto.
-- [ ] "Editar Produto" passa a ser o único ponto de entrada, sem hardcode
-      de plano.
-
-### Open Decisions
-
-- **OD-ANGOLA-003**: a nova versão fica **PUBLISHED automaticamente**, ou
-  fica **DRAFT** à espera de uma acção explícita "Publicar alterações"?
-  (Recomendação: DRAFT + publish explícito, para não publicar a meio de uma
-  edição composta por vários campos — mas é uma decisão de produto, não
-  técnica.)
-- **OD-ANGOLA-004**: o que acontece às cotações já em curso na versão
-  anterior quando uma nova versão é criada? Confirmar que não quebra
-  cotações existentes (o motor de pricing/elegibilidade já resolve por
-  `productVersionId` explícito, por isso o impacto deve ser nulo — mas
-  precisa de confirmação explícita antes de se mudar o comportamento por
-  omissão de publicação).
+- **OD-ANGOLA-003** (resolvida): a nova versão fica **PUBLISHED
+  automaticamente**, não DRAFT. Racional: o pedido original ("já não deve
+  aparecer opção de criar versão mas sim de editar produto") implica uma
+  única acção sem passo de publicação manual separado — inventar um passo
+  extra de "publicar alterações" contradiria o pedido de simplicidade.
+  Reversível se o Product Owner preferir DRAFT+publish explícito.
+- **OD-ANGOLA-004** (resolvida, confirmado por teste): retirar a versão
+  anterior nunca quebra nada que já a referencie — Quotes/PricingRuns
+  apontam para um `productVersionId` específico e imutável, e retirar uma
+  versão não apaga a linha nem os Planos/PlanBenefits associados.
 
 ---
 
-## Épico 3 — Produtos sem data de término de vigência
+## Épico 3 — Produtos sem data de término de vigência ✅ Backend concluído (2026-09-19)
 
-### Estado actual
+### Estado actual (antes desta implementação)
 
-`ProductVersion.effective_to` já é opcional (nullable) na BD e no schema —
-tecnicamente já é possível hoje deixar em branco. O que falta é impedir
-activamente que alguém a preencha.
+`ProductVersion.effective_to` já era opcional (nullable) na BD e no
+schema — tecnicamente já era possível deixar em branco. Faltava impedir
+activamente que alguém a preenchesse.
 
-### Objectivo
+### Implementado
 
-Nenhum produto/versão pode ter `effective_to`. Um produto fica aberto
-indefinidamente até ser substituído por nova versão ou marcado `RETIRED`.
-
-### Tarefas
-
-**Backend**
-- [ ] `ProductVersionCreateRequestSerializer`: remover/ignorar
-      `effectiveTo` do payload aceite (ou validar que é sempre `null`).
-- [ ] Confirmar que `RETIRED` continua a ser o único mecanismo real de
-      "fim de vida" de um produto.
-
-**Frontend**
-- [ ] Remover o campo "Data de término" de todos os formulários de
-      produto/versão.
+- `ProductVersionCreateRequestSerializer` já não aceita `effectiveTo` —
+  o campo foi removido do serializer (não apenas tornado opcional).
+- `create_product_version()` já não recebe `effective_to` como parâmetro;
+  cria sempre com `effective_to=None`.
+- `create_next_version()` (Épico 2) também nunca define `effective_to` na
+  versão nova — só na antiga, ao retirá-la (para reporting/histórico, não
+  afecta a lógica: versões `RETIRED` ficam sempre excluídas da verificação
+  de sobreposição de datas).
+- `RETIRED` continua a ser o único mecanismo real de "fim de vida" de uma
+  versão.
+- **Efeito colateral tratado**: o golden test GT-ELIG-002 (ART-013)
+  assume um `ProductVersion` com `effectiveTo` real — deixou de ser
+  reproduzível via API real. Em vez de o descartar, passou a exercitar a
+  mesma função de domínio (`evaluate()`) directamente, provando que a
+  regra ELIG-006 continua implementada e correcta mesmo sem caminho HTTP
+  para a construir (ver `tests/integration/test_golden_tests.py`).
 
 ### Open Decisions
 
-Nenhuma — mudança directa, sem ambiguidade.
+Nenhuma.
 
 ---
 
