@@ -22,6 +22,7 @@ from apps.product.domain.errors import (
     ImmutableVersionError,
     RowVersionMismatchError,
 )
+from apps.product.application.benefit_service import attach_core_benefits
 from apps.product.infrastructure.models import Plan, Product, ProductVersion
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
@@ -157,6 +158,11 @@ def create_plan(*, product_version: ProductVersion, code: str, name: str, descri
         raise DuplicateCodeError(
             f"Plan code '{code}' already exists for product version {product_version.id}"
         ) from exc
+
+    # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1: every Plan always carries the
+    # 3 market-mandatory (BASE) coverages — never something a caller opts
+    # into, and never skippable, so it happens here rather than in the view.
+    attach_core_benefits(plan=plan)
 
     _audit.record(action="plan.created", entity_type="Plan", entity_id=str(plan.id))
     _outbox.append(

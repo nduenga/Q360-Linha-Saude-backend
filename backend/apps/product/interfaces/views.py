@@ -14,11 +14,20 @@ from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.product.application import product_service
+from apps.product.application.benefit_service import (
+    add_plan_benefit,
+    list_benefits,
+    list_plan_benefits,
+    remove_plan_benefit,
+)
 from apps.product.application.configuration import publish_configuration
 from apps.product.application.pricing_parameter_service import create_pricing_parameter_set
 from apps.product.application.use_cases import PublishProductVersionUseCase
-from apps.product.infrastructure.models import Plan, PricingParameterSet, Product, ProductVersion
+from apps.product.infrastructure.models import Benefit, Plan, PricingParameterSet, Product, ProductVersion
 from apps.product.interfaces.serializers import (
+    AddPlanBenefitRequestSerializer,
+    BenefitSerializer,
+    PlanBenefitSerializer,
     PlanCreateRequestSerializer,
     PlanSerializer,
     PricingParameterSetRequestSerializer,
@@ -206,3 +215,61 @@ class ConfigurationPublishView(APIView):
     def post(self, request, config_type, config_id):
         published = publish_configuration(config_type=config_type, config_id=config_id)
         return Response(published)
+
+
+class BenefitListView(APIView):
+    """Pragmatic V1 addition, not in ART-006 — see
+    apps/product/application/benefit_service.py module docstring and
+    ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1. Lists the fixed 11-coverage
+    market catalogue (3 BASE + 8 COMPLEMENTARY), seeding it for the
+    tenant on first use."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request):
+        queryset = list_benefits(category=request.query_params.get("category"))
+        paginator = Q360PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        return paginator.get_paginated_response(BenefitSerializer(page, many=True).data)
+
+
+@requires_idempotency
+class PlanBenefitListCreateView(APIView):
+    """Pragmatic V1 addition, not in ART-006. `GET` lists the coverages
+    currently attached to a Plan (BASE + whichever COMPLEMENTARY ones were
+    opted into); `POST` attaches one more COMPLEMENTARY coverage (BASE
+    ones are attached automatically by product_service.create_plan and
+    never opted into here)."""
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [require_scope(Scope.ADMIN)(), require_permission(Permission.PRODUCT_MANAGE)()]
+        return [require_scope(Scope.READ)()]
+
+    def get(self, request, plan_id):
+        plan = get_object_or_404(Plan, id=plan_id)
+        queryset = list_plan_benefits(plan=plan)
+        return Response(PlanBenefitSerializer(queryset, many=True).data)
+
+    def post(self, request, plan_id):
+        plan = get_object_or_404(Plan, id=plan_id)
+        body = AddPlanBenefitRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        benefit = get_object_or_404(Benefit, id=body.validated_data["benefitId"])
+        plan_benefit = add_plan_benefit(plan=plan, benefit=benefit)
+        return Response(PlanBenefitSerializer(plan_benefit).data, status=201)
+
+
+class PlanBenefitDetailView(APIView):
+    """Pragmatic V1 addition, not in ART-006. `DELETE` detaches a
+    COMPLEMENTARY coverage from a Plan — a BASE coverage can never be
+    removed this way (benefit_service.remove_plan_benefit raises
+    MissingCoreBenefitsError, mapped to 400 VALIDATION-400)."""
+
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+    def delete(self, request, plan_id, benefit_id):
+        plan = get_object_or_404(Plan, id=plan_id)
+        benefit = get_object_or_404(Benefit, id=benefit_id)
+        remove_plan_benefit(plan=plan, benefit=benefit)
+        return Response(status=204)

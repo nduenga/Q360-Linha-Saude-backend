@@ -46,3 +46,14 @@ class RowVersionMismatchError(DomainProblem):
 
     http_status = 409
     problem_code = "VERSION-CONFLICT"
+
+
+class MissingCoreBenefitsError(DomainProblem):
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1: a ProductVersion cannot
+    publish while any of its Plans is missing a BASE (mandatory market)
+    coverage. Also raised (via the CoreBenefitRemovalError subclass in
+    benefit_service.py) when someone tries to detach a BASE coverage from
+    a Plan — never allowed."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"

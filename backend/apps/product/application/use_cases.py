@@ -8,8 +8,9 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentActorProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
+from apps.product.application.benefit_service import plan_has_all_core_benefits
 from apps.product.domain.enums import VersionedConfigStatus
-from apps.product.domain.errors import ImmutableVersionError
+from apps.product.domain.errors import ImmutableVersionError, MissingCoreBenefitsError
 from apps.product.infrastructure.models import ProductVersion
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
@@ -26,6 +27,20 @@ class PublishProductVersionUseCase:
 
     def execute(self, version: ProductVersion) -> ProductVersion:
         actor = CurrentActorProvider.get()
+
+        # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1: a version cannot publish
+        # while any of its Plans is missing a market-mandatory (BASE)
+        # coverage. Checked before the state-changing UPDATE below, so a
+        # rejected publish never leaves partial state.
+        missing_plan_codes = [
+            plan.code for plan in version.plans.all() if not plan_has_all_core_benefits(plan=plan)
+        ]
+        if missing_plan_codes:
+            raise MissingCoreBenefitsError(
+                "Cannot publish: plan(s) missing a mandatory coverage "
+                f"(Internamento Hospitalar, Ambulatório, Urgência Médica): {', '.join(missing_plan_codes)}"
+            )
+
         # Conditional UPDATE (not read-then-save): the WHERE clause only
         # matches a still-DRAFT row, so two concurrent publish calls for
         # the same version can never both succeed — the second affects 0

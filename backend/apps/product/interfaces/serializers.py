@@ -144,3 +144,27 @@ class PricingParameterSetRequestSerializer(serializers.Serializer):
         if len(codes) != len(set(codes)):
             raise serializers.ValidationError("Parameter codes must be unique within the set.")
         return parameters
+
+
+class BenefitSerializer(serializers.Serializer):
+    """Pragmatic V1 addition, not in ART-006 — see
+    apps/product/application/benefit_service.py module docstring and
+    ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1."""
+
+    id = serializers.UUIDField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    category = serializers.CharField(source="benefit_type")
+    description = serializers.CharField(allow_null=True)
+    status = serializers.CharField()
+
+
+class PlanBenefitSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    planId = serializers.UUIDField(source="plan_id")
+    benefit = BenefitSerializer()
+    configurationJson = serializers.JSONField(source="configuration_json")
+
+
+class AddPlanBenefitRequestSerializer(serializers.Serializer):
+    benefitId = serializers.UUIDField()

@@ -1,7 +1,10 @@
 from django.urls import path
 
 from apps.product.interfaces.views import (
+    BenefitListView,
     ConfigurationPublishView,
+    PlanBenefitDetailView,
+    PlanBenefitListCreateView,
     PlanDetailView,
     PlanListCreateView,
     PricingParameterSetCreateView,
@@ -12,6 +15,17 @@ from apps.product.interfaces.views import (
 )
 
 urlpatterns = [
+    path("benefits", BenefitListView.as_view(), name="benefit-list"),
+    path(
+        "plans/<uuid:plan_id>/benefits",
+        PlanBenefitListCreateView.as_view(),
+        name="plan-benefit-list-create",
+    ),
+    path(
+        "plans/<uuid:plan_id>/benefits/<uuid:benefit_id>",
+        PlanBenefitDetailView.as_view(),
+        name="plan-benefit-detail",
+    ),
     path("products", ProductListCreateView.as_view(), name="product-list-create"),
     path("products/<uuid:product_id>", ProductDetailView.as_view(), name="product-detail"),
     path(
