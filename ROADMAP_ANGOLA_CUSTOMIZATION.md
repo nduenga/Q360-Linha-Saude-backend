@@ -24,16 +24,43 @@ contrato fechado.
 
 ---
 
-## Épico 1 — Coberturas básicas obrigatórias
+## Épico 1 — Catálogo de coberturas do mercado angolano (base + complementares)
 
-**Pedido:** todo o produto tem de ter sempre estas 3 coberturas, da BD à UI:
+**Fonte:** `Guia_Coberturas_Seguro_Saude_Angola.pdf` (mercado angolano,
+regulação ARSEG), fornecido pelo Product Owner em 2026-09-19. Esta fonte
+**resolve** a antiga OD-ANGOLA-001 (codes/lista fechada) — deixa de ser uma
+decisão em aberto.
 
-1. **Internamento Hospitalar** — cirurgias, sala operatória, honorários
-   médicos, estadia em quarto hospitalar.
-2. **Ambulatório (Consultas e Exames)** — consultas de clínica geral/
-   especialidade e exames de diagnóstico fora do internamento.
-3. **Urgências Médicas** — assistência imediata a episódios agudos/acidentes
-   em território nacional.
+### Matriz integral de coberturas
+
+**Base (obrigatórias em todas as apólices — sempre presentes em todo o
+produto/plano, não removíveis na UI):**
+
+| # | Código proposto | Nome | Âmbito |
+|---|---|---|---|
+| 1 | `HOSPITALIZATION` | Internamento Hospitalar e Cirurgia | Honorários médicos (cirurgia/anestesia), bloco operatório, estadia hospitalar, tratamentos oncológicos, hemodiálise em internamento |
+| 2 | `OUTPATIENT` | Ambulatório | Consultas clínica geral/especialidade, meios auxiliares de diagnóstico (análises, ecografias, radiografias, TAC, ressonâncias), pequenas cirurgias de consultório |
+| 3 | `EMERGENCY` | Urgência Médica | Atendimento imediato a episódios agudos/acidentes em território nacional, transporte de emergência pré-hospitalar |
+
+**Complementares (facultativas — apresentadas como cards seleccionáveis na
+UI, nunca pré-marcadas):**
+
+| # | Código proposto | Nome | Âmbito |
+|---|---|---|---|
+| 4 | `PHARMACY` | Medicamentos / Farmácia | Comparticipação/reembolso de fármacos prescritos, rede convencionada |
+| 5 | `MATERNITY` | Maternidade e Parto | Pré-natal, parto (normal/cesariana/IVG), cuidados ao recém-nascido |
+| 6 | `DENTAL` | Estomatologia (Medicina Dentária) | Consultas, higiene oral, restaurações, extrações, cirurgia maxilofacial por sinistro |
+| 7 | `OPTICAL` | Oftalmologia e Óptica | Consultas de refração/especialidade, comparticipação de lentes/armações com limite anual |
+| 8 | `PROSTHESIS` | Próteses e Ortóteses | Muletas, cadeiras de rodas, talas, coletes, pacemakers |
+| 9 | `PHYSIOTHERAPY` | Fisioterapia e Reabilitação | Sessões de reabilitação motora, pós-cirúrgica ou livre com limite anual |
+| 10 | `MEDICAL_EVACUATION` | Evacuação Médica Internacional | Transferência aérea + assistência hospitalar no estrangeiro quando inexequível em Angola |
+| 11 | `TRAVEL_ASSISTANCE` | Assistência em Viagem | Assistência médica urgente em deslocações temporárias ao estrangeiro (tipicamente ≤60 dias) |
+
+**Exclusões-padrão de mercado** (a registar como metadado/nota do produto,
+não como lógica de pricing nesta fase): cirurgias estéticas, patologias
+pré-existentes não declaradas, tratamentos de fertilidade, lesões por
+desportos radicais, acidentes de trabalho (imputáveis à apólice de
+Acidentes de Trabalho).
 
 ### Estado actual
 
@@ -46,37 +73,48 @@ em vez de partir do zero.
 
 ### Objectivo
 
-Um Plano nunca existe (ou nunca publica) sem as 3 coberturas core
-associadas. A UI mostra-as sempre pré-preenchidas e não-removíveis;
-coberturas adicionais continuam a ser opcionais.
+- Tabela `benefit` na BD com **todas as 11** coberturas acima (id, code,
+  name, category `BASE`/`COMPLEMENTARY`, description, status).
+- Um endpoint por operação: `GET /benefits` (catálogo completo, para o
+  frontend construir a lista de cards), e associação por plano via
+  `PlanBenefit`.
+- Um Plano nunca existe (ou nunca publica) sem as 3 coberturas **BASE**
+  associadas automaticamente. As 8 **COMPLEMENTARY** aparecem na UI como
+  **cards seleccionáveis** (multi-select), nunca pré-marcados.
 
 ### Tarefas
 
 **Backend**
-- [ ] Change Request ao ART-006 (ou decisão pragmática documentada, no
-      padrão já usado neste projecto) para expor `Benefit`/`PlanBenefit`:
-      catálogo de coberturas + associação por plano.
-- [ ] Seed fixo das 3 coberturas core (code/name).
-- [ ] Validação de domínio: publicar uma versão de produto falha
-      (código de erro reaproveitado do catálogo fechado, ex.
-      `PRICING-CONFIG` ou `VALIDATION-400` consoante o caso) se algum plano
-      não tiver as 3 coberturas.
-- [ ] Se precisar de schema adicional (ex. uma flag `is_core`), **migration
-      nova** — nunca editar uma migration já aplicada (ver incidente
-      corrigido nesta sessão: `0003_outbox_idempotency_consumer_inbox.py`).
+- [x] Confirmado: `benefit.benefit_type` (ART-012 V006, `varchar(60)`, sem
+      CHECK) já serve como o campo de categoria — usa-se `BASE`/
+      `COMPLEMENTARY` directamente, **sem migration nova**.
+- [ ] Seed das 11 coberturas (3 BASE + 8 COMPLEMENTARY) com os codes acima.
+- [ ] `GET /api/v1/benefits` (catálogo, paginável, filtrável por
+      `category`) — pragmático, documentar como tal (Change Request ART-006).
+- [ ] `POST /api/v1/plans/{id}/benefits` (ou incluído no `PlanCreateRequest`)
+      para associar coberturas a um plano.
+- [ ] Ao criar um plano: associar as 3 `BASE` automaticamente no backend
+      (nunca confiar só na UI para garantir isto).
+- [ ] Validação: publicar uma versão de produto falha se algum plano não
+      tiver as 3 `BASE`.
 
 **Frontend**
-- [ ] Ecrã de plano passa a ter sempre uma secção "Coberturas", com as 3
-      core pré-marcadas e bloqueadas para remoção.
+- [ ] Ecrã de plano: secção "Coberturas base" (3, sempre presentes,
+      bloqueadas) + secção "Coberturas complementares" em **cards
+      seleccionáveis** (grid, toggle on/off por card, sem pré-selecção).
 
-### Open Decisions
+### Open Decisions (o que o PDF NÃO resolve)
 
-- **OD-ANGOLA-001**: os `code` exactos das 3 coberturas (ex.
-  `HOSPITALIZATION` / `OUTPATIENT` / `EMERGENCY`) e se são globais
-  (partilhadas entre tenants) ou definidas por tenant.
-- **OD-ANGOLA-002**: que campos de `configuration_json` por cobertura são
-  realmente precisos agora (limites monetários? franquias? sub-limites?) —
-  não inventar um schema de configuração sem confirmação de negócio.
+- **OD-ANGOLA-002** (mantém-se, mais restrita agora): que campos de
+  `configuration_json` por cobertura complementar são precisos já
+  (limites monetários anuais, franquias, percentagens de comparticipação,
+  nº de sessões/ano)? O PDF descreve o *âmbito* de cada cobertura, não os
+  *limites numéricos* — esses são decisões comerciais/actuariais reais que
+  continuam a precisar de confirmação explícita antes de virarem schema.
+- **OD-ANGOLA-007** (nova): os `code` propostos na tabela acima
+  (`HOSPITALIZATION`, `OUTPATIENT`, etc.) são uma proposta técnica minha,
+  não vêm do PDF — confirmar antes de os fixar em seed/migration (fácil de
+  mudar agora, caro depois de haver dados reais a referenciá-los).
 
 ---
 
