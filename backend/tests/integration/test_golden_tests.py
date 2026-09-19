@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -62,43 +63,39 @@ def test_golden_directory_has_no_unexpected_new_cases():
     assert on_disk == known, f"Unrecognised golden files (add a case for them): {on_disk - known}"
 
 
-@pytest.mark.django_db
-def test_GT_ELIG_002_product_not_effective_is_hard_stop(admin_client):
+def test_GT_ELIG_002_product_not_effective_is_hard_stop():
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 3 ("produtos não podem ter
+    data de término de vigência") removed `effectiveTo` from
+    `POST /products/{id}/versions` — GT-ELIG-002's exact input (a
+    ProductVersion with a bounded effective range) is no longer
+    constructible through the real HTTP API, per the golden-test README's
+    own rule ("a baseline change must be explained by an approved change
+    in input semantics"). The ELIG-006 rule itself is untouched, so this
+    exercises the same domain function directly instead of retiring the
+    case outright."""
+    from apps.eligibility.domain.evaluation import EvaluationInput, PlanFacts, ProductVersionFacts, evaluate
+
     case = _load("GT-ELIG-002")
     snap = case["inputSnapshot"]
 
-    product = admin_client.post("/api/v1/products", {"code": f"GT-ELIG-{uuid.uuid4().hex[:8]}", "name": "P"}).data
-    version = admin_client.post(
-        f"/api/v1/products/{product['id']}/versions",
-        {"effectiveFrom": snap["productEffectiveFrom"], "effectiveTo": snap["productEffectiveTo"]},
-        format="json",
-    ).data
-    plan = admin_client.post(
-        "/api/v1/plans", {"productVersionId": version["id"], "code": "B", "name": "B"}
-    ).data
-    proposer_id = admin_client.post(
-        "/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "H"}
-    ).data["id"]
-    member_id = admin_client.post(
-        "/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
-    ).data["id"]
-
-    resp = admin_client.post(
-        "/api/v1/eligibility/evaluate",
-        {
-            "proposerId": proposer_id,
-            "memberId": member_id,
-            "productVersionId": version["id"],
-            "planId": plan["id"],
-            "effectiveDate": snap["quoteEffectiveDate"],
-            "context": {},
-        },
-        format="json",
+    decision, messages = evaluate(
+        data=EvaluationInput(
+            member_id="m1",
+            relationship_code="TITULAR",
+            date_of_birth=None,
+            product_version_id="pv1",
+            plan_id="p1",
+            effective_date=date.fromisoformat(snap["quoteEffectiveDate"]),
+        ),
+        product_version=ProductVersionFacts(
+            effective_from=date.fromisoformat(snap["productEffectiveFrom"]),
+            effective_to=date.fromisoformat(snap["productEffectiveTo"]),
+        ),
+        plan=PlanFacts(is_active=True),
+        config=None,
     )
-    assert resp.status_code == 200
-    assert resp.data["decision"] == case["expected"]["decision"]
-    codes = {m["code"] for m in resp.data["messages"]}
-    assert case["expected"]["code"] in codes
+    assert decision.value == case["expected"]["decision"]
+    assert {m.code for m in messages} == {case["expected"]["code"]}
 
 
 @pytest.mark.django_db

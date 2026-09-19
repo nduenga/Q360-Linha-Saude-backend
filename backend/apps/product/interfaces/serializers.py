@@ -62,8 +62,11 @@ class ProductVersionSerializer(serializers.Serializer):
 
 
 class ProductVersionCreateRequestSerializer(serializers.Serializer):
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 3: a product/version is never
+    given an expiry — `effectiveTo` is deliberately not a field here
+    anymore (previously optional and always None in practice)."""
+
     effectiveFrom = serializers.DateField()
-    effectiveTo = serializers.DateField(allow_null=True, required=False, default=None)
 
 
 class PlanSerializer(serializers.Serializer):

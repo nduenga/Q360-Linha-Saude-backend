@@ -10,11 +10,13 @@ from __future__ import annotations
 from datetime import date
 
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from apps.foundation.application.audit_service import AuditService
-from apps.foundation.application.context import CurrentTenantProvider
+from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
+from apps.product.application.benefit_service import attach_core_benefits
 from apps.product.domain.enums import VersionedConfigStatus
 from apps.product.domain.errors import (
     DuplicateCodeError,
@@ -22,8 +24,7 @@ from apps.product.domain.errors import (
     ImmutableVersionError,
     RowVersionMismatchError,
 )
-from apps.product.application.benefit_service import attach_core_benefits
-from apps.product.infrastructure.models import Plan, Product, ProductVersion
+from apps.product.infrastructure.models import Plan, PlanBenefit, Product, ProductVersion
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
@@ -75,7 +76,97 @@ def update_product(
         entity_id=str(product.id),
         metadata={"rowVersion": product.row_version},
     )
+
+    # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 2: every edit to a Product that
+    # already has a version rolls that version forward automatically — the
+    # explicit "create version" step no longer exists from the caller's
+    # perspective. A product with no version yet has nothing to roll
+    # forward (its first version is still created explicitly, once a Plan
+    # exists to put in it).
+    if ProductVersion.objects.filter(product=product).exclude(status=VersionedConfigStatus.RETIRED.value).exists():
+        create_next_version(product=product)
+
     return product
+
+
+def create_next_version(*, product: Product) -> ProductVersion:
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 2 + 3: replaces the old
+    explicit "create version" step. Retires the current latest (non-
+    RETIRED) version, creates the next one effective today with no end
+    date (Épico 3: a product is never given an expiry), copies every Plan
+    and its PlanBenefit rows across unchanged, and publishes it
+    immediately (OD-ANGOLA-003 resolved as auto-publish: a single "edit
+    product" action should not require a separate manual publish step).
+
+    Existing Quotes/PricingRuns are unaffected: they pin a specific
+    ProductVersion by id, and retiring a version never deletes it or the
+    rows that reference it (OD-ANGOLA-004).
+    """
+    with transaction.atomic():
+        locked_product = Product.objects.select_for_update().get(id=product.id)
+        previous = (
+            ProductVersion.objects.select_for_update()
+            .filter(product=locked_product)
+            .exclude(status=VersionedConfigStatus.RETIRED.value)
+            .order_by("-version_no")
+            .first()
+        )
+        today = timezone.now().date()
+        next_version_no = (previous.version_no if previous else 0) + 1
+        actor = CurrentActorProvider.get()
+
+        if previous is not None:
+            ProductVersion.objects.filter(id=previous.id).update(
+                status=VersionedConfigStatus.RETIRED.value, effective_to=today
+            )
+
+        version = ProductVersion.objects.create(
+            tenant_id=CurrentTenantProvider.require().value,
+            product=locked_product,
+            version_no=next_version_no,
+            effective_from=today,
+            effective_to=None,
+            status=VersionedConfigStatus.PUBLISHED.value,
+            published_at=timezone.now(),
+            published_by=actor.actor_id if actor else None,
+        )
+
+        if previous is not None:
+            for plan in previous.plans.all():
+                new_plan = Plan.objects.create(
+                    tenant_id=version.tenant_id,
+                    product_version=version,
+                    code=plan.code,
+                    name=plan.name,
+                    description=plan.description,
+                )
+                for plan_benefit in plan.plan_benefits.all():
+                    PlanBenefit.objects.create(
+                        tenant_id=version.tenant_id,
+                        plan=new_plan,
+                        benefit=plan_benefit.benefit,
+                        configuration_json=plan_benefit.configuration_json,
+                    )
+
+    _audit.record(
+        action="product_version.created",
+        entity_type="ProductVersion",
+        entity_id=str(version.id),
+        metadata={"productId": str(product.id), "versionNo": version.version_no, "auto": True},
+    )
+    _outbox.append(
+        aggregate_type="ProductVersion",
+        aggregate_id=str(version.id),
+        event_type="PRODUCT.VERSION.PUBLISHED",
+        payload={
+            "productVersionId": str(version.id),
+            "productId": str(product.id),
+            "versionNo": version.version_no,
+            "publishedAt": version.published_at.isoformat() if version.published_at else None,
+            "publishedBy": version.published_by,
+        },
+    )
+    return version
 
 
 def _versions_overlap(
@@ -87,9 +178,14 @@ def _versions_overlap(
     return a_from <= b_end and b_from <= a_end
 
 
-def create_product_version(
-    *, product: Product, effective_from: date, effective_to: date | None
-) -> ProductVersion:
+def create_product_version(*, product: Product, effective_from: date) -> ProductVersion:
+    # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 3: a ProductVersion is never
+    # given an expiry — `effective_to` is always None, so the only way an
+    # existing version stops being current is being RETIRED (see
+    # create_next_version below, the normal path once a product already
+    # has a version). This function remains for a product's very first
+    # version, before there is anything to roll forward from.
+    #
     # DOC-004 s7 invariant: "vigências incompatíveis não se sobrepõem",
     # checked against every non-RETIRED version of the same product (DRAFT
     # included) — see domain/errors.py EffectiveDateOverlapError docstring
@@ -107,7 +203,7 @@ def create_product_version(
             status=VersionedConfigStatus.RETIRED.value
         )
         for other in existing:
-            if _versions_overlap(effective_from, effective_to, other.effective_from, other.effective_to):
+            if _versions_overlap(effective_from, None, other.effective_from, other.effective_to):
                 raise EffectiveDateOverlapError(
                     f"Effective range overlaps existing version {other.version_no} of product {product.id}"
                 )
@@ -120,7 +216,7 @@ def create_product_version(
             product=locked_product,
             version_no=next_version_no,
             effective_from=effective_from,
-            effective_to=effective_to,
+            effective_to=None,
         )
 
     _audit.record(

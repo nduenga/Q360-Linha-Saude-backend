@@ -120,29 +120,41 @@ def test_create_and_publish_product_version(admin_client):
 def test_list_product_versions(admin_client):
     """Pragmatic V1 addition (OPEN_DECISIONS.md#S04-LISTING-GAPS-001):
     ART-006 has no listProductVersions, but the frontend needs a way to
-    show a product's versions without a per-browser cache."""
+    show a product's versions without a per-browser cache.
+
+    ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 2: the second version is no
+    longer created via a second explicit POST (that would now correctly
+    be rejected as an overlap — every version is open-ended, see Épico 3)
+    but via editing the product, which auto-rolls the version forward."""
     product = admin_client.post("/api/v1/products", {"code": "VERLIST", "name": "VerList"}).data
-    admin_client.post(
-        f"/api/v1/products/{product['id']}/versions",
-        {"effectiveFrom": "2026-01-01", "effectiveTo": "2026-12-31"},
+    admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"})
+    admin_client.put(
+        f"/api/v1/products/{product['id']}", {"name": "VerList", "rowVersion": 0}
     )
-    admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2027-01-01"})
 
     response = admin_client.get(f"/api/v1/products/{product['id']}/versions")
     assert response.status_code == 200
     assert response.data["page"]["totalElements"] == 2
     assert [v["versionNo"] for v in response.data["items"]] == [2, 1]
+    assert response.data["items"][0]["status"] == "PUBLISHED"
+    assert response.data["items"][1]["status"] == "RETIRED"
 
 
 @pytest.mark.django_db
-def test_second_version_no_is_incremented(admin_client):
+def test_editing_a_product_auto_creates_and_publishes_the_next_version(admin_client):
     product = admin_client.post("/api/v1/products", {"code": "SEQ", "name": "Sequenced"}).data
-    admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01", "effectiveTo": "2026-06-30"})
-    v2 = admin_client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-07-01"}
+    admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"})
+
+    updated = admin_client.put(
+        f"/api/v1/products/{product['id']}", {"name": "Sequenced", "rowVersion": 0}
     )
-    assert v2.status_code == 201
-    assert v2.data["versionNo"] == 2
+    assert updated.status_code == 200
+
+    versions = admin_client.get(f"/api/v1/products/{product['id']}/versions").data["items"]
+    assert len(versions) == 2
+    new_version = next(v for v in versions if v["versionNo"] == 2)
+    assert new_version["status"] == "PUBLISHED"
+    assert new_version["effectiveTo"] is None
 
 
 @pytest.mark.django_db
@@ -161,13 +173,16 @@ def test_overlapping_effective_dates_are_rejected(admin_client):
 
 
 @pytest.mark.django_db
-def test_non_overlapping_open_ended_version_is_accepted(admin_client):
+def test_two_explicit_open_ended_versions_always_overlap(admin_client):
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 3: every version is open-ended
+    (no effectiveTo), so a second version can only ever coexist with the
+    first by retiring it first — which the explicit create-version
+    endpoint does not do (see create_next_version for the real path, used
+    automatically when a product with an existing version is edited)."""
     product = admin_client.post("/api/v1/products", {"code": "OPEN", "name": "Open ended"}).data
-    admin_client.post(
-        f"/api/v1/products/{product['id']}/versions",
-        {"effectiveFrom": "2025-01-01", "effectiveTo": "2025-12-31"},
-    )
+    admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2025-01-01"})
     response = admin_client.post(
         f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
     )
-    assert response.status_code == 201
+    assert response.status_code == 400
+    assert response.data["code"] == "VALIDATION-400"

@@ -108,7 +108,6 @@ class ProductVersionCreateView(APIView):
         version = product_service.create_product_version(
             product=product,
             effective_from=body.validated_data["effectiveFrom"],
-            effective_to=body.validated_data["effectiveTo"],
         )
         return Response(ProductVersionSerializer(version).data, status=201)
 
