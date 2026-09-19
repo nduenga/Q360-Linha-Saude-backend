@@ -201,44 +201,46 @@ Nenhuma.
 **Pedido:** em vez de pedir os dados um a um, pedir o ID da apólice e
 preencher tudo automaticamente.
 
-### Estado actual
+### Estado actual (antes desta implementação)
 
-Não existe um conceito de "Apólice" separado de `Quote` — o mais próximo é
-uma cotação já `APPROVED`. `EligibilityRequest` hoje exige
-`productVersionId`+`planId`+`effectiveDate`+`proposerId`+`memberId`
-escolhidos manualmente, um a um (6 selects sequenciais na UI).
+Não existia um conceito de "Apólice" separado de `Quote`, e
+`Quote.quote_number` nunca era realmente atribuído em código nenhum
+(campo sempre `NULL`, ver `DECISIONS_TAKEN.md#S06-QUOTE-001` item 4) —
+apesar de a coluna e o índice único já existirem desde o Sprint 6.
+`EligibilityRequest` exigia `productVersionId`+`planId`+`effectiveDate`+
+`proposerId`+`memberId` escolhidos manualmente, um a um (6 selects
+sequenciais na UI).
 
-### Objectivo
+### Implementado (backend)
 
-Utilizador introduz um único número (apólice/cotação) e o sistema
-pré-preenche produto, versão, plano, proponente e membro automaticamente.
+- **OD-ANGOLA-005 resolvida — opção (a)**: "apólice" = `Quote.quoteNumber`
+  de uma cotação `APPROVED`. Não inventa uma entidade `Policy` nova.
+- `decide_quote()` atribui agora um `quote_number` real (sequencial, via
+  `numbering_service.next_value`, mesmo mecanismo já usado para os
+  números de documento) **só na aprovação** — nunca em REJECT/RETURN,
+  nunca na criação. Continua a ser um número de teste/demonstração
+  (sequencial simples), nunca um formato ARSEG real — ART-011 PROH-008
+  continua a proibir inventar esse formato (ver `DECISIONS_TAKEN.md`).
+- `GET /api/v1/quotes?quoteNumber=...` (pragmático, novo filtro) resolve
+  a cotação completa (productVersionId/planId/proposerId/effectiveDate) a
+  partir do número — falta só o frontend chamar isto e depois
+  `GET /quotes/{id}/members` (já existente) para os beneficiários.
+- Testado (`tests/quote/test_quote_number_lookup.py`): número atribuído
+  só em APPROVE, lookup resolve o contexto completo, número desconhecido
+  devolve lista vazia, sequências independentes por tenant.
 
 ### Tarefas
 
-**Backend**
-- [ ] **Decisão de produto necessária primeiro** (ver Open Decision
-      abaixo) antes de desenhar o endpoint.
-- [ ] Endpoint pragmático de lookup (ex. `GET /quotes?quoteNumber=...` ou
-      dedicado) que devolve tudo o necessário para pré-preencher o pedido
-      de elegibilidade.
-
 **Frontend**
 - [ ] `EligibilityPage.tsx`: substituir os 6 selects por um único campo
-      "Número da apólice/cotação" + botão "Procurar", com possibilidade de
-      correcção manual se necessário.
+      "Número da apólice/cotação" + botão "Procurar" (chama
+      `GET /quotes?quoteNumber=` e depois `GET /quotes/{id}/members`),
+      com possibilidade de correcção manual se necessário.
 
 ### Open Decisions
 
-- **OD-ANGOLA-005** (bloqueante): "apólice" mapeia para quê no domínio
-  actual?
-  - **(a)** Usar `Quote.quoteNumber` de uma cotação `APPROVED` como
-    "número de apólice" — reaproveita o que já existe, não inventa
-    entidade nova. **Recomendação para V1.**
-  - **(b)** Criar uma entidade `Policy` nova, gerada a partir de uma Quote
-    aprovada — mais fiel à realidade seguradora (uma apólice pode
-    sobreviver a renovações/cotações futuras), mas implica schema novo,
-    migration nova e Change Request a ART-005/ART-006. Só avançar para
-    (b) se houver um requisito real que (a) não cubra.
+Nenhuma bloqueante — ver nota acima sobre o formato do número não ser
+uma decisão real de negócio, só um identificador de teste.
 
 ---
 

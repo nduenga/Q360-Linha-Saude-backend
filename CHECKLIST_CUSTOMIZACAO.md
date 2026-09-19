@@ -39,10 +39,10 @@ ficam marcados `(frontend — outra pessoa)` e não são construídos aqui.
       exercita `evaluate()` directamente, já não via API (ver roadmap)
 - [ ] *(frontend — outra pessoa)* remover campo "Data de término" da UI
 
-## 4 — Elegibilidade por número de apólice
-- [ ] OD-ANGOLA-005: apólice = `Quote.quoteNumber` aprovado, ou entidade
-      `Policy` nova?
-- [ ] **Backend**: endpoint de lookup por número
+## 4 — Elegibilidade por número de apólice ✅ backend concluído (2026-09-19)
+- [x] OD-ANGOLA-005 resolvida: apólice = `Quote.quoteNumber` (aprovação)
+- [x] **Backend**: `quote_number` atribuído em APPROVE (numbering_service)
+- [x] **Backend**: `GET /quotes?quoteNumber=` resolve o contexto completo
 - [ ] *(frontend — outra pessoa)* campo único + "Procurar" substitui os
       6 selects
 
