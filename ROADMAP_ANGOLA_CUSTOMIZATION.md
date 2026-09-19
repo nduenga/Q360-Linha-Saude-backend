@@ -207,6 +207,74 @@ pré-preenche produto, versão, plano, proponente e membro automaticamente.
 
 ---
 
+## Épico 6 — CRUD completo de configurações (Rating Tables, Parameter Sets, Rule Versions, Document Templates)
+
+**Pedido:** hoje não é possível editar nem remover Rating Tables,
+Pricing Parameter Sets, Rule Versions nem Document Templates — só criar
+(POST) e publicar. Isto bloqueia correcções normais de configuração.
+
+### Estado actual
+
+Confirmado em código (`apps/pricing/interfaces/views.py`,
+`apps/product/interfaces/views.py`, `apps/foundation/interfaces/rule_views.py`,
+`apps/quote/interfaces/views.py`): todos os quatro recursos só têm
+`GET` (listar) e `POST` (criar) + um endpoint de `publish` dedicado.
+**Não existe `PUT`/`PATCH`/`DELETE` em nenhum dos quatro.** Isto não é um
+esquecimento aleatório — reflecte o desenho "versão imediável" usado em
+todo o sistema (DRAFT → PUBLISHED → RETIRED), pensado para o invariante
+dos golden tests (`docs/artifacts/ART-013-golden-tests/golden/README.md`:
+"mesmo input + mesma versão exacta = mesmo resultado sempre"). Editar uma
+versão já **PUBLISHED** in-place quebraria esse invariante para qualquer
+cotação/pricing run que já a referencia.
+
+### Objectivo
+
+Dar capacidade real de manutenção sem quebrar a reprodutibilidade de
+cotações/pricing runs já existentes:
+
+- **Editar (PATCH/PUT)** — permitido **apenas enquanto o recurso está em
+  `DRAFT`** (antes de publicar). Depois de `PUBLISHED`, a única forma de
+  "corrigir" é criar uma nova versão (o fluxo de criação já suporta isto).
+- **Remover (DELETE)** — permitido **apenas em `DRAFT`** (uma versão nunca
+  usada por nenhuma cotação/pricing run pode ser apagada em segurança).
+  Para uma versão `PUBLISHED`, "remover" na prática é **retirar**
+  (`status=RETIRED`), nunca apagar a linha — para não quebrar histórico
+  nem os golden tests.
+
+### Tarefas
+
+**Backend** (mesmo padrão nos 4 recursos: Rating Table, Pricing Parameter
+Set, Rule Version, Document Template Version)
+- [ ] `PATCH /api/v1/<recurso>/{id}` — só aceite quando `status=DRAFT`;
+      `409 QUOTE-STATE`-style (reaproveitar código de erro mais próximo do
+      catálogo fechado, ex. `VERSION-CONFLICT` ou um novo caso de
+      `CONFLICT`) se já publicado.
+- [ ] `DELETE /api/v1/<recurso>/{id}` — só aceite quando `status=DRAFT` e
+      sem nenhuma referência activa (verificar FKs relevantes antes de
+      apagar).
+- [ ] `POST /api/v1/<recurso>/{id}/retire` (ou reaproveitar o dispatcher
+      `/configuration/{configType}/{configId}/publish` existente com um
+      `configType`/acção adicional) para marcar `RETIRED` uma versão
+      `PUBLISHED`.
+- [ ] Change Request ao ART-006 para os quatro novos verbos (hoje nenhum
+      está documentado no contrato).
+
+**Frontend**
+- [ ] `PricingConfigPanel.tsx` e o ecrã de Document Templates: acções
+      "Editar" e "Remover" visíveis apenas em itens `DRAFT`; acção
+      "Retirar" visível em itens `PUBLISHED`.
+
+### Open Decisions
+
+- **OD-ANGOLA-006**: confirmar que "remover" para um recurso já
+  `PUBLISHED` deve mesmo significar **retirar** (soft, `RETIRED`) e nunca
+  apagar a linha — dado o impacto directo nos golden tests e na
+  reprodutibilidade de cotações antigas. Presumo que sim por ser o único
+  comportamento seguro, mas fica registado como decisão explícita por
+  mudar o significado de "remover" pedido pelo utilizador.
+
+---
+
 ## Roadmap à parte — Portal do Cliente (autoatendimento de elegibilidade)
 
 Pedido explicitamente como um roadmap separado, de prazo mais longo — **não**
