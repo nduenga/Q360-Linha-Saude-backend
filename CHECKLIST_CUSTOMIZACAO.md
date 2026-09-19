@@ -8,31 +8,32 @@ só a vista rápida de progresso — actualizado à medida que cada item fecha.
 
 ---
 
-## 0 — Ligação Backend ↔ Autenticação do frontend existente
-- [ ] Endpoint de login pragmático (email/password → JWT real, mesmo
+## 0 — Ligação Backend ↔ Autenticação do frontend existente ✅ (2026-09-19)
+- [x] Endpoint de login pragmático (`POST /api/v1/auth/dev-login`, mesmo
       mecanismo de `manage.py issue_dev_token`, nunca a resolução final de
       OD-009/IdP real)
-- [ ] Frontend: `LoginPage.tsx` chama o backend real em vez de
+- [x] Frontend: `LoginPage.tsx` chama o backend real em vez de
       `authenticateWithMock`
-- [ ] Frontend: `AuthProvider`/`useCurrentUser` populado a partir de
+- [x] Frontend: `AuthProvider`/`useCurrentUser` populado a partir de
       `GET /api/v1/me` (já existe no backend), não de arrays hardcoded
-- [ ] Token guardado e enviado pelo `httpClient` em todos os pedidos
-      (via `setAccessTokenProvider`, já existe)
-- [ ] Confirmar que todos os ecrãs já construídos (Produtos, Pricing,
-      Elegibilidade, Subscrição, Auditoria) continuam a funcionar com a
-      sessão real
+- [x] Token guardado (`sessionStorage`) e enviado pelo `httpClient` em
+      todos os pedidos
+- [x] Verificado E2E contra o servidor real: login devolve JWT válido,
+      `/me` resolve roles/permissions reais, `GET /products` mostra os
+      mesmos 8 produtos já visíveis no browser (mesmo dev-tenant)
 
-## 1 — Catálogo de coberturas do mercado angolano
-- [ ] Seed das 11 coberturas (3 BASE + 8 COMPLEMENTARY) — dados reais do
+## 1 — Catálogo de coberturas do mercado angolano ✅ (2026-09-19)
+- [x] Seed das 11 coberturas (3 BASE + 8 COMPLEMENTARY) — dados reais do
       guia ARSEG, ver roadmap
-- [ ] `GET /api/v1/benefits` (catálogo)
-- [ ] Associação de coberturas a planos (BASE automático, COMPLEMENTARY
-      opcional)
-- [ ] Validação: plano não publica sem as 3 BASE
-- [ ] UI: 3 BASE sempre presentes e bloqueadas + COMPLEMENTARY como cards
+- [x] `GET /api/v1/benefits` (catálogo, filtrável por `category`)
+- [x] Associação de coberturas a planos (BASE automático via
+      `POST /plans/{id}/benefits`, `DELETE` recusa remover BASE)
+- [x] Validação: plano não publica sem as 3 BASE (`MissingCoreBenefitsError`)
+- [x] UI: 3 BASE sempre presentes e bloqueadas + COMPLEMENTARY como cards
       seleccionáveis (nunca pré-marcados)
-- [ ] Confirmar OD-ANGOLA-002 (limites/franquias por cobertura) e
-      OD-ANGOLA-007 (codes propostos) antes de fixar em produção
+- [x] Verificado E2E contra o servidor real (11/11 coberturas)
+- [ ] Continua em aberto: OD-ANGOLA-002 (limites/franquias por cobertura)
+      e OD-ANGOLA-007 (confirmar os codes propostos) antes de produção
 
 ## 2 — Versionamento automático do produto
 - [ ] OD-ANGOLA-003: nova versão publica automaticamente ou fica DRAFT?
