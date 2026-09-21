@@ -326,20 +326,21 @@ Set, Rule Version, Document Template Version) — ✅ concluído
 ## Roadmap à parte — Portal do Cliente (autoatendimento de elegibilidade)
 
 Pedido explicitamente como um roadmap separado, de prazo mais longo — **não**
-é trabalho imediato dos épicos acima.
+é trabalho imediato dos épicos acima. Desenvolvido em detalhe (fases,
+tarefas, decisões em aberto) em **`ROADMAP_PORTAL_CLIENTE.md`** — resumo:
 
-- **Fase 1 — Consulta de elegibilidade própria**: endpoint autenticado por
-  credenciais de cliente final (não staff) para consultar apenas o estado
-  de elegibilidade da sua própria apólice. Requer:
-  - Um mecanismo de autenticação novo para clientes finais (hoje só existem
-    actors staff via scopes OAuth2/OIDC internos — `q360.read/write/admin/
-    approve/audit`).
-  - Um RBAC novo: o cliente só pode ver os *seus* dados, nunca dados de
-    outro cliente ou de outro tenant.
-- **Fase 2 — Self-service básico**: ver cobertura contratada, descarregar o
-  documento de proposta já existente (reaproveitando
-  `GET /quotes/{id}/proposal`).
-- **Fase 3 — Submissão de pedidos pelo próprio cliente** (mais longo prazo).
+- **Fase 0 — Fundação técnica**: mecanismo de autenticação/autorização
+  novo e isolado para o cliente final (nunca reaproveitando scopes/roles
+  internos DOC-001 §18); nova tabela `customer_account`; segunda
+  fronteira de segurança (isolamento por proposer, além do isolamento por
+  tenant já existente).
+- **Fase 1 — Consulta de elegibilidade e estado da apólice (MVP)**:
+  reaproveita `EvaluateEligibilityUseCase`, `benefit_service`, `Quote`
+  já construídos.
+- **Fase 2 — Self-service básico**: descarregar proposta, ver
+  dependentes (reaproveita `document_service`, `QuoteMember`).
+- **Fase 3 — Submissão de pedidos pelo próprio cliente** (prazo mais
+  longo, desenho adiado até as Fases 0-2 estarem validadas em uso real).
 
 **Nota:** isto é uma extensão de âmbito significativa (fora do V1 definido
 em DOC-002/DOC-003) e deve ser tratada como um projecto à parte, com o seu
