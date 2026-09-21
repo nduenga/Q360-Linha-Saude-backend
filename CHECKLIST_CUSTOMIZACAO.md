@@ -51,12 +51,18 @@ ficam marcados `(frontend — outra pessoa)` e não são construídos aqui.
       mágicos, histórico de configurações, paginação real — sem trabalho
       de backend associado
 
-## 6 — CRUD de Rating Tables / Parameter Sets / Rule Versions / Templates
-- [ ] OD-ANGOLA-006: confirmar "remover" em PUBLISHED = retirar, nunca
+## 6 — CRUD de Rating Tables / Parameter Sets / Rule Versions / Templates ✅ backend concluído (2026-09-21)
+- [x] OD-ANGOLA-006 resolvida: "remover" em PUBLISHED = retirar, nunca
       apagar
-- [ ] **Backend**: `PATCH` (só DRAFT) nos 4 recursos
-- [ ] **Backend**: `DELETE` (só DRAFT) nos 4 recursos
-- [ ] **Backend**: acção "Retirar" para PUBLISHED
+- [x] **Backend**: `PATCH` (só DRAFT) nos 4 recursos
+- [x] **Backend**: `DELETE` (só DRAFT) nos 4 recursos — corrigido bug real
+      de FK (`rating_factor`/`pricing_parameter` sem `ON DELETE CASCADE`)
+      apanhado pelos próprios testes novos
+- [x] **Backend**: acção "Retirar" para PUBLISHED (dispatcher partilhado
+      para 3 recursos + endpoint dedicado para Document Template)
+- [x] Testes dedicados (24 casos): PATCH/DELETE em DRAFT, rejeição em
+      PUBLISHED, retire válido e retire de DRAFT rejeitado — para os 4
+      recursos
 - [ ] *(frontend — outra pessoa)* botões Editar/Remover (DRAFT), Retirar
       (PUBLISHED)
 

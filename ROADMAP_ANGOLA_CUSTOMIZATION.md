@@ -281,34 +281,45 @@ cotações/pricing runs já existentes:
 ### Tarefas
 
 **Backend** (mesmo padrão nos 4 recursos: Rating Table, Pricing Parameter
-Set, Rule Version, Document Template Version)
-- [ ] `PATCH /api/v1/<recurso>/{id}` — só aceite quando `status=DRAFT`;
-      `409 QUOTE-STATE`-style (reaproveitar código de erro mais próximo do
-      catálogo fechado, ex. `VERSION-CONFLICT` ou um novo caso de
-      `CONFLICT`) se já publicado.
-- [ ] `DELETE /api/v1/<recurso>/{id}` — só aceite quando `status=DRAFT` e
-      sem nenhuma referência activa (verificar FKs relevantes antes de
-      apagar).
-- [ ] `POST /api/v1/<recurso>/{id}/retire` (ou reaproveitar o dispatcher
-      `/configuration/{configType}/{configId}/publish` existente com um
-      `configType`/acção adicional) para marcar `RETIRED` uma versão
-      `PUBLISHED`.
-- [ ] Change Request ao ART-006 para os quatro novos verbos (hoje nenhum
-      está documentado no contrato).
+Set, Rule Version, Document Template Version) — ✅ concluído
+- [x] `PATCH /api/v1/rating-tables/{id}`,
+      `/api/v1/pricing-parameter-sets/{id}`, `/api/v1/rule-versions/{id}`,
+      `/api/v1/document-templates/{id}` — só aceite quando `status=DRAFT`;
+      `409` reaproveitando o código de erro já existente de cada recurso
+      (`CONFLICT` para Rating Table/Pricing Parameter Set/Rule Version,
+      `CONFLICT` também para Document Template via `TemplateImmutableError`)
+      se já publicado.
+- [x] `DELETE` nos mesmos 4 endpoints — só aceite quando `status=DRAFT`.
+      Corrigido um bug real encontrado pelos testes: apagar directamente a
+      linha-pai (`RatingTable`/`PricingParameterSet`) falhava com
+      `IntegrityError` de FK porque `rating_factor`/`pricing_parameter` não
+      têm `ON DELETE CASCADE` — agora as linhas-filho são apagadas primeiro,
+      na mesma transacção.
+- [x] `POST /api/v1/configuration/{configType}/{configId}/retire`
+      (dispatcher partilhado, mesmos 3 `configType` do publish:
+      `pricing-parameter-set`/`rule-version`/`rating-table`) +
+      `POST /api/v1/document-templates/{id}/retire` (endpoint dedicado,
+      Document Template nunca fez parte desse dispatcher) — marcam
+      `RETIRED` uma versão `PUBLISHED`.
+- [ ] Change Request ao ART-006 para os novos verbos (hoje nenhum está
+      documentado no contrato) — pendente, não bloqueia o uso real.
 
-**Frontend**
+**Frontend** (fica para outra pessoa construir)
 - [ ] `PricingConfigPanel.tsx` e o ecrã de Document Templates: acções
       "Editar" e "Remover" visíveis apenas em itens `DRAFT`; acção
-      "Retirar" visível em itens `PUBLISHED`.
+      "Retirar" visível em itens `PUBLISHED`. Ver `FRONTEND_PLAN.md`.
 
 ### Open Decisions
 
-- **OD-ANGOLA-006**: confirmar que "remover" para um recurso já
-  `PUBLISHED` deve mesmo significar **retirar** (soft, `RETIRED`) e nunca
-  apagar a linha — dado o impacto directo nos golden tests e na
-  reprodutibilidade de cotações antigas. Presumo que sim por ser o único
-  comportamento seguro, mas fica registado como decisão explícita por
-  mudar o significado de "remover" pedido pelo utilizador.
+- **OD-ANGOLA-006 — resolvida**: "remover" para um recurso já `PUBLISHED`
+  significa **retirar** (soft, `RETIRED`) e nunca apagar a linha — dado o
+  impacto directo nos golden tests e na reprodutibilidade de cotações
+  antigas. Implementado exactamente assim nos 4 recursos, com testes
+  (`tests/pricing/test_rating_table_crud.py`,
+  `tests/product/test_pricing_parameter_crud.py`,
+  `tests/foundation/test_rule_version_crud.py`,
+  `tests/quote/test_document_template_crud.py`) a confirmar que retirar
+  uma versão `DRAFT` é rejeitado (só faz sentido em `PUBLISHED`).
 
 ---
 
