@@ -47,8 +47,13 @@ from apps.foundation.interfaces.auth_serializers import (
 _DEV_TENANT_CODE = "dev-tenant"
 _TTL_SECONDS = 3600
 
-# Same two identities the frontend's mockAuth.ts already advertised on the
-# login screen — real roles now, not a hardcoded permission array.
+# The first two identities are what the frontend's mockAuth.ts already
+# advertised on the login screen — real roles now, not a hardcoded
+# permission array. `aprovador@q360.co.ao` is a pragmatic V1 addition:
+# ART-012's `ck_decision_four_eyes` requires a *different actor* to decide
+# a quote than the one who submitted it, so testing the review workflow
+# end-to-end through the UI (not just curl + issue_dev_token) needs a
+# second login-able identity with Role.APPROVER, distinct from admin-demo.
 _DEV_USERS = {
     "admin@q360.co.ao": {
         "password": "Q360admin2026",
@@ -56,6 +61,13 @@ _DEV_USERS = {
         "name": "Administrador Q360",
         "roles": [Role.ADMIN],
         "scopes": "q360.read q360.write q360.admin q360.approve q360.audit",
+    },
+    "aprovador@q360.co.ao": {
+        "password": "Q360aprova2026",
+        "actor_id": "aprovador-demo",
+        "name": "Aprovador Q360",
+        "roles": [Role.APPROVER],
+        "scopes": "q360.read q360.write q360.approve q360.audit",
     },
     "subscritor@q360.co.ao": {
         "password": "Q360demo2026",

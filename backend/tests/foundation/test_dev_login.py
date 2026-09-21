@@ -59,6 +59,32 @@ def test_valid_subscriber_credentials_get_real_doc001_permissions(settings):
 
 
 @pytest.mark.django_db
+def test_valid_approver_credentials_get_real_doc001_permissions(settings):
+    """Distinct login-able identity so the four-eyes review workflow
+    (ART-012 ck_decision_four_eyes) can be exercised end-to-end through
+    the UI, not just curl + issue_dev_token."""
+    settings.OIDC_STATIC_VERIFICATION_KEY = "dev-login-test-secret-32-bytes-min"
+    settings.OIDC_ALGORITHMS = ["HS256"]
+    client = APIClient()
+
+    resp = client.post(
+        "/api/v1/auth/dev-login",
+        {"email": "aprovador@q360.co.ao", "password": "Q360aprova2026"},
+        format="json",
+    )
+    assert resp.status_code == 200
+    token = resp.data["accessToken"]
+
+    authed = APIClient()
+    authed.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+    me = authed.get("/api/v1/me")
+    assert me.status_code == 200
+    assert me.data["roles"] == ["APPROVER"]
+    assert "quote:approve" in me.data["permissions"]
+    assert "quote:create" not in me.data["permissions"]
+
+
+@pytest.mark.django_db
 def test_wrong_password_is_401_auth_401(settings):
     settings.OIDC_STATIC_VERIFICATION_KEY = "dev-login-test-secret-32-bytes-min"
     settings.OIDC_ALGORITHMS = ["HS256"]
