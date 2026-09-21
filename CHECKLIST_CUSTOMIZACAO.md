@@ -66,6 +66,22 @@ ficam marcados `(frontend — outra pessoa)` e não são construídos aqui.
 - [ ] *(frontend — outra pessoa)* botões Editar/Remover (DRAFT), Retirar
       (PUBLISHED)
 
+## 7 — Resolução das 8 decisões do Product Owner (2026-09-21)
+- [ ] OD-ANGOLA-008 (Auth0): backend pronto, guia escrito (`AUTH0_SETUP.md`),
+      falta o Product Owner criar a conta Auth0 + ligar o frontend
+- [x] OD-ANGOLA-009: nova cotação exige versão PUBLISHED do produto
+- [x] OD-ANGOLA-010: catálogo real de relações (+ pais/avós), endpoint
+      `GET /relationship-codes`, validação em criar/editar membro
+- [x] OD-ANGOLA-011: importação em massa aceita Excel (preferencial) e
+      CSV, com ETL de valores nulos/vazios
+- [ ] OD-ANGOLA-012 (motor de elegibilidade): desenho entregue
+      (`MOTOR_ELEGIBILIDADE.md`), implementação faseada em curso
+- [x] OD-ANGOLA-013: AOA + arredondamento promovidos a política oficial
+- [x] OD-ANGOLA-014: regras de preço configuráveis — confirmado já
+      resolvido, limitação conhecida documentada
+- [x] OD-ANGOLA-015: dupla aprovação em regras — confirmado manter como
+      está
+
 ## Portal do Cliente (roadmap à parte, prazo mais longo)
 - [ ] Fase 1: autenticação de cliente final + consulta da própria
       elegibilidade

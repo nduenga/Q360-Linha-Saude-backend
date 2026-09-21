@@ -367,6 +367,139 @@ simplificação real: códigos auto-gerados, selects nomeados, acções
 
 ---
 
+## Epico 7 - Resolucao das 8 decisoes do Product Owner (2026-09-21)
+
+**Nota de numeracao:** o Product Owner numerou estas 8 decisoes OD-001 a
+OD-008 na propria mensagem - para nao colidir com o OD-001/OD-002 que ja
+existiam antes desta customizacao (tarifas reais / moeda-arredondamento,
+ver `backend/DECISIONS_TAKEN.md`, seccao final "Fora de ambito desta
+resolucao"), ficam registadas aqui como **OD-ANGOLA-008 a OD-ANGOLA-015**,
+continuando a sequencia ja usada neste roadmap.
+
+### OD-ANGOLA-008 (pedido "OD-001") - Auth0 como fornecedor de login
+
+**Pedido:** construir a infra-estrutura para usar o Auth0 como IdP real.
+**Estado:** backend ja pronto (nao precisou de codigo novo); guia de
+configuracao escrito; ligacao do frontend ainda por fazer - falta o
+Product Owner criar a conta Auth0.
+Ver detalhe completo em `AUTH0_SETUP.md`.
+
+### OD-ANGOLA-009 (pedido "OD-002") - versao antiga nunca inicia negocio novo
+
+**Pedido (resumido):** quando existe uma versao nova de um produto, a
+versao anterior deixa de poder ser usada para **novas** cotacoes - mas
+cotacoes/contratos ja feitos com a versao anterior continuam validos ate
+a renovacao ou fim do contrato.
+**Resposta a pergunta "faz sentido?": sim** - e exactamente a pratica
+correcta do mercado segurador (nao vender negocio novo sobre uma
+tarifa/desenho descontinuado, mas nunca invalidar apolices em vigor).
+**Estado:** concluido e testado.
+- `apps/quote/application/quote_service.py::create_quote` agora rejeita
+  (`400 VALIDATION-400`) sempre que `productVersion.status != PUBLISHED`.
+- Uma cotacao ja criada contra uma versao que e retirada depois continua
+  perfeitamente legivel e utilizavel (OD-ANGOLA-004 ja garantia isto).
+- Testes: `backend/tests/quote/test_quote_requires_current_version.py`.
+
+### OD-ANGOLA-010 (pedido "OD-003") - catalogo de relacoes familiares real, com pais/avos
+
+**Pedido:** adicionar pais e avos ao catalogo, ligado desde a BD ate as
+interfaces (nao hardcoded no frontend).
+**Ambito confirmado com o Product Owner:** so o catalogo, aplicado ao
+produto de Saude ja existente - a mencao a Acidentes Pessoais/Funeral era
+so contexto de mercado, nao pedido para construir essas linhas de
+produto novas.
+**Estado:** concluido e testado (backend).
+- Nova tabela `relationship_code` (tenant-scoped, migration
+  `apps/client/infrastructure/migrations/0002_relationship_catalog.py`),
+  com 5 valores: `TITULAR`, `CONJUGE` (conjuge ou equiparado),
+  `FILHO` (descendente directo), **`ASCENDENTE`** (pai/mae/avo/avo - o
+  valor novo pedido aqui), `OUTRO`.
+- Cada codigo tem uma `category` (TITULAR/SPOUSE/CHILD/ASCENDANT/OTHER) -
+  pensada para o motor de elegibilidade (OD-ANGOLA-012) poder aplicar
+  regras por categoria (ex. "descendentes perdem elegibilidade aos
+  18/25 anos") sem repetir a logica por cada codigo individual.
+- `GET /api/v1/relationship-codes` - endpoint novo, e a partir daqui que
+  o frontend deve construir o `<select>` de "Relacao", nunca de um array
+  hardcoded.
+- `POST/PUT /api/v1/members` agora rejeita (`400 VALIDATION-400`) um
+  `relationshipCode` que nao esteja no catalogo do tenant.
+- Testes: `backend/tests/client/test_relationship_codes.py`.
+- **Ainda nao implementado (fica para o motor de elegibilidade,
+  OD-ANGOLA-012):** os proprios limites de idade/documentos por
+  categoria (ex. filho ate 18, ou ate 25 com comprovativo de
+  matricula) - o catalogo so guarda o *codigo*, nao a *regra*.
+
+### OD-ANGOLA-011 (pedido "OD-004") - importacao em massa: Excel primeiro, com validacao ETL
+
+**Pedido:** suportar Excel (preferencial) e CSV, com um ETL que apanhe
+campos vazios/valores nulos antes de importar.
+**Estado:** concluido e testado.
+- `.xlsx`/`.xlsm` e agora detectado automaticamente pela extensao do
+  ficheiro e lido directamente (biblioteca `openpyxl`, ja declarada em
+  `pyproject.toml`); `.csv` continua a funcionar como alternativa.
+- Linhas completamente em branco numa folha Excel sao ignoradas (nao
+  contam como erro).
+- Novo passo de ETL: qualquer coluna esperada com um valor "parece vazio
+  mas nao e" (`null`, `n/a`, `nan`, `none`, `-`, `--`, sem distinguir
+  maiusculas/minusculas) e rejeitado explicitamente, em vez de ser aceite
+  como texto valido.
+- `relationshipCode` passou a ser validado contra o catalogo real
+  (OD-ANGOLA-010) ja no momento do upload, nao so no commit.
+- Testes: `backend/tests/client/test_imports_excel_etl.py`.
+
+### OD-ANGOLA-012 (pedido "OD-005") - motor de elegibilidade inteligente e configuravel
+
+**Pedido:** motor completo (compliance legal + regras dinamicas) descrito
+em detalhe, com UX "Elegivel/Nao Elegivel" simples e mensagens humanas.
+**Estado:** desenho entregue na integra; implementacao faseada - ver
+`MOTOR_ELEGIBILIDADE.md` para a arvore de decisao, os exemplos de
+mensagens amigaveis e o esquema JSON pedidos explicitamente pelo Product
+Owner. Este e o maior dos 8 pedidos - tratado como o seu proprio roadmap
+de implementacao dentro deste Epico, com fases proprias (ver esse
+documento).
+
+### OD-ANGOLA-013 (pedido "OD-006") - Kwanza (AOA) como moeda oficial, arredondamento oficial
+
+**Pedido:** usar sempre AOA, arredondar para cima ao chegar a 3 casas
+decimais.
+**Estado:** ja era exactamente isto que o sistema fazia como valor de
+teste (`ROUND_HALF_UP` a 2 casas decimais, aplicado a cada componente) -
+promovido de "placeholder pendente de aprovacao" para **politica oficial
+aprovada**. `apps/pricing/domain/money.py` actualizado (constante
+renomeada de `PLACEHOLDER_ROUNDING_POLICY_*` para `ROUNDING_POLICY_*`,
+codigo `OD-006-OFFICIAL-HALF-UP-2DP`). Nenhuma mudanca de comportamento -
+so deixa de ser um placeholder.
+
+### OD-ANGOLA-014 (pedido "OD-007") - regras de ajuste de preco configuraveis pela interface
+
+**Pedido:** as regras de ajuste de preco devem ser configuraveis pela
+interface, nunca hardcoded.
+**Estado:** ja resolvido antes desta conversa, confirmado agora como
+suficiente. `PricingRuleConfig`/`PricingAdjustment`
+(`apps/pricing/domain/pricing_rules.py`) ja le os ajustes de um
+`RuleVersion` publicado (rule_domain=PRICING, artifact_type=JSON) - nunca
+hardcoded no codigo. O Epico 6 ja deu a esse `RuleVersion` o ciclo de
+vida completo (criar/editar em DRAFT/publicar/retirar).
+**Limitacao conhecida, aceite como esta:** um JSON de ajuste mal-formado
+nao e rejeitado no momento de configurar - e silenciosamente ignorado no
+momento de calcular o preco. Corrigir isto exigiria o modulo `foundation`
+(dono do `RuleVersion` generico) depender do modulo `pricing` (dono do
+formato especifico dos ajustes), o que DOC-004 s3.1 proibe
+explicitamente. Fica documentado como opcao conhecida, nao como bug.
+
+### OD-ANGOLA-015 (pedido "OD-008") - dupla aprovacao na publicacao de regras
+
+**Pedido:** manter como esta - quem tem o perfil autorizado publica
+sozinho.
+**Estado:** confirmado, sem alteracao de codigo. E exactamente o
+comportamento ja implementado desde S05-RULE-FOUR-EYES-001: publicar uma
+`RuleVersion`/`RatingTable`/`PricingParameterSet` exige apenas o scope
+`q360.admin` (o "perfil autorizado a configurar"), sem exigir um segundo
+aprovador - ao contrario da aprovacao de cotacoes, que continua a exigir
+sempre um actor diferente.
+
+---
+
 ## Como usar este documento
 
 - Cada épico tem "Open Decisions" que **bloqueiam** o início do código
