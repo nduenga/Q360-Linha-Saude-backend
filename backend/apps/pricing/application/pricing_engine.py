@@ -47,8 +47,8 @@ from apps.pricing.domain.errors import (
     ReferencedEntityNotFoundError,
 )
 from apps.pricing.domain.money import (
-    PLACEHOLDER_ROUNDING_POLICY_CODE,
-    PLACEHOLDER_ROUNDING_POLICY_VERSION,
+    ROUNDING_POLICY_CODE,
+    ROUNDING_POLICY_VERSION,
     round_amount,
 )
 from apps.pricing.infrastructure.models import PricingComponent, PricingRun, PricingScenario, PricingTrace
@@ -209,8 +209,8 @@ def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) ->
         status=PricingRunStatus.REQUESTED.value,
         effective_date=effective_date,
         currency_code=rating_table.currency_code,
-        rounding_policy_code=PLACEHOLDER_ROUNDING_POLICY_CODE,
-        rounding_policy_version=PLACEHOLDER_ROUNDING_POLICY_VERSION,
+        rounding_policy_code=ROUNDING_POLICY_CODE,
+        rounding_policy_version=ROUNDING_POLICY_VERSION,
         input_snapshot_json=request_snapshot,
         correlation_id=correlation_id,
     )
