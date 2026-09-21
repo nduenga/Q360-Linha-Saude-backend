@@ -32,6 +32,7 @@ from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositor
 from apps.pricing.application.auto_resolve import resolve_default_parameter_set_code, resolve_default_rating_table_code
 from apps.pricing.application.pricing_engine import calculate_pricing
 from apps.pricing.domain.age_band import compute_age_band
+from apps.product.domain.enums import VersionedConfigStatus
 from apps.product.infrastructure.models import Plan, ProductVersion
 from apps.quote.application.numbering_service import next_value
 from apps.quote.domain.enums import (
@@ -114,6 +115,17 @@ def create_quote(
         raise ReferencedEntityNotFoundError(
             "Referenced proposerId, productVersionId or planId does not exist for this tenant "
             "(or planId does not belong to productVersionId)"
+        )
+    if product_version.status != VersionedConfigStatus.PUBLISHED.value:
+        # OD-002 (ROADMAP_ANGOLA_CUSTOMIZATION.md): once a product has a
+        # newer version, its earlier plans can never start new business
+        # again — DRAFT was never sellable, and RETIRED means a later edit
+        # already superseded it. A Quote already created against a version
+        # keeps working after it is retired (OD-ANGOLA-004, proven by
+        # test_auto_versioning.py) — this only blocks *new* quotes.
+        raise ReferencedEntityNotFoundError(
+            f"ProductVersion {product_version_id} is {product_version.status}; "
+            "only a PUBLISHED (current) version can be used to start a new quote"
         )
 
     quote = Quote.objects.create(

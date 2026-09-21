@@ -20,6 +20,10 @@ def _product_with_plan_and_benefit(client, *, code: str) -> dict:
         if item["code"] == "DENTAL"
     )
     client.post(f"/api/v1/plans/{plan['id']}/benefits", {"benefitId": complementary["id"]}, format="json")
+    # A Quote can only be created against a PUBLISHED version (OD-002,
+    # ROADMAP_ANGOLA_CUSTOMIZATION.md) - publish AFTER the plan/benefit are
+    # attached (both require a DRAFT version).
+    client.post(f"/api/v1/product-versions/{version['id']}/publish")
     return {"product": product, "version": version, "plan": plan, "complementaryBenefitId": complementary["id"]}
 
 
