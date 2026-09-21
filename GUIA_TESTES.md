@@ -42,14 +42,17 @@ apresenta (mirror de `mockAuth.ts`), agora reais:
 | Email | Password | Role | Scopes |
 |---|---|---|---|
 | `admin@q360.co.ao` | `Q360admin2026` | `ADMIN` | `q360.read q360.write q360.admin q360.approve q360.audit` |
+| `aprovador@q360.co.ao` | `Q360aprova2026` | `APPROVER` | `q360.read q360.write q360.approve q360.audit` |
 | `subscritor@q360.co.ao` | `Q360demo2026` | `SUBSCRIBER` | `q360.read q360.write` |
 
-Tenant usado por estes dois: sempre `dev-tenant` (criado automaticamente
-no primeiro login, se ainda não existir).
+Tenant usado pelos três: sempre `dev-tenant` (criado automaticamente no
+primeiro login, se ainda não existir).
 
-**Nenhum dos dois é `APPROVER`** — para testar o fluxo de aprovação de
-cotações (que exige um actor diferente do submissor, "four-eyes") usa o
-comando abaixo (secção 1.4) para emitir um terceiro token.
+O `aprovador@q360.co.ao` existe especificamente para testar o fluxo de
+aprovação de cotações pela interface: a regra de "four-eyes" (ART-012)
+exige um actor diferente de quem submeteu — inicia sessão com este
+utilizador (num separador diferente, ou depois de sair do admin) para
+aprovar/rejeitar uma cotação submetida por `admin@q360.co.ao`.
 
 ### 1.4 Emitir tokens extra (qualquer role) — `manage.py issue_dev_token`
 
@@ -275,10 +278,12 @@ curl -s -X POST http://localhost:8000/api/v1/quotes/$QUOTE_ID/submit \
 ```
 
 **Aprovar exige um actor diferente** (regra de segregação de funções,
-CHECK constraint na BD). Usa um token `APPROVER` (secção 1.4):
+CHECK constraint na BD). Usa o login `aprovador@q360.co.ao` (secção 1.3)
+para obter um segundo token — ou, alternativamente, `issue_dev_token`
+(secção 1.4) com qualquer role:
 
 ```bash
-export APPROVER_TOKEN="<token emitido com --roles APPROVER>"
+export APPROVER_TOKEN="<accessToken do login como aprovador@q360.co.ao>"
 
 curl -s -X POST http://localhost:8000/api/v1/quotes/$QUOTE_ID/decision \
   -H "Authorization: Bearer $APPROVER_TOKEN" -H "Content-Type: application/json" \
@@ -381,11 +386,47 @@ publicada para o tenant — fail-closed, nunca assume elegível por omissão).
 
 ---
 
-## 10. O que NÃO está ligado ao backend real ainda (frontend)
+## 10. Roteiro de teste pela plataforma visual (frontend)
 
-Ver `FRONTEND_PLAN.md` para o detalhe completo por página. Resumo: a
-maior parte das páginas do frontend ainda lê de `Mockdata.ts` por
-domínio — só Épico 0 (login) e Épico 1 (coberturas do plano) estão
-realmente ligados ao backend no frontend. Testar tudo o resto (Épicos 2,
-3, 4, 6) só é possível via `curl`/Postman até alguém ligar essas páginas,
-conforme o plano.
+**Correcção a uma nota anterior deste guia:** a maior parte das páginas
+principais **já está ligada ao backend real** — não só o login e as
+coberturas. Confirmado directamente no código de cada página (nenhuma
+lê de `Mockdata.ts`):
+
+| Página / menu | Estado | O que já dá para testar visualmente |
+|---|---|---|
+| Login | Real | Épico 0 — já testado, a funcionar |
+| Produtos | Real | Criar produto/plano, coberturas (Épico 1), **editar o produto e confirmar que gera uma nova versão sozinho, sem data de fim (Épico 2+3)** — o botão "Criar versão" ainda aparece, mas passou a ser opcional (roadmap pede para o remover) |
+| Proponentes / Membros | Real | Criar proponente, adicionar membros |
+| Pricing | Real | Criar/publicar Rating Table e Pricing Parameter Set, calcular preço |
+| Nova Cotação / Resumo da Cotação | Real | Criar cotação, ver preçário, submeter, cancelar — o `quoteNumber` (Épico 4) já aparece no resumo assim que a cotação é aprovada |
+| Underwriting / Revisão | Real | Rever, aprovar, rejeitar, devolver uma cotação submetida (precisa de um segundo utilizador — ver `aprovador@q360.co.ao` na secção 1.3) |
+| Auditoria | Real | Consultar o registo de eventos |
+| Dashboard | **Mock** | Métricas e fila de prioridade ainda são dados inventados no browser — não reflectem a BD real |
+| Administração | **Mock** | Gestão de utilizadores/roles ainda são dados inventados no browser |
+
+**O que ainda não tem ecrã nenhum (só testável via `curl`, secção 8):**
+Épico 6 — editar/remover/retirar Rating Tables, Pricing Parameter Sets,
+Rule Versions e Document Templates. O `PricingConfigPanel.tsx` ainda só
+tem "criar e publicar"; os botões "Editar"/"Remover"/"Retirar" são o
+único item de frontend que falta desse épico (ver `FRONTEND_PLAN.md`).
+
+**Roteiro sugerido, de ponta a ponta, tudo pela interface:**
+1. Login como `admin@q360.co.ao`.
+2. Produtos → criar um produto → criar/publicar uma versão → criar um
+   plano (as 3 coberturas obrigatórias já vêm associadas automaticamente)
+   → adicionar uma cobertura facultativa.
+3. Editar o nome do produto → confirmar na lista de versões que apareceu
+   uma versão nova, publicada, sem data de fim, e que a anterior ficou
+   retirada.
+4. Pricing → criar e publicar um Pricing Parameter Set e uma Rating
+   Table.
+5. Proponentes → criar um proponente e um membro.
+6. Nova Cotação → escolher o plano, o proponente, adicionar o membro,
+   calcular o preço.
+7. Submeter a cotação para revisão.
+8. Sair e voltar a entrar como `aprovador@q360.co.ao` (secção 1.3) →
+   aprovar a cotação em Underwriting.
+9. Voltar ao resumo da cotação como admin → confirmar que o número da
+   apólice apareceu.
+10. Auditoria → confirmar que todas as acções acima ficaram registadas.
