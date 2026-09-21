@@ -1,8 +1,8 @@
 """Controllers for the product module. Every `security` scope and
 permission combination below is copied from ART-006's `security` block for
 that exact `operationId` — see the operationId noted in each view's
-docstring to cross-check against docs/artifacts/ART-006-openapi/.
-"""
+docstring to cross-check against docs/artifacts/ART-006-openapi/."""
+
 from __future__ import annotations
 
 from django.shortcuts import get_object_or_404
@@ -20,8 +20,12 @@ from apps.product.application.benefit_service import (
     list_plan_benefits,
     remove_plan_benefit,
 )
-from apps.product.application.configuration import publish_configuration
-from apps.product.application.pricing_parameter_service import create_pricing_parameter_set
+from apps.product.application.configuration import publish_configuration, retire_configuration
+from apps.product.application.pricing_parameter_service import (
+    create_pricing_parameter_set,
+    delete_pricing_parameter_set,
+    update_pricing_parameter_set,
+)
 from apps.product.application.use_cases import PublishProductVersionUseCase
 from apps.product.infrastructure.models import Benefit, Plan, PricingParameterSet, Product, ProductVersion
 from apps.product.interfaces.serializers import (
@@ -31,6 +35,7 @@ from apps.product.interfaces.serializers import (
     PlanCreateRequestSerializer,
     PlanSerializer,
     PricingParameterSetRequestSerializer,
+    PricingParameterSetUpdateRequestSerializer,
     ProductCreateRequestSerializer,
     ProductSerializer,
     ProductUpdateRequestSerializer,
@@ -198,6 +203,27 @@ class PricingParameterSetCreateView(APIView):
 
 
 @requires_idempotency
+class PricingParameterSetDetailView(APIView):
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+    in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`."""
+
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRICING_CONFIG_MANAGE)]
+
+    def patch(self, request, parameter_set_id):
+        parameter_set = get_object_or_404(PricingParameterSet, id=parameter_set_id)
+        body = PricingParameterSetUpdateRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        parameter_rows = [p["_row"] for p in body.validated_data["parameters"]]
+        updated = update_pricing_parameter_set(parameter_set, parameter_rows=parameter_rows)
+        return Response(VersionedConfigHeaderSerializer(updated).data)
+
+    def delete(self, request, parameter_set_id):
+        parameter_set = get_object_or_404(PricingParameterSet, id=parameter_set_id)
+        delete_pricing_parameter_set(parameter_set)
+        return Response(status=204)
+
+
+@requires_idempotency
 class ConfigurationPublishView(APIView):
     """ART-006 `/api/v1/configuration/{configType}/{configId}/publish`:
     `publishConfiguration` (POST).
@@ -214,6 +240,21 @@ class ConfigurationPublishView(APIView):
     def post(self, request, config_type, config_id):
         published = publish_configuration(config_type=config_type, config_id=config_id)
         return Response(published)
+
+
+@requires_idempotency
+class ConfigurationRetireView(APIView):
+    """`/api/v1/configuration/{configType}/{configId}/retire` —
+    ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6 (OD-ANGOLA-006), pragmatic V1
+    addition alongside the existing publish dispatcher, same `configType`
+    closed set (pricing-parameter-set/rule-version/rating-table), not in
+    ART-006."""
+
+    permission_classes = [require_scope(Scope.ADMIN)]
+
+    def post(self, request, config_type, config_id):
+        retired = retire_configuration(config_type=config_type, config_id=config_id)
+        return Response(retired)
 
 
 class BenefitListView(APIView):

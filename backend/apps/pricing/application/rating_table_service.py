@@ -76,6 +76,89 @@ def create_rating_table(
     return rating_table
 
 
+def update_rating_table(
+    rating_table: RatingTable, *, name: str, currency_code: str | None, factor_rows: list[dict[str, Any]]
+) -> RatingTable:
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6: only a DRAFT RatingTable
+    can be edited — once PUBLISHED, correcting it means creating the next
+    version (create_rating_table already handles that), never mutating a
+    version something may already be pricing against."""
+    with transaction.atomic():
+        updated = RatingTable.objects.filter(
+            id=rating_table.id, status=VersionedConfigStatus.DRAFT.value
+        ).update(name=name, currency_code=currency_code)
+        if updated == 0:
+            raise ImmutableVersionError(
+                f"RatingTable {rating_table.id} is not DRAFT; only a DRAFT rating table can be edited"
+            )
+        RatingFactor.objects.filter(rating_table=rating_table).delete()
+        RatingFactor.objects.bulk_create(
+            [
+                RatingFactor(
+                    tenant_id=rating_table.tenant_id,
+                    rating_table=rating_table,
+                    factor_code=row["factorCode"],
+                    dimension_json=row["dimensions"],
+                    factor_value=row["factorValue"],
+                    priority=row.get("priority", 0),
+                )
+                for row in factor_rows
+            ]
+        )
+    rating_table.refresh_from_db()
+
+    _audit.record(
+        action="rating_table.updated",
+        entity_type="RatingTable",
+        entity_id=str(rating_table.id),
+        metadata={"code": rating_table.code, "versionNo": rating_table.version_no, "factorCount": len(factor_rows)},
+    )
+    return rating_table
+
+
+def delete_rating_table(rating_table: RatingTable) -> None:
+    """Only a DRAFT rating table can be deleted — one that ever reached
+    PUBLISHED may already be referenced by a PricingRun and must never be
+    hard-deleted; retire_rating_table is the safe way to take it out of
+    use. `rating_factor` has no `ON DELETE CASCADE` (see
+    0001_pricing_baseline.py), so factors must be deleted first."""
+    with transaction.atomic():
+        still_draft = RatingTable.objects.select_for_update().filter(
+            id=rating_table.id, status=VersionedConfigStatus.DRAFT.value
+        ).exists()
+        if not still_draft:
+            raise ImmutableVersionError(
+                f"RatingTable {rating_table.id} is not DRAFT; only a DRAFT rating table can be deleted"
+            )
+        RatingFactor.objects.filter(rating_table_id=rating_table.id).delete()
+        RatingTable.objects.filter(id=rating_table.id).delete()
+    _audit.record(
+        action="rating_table.deleted", entity_type="RatingTable", entity_id=str(rating_table.id),
+        metadata={"code": rating_table.code, "versionNo": rating_table.version_no},
+    )
+
+
+def retire_rating_table(rating_table: RatingTable) -> RatingTable:
+    """The safe way to take a PUBLISHED rating table out of use — marks it
+    RETIRED, never deletes the row (ROADMAP_ANGOLA_CUSTOMIZATION.md
+    OD-ANGOLA-006: "remover" on something PUBLISHED means retire, not
+    delete, so existing PricingRuns/golden tests that reference it are
+    never broken)."""
+    updated = RatingTable.objects.filter(
+        id=rating_table.id, status=VersionedConfigStatus.PUBLISHED.value
+    ).update(status=VersionedConfigStatus.RETIRED.value)
+    if updated == 0:
+        raise ImmutableVersionError(
+            f"RatingTable {rating_table.id} is not PUBLISHED; only a PUBLISHED rating table can be retired"
+        )
+    rating_table.refresh_from_db()
+    _audit.record(
+        action="rating_table.retired", entity_type="RatingTable", entity_id=str(rating_table.id),
+        metadata={"code": rating_table.code, "versionNo": rating_table.version_no},
+    )
+    return rating_table
+
+
 def publish_rating_table(rating_table: RatingTable) -> RatingTable:
     actor = CurrentActorProvider.get()
     updated = RatingTable.objects.filter(id=rating_table.id, status=VersionedConfigStatus.DRAFT.value).update(

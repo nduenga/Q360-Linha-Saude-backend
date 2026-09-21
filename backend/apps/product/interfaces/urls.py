@@ -3,11 +3,13 @@ from django.urls import path
 from apps.product.interfaces.views import (
     BenefitListView,
     ConfigurationPublishView,
+    ConfigurationRetireView,
     PlanBenefitDetailView,
     PlanBenefitListCreateView,
     PlanDetailView,
     PlanListCreateView,
     PricingParameterSetCreateView,
+    PricingParameterSetDetailView,
     ProductDetailView,
     ProductListCreateView,
     ProductVersionCreateView,
@@ -46,8 +48,18 @@ urlpatterns = [
         name="pricing-parameter-set-create",
     ),
     path(
+        "pricing-parameter-sets/<uuid:parameter_set_id>",
+        PricingParameterSetDetailView.as_view(),
+        name="pricing-parameter-set-detail",
+    ),
+    path(
         "configuration/<str:config_type>/<uuid:config_id>/publish",
         ConfigurationPublishView.as_view(),
         name="configuration-publish",
+    ),
+    path(
+        "configuration/<str:config_type>/<uuid:config_id>/retire",
+        ConfigurationRetireView.as_view(),
+        name="configuration-retire",
     ),
 ]

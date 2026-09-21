@@ -5,10 +5,12 @@ from apps.pricing.interfaces.views import (
     PricingExplanationView,
     PricingScenarioView,
     RatingTableCreateView,
+    RatingTableDetailView,
 )
 
 urlpatterns = [
     path("rating-tables", RatingTableCreateView.as_view(), name="rating-table-create"),
+    path("rating-tables/<uuid:rating_table_id>", RatingTableDetailView.as_view(), name="rating-table-detail"),
     path("pricing/calculate", PricingCalculateView.as_view(), name="pricing-calculate"),
     path(
         "pricing/<uuid:pricing_run_id>/explanation",

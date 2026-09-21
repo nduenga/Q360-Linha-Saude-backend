@@ -118,6 +118,13 @@ class DocumentTemplateCreateRequestSerializer(serializers.Serializer):
     effectiveTo = serializers.DateField(source="effective_to", allow_null=True, required=False, default=None)
 
 
+class DocumentTemplateUpdateRequestSerializer(serializers.Serializer):
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6 — only DRAFT is editable;
+    `templateCode`/`effectiveFrom`/`effectiveTo` are not editable fields."""
+
+    storageRef = serializers.CharField(source="storage_ref")
+
+
 class DocumentTemplateHeaderSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     templateCode = serializers.CharField(source="template_code")

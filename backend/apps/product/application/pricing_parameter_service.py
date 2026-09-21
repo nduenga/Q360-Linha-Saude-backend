@@ -70,6 +70,80 @@ def create_pricing_parameter_set(
     return parameter_set
 
 
+def update_pricing_parameter_set(
+    parameter_set: PricingParameterSet, *, parameter_rows: list[dict[str, Any]]
+) -> PricingParameterSet:
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6: only a DRAFT set can be
+    edited — once PUBLISHED, correcting it means creating the next
+    version, never mutating a version pricing may already reference."""
+    with transaction.atomic():
+        still_draft = PricingParameterSet.objects.select_for_update().filter(
+            id=parameter_set.id, status=VersionedConfigStatus.DRAFT.value
+        ).exists()
+        if not still_draft:
+            raise ImmutableVersionError(
+                f"PricingParameterSet {parameter_set.id} is not DRAFT; only a DRAFT set can be edited"
+            )
+        PricingParameter.objects.filter(parameter_set=parameter_set).delete()
+        try:
+            PricingParameter.objects.bulk_create(
+                [
+                    PricingParameter(tenant_id=parameter_set.tenant_id, parameter_set=parameter_set, **row)
+                    for row in parameter_rows
+                ]
+            )
+        except IntegrityError as exc:
+            raise DuplicateCodeError("A parameterCode is duplicated within the set") from exc
+    parameter_set.refresh_from_db()
+
+    _audit.record(
+        action="pricing_parameter_set.updated",
+        entity_type="PricingParameterSet",
+        entity_id=str(parameter_set.id),
+        metadata={"code": parameter_set.code, "versionNo": parameter_set.version_no},
+    )
+    return parameter_set
+
+
+def delete_pricing_parameter_set(parameter_set: PricingParameterSet) -> None:
+    """Only a DRAFT set can be deleted — retire_pricing_parameter_set is
+    the safe way to take a PUBLISHED one out of use. `pricing_parameter`
+    has no `ON DELETE CASCADE` (see 0001_product_baseline.py), so
+    parameters must be deleted first."""
+    with transaction.atomic():
+        still_draft = PricingParameterSet.objects.select_for_update().filter(
+            id=parameter_set.id, status=VersionedConfigStatus.DRAFT.value
+        ).exists()
+        if not still_draft:
+            raise ImmutableVersionError(
+                f"PricingParameterSet {parameter_set.id} is not DRAFT; only a DRAFT set can be deleted"
+            )
+        PricingParameter.objects.filter(parameter_set_id=parameter_set.id).delete()
+        PricingParameterSet.objects.filter(id=parameter_set.id).delete()
+    _audit.record(
+        action="pricing_parameter_set.deleted", entity_type="PricingParameterSet", entity_id=str(parameter_set.id),
+        metadata={"code": parameter_set.code, "versionNo": parameter_set.version_no},
+    )
+
+
+def retire_pricing_parameter_set(parameter_set: PricingParameterSet) -> PricingParameterSet:
+    """OD-ANGOLA-006: "remover" on something PUBLISHED means retire, not
+    delete."""
+    updated = PricingParameterSet.objects.filter(
+        id=parameter_set.id, status=VersionedConfigStatus.PUBLISHED.value
+    ).update(status=VersionedConfigStatus.RETIRED.value)
+    if updated == 0:
+        raise ImmutableVersionError(
+            f"PricingParameterSet {parameter_set.id} is not PUBLISHED; only a PUBLISHED set can be retired"
+        )
+    parameter_set.refresh_from_db()
+    _audit.record(
+        action="pricing_parameter_set.retired", entity_type="PricingParameterSet", entity_id=str(parameter_set.id),
+        metadata={"code": parameter_set.code, "versionNo": parameter_set.version_no},
+    )
+    return parameter_set
+
+
 def publish_pricing_parameter_set(parameter_set: PricingParameterSet) -> PricingParameterSet:
     actor = CurrentActorProvider.get()
     # Conditional UPDATE, not read-then-save — see PublishProductVersionUseCase

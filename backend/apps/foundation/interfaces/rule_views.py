@@ -5,16 +5,18 @@ client module — see docs/08-integration-contract/BACKEND_FRONTEND_ALIGNMENT.md
 """
 from __future__ import annotations
 
+from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.foundation.application.rule_service import create_rule_version
+from apps.foundation.application.rule_service import create_rule_version, delete_rule_version, update_rule_version
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.infrastructure.models import RuleVersion
 from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_scope
 from apps.foundation.interfaces.rule_serializers import (
     RuleSetVersionRequestSerializer,
+    RuleVersionUpdateRequestSerializer,
     VersionedConfigHeaderSerializer,
 )
 from shared.pagination import Q360PageNumberPagination
@@ -49,3 +51,30 @@ class RuleVersionCreateView(APIView):
         body.is_valid(raise_exception=True)
         rule_version = create_rule_version(**body.validated_data)
         return Response(VersionedConfigHeaderSerializer(rule_version).data, status=201)
+
+
+@requires_idempotency
+class RuleVersionDetailView(APIView):
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+    in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`."""
+
+    permission_classes = [require_scope(Scope.ADMIN)]
+
+    def patch(self, request, rule_version_id):
+        rule_version = get_object_or_404(RuleVersion.objects.select_related("rule_set"), id=rule_version_id)
+        body = RuleVersionUpdateRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        updated = update_rule_version(
+            rule_version,
+            name=data["name"],
+            artifact_type=data["artifact_type"],
+            artifact_ref=data["artifact_ref"],
+            artifact_checksum=data["artifact_checksum"],
+        )
+        return Response(VersionedConfigHeaderSerializer(updated).data)
+
+    def delete(self, request, rule_version_id):
+        rule_version = get_object_or_404(RuleVersion, id=rule_version_id)
+        delete_rule_version(rule_version)
+        return Response(status=204)

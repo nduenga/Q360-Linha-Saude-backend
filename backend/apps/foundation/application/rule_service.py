@@ -72,6 +72,66 @@ def create_rule_version(
     return rule_version
 
 
+def update_rule_version(
+    rule_version: RuleVersion,
+    *,
+    name: str,
+    artifact_type: str,
+    artifact_ref: str | None,
+    artifact_checksum: str | None,
+) -> RuleVersion:
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6: only a DRAFT RuleVersion
+    can be edited — once PUBLISHED, correcting it means creating the next
+    version via create_rule_version, never mutating a version eligibility/
+    pricing evaluations may already reference."""
+    updated = RuleVersion.objects.filter(id=rule_version.id, status="DRAFT").update(
+        artifact_type=artifact_type, artifact_ref=artifact_ref, artifact_checksum=artifact_checksum
+    )
+    if updated == 0:
+        raise RuleVersionImmutableError(
+            f"RuleVersion {rule_version.id} is not DRAFT; only a DRAFT rule version can be edited"
+        )
+    RuleSet.objects.filter(id=rule_version.rule_set_id).update(name=name)
+    rule_version.refresh_from_db()
+
+    _audit.record(
+        action="rule_version.updated",
+        entity_type="RuleVersion",
+        entity_id=str(rule_version.id),
+        metadata={"versionNo": rule_version.version_no},
+    )
+    return rule_version
+
+
+def delete_rule_version(rule_version: RuleVersion) -> None:
+    """Only a DRAFT rule version can be deleted."""
+    deleted, _ = RuleVersion.objects.filter(id=rule_version.id, status="DRAFT").delete()
+    if deleted == 0:
+        raise RuleVersionImmutableError(
+            f"RuleVersion {rule_version.id} is not DRAFT; only a DRAFT rule version can be deleted"
+        )
+    _audit.record(
+        action="rule_version.deleted", entity_type="RuleVersion", entity_id=str(rule_version.id),
+        metadata={"versionNo": rule_version.version_no},
+    )
+
+
+def retire_rule_version(rule_version: RuleVersion) -> RuleVersion:
+    """OD-ANGOLA-006: "remover" on something PUBLISHED means retire, not
+    delete."""
+    updated = RuleVersion.objects.filter(id=rule_version.id, status="PUBLISHED").update(status="RETIRED")
+    if updated == 0:
+        raise RuleVersionImmutableError(
+            f"RuleVersion {rule_version.id} is not PUBLISHED; only a PUBLISHED rule version can be retired"
+        )
+    rule_version.refresh_from_db()
+    _audit.record(
+        action="rule_version.retired", entity_type="RuleVersion", entity_id=str(rule_version.id),
+        metadata={"versionNo": rule_version.version_no},
+    )
+    return rule_version
+
+
 def publish_rule_version(rule_version: RuleVersion) -> RuleVersion:
     actor = CurrentActorProvider.get()
     updated = RuleVersion.objects.filter(id=rule_version.id, status="DRAFT").update(

@@ -27,6 +27,7 @@ from apps.quote.interfaces.serializers import (
     DocumentSerializer,
     DocumentTemplateCreateRequestSerializer,
     DocumentTemplateHeaderSerializer,
+    DocumentTemplateUpdateRequestSerializer,
     QuoteCreateRequestSerializer,
     QuoteMemberRequestSerializer,
     QuoteMemberSerializer,
@@ -321,6 +322,42 @@ class DocumentTemplatePublishView(APIView):
         template = get_object_or_404(DocumentTemplateVersion, id=template_id)
         published = document_service.publish_document_template(template)
         return Response(DocumentTemplateHeaderSerializer(published).data)
+
+
+@requires_idempotency
+class DocumentTemplateDetailView(APIView):
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+    in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`."""
+
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+    def patch(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        body = DocumentTemplateUpdateRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        updated = document_service.update_document_template(
+            template, storage_ref=body.validated_data["storage_ref"]
+        )
+        return Response(DocumentTemplateHeaderSerializer(updated).data)
+
+    def delete(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        document_service.delete_document_template(template)
+        return Response(status=204)
+
+
+@requires_idempotency
+class DocumentTemplateRetireView(APIView):
+    """OD-ANGOLA-006: the safe way to take a PUBLISHED template out of use
+    — marks it RETIRED, never deletes the row (a Document already
+    generated from it must keep resolving it)."""
+
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+    def post(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        retired = document_service.retire_document_template(template)
+        return Response(DocumentTemplateHeaderSerializer(retired).data)
 
 
 class ReviewQueueView(APIView):

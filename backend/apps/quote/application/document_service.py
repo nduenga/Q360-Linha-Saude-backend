@@ -93,6 +93,52 @@ def publish_document_template(template: DocumentTemplateVersion) -> DocumentTemp
     return template
 
 
+def update_document_template(
+    template: DocumentTemplateVersion, *, storage_ref: str
+) -> DocumentTemplateVersion:
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6: only a DRAFT template can
+    be edited."""
+    checksum = hashlib.sha256(storage_ref.encode("utf-8")).hexdigest()
+    updated = DocumentTemplateVersion.objects.filter(
+        id=template.id, status=DocumentTemplateStatus.DRAFT.value
+    ).update(storage_ref=storage_ref, checksum=checksum)
+    if updated == 0:
+        raise TemplateImmutableError(
+            f"DocumentTemplateVersion {template.id} is not DRAFT; only a DRAFT template can be edited"
+        )
+    template.refresh_from_db()
+    _audit.record(action="document_template.updated", entity_type="DocumentTemplateVersion", entity_id=str(template.id))
+    return template
+
+
+def delete_document_template(template: DocumentTemplateVersion) -> None:
+    """Only a DRAFT template can be deleted."""
+    deleted, _ = DocumentTemplateVersion.objects.filter(
+        id=template.id, status=DocumentTemplateStatus.DRAFT.value
+    ).delete()
+    if deleted == 0:
+        raise TemplateImmutableError(
+            f"DocumentTemplateVersion {template.id} is not DRAFT; only a DRAFT template can be deleted"
+        )
+    _audit.record(action="document_template.deleted", entity_type="DocumentTemplateVersion", entity_id=str(template.id))
+
+
+def retire_document_template(template: DocumentTemplateVersion) -> DocumentTemplateVersion:
+    """OD-ANGOLA-006: "remover" on something PUBLISHED means retire, not
+    delete -- a Document already generated from this template must keep
+    resolving it."""
+    updated = DocumentTemplateVersion.objects.filter(
+        id=template.id, status=DocumentTemplateStatus.PUBLISHED.value
+    ).update(status=DocumentTemplateStatus.RETIRED.value)
+    if updated == 0:
+        raise TemplateImmutableError(
+            f"DocumentTemplateVersion {template.id} is not PUBLISHED; only a PUBLISHED template can be retired"
+        )
+    template.refresh_from_db()
+    _audit.record(action="document_template.retired", entity_type="DocumentTemplateVersion", entity_id=str(template.id))
+    return template
+
+
 def _resolve_published_template(*, template_code: str, effective_date) -> DocumentTemplateVersion | None:
     from django.db.models import Q
 

@@ -56,6 +56,21 @@ class RatingTableRequestSerializer(serializers.Serializer):
         return factors
 
 
+class RatingTableUpdateRequestSerializer(serializers.Serializer):
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6 — only DRAFT is editable;
+    `code`/`effectiveFrom`/`effectiveTo` are not editable fields (identity
+    and vigência of a version, not content)."""
+
+    name = serializers.CharField()
+    currencyCode = serializers.RegexField(r"^[A-Z]{3}$", allow_null=True, required=False, default=None)
+    factors = RatingFactorSerializer(many=True)
+
+    def validate_factors(self, factors: list[dict]) -> list[dict]:
+        if not factors:
+            raise serializers.ValidationError("At least one factor is required.")
+        return factors
+
+
 class PricingCalculateRequestSerializer(serializers.Serializer):
     productVersionId = serializers.UUIDField()
     planId = serializers.UUIDField()

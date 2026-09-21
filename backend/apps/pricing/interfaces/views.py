@@ -16,7 +16,11 @@ from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.pricing.application.pricing_engine import calculate_pricing, create_pricing_scenario, get_pricing_run
-from apps.pricing.application.rating_table_service import create_rating_table
+from apps.pricing.application.rating_table_service import (
+    create_rating_table,
+    delete_rating_table,
+    update_rating_table,
+)
 from apps.pricing.infrastructure.models import PricingRun, RatingTable
 from apps.pricing.interfaces.serializers import (
     PricingCalculateRequestSerializer,
@@ -24,6 +28,7 @@ from apps.pricing.interfaces.serializers import (
     PricingResponseSerializer,
     PricingScenarioRequestSerializer,
     RatingTableRequestSerializer,
+    RatingTableUpdateRequestSerializer,
     VersionedConfigHeaderSerializer,
 )
 from shared.pagination import Q360PageNumberPagination
@@ -61,6 +66,30 @@ class RatingTableCreateView(APIView):
             factor_rows=data["factors"],
         )
         return Response(VersionedConfigHeaderSerializer(rating_table).data, status=201)
+
+
+@requires_idempotency
+class RatingTableDetailView(APIView):
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+    in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT` — see
+    rating_table_service.update_rating_table/delete_rating_table."""
+
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRICING_CONFIG_MANAGE)]
+
+    def patch(self, request, rating_table_id):
+        rating_table = get_object_or_404(RatingTable, id=rating_table_id)
+        body = RatingTableUpdateRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        updated = update_rating_table(
+            rating_table, name=data["name"], currency_code=data["currencyCode"], factor_rows=data["factors"]
+        )
+        return Response(VersionedConfigHeaderSerializer(updated).data)
+
+    def delete(self, request, rating_table_id):
+        rating_table = get_object_or_404(RatingTable, id=rating_table_id)
+        delete_rating_table(rating_table)
+        return Response(status=204)
 
 
 @requires_idempotency

@@ -26,6 +26,21 @@ class RuleSetVersionRequestSerializer(serializers.Serializer):
     )
 
 
+class RuleVersionUpdateRequestSerializer(serializers.Serializer):
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6 — only DRAFT is editable;
+    `code`/`ruleDomain`/`effectiveFrom`/`effectiveTo` are not editable
+    fields (identity/domain/vigência of a version, not content)."""
+
+    name = serializers.CharField()
+    artifactType = serializers.ChoiceField(
+        source="artifact_type", choices=["DRL", "DECISION_TABLE", "JSON", "INTERNAL"]
+    )
+    artifactRef = serializers.CharField(source="artifact_ref", allow_null=True, required=False, default=None)
+    artifactChecksum = serializers.CharField(
+        source="artifact_checksum", allow_null=True, required=False, default=None
+    )
+
+
 class VersionedConfigHeaderSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     code = serializers.SerializerMethodField()

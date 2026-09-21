@@ -149,6 +149,21 @@ class PricingParameterSetRequestSerializer(serializers.Serializer):
         return parameters
 
 
+class PricingParameterSetUpdateRequestSerializer(serializers.Serializer):
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6 — only DRAFT is editable;
+    `code`/`effectiveFrom`/`effectiveTo` are not editable fields."""
+
+    parameters = PricingParameterValueSerializer(many=True)
+
+    def validate_parameters(self, parameters: list[dict]) -> list[dict]:
+        if not parameters:
+            raise serializers.ValidationError("At least one parameter is required.")
+        codes = [p["code"] for p in parameters]
+        if len(codes) != len(set(codes)):
+            raise serializers.ValidationError("Parameter codes must be unique within the set.")
+        return parameters
+
+
 class BenefitSerializer(serializers.Serializer):
     """Pragmatic V1 addition, not in ART-006 — see
     apps/product/application/benefit_service.py module docstring and

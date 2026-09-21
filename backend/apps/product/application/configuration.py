@@ -17,11 +17,14 @@ import uuid
 
 from rest_framework.exceptions import NotFound
 
-from apps.foundation.application.rule_service import publish_rule_version
+from apps.foundation.application.rule_service import publish_rule_version, retire_rule_version
 from apps.foundation.infrastructure.models import RuleVersion
-from apps.pricing.application.rating_table_service import publish_rating_table
+from apps.pricing.application.rating_table_service import publish_rating_table, retire_rating_table
 from apps.pricing.infrastructure.models import RatingTable
-from apps.product.application.pricing_parameter_service import publish_pricing_parameter_set
+from apps.product.application.pricing_parameter_service import (
+    publish_pricing_parameter_set,
+    retire_pricing_parameter_set,
+)
 from apps.product.infrastructure.models import PricingParameterSet
 
 
@@ -84,6 +87,49 @@ def publish_configuration(*, config_type: str, config_id: uuid.UUID) -> dict:
             effective_to=published.effective_to,
             status=published.status,
             checksum=published.checksum,
+        )
+
+    raise NotFound(f"Configuration type '{config_type}' is not available yet")
+
+
+def retire_configuration(*, config_type: str, config_id: uuid.UUID) -> dict:
+    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6 (OD-ANGOLA-006): the safe
+    way to take a PUBLISHED configuration out of use — marks it RETIRED,
+    never deletes the row. Mirrors publish_configuration's dispatch."""
+    if config_type == "pricing-parameter-set":
+        try:
+            parameter_set = PricingParameterSet.objects.get(id=config_id)
+        except PricingParameterSet.DoesNotExist as exc:
+            raise NotFound(f"PricingParameterSet {config_id} not found") from exc
+        retired = retire_pricing_parameter_set(parameter_set)
+        return _header(
+            id=retired.id, code=retired.code, version_no=retired.version_no,
+            effective_from=retired.effective_from, effective_to=retired.effective_to,
+            status=retired.status, checksum=retired.checksum,
+        )
+
+    if config_type == "rule-version":
+        try:
+            rule_version = RuleVersion.objects.select_related("rule_set").get(id=config_id)
+        except RuleVersion.DoesNotExist as exc:
+            raise NotFound(f"RuleVersion {config_id} not found") from exc
+        retired = retire_rule_version(rule_version)
+        return _header(
+            id=retired.id, code=retired.rule_set.code, version_no=retired.version_no,
+            effective_from=retired.effective_from, effective_to=retired.effective_to,
+            status=retired.status, checksum=retired.artifact_checksum,
+        )
+
+    if config_type == "rating-table":
+        try:
+            rating_table = RatingTable.objects.get(id=config_id)
+        except RatingTable.DoesNotExist as exc:
+            raise NotFound(f"RatingTable {config_id} not found") from exc
+        retired = retire_rating_table(rating_table)
+        return _header(
+            id=retired.id, code=retired.code, version_no=retired.version_no,
+            effective_from=retired.effective_from, effective_to=retired.effective_to,
+            status=retired.status, checksum=retired.checksum,
         )
 
     raise NotFound(f"Configuration type '{config_type}' is not available yet")
