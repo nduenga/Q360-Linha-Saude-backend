@@ -8,11 +8,21 @@ for transparency (see OPEN_DECISIONS.md#S03-IMPORT-001):
   to Django's file storage at a path derived from the ImportJob id, and
   re-read at commit time — schema-neutral, but a storage decision no
   document specifies.
-- The expected file is CSV with a header row matching ART-006
-  `MemberCreateRequest` field names exactly (`relationshipCode,firstName,
-  lastName,dateOfBirth,sexCode,externalReference`) — the least-invented
-  column mapping available, since no approved "import template" exists.
-  The free-form `attributes` object is not supported via CSV in V1.
+- The expected columns match ART-006 `MemberCreateRequest` field names
+  exactly (`relationshipCode,firstName,lastName,dateOfBirth,sexCode,
+  externalReference`) — the least-invented column mapping available,
+  since no approved "import template" exists. The free-form `attributes`
+  object is not supported via file import in V1.
+
+UPDATED 2026-09-21 (OD-004, Product Owner decision): Excel (`.xlsx`) is
+now the preferred/first format — `.csv` still works as a fallback for
+anyone without Excel. A basic ETL pass now rejects an entire row (not
+just missing/malformed dates) whenever any expected field contains a
+literal null-looking placeholder (`null`, `n/a`, `nan`, `none`, `-`,
+case-insensitive) instead of being left genuinely empty, and
+`relationshipCode` is validated against the real catalogue (OD-003,
+apps/client/application/relationship_service.py) at upload time, not only
+at commit time.
 """
 from __future__ import annotations
 
@@ -30,13 +40,24 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
+from apps.client.application.relationship_service import validate_relationship_code
 from apps.client.domain.enums import ImportJobStatus, ImportType
-from apps.client.domain.errors import ImportCommitNotAllowedError
+from apps.client.domain.errors import ImportCommitNotAllowedError, UnknownRelationshipCodeError
 from apps.client.infrastructure.models import ImportJob, ImportRowError, InsuredMember, Proposer
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
 _EXPECTED_COLUMNS = ["relationshipCode", "firstName", "lastName", "dateOfBirth", "sexCode", "externalReference"]
+_XLSX_EXTENSIONS = (".xlsx", ".xlsm")
+# Common ETL "looks like a null but isn't really empty" placeholders that
+# spreadsheet exports/manual entry tend to leave behind - OD-004 asks that
+# these be caught explicitly, not silently treated as valid text values.
+_NULL_LOOKALIKES = {"null", "n/a", "na", "nan", "none", "-", "--"}
+
+
+class ImportFileParseError(Exception):
+    """Raised when the uploaded file cannot be parsed at all (corrupt
+    workbook, undecodable CSV, unsupported extension)."""
 
 
 @dataclass
@@ -54,6 +75,57 @@ def _storage_path(tenant_id, import_job_id, filename: str) -> str:
     return f"member-imports/{tenant_id}/{import_job_id}/{filename}"
 
 
+def _rows_from_xlsx(content: bytes) -> list[dict[str, str]]:
+    import openpyxl
+
+    try:
+        workbook = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except Exception as exc:  # openpyxl raises several distinct exception types for a corrupt file
+        raise ImportFileParseError(str(exc)) from exc
+
+    sheet = workbook.worksheets[0]
+    rows_iter = sheet.iter_rows(values_only=True)
+    try:
+        header = [str(cell).strip() if cell is not None else "" for cell in next(rows_iter)]
+    except StopIteration:
+        return []
+
+    rows: list[dict[str, str]] = []
+    for raw_row in rows_iter:
+        if all(cell is None or str(cell).strip() == "" for cell in raw_row):
+            continue  # a fully blank spreadsheet row is not a data row
+        values = {}
+        for column_name, cell in zip(header, raw_row):
+            if not column_name:
+                continue
+            if cell is None:
+                values[column_name] = ""
+            elif hasattr(cell, "isoformat"):  # datetime/date cell (Excel stores dates as real dates)
+                values[column_name] = cell.isoformat()[:10]
+            else:
+                values[column_name] = str(cell).strip()
+        rows.append(values)
+    return rows
+
+
+def _rows_from_csv(content: bytes) -> list[dict[str, str]]:
+    try:
+        reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
+        return [dict(raw) for raw in reader]
+    except (UnicodeDecodeError, csv.Error) as exc:
+        raise ImportFileParseError(str(exc)) from exc
+
+
+def _parse_uploaded_rows(*, filename: str, content: bytes) -> list[dict[str, str]]:
+    """OD-004: Excel (`.xlsx`/`.xlsm`) is the preferred format; `.csv` is
+    kept as a fallback. Both produce the same `dict[columnName, value]`
+    shape so `_validate_row` never needs to know which format was used."""
+    lowered = (filename or "").lower()
+    if lowered.endswith(_XLSX_EXTENSIONS):
+        return _rows_from_xlsx(content)
+    return _rows_from_csv(content)
+
+
 def _parse_date(raw: str) -> tuple[object | None, str | None]:
     if not raw:
         return None, None
@@ -63,11 +135,29 @@ def _parse_date(raw: str) -> tuple[object | None, str | None]:
         return None, f"'{raw}' is not a valid YYYY-MM-DD date"
 
 
-def _validate_row(row_number: int, raw: dict[str, str]) -> _ParsedRow:
+def _validate_row(row_number: int, raw: dict[str, str], *, tenant_id) -> _ParsedRow:
     parsed = _ParsedRow(row_number=row_number, values=raw)
+
+    # OD-004 ETL pass: a null-lookalike placeholder in ANY expected column
+    # is always a data error, regardless of which column it is in — a
+    # spreadsheet cell reading "N/A" is never a valid firstName/sexCode/etc.
+    for column in _EXPECTED_COLUMNS:
+        value = (raw.get(column) or "").strip()
+        if value.lower() in _NULL_LOOKALIKES:
+            parsed.errors.append(
+                (column, "VALIDATION-400", f"{column} contains '{value}', which looks like a placeholder for empty — leave the cell blank instead")
+            )
+
     relationship_code = (raw.get("relationshipCode") or "").strip()
     if not relationship_code or len(relationship_code) > 40:
         parsed.errors.append(("relationshipCode", "VALIDATION-400", "relationshipCode is required (max 40 chars)"))
+    elif relationship_code.lower() not in _NULL_LOOKALIKES:
+        try:
+            validate_relationship_code(tenant_id=tenant_id, code=relationship_code)
+        except UnknownRelationshipCodeError:
+            parsed.errors.append(
+                ("relationshipCode", "VALIDATION-400", f"'{relationship_code}' is not a valid relationshipCode")
+            )
 
     date_of_birth, date_error = _parse_date((raw.get("dateOfBirth") or "").strip())
     if date_error:
@@ -100,9 +190,9 @@ def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFi
     default_storage.save(path, io.BytesIO(content))
 
     try:
-        reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
-        rows = [_validate_row(i, raw) for i, raw in enumerate(reader, start=1)]
-    except (UnicodeDecodeError, csv.Error):
+        raw_rows = _parse_uploaded_rows(filename=uploaded_file.name, content=content)
+        rows = [_validate_row(i, raw, tenant_id=tenant_id.value) for i, raw in enumerate(raw_rows, start=1)]
+    except ImportFileParseError as exc:
         import_job.status = ImportJobStatus.FAILED.value
         import_job.completed_at = timezone.now()
         import_job.save(update_fields=["status", "completed_at"])
@@ -110,7 +200,7 @@ def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFi
             action="member_import.failed",
             entity_type="ImportJob",
             entity_id=str(import_job.id),
-            metadata={"result": "FAILURE", "reason": "CSV decode or parsing error"},
+            metadata={"result": "FAILURE", "reason": f"File decode or parsing error: {exc}"},
         )
         return import_job
 
@@ -163,8 +253,8 @@ def commit_member_import(*, import_job: ImportJob, actor_id: str) -> ImportJob:
     path = _storage_path(tenant_id.value, import_job.id, import_job.original_filename)
     with default_storage.open(path) as fh:
         content = fh.read()
-    reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
-    rows = [_validate_row(i, raw) for i, raw in enumerate(reader, start=1)]
+    raw_rows = _parse_uploaded_rows(filename=import_job.original_filename, content=content)
+    rows = [_validate_row(i, raw, tenant_id=tenant_id.value) for i, raw in enumerate(raw_rows, start=1)]
 
     import_job.status = ImportJobStatus.COMMITTING.value
     import_job.save(update_fields=["status"])
