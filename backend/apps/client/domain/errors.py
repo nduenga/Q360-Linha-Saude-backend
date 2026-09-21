@@ -34,6 +34,15 @@ class IncoherentDateError(DomainProblem):
     problem_code = "VALIDATION-400"
 
 
+class UnknownRelationshipCodeError(DomainProblem):
+    """OD-003 (OPEN_DECISIONS.md#S03-RELATIONSHIP-001): `relationshipCode`
+    must be one of the tenant's real catalogue values (GET
+    /api/v1/relationship-codes), not an arbitrary string."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
 class ImportCommitNotAllowedError(DomainProblem):
     """`commitMemberImport` called on a job that is not VALIDATED (already
     committed, still validating, or failed)."""

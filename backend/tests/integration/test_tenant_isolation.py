@@ -142,7 +142,7 @@ class TestClientTenantIsolation:
             {
                 "firstName": "João",
                 "lastName": "Silva",
-                "relationshipCode": "SPOUSE",
+                "relationshipCode": "CONJUGE",
                 "dateOfBirth": "1981-03-03",
                 "proposerId": proposer["id"],
                 "attributes": {"smoker": False},

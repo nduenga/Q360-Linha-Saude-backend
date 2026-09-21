@@ -50,6 +50,17 @@ class ProposerUpdateRequestSerializer(serializers.Serializer):
         }
 
 
+class RelationshipCodeSerializer(serializers.Serializer):
+    """Pragmatic V1 addition, not in ART-006 — see
+    apps/client/application/relationship_service.py module docstring and
+    ROADMAP_ANGOLA_CUSTOMIZATION.md OD-003."""
+
+    id = serializers.UUIDField()
+    code = serializers.CharField()
+    label = serializers.CharField()
+    category = serializers.CharField()
+
+
 class MemberSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     proposerId = serializers.UUIDField(source="proposer_id")

@@ -1,13 +1,15 @@
 """InsuredMember orchestration (Q360-S3-02).
 
 DOC-003 Q360-S3-02 acceptance criteria: "Relação válida • Dependente
-requer titular • Datas coerentes". Only "Datas coerentes" (dateOfBirth not
-in the future) is enforced here — the "dependente requer titular" check is
-deliberately NOT implemented: it would require knowing which
-`relationshipCode` string means "titular", and no approved document
-defines one (see OPEN_DECISIONS.md#S03-RELATIONSHIP-001). "Relação válida"
-reduces to the ART-006 structural constraint (non-empty, <=40 chars),
-already enforced by the request serializer.
+requer titular • Datas coerentes". "Datas coerentes" (dateOfBirth not in
+the future) is enforced here. "Relação válida" — UPDATED 2026-09-21
+(OPEN_DECISIONS.md#S03-RELATIONSHIP-001, OD-003): now means
+`relationshipCode` must be one of the tenant's real catalogue values (see
+apps/client/application/relationship_service.py), not just a non-empty
+string. "Dependente requer titular" is still NOT implemented — that is a
+question for the eligibility rules engine (OD-005), which can key off
+`RelationshipCode.category` (e.g. CHILD/ASCENDANT require a TITULAR to
+exist on the same Proposer), not this module.
 """
 from __future__ import annotations
 
@@ -21,6 +23,7 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
+from apps.client.application.relationship_service import validate_relationship_code
 from apps.client.domain.errors import (
     DuplicateExternalReferenceError,
     IncoherentDateError,
@@ -50,6 +53,7 @@ def create_member(
 ) -> InsuredMember:
     _check_date_of_birth_coherent(date_of_birth)
     tenant_id = CurrentTenantProvider.require()
+    validate_relationship_code(tenant_id=tenant_id.value, code=relationship_code)
     try:
         with transaction.atomic():
             member = InsuredMember.objects.create(
@@ -97,6 +101,7 @@ def update_member(
     row_version: int,
 ) -> InsuredMember:
     _check_date_of_birth_coherent(date_of_birth)
+    validate_relationship_code(tenant_id=member.tenant_id, code=relationship_code)
     updated = InsuredMember.objects.filter(id=member.id, row_version=row_version).update(
         relationship_code=relationship_code,
         first_name=first_name,

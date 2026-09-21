@@ -14,7 +14,14 @@ from django.db import models
 
 from apps.foundation.infrastructure.models import Tenant
 from apps.foundation.infrastructure.tenant_scoping import TenantScopedModel
-from apps.client.domain.enums import ImportJobStatus, ImportType, MemberStatus, ProposerStatus, ProposerType
+from apps.client.domain.enums import (
+    ImportJobStatus,
+    ImportType,
+    MemberStatus,
+    ProposerStatus,
+    ProposerType,
+    RelationshipCategory,
+)
 
 
 class Proposer(TenantScopedModel):
@@ -66,6 +73,26 @@ class InsuredMember(TenantScopedModel):
 
     def __str__(self) -> str:  # pragma: no cover - debug helper
         return f"{self.first_name or ''} {self.last_name or ''} ({self.id})".strip()
+
+
+class RelationshipCode(TenantScopedModel):
+    """OD-003 (ROADMAP_ANGOLA_CUSTOMIZATION.md, OPEN_DECISIONS.md
+    #S03-RELATIONSHIP-001) — pragmatic V1 addition, not ART-005/ART-012.
+    See apps/client/infrastructure/migrations/0002_relationship_catalog.py."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    code = models.CharField(max_length=40)
+    label = models.CharField(max_length=100)
+    category = models.CharField(max_length=20, choices=[(c.value, c.value) for c in RelationshipCategory])
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "relationship_code"
+
+    def __str__(self) -> str:  # pragma: no cover - debug helper
+        return f"{self.code} ({self.label})"
 
 
 class ImportJob(TenantScopedModel):

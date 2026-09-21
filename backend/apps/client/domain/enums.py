@@ -2,15 +2,35 @@
 constraints (ART-006 schema enums agree). Do not add a value that is not
 in both.
 
-`relationship_code` (ART-005 `insured_member.relationship_code`) has
-deliberately NO enum here: no approved document defines the set of valid
-relationship codes (DOC-004 s8 claims "finalized in ART-011", but
-ART-011's own Code Catalogues sheet has no such entry — see
-OPEN_DECISIONS.md#S03-RELATIONSHIP-001). It is a free `varchar(40)` in V1.
+`relationship_code` (ART-005 `insured_member.relationship_code`) stays a
+free `varchar(40)` at the DB level — no approved document defines the set
+of valid relationship codes as an ART-005/ART-012 enum (DOC-004 s8 claims
+"finalized in ART-011", but ART-011's own Code Catalogues sheet has no
+such entry). What changed (OPEN_DECISIONS.md#S03-RELATIONSHIP-001,
+Product Owner decision 2026-09-21, OD-003): a real, DB-backed catalog
+table (`RelationshipCode`, apps/client/infrastructure/models.py) now
+supplies the actual valid values per tenant, validated at the application
+layer (apps/client/application/member_service.py) — `RelationshipCategory`
+below is that catalog's own `category` column, a pragmatic V1
+classification, not an ART-005 enum.
 """
 from __future__ import annotations
 
 from enum import Enum
+
+
+class RelationshipCategory(str, Enum):
+    """`relationship_code.category` (pragmatic V1 addition, see module
+    docstring) — broad classification a future eligibility rule (OD-005)
+    can key off (e.g. "children lose eligibility at 18/25", "ascendants
+    require proof of cohabitation or financial dependency") without
+    hardcoding every individual relationship code."""
+
+    TITULAR = "TITULAR"
+    SPOUSE = "SPOUSE"
+    CHILD = "CHILD"
+    ASCENDANT = "ASCENDANT"
+    OTHER = "OTHER"
 
 
 class ProposerType(str, Enum):

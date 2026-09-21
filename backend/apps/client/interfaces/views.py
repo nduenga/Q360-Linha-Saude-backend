@@ -17,6 +17,7 @@ from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_scope
 from apps.client.application import import_service, member_service, proposer_service
+from apps.client.application.relationship_service import list_relationship_codes
 from apps.client.infrastructure.models import ImportJob, InsuredMember, Proposer
 from apps.client.interfaces.serializers import (
     ImportCommitRequestSerializer,
@@ -27,8 +28,26 @@ from apps.client.interfaces.serializers import (
     ProposerCreateRequestSerializer,
     ProposerSerializer,
     ProposerUpdateRequestSerializer,
+    RelationshipCodeSerializer,
 )
 from shared.pagination import Q360PageNumberPagination
+
+
+class RelationshipCodeListView(APIView):
+    """Pragmatic V1 addition, not in ART-006 — see
+    apps/client/application/relationship_service.py module docstring and
+    ROADMAP_ANGOLA_CUSTOMIZATION.md OD-003. Lists the real, DB-backed
+    catalogue of relationship codes for the current tenant, seeding it on
+    first use — the frontend should build its "Relação" dropdown from
+    this, never from a hardcoded array."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request):
+        queryset = list_relationship_codes()
+        paginator = Q360PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        return paginator.get_paginated_response(RelationshipCodeSerializer(page, many=True).data)
 
 
 @requires_idempotency

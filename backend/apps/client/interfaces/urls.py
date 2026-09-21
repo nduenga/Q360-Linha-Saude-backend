@@ -8,9 +8,11 @@ from apps.client.interfaces.views import (
     MemberListCreateView,
     ProposerDetailView,
     ProposerListCreateView,
+    RelationshipCodeListView,
 )
 
 urlpatterns = [
+    path("relationship-codes", RelationshipCodeListView.as_view(), name="relationship-code-list"),
     path("proposers", ProposerListCreateView.as_view(), name="proposer-list-create"),
     path("proposers/<uuid:proposer_id>", ProposerDetailView.as_view(), name="proposer-detail"),
     path("members", MemberListCreateView.as_view(), name="member-list-create"),
