@@ -1,5 +1,8 @@
 # Roadmap — Portal do Cliente (autoatendimento para o segurado final)
 
+**Estado:** Fase 0 (Fundação técnica) **implementada** (2026-09-22) — ver
+secção própria abaixo para código/testes. Fase 1+ ainda não iniciadas.
+
 Projecto à parte, de prazo mais longo, pedido explicitamente como um
 roadmap separado (não faz parte dos Épicos 0-6 de
 `ROADMAP_ANGOLA_CUSTOMIZATION.md`, nem do V1 definido em DOC-002/DOC-003).
@@ -55,59 +58,111 @@ Um mecanismo de autenticação e autorização **novo e isolado**, que nunca
 reaproveita os scopes/roles internos, para não criar uma forma acidental
 de um cliente final herdar permissões de staff.
 
-### Tarefas
-- [ ] Nova tabela `customer_account` (schema `q360`, `TenantScopedModel`,
+### Tarefas — IMPLEMENTADAS (2026-09-22)
+- [x] Nova tabela `customer_account` (schema `q360`, `TenantScopedModel`,
       migration nova, nunca editando as existentes): liga-se a um ou mais
       `Proposer` do mesmo tenant (uma pessoa pode ter mais que uma
       cotação/apólice ao longo do tempo). Guarda apenas o necessário para
-      autenticar — não duplicar dados já em `Proposer`.
-- [ ] Mecanismo de login **fora** do fluxo OAuth2/OIDC staff — proposta
-      mínima e realista para o mercado angolano: número de apólice
-      (`Quote.quoteNumber`, já existe desde o Épico 4) + número de
-      documento de identificação (BI/NIF, já em
-      `Proposer.registration_number`) + um código OTP enviado por
-      SMS/email no momento do primeiro acesso (ver OD-PORTAL-001 — método
-      exacto de envio ainda em aberto).
-- [ ] `actor_type="CUSTOMER"` em `Actor`, com `roles=frozenset()` sempre
-      vazio (um cliente nunca tem `Role` de staff) e um novo mecanismo de
-      permissão *específico do portal*, não DOC-001 §18.
-- [ ] `CurrentActorProvider`/middleware: quando `actor_type="CUSTOMER"`,
+      autenticar — não duplica dados já em `Proposer`.
+      - `apps/customer_portal/infrastructure/models.py`
+        (`CustomerAccount`, `CustomerAccountProposer` — a tabela de junção
+        do OD-PORTAL-002, `CustomerLoginChallenge` para o OTP) +
+        `apps/customer_portal/infrastructure/migrations/0001_customer_portal_baseline.py`.
+- [x] Mecanismo de login **fora** do fluxo OAuth2/OIDC staff: número de
+      apólice (`Quote.quoteNumber`) + número de documento de identificação
+      (`Proposer.registrationNumber`) + código OTP por email
+      (OD-PORTAL-001).
+      - `apps/customer_portal/application/auth_service.py`
+        (`CustomerPortalAuthService.request_access`/`verify_otp`),
+        `apps/customer_portal/infrastructure/otp.py` (hash via
+        `django.contrib.auth.hashers`, nunca em texto simples),
+        `apps/customer_portal/infrastructure/email_sender.py` (via
+        `django.core.mail`, backend configurável por ambiente — console em
+        dev, locmem em testes, SMTP/API real a configurar em produção via
+        `EMAIL_*`).
+      - `apps/customer_portal/infrastructure/portal_token.py`: token de
+        sessão próprio (`CUSTOMER_PORTAL_JWT_SECRET`, nunca `SECRET_KEY`
+        nem uma chave OIDC), 30 min por omissão
+        (`CUSTOMER_PORTAL_TOKEN_TTL_SECONDS`), sem refresh token nesta
+        fase.
+      - Endpoints: `POST /api/v1/customer-portal/{tenantId}/auth/request-access`
+        e `POST /api/v1/customer-portal/{tenantId}/auth/verify-otp`
+        (`apps/customer_portal/interfaces/views.py`). `{tenantId}` vem do
+        path — decisão de implementação adicional, não coberta por
+        OD-PORTAL-001..004: o frontend do portal é publicado por tenant e
+        já conhece o seu próprio `tenantId`; o único papel deste valor é
+        seleccionar em que tenant a consulta corre, nunca autorizar nada
+        por si só — a verificação real continua a ser o par
+        quoteNumber+registrationNumber(+OTP).
+      - Resposta de `request-access` é sempre `202`, exista ou não uma
+        correspondência real, para nunca confirmar a um chamador não
+        autenticado que um dado número de apólice/documento existe.
+- [x] `actor_type="CUSTOMER"` em `Actor`, com `roles=frozenset()` sempre
+      vazio e um novo mecanismo de permissão *específico do portal*, não
+      DOC-001 §18.
+      - `apps/foundation/domain/actor.py` (`Actor.actor_type="CUSTOMER"`,
+        já suportado antes desta fase) +
+        `apps/customer_portal/interfaces/authentication.py`
+        (`CustomerPortalJwtAuthentication`, isolada de
+        `JwtActorAuthentication`) +
+        `apps/customer_portal/interfaces/permissions.py`
+        (`IsCustomerPortalActor`, não `require_scope`).
+- [x] `CurrentActorProvider`/middleware: quando `actor_type="CUSTOMER"`,
       toda a query tem de ser adicionalmente filtrada por
-      `proposer_id IN (<os do customer_account autenticado>)` — não basta
-      o filtro de tenant já existente. Isto é uma segunda fronteira de
-      segurança, nova, e tem de ser fail-closed tal como o tenant scoping
-      (ver `apps/foundation/infrastructure/tenant_scoping.py` como
-      referência do padrão a seguir).
-- [ ] Estender `ck_audit_actor_type` (migration nova) para incluir
-      `'CUSTOMER'`, para que acções de um cliente final continuem
-      auditadas como tudo o resto no sistema.
-- [ ] Rate limiting mais agressivo que o actual (`RateLimitMiddleware`
-      já existe, ver `apps/foundation/interfaces/middleware.py`) nos
-      endpoints públicos de login do portal — são o único ponto do
-      sistema acessível sem já ter um token válido, logo o alvo natural
-      de força bruta (tentar adivinhar números de apólice/documento).
-- [ ] Namespace de URLs novo e isolado, ex. `/api/v1/customer-portal/...`
-      — nunca reaproveitar os paths `/api/v1/quotes`, `/api/v1/products`,
-      etc. já usados pelo backoffice, mesmo que a lógica por baixo
-      reaproveite os mesmos serviços de aplicação.
+      `proposer_id IN (<os do customer_account autenticado>)`.
+      - `Actor.customer_proposer_ids: frozenset[str]` (novo campo,
+        `apps/foundation/domain/actor.py`, opaco — sem import de
+        `apps.client` em `foundation`, DOC-004 s3.1) preenchido pelo
+        `PortalTokenService`/`CustomerPortalJwtAuthentication` a partir do
+        token; `apps/customer_portal/infrastructure/scoping.py`
+        (`require_customer_proposer_ids`) é o acessor fail-closed que a
+        Fase 1 (ainda não construída) deve usar em vez de ler o campo do
+        Actor directamente.
+- [x] Estender `ck_audit_actor_type` (migration nova) para incluir
+      `'CUSTOMER'`.
+      - `apps/foundation/infrastructure/migrations/0004_customer_actor_type.py`;
+        `CustomerPortalAuthService` audita
+        `customer_portal.access_requested`/`otp_failed`/`login_succeeded`
+        via o `AuditService` já existente.
+- [x] Rate limiting mais agressivo que o actual nos endpoints públicos de
+      login do portal.
+      - `apps/customer_portal/interfaces/rate_limit.py`
+        (`CUSTOMER_PORTAL_LOGIN_RATE_LIMIT`/`_WINDOW_SECONDS`, por omissão
+        10/60s por tenant+IP+email) — soma-se ao `RateLimitMiddleware`
+        global, não o substitui.
+      - Lockout por conta (distinto do rate limit por IP):
+        `apps/customer_portal/domain/lockout.py`, política pura testada em
+        `backend/tests/customer_portal/test_lockout_domain.py` — ver
+        OD-PORTAL-003.
+- [x] Namespace de URLs novo e isolado, `/api/v1/customer-portal/...`
+      (`apps/customer_portal/interfaces/urls.py`, incluído em
+      `config/urls.py`) — nunca reaproveita os paths do backoffice.
+- Testes: `backend/tests/customer_portal/` (`test_lockout_domain.py`,
+  `test_portal_token.py`, `test_scoping.py` — puros, sem BD, todos
+  verdes; `test_portal_auth_api.py` — integração real via
+  `@pytest.mark.django_db`, mesmo padrão de
+  `tests/eligibility/test_evaluate_api.py`, não corrida neste ambiente por
+  falta de Docker/Postgres local, tal como os testes de API já existentes
+  do módulo eligibility).
+- **Deliberadamente fora desta fase**: nenhum endpoint autenticado de
+  leitura (`GET /me`, etc.) foi construído — isso é Fase 1, que depende
+  desta fundação estar fechada primeiro, exactamente como este roadmap
+  pede.
 
-### Open Decisions
-- **OD-PORTAL-001**: qual o mecanismo real de verificação de identidade
-  no primeiro acesso (SMS OTP via que gateway/operadora angolana? Email?
-  Os dois?). Bloqueia o desenho exacto de `customer_account`.
-- **OD-PORTAL-002**: um `customer_account` está ligado a **um** `Proposer`
-  ou pode agregar vários (ex. o mesmo NIF em duas cotações diferentes ao
-  longo dos anos)? Afecta o modelo de dados.
-- **OD-PORTAL-003**: política de bloqueio/lockout após N tentativas
-  falhadas de login — nenhuma política de lockout existe hoje em lado
-  nenhum do sistema (staff usa IdP externo, quando OD-009 for resolvido).
-- **OD-PORTAL-004**: este portal corre atrás do mesmo backend Django (novo
-  app `customer_portal`) ou é um serviço separado que só lê via API? Dado
-  DOC-004 s3.1 (fronteiras entre módulos), a proposta por omissão é um
-  novo app Django dentro do mesmo backend, reaproveitando os serviços de
-  aplicação já existentes (`quote_service`, `benefit_service`,
-  `EvaluateEligibilityUseCase`) — mas nunca os endpoints/views do
-  backoffice directamente.
+### Open Decisions — RESOLVIDAS (Product Owner, 2026-09-22)
+- **OD-PORTAL-001** — RESOLVIDA: email OTP apenas (não SMS). Razão: evita
+  depender de um contrato com gateway SMS angolano ainda por escolher;
+  `Proposer`/`CustomerAccount` já não precisam de um campo de telefone
+  verificado nesta fase.
+- **OD-PORTAL-002** — RESOLVIDA: muitos-para-um via NIF. Um
+  `CustomerAccount` pode agregar vários `Proposer` do mesmo tenant ao
+  longo do tempo, através da tabela de junção `CustomerAccountProposer`.
+- **OD-PORTAL-003** — RESOLVIDA: 5 tentativas falhadas → bloqueio de 30
+  minutos, com reset automático. `apps/customer_portal/domain/lockout.py`.
+- **OD-PORTAL-004** — RESOLVIDA: novo app Django (`apps.customer_portal`)
+  no mesmo backend, reaproveitando os serviços de aplicação já existentes
+  em processo (sem chamada de rede interna) — proposta por omissão do
+  próprio roadmap, confirmada.
 
 ---
 

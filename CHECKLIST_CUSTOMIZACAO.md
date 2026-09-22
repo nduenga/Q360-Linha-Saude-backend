@@ -74,16 +74,31 @@ ficam marcados `(frontend — outra pessoa)` e não são construídos aqui.
       `GET /relationship-codes`, validação em criar/editar membro
 - [x] OD-ANGOLA-011: importação em massa aceita Excel (preferencial) e
       CSV, com ETL de valores nulos/vazios
-- [ ] OD-ANGOLA-012 (motor de elegibilidade): desenho entregue
-      (`MOTOR_ELEGIBILIDADE.md`), implementação faseada em curso
+- [x] OD-ANGOLA-012 (motor de elegibilidade): desenho entregue
+      (`MOTOR_ELEGIBILIDADE.md`) e **Fase A implementada (2026-09-22)** —
+      regras por categoria (CHILD/SPOUSE/ASCENDANT), overrides
+      corporativos, carência informativa, preexistências
+      (agravamento/junta médica), 3 novas decisões + mensagens amigãveis.
+      Fases B (armazenamento de documentos) e C (validação NIF/vínculo
+      laboral) continuam bloqueadas por decisão de produto/integração
+      externa inexistente — ver `MOTOR_ELEGIBILIDADE.md`.
 - [x] OD-ANGOLA-013: AOA + arredondamento promovidos a política oficial
 - [x] OD-ANGOLA-014: regras de preço configuráveis — confirmado já
       resolvido, limitação conhecida documentada
 - [x] OD-ANGOLA-015: dupla aprovação em regras — confirmado manter como
       está
 
-## Portal do Cliente (roadmap à parte, prazo mais longo)
-- [ ] Fase 1: autenticação de cliente final + consulta da própria
-      elegibilidade
+## Portal do Cliente (roadmap à parte, prazo mais longo) — ver `ROADMAP_PORTAL_CLIENTE.md`
+- [x] Fase 0 (Fundação técnica) ✅ backend concluído (2026-09-22) —
+      OD-PORTAL-001..004 resolvidas (email OTP; `customer_account`
+      muitos-para-um via NIF; lockout 5/30min; novo app Django
+      `apps.customer_portal` no mesmo backend). Novo `actor_type=CUSTOMER`,
+      token de sessão isolado do OIDC staff, scoping por proposer
+      fail-closed, `ck_audit_actor_type` alargado, rate limiting dedicado,
+      namespace `/api/v1/customer-portal/...`.
+      *(frontend — outra pessoa)* ver `FRONTEND_PLAN.md` secção Portal do
+      Cliente para o contrato exacto dos 2 endpoints já disponíveis.
+- [ ] Fase 1: `GET /me`, coberturas e elegibilidade da própria apólice —
+      backend por construir (depende da Fase 0, agora fechada)
 - [ ] Fase 2: self-service (ver cobertura, descarregar proposta)
 - [ ] Fase 3: submissão de pedidos pelo cliente

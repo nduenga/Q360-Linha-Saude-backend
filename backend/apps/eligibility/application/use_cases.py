@@ -10,9 +10,16 @@ import datetime
 import uuid
 from typing import Any
 
-from apps.client.infrastructure.models import InsuredMember, Proposer
+from apps.client.domain.enums import ProposerType
+from apps.client.infrastructure.models import InsuredMember, Proposer, RelationshipCode
 from apps.eligibility.domain.errors import ReferencedEntityNotFoundError
-from apps.eligibility.domain.evaluation import EvaluationInput, PlanFacts, ProductVersionFacts, evaluate
+from apps.eligibility.domain.evaluation import (
+    AngolaEvidence,
+    EvaluationInput,
+    PlanFacts,
+    ProductVersionFacts,
+    evaluate,
+)
 from apps.eligibility.infrastructure.models import EligibilityEvaluation
 from apps.eligibility.infrastructure.rule_repository import parse_config, resolve_eligibility_rule_version
 from apps.foundation.application.audit_service import AuditService
@@ -52,6 +59,24 @@ class EvaluateEligibilityUseCase:
         rule_version = resolve_eligibility_rule_version(effective_date)
         config = parse_config(rule_version) if rule_version else None
 
+        # MOTOR_ELEGIBILIDADE.md Fase A: resolve the RelationshipCode
+        # category (OD-ANGOLA-010 catalog, already tenant-scoped) and, for
+        # a corporate group policy, the sponsoring organisation's Proposer
+        # id — both feed EligibilityRuleConfig.category_rule_for. Evidence
+        # flags are read from the request's existing `context` payload,
+        # never fabricated here (Fase B/C are still open on where that
+        # evidence is verified/stored).
+        relationship_category = None
+        if member and member.relationship_code:
+            relationship_category = (
+                RelationshipCode.objects.filter(code=member.relationship_code)
+                .values_list("category", flat=True)
+                .first()
+            )
+        organisation_proposer_id = (
+            str(proposer.id) if proposer and proposer.proposer_type == ProposerType.ORGANISATION.value else None
+        )
+
         data = EvaluationInput(
             member_id=str(member.id) if member else (str(member_id) if member_id else None),
             relationship_code=member.relationship_code if member else None,
@@ -59,6 +84,9 @@ class EvaluateEligibilityUseCase:
             product_version_id=str(product_version_id),
             plan_id=str(plan_id),
             effective_date=effective_date,
+            relationship_category=relationship_category,
+            organisation_proposer_id=organisation_proposer_id,
+            angola_evidence=AngolaEvidence.from_dict(context.get("angola") if context else None),
         )
         pv_facts = ProductVersionFacts(
             effective_from=product_version.effective_from, effective_to=product_version.effective_to

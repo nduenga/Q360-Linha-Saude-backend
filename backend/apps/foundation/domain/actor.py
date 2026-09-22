@@ -22,6 +22,16 @@ class Actor:
     roles: frozenset[Role]
     scopes: frozenset[Scope] = frozenset()
     actor_type: str = "USER"
+    # ROADMAP_PORTAL_CLIENTE.md Fase 0 — the second, narrower security
+    # boundary a `actor_type="CUSTOMER"` actor needs on top of tenant
+    # scoping: opaque Proposer id strings (never a business-module type
+    # here, to keep foundation free of a dependency on apps.client per
+    # DOC-004 s3.1) this actor is allowed to see. Always empty for
+    # USER/SYSTEM/SERVICE actors — see
+    # apps.customer_portal.infrastructure.scoping.require_customer_proposer_ids
+    # for the fail-closed accessor customer_portal code must use instead of
+    # reading this field directly.
+    customer_proposer_ids: frozenset[str] = frozenset()
 
     @property
     def permissions(self) -> frozenset[Permission]:

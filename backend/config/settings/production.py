@@ -18,3 +18,9 @@ if not (OIDC_ISSUER and OIDC_AUDIENCE and OIDC_JWKS_URL):
         "OIDC_ISSUER, OIDC_AUDIENCE and OIDC_JWKS_URL must all be set in production "
         "(Q360-S1-03 resource-server configuration)."
     )
+
+if not CUSTOMER_PORTAL_JWT_SECRET:
+    raise RuntimeError(
+        "CUSTOMER_PORTAL_JWT_SECRET must be set in production (ROADMAP_PORTAL_CLIENTE.md "
+        "Fase 0 — must never fall back to SECRET_KEY or an OIDC key)."
+    )

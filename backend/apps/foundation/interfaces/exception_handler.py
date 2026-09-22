@@ -42,6 +42,9 @@ _TITLES: dict[str, str] = {
     "NOT-FOUND": "Recurso não encontrado",
     "CONFLICT": "Conflito genérico",
     "RATE-LIMIT": "Limite excedido",
+    # Customer portal (ROADMAP_PORTAL_CLIENTE.md) — a new actor/contract
+    # outside ART-006's catalog, not a Change Request against it.
+    "PORTAL-LOCKED": "Conta temporariamente bloqueada",
 }
 
 _CODE_BY_EXCEPTION: dict[type[Exception], str] = {

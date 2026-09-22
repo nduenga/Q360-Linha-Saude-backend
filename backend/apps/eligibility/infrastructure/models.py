@@ -32,7 +32,7 @@ class EligibilityEvaluation(TenantScopedModel):
     rule_version = models.ForeignKey(
         RuleVersion, on_delete=models.DO_NOTHING, db_column="rule_version_id", null=True, blank=True
     )
-    decision = models.CharField(max_length=20, choices=[(d.value, d.value) for d in EligibilityDecision])
+    decision = models.CharField(max_length=30, choices=[(d.value, d.value) for d in EligibilityDecision])
     input_snapshot_json = models.JSONField()
     evidence_json = models.JSONField(default=list)
     evaluated_at = models.DateTimeField(auto_now_add=True)

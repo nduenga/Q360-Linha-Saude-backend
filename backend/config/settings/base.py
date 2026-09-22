@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     "apps.eligibility",
     "apps.pricing",
     "apps.quote",
+    "apps.customer_portal",
     "drf_spectacular",
 ]
 
@@ -102,6 +103,7 @@ MIGRATION_MODULES = {
     "eligibility": "apps.eligibility.infrastructure.migrations",
     "pricing": "apps.pricing.infrastructure.migrations",
     "quote": "apps.quote.infrastructure.migrations",
+    "customer_portal": "apps.customer_portal.infrastructure.migrations",
 }
 
 ROOT_URLCONF = "config.urls"
@@ -209,6 +211,27 @@ OIDC_ALGORITHMS = [
 # Dev/test-only escape hatch when no OIDC provider is running locally;
 # config/settings/production.py refuses to start if this is set.
 OIDC_STATIC_VERIFICATION_KEY = os.environ.get("OIDC_STATIC_VERIFICATION_KEY", "")
+
+# --- Customer Portal (ROADMAP_PORTAL_CLIENTE.md Fase 0) ----------------
+# Deliberately isolated from OIDC_*/SECRET_KEY above: a customer-portal
+# token must never be verifiable/forgeable with the staff IdP's key or
+# Django's own SECRET_KEY ("nunca reaproveita os scopes/roles internos").
+CUSTOMER_PORTAL_JWT_SECRET = os.environ.get("CUSTOMER_PORTAL_JWT_SECRET", "")
+CUSTOMER_PORTAL_TOKEN_TTL_SECONDS = int(os.environ.get("CUSTOMER_PORTAL_TOKEN_TTL_SECONDS", "1800"))
+# OD-PORTAL-001 (Product Owner decision 2026-09-22): email OTP only.
+CUSTOMER_PORTAL_OTP_TTL_SECONDS = int(os.environ.get("CUSTOMER_PORTAL_OTP_TTL_SECONDS", "600"))
+CUSTOMER_PORTAL_EMAIL_FROM = os.environ.get("CUSTOMER_PORTAL_EMAIL_FROM", "no-reply@q360.example")
+# OD-PORTAL-003 (Product Owner decision 2026-09-22): 5 tentativas / 30 min.
+CUSTOMER_PORTAL_MAX_FAILED_ATTEMPTS = int(os.environ.get("CUSTOMER_PORTAL_MAX_FAILED_ATTEMPTS", "5"))
+CUSTOMER_PORTAL_LOCKOUT_MINUTES = int(os.environ.get("CUSTOMER_PORTAL_LOCKOUT_MINUTES", "30"))
+# Stricter than RATE_LIMIT_REQUESTS above: these 2 endpoints are the only
+# ones a caller can hit before proving anything, so they are the natural
+# brute-force target for guessing quoteNumber/registrationNumber pairs
+# (see apps/customer_portal/interfaces/rate_limit.py).
+CUSTOMER_PORTAL_LOGIN_RATE_LIMIT = int(os.environ.get("CUSTOMER_PORTAL_LOGIN_RATE_LIMIT", "10"))
+CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS = int(
+    os.environ.get("CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS", "60")
+)
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"

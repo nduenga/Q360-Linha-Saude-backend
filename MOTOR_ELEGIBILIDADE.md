@@ -1,9 +1,10 @@
 # Motor de Elegibilidade Inteligente — Desenho (OD-ANGOLA-012)
 
-**Estado:** desenho completo, entregue conforme pedido. Implementação
-faseada — ver "Fases de implementação" no final. Este documento cobre
-exactamente os 3 entregáveis pedidos: (1) árvore de decisão, (2)
-mensagens amigáveis, (3) esquema JSON de configuração.
+**Estado:** desenho completo. **Fase A implementada** (ver "Fases de
+implementação" no final para o que ficou de fora, deliberadamente, e
+porquê). Este documento cobre exactamente os 3 entregáveis pedidos: (1)
+árvore de decisão, (2) mensagens amigáveis, (3) esquema JSON de
+configuração.
 
 **Princípio herdado do motor já existente** (`apps/eligibility/domain/
 evaluation.py`, construído no Sprint 3): a função `evaluate()` é pura,
@@ -242,12 +243,45 @@ novo; o JSON não.
 Dado o tamanho, a implementação real fica dividida (nenhuma parte
 depende de inventar uma integração externa que não existe):
 
-- **Fase A (segura para construir já):** extensão do parser
-  `EligibilityRuleConfig`/`Criterion` para ler `categoryRules`,
-  `corporateOverrides`, `preExistingConditionPolicy`, `waitingPeriod` —
-  tudo dados fornecidos pela própria configuração, sem chamar nenhum
-  serviço externo. Mensagens amigáveis (secção 2) devolvidas em vez das
-  actuais genéricas.
+- **Fase A (segura para construir já) — IMPLEMENTADA (2026-09-22):**
+  extensão do parser `EligibilityRuleConfig`/`Criterion` para ler
+  `categoryRules`, `corporateOverrides`, `preExistingConditionPolicy`,
+  `waitingPeriod` — tudo dados fornecidos pela própria configuração, sem
+  chamar nenhum serviço externo. Mensagens amigáveis (secção 2) devolvidas
+  em vez das actuais genéricas.
+  - Código: `apps/eligibility/domain/evaluation.py` (`CategoryRule`,
+    `WaitingPeriodConfig`, `PreExistingConditionPolicy`,
+    `EligibilityRuleConfig.category_rule_for`, `_evaluate_category_rules`,
+    `_evaluate_pre_existing_condition`, `_waiting_period_message`, todos
+    ligados em `evaluate()` entre ELIG-005 e ELIG-008/009, exactamente
+    como a árvore de decisão da secção 1 pede) e
+    `apps/eligibility/domain/messages_pt.py` (secção 2, `friendly_text`).
+  - `EligibilityDecision` ganhou `ELIGIBLE_WITH_LOADING`,
+    `PENDING_DOCUMENT`, `PENDING_MEDICAL_BOARD` — nova migration
+    `apps/eligibility/infrastructure/migrations/0002_angola_category_rules.py`
+    (alarga `decision` para varchar(30) e o `ck_eligibility_decision`),
+    nunca editando `0001_eligibility_baseline.py`.
+  - `EvaluateEligibilityUseCase` (`apps/eligibility/application/
+    use_cases.py`) resolve `relationship_category` via o catálogo
+    `RelationshipCode` (OD-ANGOLA-010, já tenant-scoped) e o
+    `organisation_proposer_id` (Proposer `ORGANISATION` da apólice de
+    Grupo); os "evidence flags" (certificado de matrícula, homologação de
+    união de facto, prova de coabitação/dependência, doença preexistente
+    declarada, portabilidade) vêm do `context` já existente no pedido —
+    nenhum campo novo em `InsuredMember`/`Proposer`, nenhuma tabela de
+    documentos inventada.
+  - Testes: `backend/tests/eligibility/test_evaluation_domain_angola.py`
+    (puros, sem BD, mesmo estilo de `test_evaluation_domain.py`, que fica
+    inalterado — um teste de regressão confirma que um tenant sem
+    `categoryRules` continua a comportar-se exactamente como antes desta
+    fase).
+  - **Deliberadamente fora da Fase A** (não é omissão): o módulo de
+    `compliance` (`DOCUMENTO_INVALIDO`, `PROPOSTA_ANONIMA`, `NIF_INATIVO`)
+    e `groupPolicyRules` (`VINCULO_LABORAL_INATIVO`) não têm parser nem
+    lógica ligada em `evaluate()` — dependem da validação de NIF/vínculo
+    laboral que a Fase C já identifica como bloqueada por integração
+    externa inexistente. As mensagens amigãveis desses 4 códigos já estão
+    em `messages_pt.py`, prontas a usar quando a Fase C desbloquear.
 - **Fase B (precisa de decisão de produto, não técnica):** onde ficam
   guardados os documentos comprovativos (certificado de matrícula,
   homologação, etc.) — hoje não existe nenhum campo de upload de
