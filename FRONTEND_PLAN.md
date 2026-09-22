@@ -95,12 +95,34 @@ completamente isolado do backoffice.
       (env var), nunca digitado pelo utilizador.
 - [ ] Token expira em `expiresIn` segundos (1800 por omissão), sem
       refresh — ao expirar, voltar ao Ecrã 1.
-- [ ] Não construir nenhum ecrã depois do login (coberturas, "a minha
-      apólice", etc.) — isso é a Fase 1, o backend ainda não a tem.
-
 Estes 2 endpoints são novos e isolados (não estão no OpenAPI do
 backoffice) — é este o único contrato que precisa de ser lido aqui em
 vez de gerado.
+
+## 6. Portal do Cliente — Fase 1 (novo, backend pronto — os ecrãs depois do login)
+
+Autenticado com o `accessToken` da Fase 0 (mesmo cliente HTTP isolado).
+Nenhum destes 3 aceita nem precisa de `proposerId`/`planId`/etc. no
+pedido — tudo resolvido no servidor a partir do token.
+
+- [ ] Ecrã "A minha apólice": `GET /api/v1/customer-portal/me` → lista
+      de apólices do cliente, cada uma já com `quote` (status,
+      quoteNumber, datas), `product`, `productVersion`, `plan`
+      embutidos. Se vazia, mostrar estado vazio (cliente ainda sem
+      apólice associada).
+- [ ] Secção "Coberturas": `GET /api/v1/customer-portal/coverage?quoteNumber=<numero>`
+      → `{quoteNumber, benefits: [{id, planId, benefit: {code, name,
+      category, description}, configurationJson}]}`. `404` se o
+      `quoteNumber` não pertencer ao cliente autenticado.
+- [ ] Secção/acção "Ver elegibilidade": `POST /api/v1/customer-portal/eligibility`
+      `{quoteNumber, memberId?}` → `{quoteNumber, results: [{memberId,
+      relationshipCode, decision, messages}]}`. Sem `memberId` avalia
+      todos os membros da apólice; `decision`/`messages` seguem
+      exactamente a mesma tabela de cores da secção 4 (Motor de
+      Elegibilidade). `404` se `quoteNumber`/`memberId` não pertencerem
+      ao cliente.
+- [ ] Qualquer resposta `401` de um destes 3 (token expirado) →
+      redireccionar ao Ecrã 1 do login (Fase 0), pedir novo código.
 
 ---
 

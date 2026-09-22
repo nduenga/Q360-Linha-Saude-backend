@@ -27,3 +27,16 @@ class PortalAccountLockedError(DomainProblem):
 
     http_status = 423
     problem_code = "PORTAL-LOCKED"
+
+
+class PortalResourceNotFoundError(DomainProblem):
+    """Fase 1 (ROADMAP_PORTAL_CLIENTE.md): a `quoteNumber`/`memberId`
+    supplied by the authenticated customer does not resolve to something
+    linked to their own `customer_account` proposers. Deliberately the
+    same 404 whether the resource doesn't exist at all or belongs to a
+    different customer — never confirms another customer's policy
+    exists. Reuses the generic NOT-FOUND catalog code (this is a plain
+    instance of it, not a portal-specific situation)."""
+
+    http_status = 404
+    problem_code = "NOT-FOUND"

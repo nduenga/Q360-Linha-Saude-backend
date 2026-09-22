@@ -166,7 +166,7 @@ de um cliente final herdar permissões de staff.
 
 ---
 
-## Fase 1 — Consulta de elegibilidade e estado da apólice (MVP)
+## Fase 1 — Consulta de elegibilidade e estado da apólice (MVP) — IMPLEMENTADA (2026-09-22)
 
 ### Pedido
 Depois de autenticado (Fase 0), o cliente final deve conseguir ver o
@@ -177,27 +177,46 @@ O mínimo útil e seguro: ver que apólice tem, que plano/coberturas
 contratou, e se está elegível.
 
 ### Tarefas
-- [ ] `GET /api/v1/customer-portal/me` — devolve o(s)
+- [x] `GET /api/v1/customer-portal/me` — devolve o(s)
       `Quote.quoteNumber` associados ao `customer_account` autenticado,
-      status (`APPROVED`/etc.), plano e produto (reaproveitar
-      `QuoteSerializer`/`ProductVersionSerializer` já existentes, apenas
-      restringindo o queryset ao proposer do actor autenticado — nunca
-      duplicar serializers).
-- [ ] `GET /api/v1/customer-portal/coverage` — coberturas contratadas no
-      plano (reaproveitar `list_plan_benefits` de
-      `apps/product/application/benefit_service.py`, já construído no
-      Épico 1).
-- [ ] `POST /api/v1/customer-portal/eligibility` (ou automaticamente
-      incluído em `/me`) — reaproveitar
-      `EvaluateEligibilityUseCase.execute()` já existente, chamado com o
-      `proposer_id`/`plan_id`/`product_version_id` resolvidos do próprio
-      `customer_account`, nunca aceitando esses IDs vindos do pedido do
-      cliente (evitar que um cliente peça a elegibilidade de outro
-      alterando um ID no payload).
+      status (`APPROVED`/etc.), plano e produto (reaproveita
+      `QuoteSerializer`/`ProductSerializer`/`ProductVersionSerializer`/
+      `PlanSerializer` já existentes, tal como pedido — nenhum serializer
+      novo/mais magro nesta fase, isso fica para a Fase 2). Restringido
+      via `apps.customer_portal.application.self_service.list_my_quotes`,
+      que filtra por `proposer_id IN (<proposers ligados ao
+      customer_account>)` (`require_customer_proposer_ids`, Fase 0).
+      Sem `{tenantId}` no path — ao contrário dos 2 endpoints de login,
+      este já vem autenticado pelo token do portal, que já traz o
+      `tenant_id`.
+- [x] `GET /api/v1/customer-portal/coverage?quoteNumber=` — coberturas
+      contratadas no plano, via `list_plan_benefits` de
+      `apps/product/application/benefit_service.py` (Épico 1), sem
+      alteração nenhuma a esse serviço.
+- [x] `POST /api/v1/customer-portal/eligibility` `{quoteNumber,
+      memberId?}` — reaproveita `EvaluateEligibilityUseCase.execute()`
+      já existente, chamado com `proposer_id`/`plan_id`/
+      `product_version_id`/`effective_date` resolvidos do próprio
+      `Quote` (nunca do pedido); se `memberId` for omitido avalia todos
+      os membros da apólice, se for dado tem de pertencer a essa mesma
+      apólice (verificado via `QuoteMember`) — nunca aceita um
+      `memberId` de outra pessoa.
+      Código: `apps/customer_portal/application/self_service.py`
+      (`list_my_quotes`, `resolve_my_quote` — resolução scoped, nunca
+      confia num `quoteNumber` sem verificar que pertence ao chamador) e
+      `apps/customer_portal/interfaces/self_service_views.py`.
+      `resolve_my_quote`/o `memberId` inexistente na apólice devolvem o
+      mesmo `404 NOT-FOUND` (`PortalResourceNotFoundError`) quer o
+      recurso não exista quer pertença a outro cliente — nunca confirma
+      a existência de uma apólice alheia.
+      Testes: `backend/tests/customer_portal/test_self_service_api.py`
+      (isolamento entre clientes, 401 sem token, 404 em apólice/membro
+      alheios) — mesmo padrão de integração via `@pytest.mark.django_db`
+      dos restantes testes de API deste projecto.
 
 ### Open Decisions
-- Nenhuma nova além das da Fase 0 — esta fase é sobretudo composição de
-  serviços de aplicação já existentes e testados.
+- Nenhuma nova além das da Fase 0 — esta fase foi mesmo, como previsto,
+  só composição de serviços de aplicação já existentes e testados.
 
 ---
 

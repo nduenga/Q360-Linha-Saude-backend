@@ -98,7 +98,10 @@ ficam marcados `(frontend — outra pessoa)` e não são construídos aqui.
       namespace `/api/v1/customer-portal/...`.
       *(frontend — outra pessoa)* ver `FRONTEND_PLAN.md` secção Portal do
       Cliente para o contrato exacto dos 2 endpoints já disponíveis.
-- [ ] Fase 1: `GET /me`, coberturas e elegibilidade da própria apólice —
-      backend por construir (depende da Fase 0, agora fechada)
+- [x] Fase 1 ✅ backend concluído (2026-09-22) — `GET /customer-portal/me`,
+      `GET /customer-portal/coverage`, `POST /customer-portal/eligibility`,
+      todos scoped ao proposer do `customer_account` autenticado, nunca a
+      IDs vindos do pedido. *(frontend — outra pessoa)* ver
+      `FRONTEND_PLAN.md`.
 - [ ] Fase 2: self-service (ver cobertura, descarregar proposta)
 - [ ] Fase 3: submissão de pedidos pelo cliente
