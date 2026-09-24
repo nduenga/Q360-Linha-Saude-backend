@@ -48,6 +48,30 @@ class RowVersionMismatchError(DomainProblem):
     problem_code = "VERSION-CONFLICT"
 
 
+class DuplicatePlanCoverageSetError(DomainProblem):
+    """Two Plans of the same ProductVersion would end up with the exact
+    same set of attached coverages (BASE + chosen COMPLEMENTARY ones) —
+    a Plan's coverages are its only real differentiator, so this would be
+    a functionally-duplicate plan. Covers both requirements from the
+    Product Owner: no two plans with identical coverages, and at most one
+    "basic" plan (BASE coverages only, no COMPLEMENTARY ones opted into)
+    per ProductVersion — the latter is just the empty-selection case of
+    the former."""
+
+    http_status = 409
+    problem_code = "CONFLICT"
+
+
+class InvalidBenefitSelectionError(DomainProblem):
+    """A `complementaryBenefitIds` entry does not resolve to an ACTIVE,
+    COMPLEMENTARY Benefit of the caller's tenant — either unknown, or a
+    BASE coverage (those are never opted into, they are always attached
+    automatically)."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
 class MissingCoreBenefitsError(DomainProblem):
     """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1: a ProductVersion cannot
     publish while any of its Plans is missing a BASE (mandatory market)

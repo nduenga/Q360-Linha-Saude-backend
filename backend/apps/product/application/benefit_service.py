@@ -19,7 +19,7 @@ from typing import Any
 
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.product.domain.enums import BenefitStatus
-from apps.product.domain.errors import MissingCoreBenefitsError
+from apps.product.domain.errors import InvalidBenefitSelectionError, MissingCoreBenefitsError
 from apps.product.infrastructure.models import Benefit, Plan, PlanBenefit
 
 BASE = "BASE"
@@ -79,6 +79,36 @@ def attach_core_benefits(*, plan: Plan) -> None:
         PlanBenefit.objects.get_or_create(
             tenant_id=plan.tenant_id, plan=plan, benefit=benefit, defaults={"configuration_json": {}}
         )
+
+
+def core_benefit_ids(tenant_id: uuid.UUID) -> set[uuid.UUID]:
+    ensure_market_catalog(tenant_id)
+    return set(Benefit.objects.filter(benefit_type=BASE).values_list("id", flat=True))
+
+
+def resolve_complementary_benefits(*, tenant_id: uuid.UUID, benefit_ids: list[uuid.UUID]) -> list[Benefit]:
+    """Validates a Plan-creation coverage selection (product_service.
+    create_plan): every id must resolve to an ACTIVE COMPLEMENTARY Benefit
+    of this tenant. BASE coverages are never selectable here — they are
+    always attached automatically (attach_core_benefits), never opted
+    into — so a caller passing a BASE id is treated the same as an
+    unknown one: rejected."""
+    if not benefit_ids:
+        return []
+    ensure_market_catalog(tenant_id)
+    unique_ids = set(benefit_ids)
+    benefits = list(
+        Benefit.objects.filter(
+            id__in=unique_ids, tenant_id=tenant_id, benefit_type=COMPLEMENTARY, status=BenefitStatus.ACTIVE.value
+        )
+    )
+    if len(benefits) != len(unique_ids):
+        found_ids = {b.id for b in benefits}
+        missing = unique_ids - found_ids
+        raise InvalidBenefitSelectionError(
+            f"complementaryBenefitIds contains unknown, inactive or non-COMPLEMENTARY ids: {sorted(str(i) for i in missing)}"
+        )
+    return benefits
 
 
 def list_plan_benefits(*, plan: Plan) -> Any:

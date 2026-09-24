@@ -97,6 +97,24 @@ def test_list_products_returns_page_envelope(admin_client):
 
 
 @pytest.mark.django_db
+def test_list_products_filtered_by_status(admin_client):
+    """`?status=` is a pragmatic V1 addition (not in ART-006, same posture
+    as the equivalent filter on PricingParameterSet/RatingTable/
+    RuleVersion) - lets a product picker ask for ACTIVE only."""
+    draft = admin_client.post("/api/v1/products", {"code": "STATUS-DRAFT", "name": "Draft"}).data
+    active = admin_client.post("/api/v1/products", {"code": "STATUS-ACTIVE", "name": "Active"}).data
+    admin_client.put(
+        f"/api/v1/products/{active['id']}", {"name": "Active", "rowVersion": 0, "status": "ACTIVE"}
+    )
+
+    response = admin_client.get("/api/v1/products?status=ACTIVE")
+    assert response.status_code == 200
+    codes = {item["code"] for item in response.data["items"]}
+    assert codes == {"STATUS-ACTIVE"}
+    assert draft["code"] not in codes
+
+
+@pytest.mark.django_db
 def test_create_and_publish_product_version(admin_client):
     product = admin_client.post("/api/v1/products", {"code": "VER", "name": "Versioned"}).data
 
@@ -129,7 +147,7 @@ def test_list_product_versions(admin_client):
     product = admin_client.post("/api/v1/products", {"code": "VERLIST", "name": "VerList"}).data
     admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"})
     admin_client.put(
-        f"/api/v1/products/{product['id']}", {"name": "VerList", "rowVersion": 0}
+        f"/api/v1/products/{product['id']}", {"name": "VerList renamed", "rowVersion": 0}
     )
 
     response = admin_client.get(f"/api/v1/products/{product['id']}/versions")
@@ -146,7 +164,7 @@ def test_editing_a_product_auto_creates_and_publishes_the_next_version(admin_cli
     admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"})
 
     updated = admin_client.put(
-        f"/api/v1/products/{product['id']}", {"name": "Sequenced", "rowVersion": 0}
+        f"/api/v1/products/{product['id']}", {"name": "Sequenced renamed", "rowVersion": 0}
     )
     assert updated.status_code == 200
 

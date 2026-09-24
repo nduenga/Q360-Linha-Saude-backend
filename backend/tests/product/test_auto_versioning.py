@@ -1,7 +1,12 @@
-"""ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 2: editing a product (any field,
-even the most basic) rolls its version forward automatically — there is
-no separate "create version" action anymore. Épico 3: every version is
-open-ended (no `effectiveTo`)."""
+"""ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 2: editing a product's name or
+description rolls its version forward automatically — there is no
+separate "create version" action anymore for that case. Épico 3: every
+version is open-ended (no `effectiveTo`). Product Owner requirement
+(2026-09-24): a PUT that does not actually change name/description (a
+status-only edit, or resending the same values) must NOT roll the
+version forward — a Plan's coverages, not a Product's status, are what
+differentiate versions; see test_status_only_edit_does_not_roll_version
+below."""
 from __future__ import annotations
 
 import datetime
@@ -32,7 +37,7 @@ def test_editing_product_retires_previous_version_and_publishes_next(admin_clien
     refs = _product_with_plan_and_benefit(admin_client, code="AUTOV-1")
 
     admin_client.put(
-        f"/api/v1/products/{refs['product']['id']}", {"name": "AUTOV-1", "rowVersion": 0}
+        f"/api/v1/products/{refs['product']['id']}", {"name": "AUTOV-1 renomeado", "rowVersion": 0}
     )
 
     versions = admin_client.get(f"/api/v1/products/{refs['product']['id']}/versions").data["items"]
@@ -51,7 +56,7 @@ def test_new_version_inherits_plans_and_their_benefits(admin_client):
     refs = _product_with_plan_and_benefit(admin_client, code="AUTOV-2")
 
     admin_client.put(
-        f"/api/v1/products/{refs['product']['id']}", {"name": "AUTOV-2", "rowVersion": 0}
+        f"/api/v1/products/{refs['product']['id']}", {"name": "AUTOV-2 renomeado", "rowVersion": 0}
     )
 
     versions = admin_client.get(f"/api/v1/products/{refs['product']['id']}/versions").data["items"]
@@ -89,7 +94,7 @@ def test_old_plan_and_quote_still_readable_after_version_retired(admin_client):
     assert quote["productVersionId"] == refs["version"]["id"]
 
     admin_client.put(
-        f"/api/v1/products/{refs['product']['id']}", {"name": "AUTOV-3", "rowVersion": 0}
+        f"/api/v1/products/{refs['product']['id']}", {"name": "AUTOV-3 renomeado", "rowVersion": 0}
     )
 
     still_there = admin_client.get(f"/api/v1/quotes/{quote['id']}")
@@ -112,7 +117,7 @@ def test_editing_a_product_with_no_version_yet_does_not_create_one(admin_client)
 @pytest.mark.django_db
 def test_multiple_edits_increment_version_each_time(admin_client):
     refs = _product_with_plan_and_benefit(admin_client, code="AUTOV-5")
-    admin_client.put(f"/api/v1/products/{refs['product']['id']}", {"name": "AUTOV-5", "rowVersion": 0})
+    admin_client.put(f"/api/v1/products/{refs['product']['id']}", {"name": "AUTOV-5 v1", "rowVersion": 0})
     admin_client.put(f"/api/v1/products/{refs['product']['id']}", {"name": "AUTOV-5 v2", "rowVersion": 1})
 
     versions = admin_client.get(f"/api/v1/products/{refs['product']['id']}/versions").data["items"]
@@ -121,3 +126,24 @@ def test_multiple_edits_increment_version_each_time(admin_client):
     non_retired = [v for v in versions if v["status"] != "RETIRED"]
     assert len(non_retired) == 1
     assert non_retired[0]["versionNo"] == 3
+
+
+@pytest.mark.django_db
+def test_status_only_edit_does_not_roll_version(admin_client):
+    """Product Owner requirement (2026-09-24): a PUT that changes only
+    `status` (or resends the same name/description) must not create a new
+    ProductVersion - creating a Plan is already independent of this
+    (test_plans.py), and so must a bare status transition be."""
+    refs = _product_with_plan_and_benefit(admin_client, code="AUTOV-6")
+
+    response = admin_client.put(
+        f"/api/v1/products/{refs['product']['id']}",
+        {"name": refs["product"]["name"], "rowVersion": 0, "status": "ACTIVE"},
+    )
+    assert response.status_code == 200
+    assert response.data["status"] == "ACTIVE"
+
+    versions = admin_client.get(f"/api/v1/products/{refs['product']['id']}/versions").data["items"]
+    assert len(versions) == 1
+    assert versions[0]["id"] == refs["version"]["id"]
+    assert versions[0]["status"] == "PUBLISHED"

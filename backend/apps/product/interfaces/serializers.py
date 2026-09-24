@@ -84,6 +84,13 @@ class PlanCreateRequestSerializer(serializers.Serializer):
     code = serializers.CharField(min_length=1, max_length=60)
     name = serializers.CharField(min_length=1, max_length=200)
     description = serializers.CharField(allow_null=True, required=False, default=None)
+    # The 3 BASE (market-mandatory) coverages are always attached
+    # automatically (product_service.create_plan) - never listed here.
+    # Omit/empty this for a "basic" plan (BASE coverages only); each
+    # COMPLEMENTARY id chosen must come from GET /api/v1/benefits.
+    complementaryBenefitIds = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list
+    )
 
 
 class VersionedConfigHeaderSerializer(serializers.Serializer):

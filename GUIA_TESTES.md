@@ -119,11 +119,12 @@ aceita qualquer porta localhost em dev).
 
 ```bash
 cd backend
-python -m pytest tests/ -q --deselect tests/foundation/test_idempotency.py::test_same_key_different_body_returns_409_idemp_replay
+python -m pytest tests/ -q
 ```
 
-O `--deselect` evita um flake intermitente já documentado e não
-relacionado com o trabalho actual (`DECISIONS_TAKEN.md#S09-IDEMPOTENCY-001`).
+(O flake intermitente que este comando costumava contornar com
+`--deselect` — `DECISIONS_TAKEN.md#S09-IDEMPOTENCY-001` — foi root-causado
+e corrigido em 2026-09-24; já não é preciso.)
 Se a suite completa falhar com `TimeoutError` a ligar ao Postgres do
 Testcontainers, é instabilidade do Docker local, não do código — corre de
 novo ou testa o módulo isolado (`pytest tests/product/ -q`).

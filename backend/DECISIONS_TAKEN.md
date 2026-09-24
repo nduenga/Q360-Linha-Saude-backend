@@ -368,17 +368,26 @@ documentado em `tenant_scoping.py` para jobs que legitimamente precisam de
 funcionar sem contexto de tenant vinculado) e passa `tenant_id` como filtro
 explícito em cada query — nunca depende do filtro implícito do manager.
 
-**Known issue não resolvido:** `tests/foundation/test_idempotency.py::test_same_key_different_body_returns_409_idemp_replay`
-passa isoladamente mas foi observado a falhar intermitentemente quando
-corrido a seguir a outro teste na mesma sessão — a segunda chamada
-`IdempotencyRecord.all_tenants.create()` ocasionalmente levanta uma
-violação de foreign key a dizer que o *mesmo* tenant usado pela primeira
-chamada momentos antes "não existe" na tabela `tenant`, em vez do
-`IntegrityError` de unique-constraint esperado. Causa raiz não isolada
-(suspeita: interacção entre o `transaction.atomic()` aninhado em
-`IdempotencyService.begin()` e o wrapper de rollback por teste do
-pytest-django sob Testcontainers). Deixado a falhar ruidosamente (não
-marcado `skip`/`xfail`) para não ser esquecido — ver docstring do teste.
+**Known issue resolvido (2026-09-24):** `tests/foundation/test_idempotency.py::test_same_key_different_body_returns_409_idemp_replay`
+passava isoladamente mas falhava intermitentemente a seguir a outro teste
+na mesma sessão. Causa raiz real (nada a ver com Postgres/Testcontainers,
+nem específica de `all_tenants`): `IdempotencyMiddleware` tem dois caminhos
+de retorno antecipado (o 409 `IdempotencyReplayError` e o short-circuit de
+resposta repetida) que devolvem a resposta **sem chamar
+`self.get_response(request)`** — e é só dentro dessa chamada que
+`ActorContextCleanupMiddleware` (mais interno na lista `MIDDLEWARE`) corre
+e limpa `CurrentActorProvider`. Nesses dois caminhos, o actor que o próprio
+`IdempotencyMiddleware` vincula (para resolver o tenant antes da
+autenticação DRF, linha ~143) ficava "pendurado" no contextvar e era
+reutilizado pelo pedido seguinte tratado pela mesma worker thread — daí o
+tenant errado (o do pedido *anterior*) aparecer na segunda chamada deste
+teste. Corrigido em `apps/foundation/interfaces/middleware.py`: os dois
+caminhos de retorno antecipado agora limpam a vinculação antes de devolver
+a resposta. `test_same_key_same_body_is_replayed` também foi corrigido — a
+sua asserção final dependia acidentalmente da mesma fuga para conseguir
+correr `Product.objects.filter(...)` fora de qualquer pedido HTTP; passou a
+usar `Product.all_tenants.filter(tenant_id=tenant.id, ...)` explicitamente,
+o padrão já documentado acima para este cenário.
 
 ## S09-OUTBOX-EVENT-FIELDS-001 — Gap de campos ART-007 em QUOTE.SUBMITTED/APPROVED (2026-09-18)
 

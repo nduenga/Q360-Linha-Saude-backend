@@ -246,8 +246,10 @@ class IdempotencyMiddleware:
         data = getattr(response, "data", None)
         if data is None:
             return None
-        if isinstance(data, dict):
-            return data
+        # Always round-trip through JSON, dicts included: serializer output
+        # can still hold UUID/Decimal/date objects (e.g. SerializerMethodField
+        # values) that the JSONField below cannot encode, which used to turn
+        # an already-successful request into a 500 at persistence time.
         try:
             serialized = json.loads(json.dumps(data, default=str))
             if isinstance(serialized, dict):

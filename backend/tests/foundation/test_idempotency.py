@@ -24,7 +24,7 @@ def _idempotency_required(settings):
 
 
 @pytest.mark.django_db
-def test_same_key_same_body_is_replayed(admin_client):
+def test_same_key_same_body_is_replayed(admin_client, tenant):
     key = str(uuid.uuid4())
     code = f"IDEMP-{uuid.uuid4().hex[:8]}"
     body = {"code": code, "name": "Idempotent Product"}
@@ -38,22 +38,29 @@ def test_same_key_same_body_is_replayed(admin_client):
 
     from apps.product.infrastructure.models import Product
 
-    assert Product.objects.filter(code=code).count() == 1
+    # No actor/tenant is bound here (this runs outside any HTTP request, so
+    # no middleware ever resolved one) - `all_tenants` + an explicit
+    # tenant_id is the documented escape hatch for exactly this
+    # (apps.foundation.infrastructure.tenant_scoping), not the default
+    # `objects` manager, which requires CurrentTenantProvider to be bound.
+    assert Product.all_tenants.filter(tenant_id=tenant.id, code=code).count() == 1
 
 
 @pytest.mark.django_db
 def test_same_key_different_body_returns_409_idemp_replay(admin_client):
-    """KNOWN ISSUE (see DECISIONS_TAKEN.md#S09-IDEMPOTENCY-001): passes in
-    isolation but has been observed to fail intermittently when run after
-    another test in the same session — the second `admin_client.post()`
-    call's `IdempotencyRecord.all_tenants.create()` occasionally raises a
-    foreign-key violation claiming the *same* tenant used by the first
-    call moments earlier "is not present in table tenant", instead of the
-    expected unique-constraint IntegrityError. Root cause not yet isolated
-    (suspected Postgres connection/transaction-state interaction between
-    the nested `transaction.atomic()` in `IdempotencyService.begin()` and
-    pytest-django's per-test rollback wrapper under Testcontainers). Not
-    skipped outright so it keeps failing loudly in CI until root-caused."""
+    """Previously a documented flaky KNOWN ISSUE (DECISIONS_TAKEN.md#S09-
+    IDEMPOTENCY-001): root-caused and fixed - IdempotencyMiddleware's two
+    early-return paths (the IdempotencyReplayError 409 below, and a
+    replayed-response short-circuit) returned without calling
+    `self.get_response(request)`, so `ActorContextCleanupMiddleware`
+    (deeper in MIDDLEWARE, only runs inside get_response) never ran to
+    clear the actor this middleware itself binds a few lines above. That
+    left a stale actor/tenant bound into whatever request the same worker
+    thread handled next - exactly the symptom this test surfaced when run
+    after another test in the same session. Fixed in
+    apps/foundation/interfaces/middleware.py (both early returns now clear
+    the binding themselves before returning).
+    """
     key = str(uuid.uuid4())
     first_code = f"IDEMP-{uuid.uuid4().hex[:8]}"
     other_code = f"IDEMP-{uuid.uuid4().hex[:8]}"

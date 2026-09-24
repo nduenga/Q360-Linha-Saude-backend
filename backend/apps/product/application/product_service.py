@@ -7,6 +7,7 @@ is plumbing, not modelled as a separate class in the source document.
 """
 from __future__ import annotations
 
+import uuid
 from datetime import date
 
 from django.db import IntegrityError, transaction
@@ -16,10 +17,16 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
-from apps.product.application.benefit_service import attach_core_benefits
+from apps.product.application.benefit_service import (
+    add_plan_benefit,
+    attach_core_benefits,
+    core_benefit_ids,
+    resolve_complementary_benefits,
+)
 from apps.product.domain.enums import VersionedConfigStatus
 from apps.product.domain.errors import (
     DuplicateCodeError,
+    DuplicatePlanCoverageSetError,
     EffectiveDateOverlapError,
     ImmutableVersionError,
     RowVersionMismatchError,
@@ -61,6 +68,12 @@ def update_product(
     # ProductVersion never implicitly activates the parent Product, those
     # are two independent lifecycle fields (ART-005). Optional and
     # backward-compatible: omitted, behaviour is unchanged.
+    # Captured before the UPDATE below overwrites them - see the
+    # content_changed check further down (Product Owner requirement: a new
+    # ProductVersion only rolls forward when name/description actually
+    # change, never for e.g. a status-only edit).
+    content_changed = product.name != name or product.description != description
+
     fields = {"name": name, "description": description, "row_version": row_version + 1}
     if status is not None:
         fields["status"] = status
@@ -77,13 +90,19 @@ def update_product(
         metadata={"rowVersion": product.row_version},
     )
 
-    # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 2: every edit to a Product that
-    # already has a version rolls that version forward automatically — the
-    # explicit "create version" step no longer exists from the caller's
-    # perspective. A product with no version yet has nothing to roll
-    # forward (its first version is still created explicitly, once a Plan
-    # exists to put in it).
-    if ProductVersion.objects.filter(product=product).exclude(status=VersionedConfigStatus.RETIRED.value).exists():
+    # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 2: an edit to a Product that
+    # actually changes name/description rolls its version forward
+    # automatically — the explicit "create version" step no longer exists
+    # from the caller's perspective for that case. A product with no
+    # version yet has nothing to roll forward (its first version is still
+    # created explicitly, once a Plan exists to put in it). A status-only
+    # edit (or a PUT that resends the same name/description) must NOT
+    # trigger a version rollover — Product Owner requirement: creating a
+    # new Plan is a completely separate action from creating a new
+    # ProductVersion, and only name/description changes justify a new one.
+    if content_changed and ProductVersion.objects.filter(product=product).exclude(
+        status=VersionedConfigStatus.RETIRED.value
+    ).exists():
         create_next_version(product=product)
 
     return product
@@ -228,13 +247,31 @@ def create_product_version(*, product: Product, effective_from: date) -> Product
     return version
 
 
-def create_plan(*, product_version: ProductVersion, code: str, name: str, description: str | None) -> Plan:
+def create_plan(
+    *,
+    product_version: ProductVersion,
+    code: str,
+    name: str,
+    description: str | None,
+    complementary_benefit_ids: list[uuid.UUID] | None = None,
+) -> Plan:
+    tenant_id = CurrentTenantProvider.require().value
+    # Resolved *before* the locked transaction below: a bad id here must
+    # 400 (InvalidBenefitSelectionError) without ever touching a row lock.
+    complementary_benefits = resolve_complementary_benefits(
+        tenant_id=tenant_id, benefit_ids=complementary_benefit_ids or []
+    )
+    candidate_coverage_ids = core_benefit_ids(tenant_id) | {b.id for b in complementary_benefits}
+
     # `select_for_update()` closes a race against a concurrent publish of
     # the same version: without it, this check and
     # `PublishProductVersionUseCase`'s conditional UPDATE could each read
     # DRAFT before the other commits, letting a plan attach to a version
     # that ends up PUBLISHED (DOC-004 s7: "publicação é operação explícita"
-    # / immutable once published).
+    # / immutable once published). The same lock also serialises concurrent
+    # create_plan() calls against this version, which is what makes the
+    # duplicate-coverage-set check below race-free (no DB constraint can
+    # express "no two rows share the same computed set").
     try:
         with transaction.atomic():
             locked_version = ProductVersion.objects.select_for_update().get(id=product_version.id)
@@ -243,8 +280,25 @@ def create_plan(*, product_version: ProductVersion, code: str, name: str, descri
                     f"ProductVersion {locked_version.id} is {locked_version.status}; "
                     "plans can only be added to a DRAFT version"
                 )
+
+            # Product Owner requirement: a Plan's coverages are its only
+            # real differentiator, so no two Plans of the same
+            # ProductVersion may end up with the exact same coverage set -
+            # this also covers "at most one basic plan" for free, since an
+            # empty `complementary_benefit_ids` candidate set equals BASE
+            # coverages only, same as any other existing basic plan's.
+            for existing_plan in Plan.objects.filter(product_version=locked_version):
+                existing_ids = set(
+                    PlanBenefit.objects.filter(plan=existing_plan).values_list("benefit_id", flat=True)
+                )
+                if existing_ids == candidate_coverage_ids:
+                    raise DuplicatePlanCoverageSetError(
+                        f"Plan '{existing_plan.code}' already has this exact set of coverages "
+                        f"in product version {locked_version.id}"
+                    )
+
             plan = Plan.objects.create(
-                tenant_id=CurrentTenantProvider.require().value,
+                tenant_id=tenant_id,
                 product_version=locked_version,
                 code=code,
                 name=name,
@@ -259,6 +313,8 @@ def create_plan(*, product_version: ProductVersion, code: str, name: str, descri
     # 3 market-mandatory (BASE) coverages — never something a caller opts
     # into, and never skippable, so it happens here rather than in the view.
     attach_core_benefits(plan=plan)
+    for benefit in complementary_benefits:
+        add_plan_benefit(plan=plan, benefit=benefit)
 
     _audit.record(action="plan.created", entity_type="Plan", entity_id=str(plan.id))
     _outbox.append(

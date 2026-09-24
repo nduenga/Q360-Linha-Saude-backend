@@ -142,11 +142,14 @@ class PricingResponseSerializer(serializers.Serializer):
         return PricingComponentSerializer(obj.components.order_by("component_order"), many=True).data
 
     def get_versions(self, obj) -> dict:
+        def _id(value) -> str | None:
+            return str(value) if value is not None else None
+
         return {
-            "productVersionId": obj.product_version_id,
-            "ratingTableId": obj.rating_table_id,
-            "parameterSetId": obj.parameter_set_id,
-            "ruleVersionId": obj.rule_version_id,
+            "productVersionId": _id(obj.product_version_id),
+            "ratingTableId": _id(obj.rating_table_id),
+            "parameterSetId": _id(obj.parameter_set_id),
+            "ruleVersionId": _id(obj.rule_version_id),
             "roundingPolicyCode": obj.rounding_policy_code,
             "roundingPolicyVersion": obj.rounding_policy_version,
         }

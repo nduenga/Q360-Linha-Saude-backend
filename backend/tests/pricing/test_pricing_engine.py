@@ -104,6 +104,32 @@ def test_calculate_pricing_happy_path(admin_client):
 
 
 @pytest.mark.django_db
+def test_calculate_pricing_with_idempotency_enabled(admin_client, settings):
+    """Regression: `versions` used to hold raw UUIDs, which the idempotency
+    middleware could not persist to its JSONField -> HTTP 500 in any
+    environment with IDEMPOTENCY_REQUIRED=True (the testing settings turn
+    it off, which is why the happy-path test above never caught it)."""
+    plan_ref = _plan(admin_client, product_code="PRICE-IDEMP")
+    param_code = _parameter_set(admin_client, code="PARAMS-IDEMP")
+    table_code = _rating_table(admin_client, code="TABLE-IDEMP")
+    member_id = _member(admin_client)
+    settings.IDEMPOTENCY_REQUIRED = True
+
+    body = _calc_body(plan_ref=plan_ref, param_code=param_code, table_code=table_code, member_id=member_id)
+    first = admin_client.post(
+        "/api/v1/pricing/calculate", body, format="json", HTTP_IDEMPOTENCY_KEY="pricing-idemp-1"
+    )
+    assert first.status_code == 200
+    assert first.data["versions"]["productVersionId"] == plan_ref["productVersionId"]
+
+    replay = admin_client.post(
+        "/api/v1/pricing/calculate", body, format="json", HTTP_IDEMPOTENCY_KEY="pricing-idemp-1"
+    )
+    assert replay.status_code == 200
+    assert replay.json()["pricingRunId"] == str(first.data["pricingRunId"])
+
+
+@pytest.mark.django_db
 def test_same_input_produces_same_result(admin_client):
     plan_ref = _plan(admin_client, product_code="PRICE-2")
     param_code = _parameter_set(admin_client, code="PARAMS-2")

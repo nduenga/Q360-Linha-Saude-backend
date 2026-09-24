@@ -56,8 +56,17 @@ class ProductListCreateView(APIView):
         return [require_scope(Scope.READ)()]
 
     def get(self, request):
+        # `?status=` is a pragmatic V1 addition, not in ART-006 (same
+        # posture as the equivalent filter on PricingParameterSet/
+        # RatingTable/RuleVersion list endpoints) - lets the frontend ask
+        # for ACTIVE only where a product picker must never offer a
+        # DRAFT/INACTIVE/ARCHIVED one (e.g. starting a new quote).
+        queryset = Product.objects.all().order_by("code")
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
         paginator = Q360PageNumberPagination()
-        page = paginator.paginate_queryset(Product.objects.all().order_by("code"), request)
+        page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(ProductSerializer(page, many=True).data)
 
     def post(self, request):
@@ -155,6 +164,7 @@ class PlanListCreateView(APIView):
             code=body.validated_data["code"],
             name=body.validated_data["name"],
             description=body.validated_data["description"],
+            complementary_benefit_ids=body.validated_data["complementaryBenefitIds"],
         )
         return Response(PlanSerializer(plan).data, status=201)
 
