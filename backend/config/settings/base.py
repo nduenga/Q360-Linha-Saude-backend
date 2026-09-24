@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "apps.pricing",
     "apps.quote",
     "apps.customer_portal",
+    "apps.staff_accounts",
     "drf_spectacular",
 ]
 
@@ -104,6 +105,7 @@ MIGRATION_MODULES = {
     "pricing": "apps.pricing.infrastructure.migrations",
     "quote": "apps.quote.infrastructure.migrations",
     "customer_portal": "apps.customer_portal.infrastructure.migrations",
+    "staff_accounts": "apps.staff_accounts.infrastructure.migrations",
 }
 
 ROOT_URLCONF = "config.urls"
@@ -211,6 +213,27 @@ OIDC_ALGORITHMS = [
 # Dev/test-only escape hatch when no OIDC provider is running locally;
 # config/settings/production.py refuses to start if this is set.
 OIDC_STATIC_VERIFICATION_KEY = os.environ.get("OIDC_STATIC_VERIFICATION_KEY", "")
+
+# --- Self-hosted staff identity (apps.staff_accounts) -------------------
+# Replaces an external OIDC IdP (Auth0/Keycloak/...) with a token this
+# backend issues itself (apps/staff_accounts/infrastructure/staff_token.py)
+# — a legitimate PRODUCTION signing key, unlike OIDC_STATIC_VERIFICATION_KEY
+# above. JwtActorAdapter (apps/foundation/infrastructure/jwt_actor_adapter.py)
+# needs no change: it already resolves the verification key generically: an
+# external JWKS if OIDC_JWKS_URL is set, else this key if set, else the dev
+# escape hatch. Dev gets a fallback (same pattern as DJANGO_SECRET_KEY);
+# config/settings/production.py requires this OR a real external IdP to be
+# configured — never neither.
+Q360_JWT_SIGNING_KEY = os.environ.get("Q360_JWT_SIGNING_KEY", "")
+
+Q360_STAFF_ACCESS_TOKEN_TTL_SECONDS = int(os.environ.get("Q360_STAFF_ACCESS_TOKEN_TTL_SECONDS", "1800"))
+Q360_STAFF_REFRESH_TOKEN_TTL_SECONDS = int(os.environ.get("Q360_STAFF_REFRESH_TOKEN_TTL_SECONDS", str(30 * 24 * 3600)))
+# Same lockout policy shape as OD-PORTAL-003 (customer portal), applied to
+# staff logins instead of OTP verification.
+Q360_STAFF_MAX_FAILED_ATTEMPTS = int(os.environ.get("Q360_STAFF_MAX_FAILED_ATTEMPTS", "5"))
+Q360_STAFF_LOCKOUT_MINUTES = int(os.environ.get("Q360_STAFF_LOCKOUT_MINUTES", "30"))
+Q360_STAFF_LOGIN_RATE_LIMIT = int(os.environ.get("Q360_STAFF_LOGIN_RATE_LIMIT", "10"))
+Q360_STAFF_LOGIN_RATE_WINDOW_SECONDS = int(os.environ.get("Q360_STAFF_LOGIN_RATE_WINDOW_SECONDS", "60"))
 
 # --- Customer Portal (ROADMAP_PORTAL_CLIENTE.md Fase 0) ----------------
 # Deliberately isolated from OIDC_*/SECRET_KEY above: a customer-portal

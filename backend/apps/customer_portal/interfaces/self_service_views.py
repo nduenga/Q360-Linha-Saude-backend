@@ -115,7 +115,7 @@ class CustomerPortalEligibilityView(APIView):
             )
             results.append(
                 {
-                    "memberId": quote_member.member_id,
+                    "memberId": str(quote_member.member_id),
                     "relationshipCode": quote_member.member.relationship_code if quote_member.member else None,
                     "decision": evaluation.decision,
                     "messages": evaluation.evidence_json,

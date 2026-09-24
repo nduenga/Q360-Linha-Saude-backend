@@ -45,6 +45,9 @@ _TITLES: dict[str, str] = {
     # Customer portal (ROADMAP_PORTAL_CLIENTE.md) — a new actor/contract
     # outside ART-006's catalog, not a Change Request against it.
     "PORTAL-LOCKED": "Conta temporariamente bloqueada",
+    # apps.staff_accounts — self-hosted staff identity (replaces the
+    # external Auth0 IdP), same posture: a new contract, not a CR.
+    "STAFF-LOCKED": "Conta temporariamente bloqueada",
 }
 
 _CODE_BY_EXCEPTION: dict[type[Exception], str] = {

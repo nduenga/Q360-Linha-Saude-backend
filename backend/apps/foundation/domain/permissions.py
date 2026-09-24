@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from enum import Enum
 
+from apps.foundation.domain.scopes import Scope
+
 
 class Role(str, Enum):
     """DOC-001 s6 — Actores e Personas."""
@@ -94,3 +96,26 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         }
     ),
 }
+
+# Canonical Role -> ART-006 OAuth2 scope mapping (domain/scopes.py). Before
+# apps.staff_accounts existed, this was duplicated ad hoc across 3 users in
+# apps.foundation.interfaces.auth_views.DevLoginView; this is now the one
+# source of truth, used by StaffAccountAuthService when it issues a token.
+# Derived from ROLE_PERMISSIONS above: q360.write/approve/admin/audit map
+# to the write/approve/product-or-pricing-config/audit-read permissions a
+# role actually has; q360.read is granted to every role (DOC-001 s18 - a
+# role with any permission at all can at minimum read).
+ROLE_SCOPES: dict[Role, frozenset[Scope]] = {
+    Role.ADMIN: frozenset({Scope.READ, Scope.WRITE, Scope.ADMIN, Scope.APPROVE, Scope.AUDIT}),
+    Role.PRODUCT_CONFIGURATOR: frozenset({Scope.READ, Scope.WRITE, Scope.ADMIN}),
+    Role.SUBSCRIBER: frozenset({Scope.READ, Scope.WRITE}),
+    Role.APPROVER: frozenset({Scope.READ, Scope.WRITE, Scope.APPROVE, Scope.AUDIT}),
+    Role.AUDITOR: frozenset({Scope.READ, Scope.AUDIT}),
+}
+
+
+def scopes_for_roles(roles: frozenset[Role]) -> frozenset[Scope]:
+    granted: set[Scope] = set()
+    for role in roles:
+        granted |= ROLE_SCOPES.get(role, frozenset())
+    return frozenset(granted)

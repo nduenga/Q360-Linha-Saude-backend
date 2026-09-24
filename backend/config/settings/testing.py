@@ -16,6 +16,16 @@ RATE_LIMIT_REQUESTS = 0
 REST_FRAMEWORK = {**REST_FRAMEWORK, "TEST_REQUEST_DEFAULT_FORMAT": "json"}
 
 CUSTOMER_PORTAL_JWT_SECRET = CUSTOMER_PORTAL_JWT_SECRET or "test-only-portal-secret-32-bytes-min"
+# Existing JwtActorAdapter fixtures (tests/foundation/conftest.py and
+# others) sign with OIDC_STATIC_VERIFICATION_KEY and expect it to be the
+# active key. Q360_JWT_SIGNING_KEY takes priority over it in the adapter
+# (apps/foundation/infrastructure/jwt_actor_adapter.py) when set, and
+# base.py's `load_dotenv` loads backend/.env's real dev value regardless of
+# which settings module is active - blank it here so tests keep getting the
+# static-key behaviour unless a test explicitly opts into the self-hosted
+# key path (apps.staff_accounts) by setting this itself, the same way
+# apps/customer_portal/tests set OIDC_STATIC_VERIFICATION_KEY.
+Q360_JWT_SIGNING_KEY = ""
 # Captures sent emails in django.core.mail.outbox instead of actually
 # sending them — lets tests assert an OTP email was sent without a real
 # SMTP server.

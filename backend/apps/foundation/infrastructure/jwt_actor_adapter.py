@@ -77,6 +77,14 @@ class JwtActorAdapter:
     def _decode(self, bearer_token: str) -> dict[str, Any]:
         if self._jwks_client is not None:
             signing_key = self._jwks_client.get_signing_key_from_jwt(bearer_token).key
+        elif settings.Q360_JWT_SIGNING_KEY:
+            # Self-hosted staff identity (apps.staff_accounts) - a
+            # legitimate PRODUCTION key, unlike OIDC_STATIC_VERIFICATION_KEY
+            # below. Checked before that dev-only key so a developer who
+            # has both set (e.g. leftover from testing the Auth0 path)
+            # always validates against whichever one actually issued the
+            # token in front of them; in practice only one is ever set.
+            signing_key = settings.Q360_JWT_SIGNING_KEY
         elif settings.OIDC_STATIC_VERIFICATION_KEY:
             # Local/dev-only escape hatch for environments without a running
             # OIDC provider. Never set in production (enforced in
@@ -84,7 +92,7 @@ class JwtActorAdapter:
             signing_key = settings.OIDC_STATIC_VERIFICATION_KEY
         else:
             raise InvalidTokenError(
-                "No OIDC_JWKS_URL or OIDC_STATIC_VERIFICATION_KEY configured"
+                "No OIDC_JWKS_URL, Q360_JWT_SIGNING_KEY or OIDC_STATIC_VERIFICATION_KEY configured"
             )
 
         return jwt.decode(

@@ -167,6 +167,18 @@ class IdempotencyMiddleware:
         except Exception as exc:
             if not hasattr(exc, "problem_code"):
                 raise
+            # Bug fix (found while investigating DECISIONS_TAKEN.md#S09-
+            # IDEMPOTENCY-001): this branch returns without ever calling
+            # `self.get_response(request)`, so `ActorContextCleanupMiddleware`
+            # (deeper in MIDDLEWARE, only runs *inside* get_response) never
+            # executes for it - the actor this middleware bound above (line
+            # ~143) would otherwise stay bound into whatever request this
+            # worker thread/task handles next, corrupting that next
+            # request's idempotency tenant scoping (its own `if
+            # CurrentTenantProvider.get() is None` check above would find a
+            # stale non-None value and skip resolving its own token). Same
+            # fix applied to the replay short-circuit below.
+            CurrentActorProvider.bind(None)
             return self._problem_response(
                 code=exc.problem_code,
                 status=exc.http_status,
@@ -174,6 +186,7 @@ class IdempotencyMiddleware:
             )
 
         if not begin_result.started_new and begin_result.replayed_response is not None:
+            CurrentActorProvider.bind(None)
             return JsonResponse(
                 begin_result.replayed_response,
                 status=begin_result.replayed_status or 200,
