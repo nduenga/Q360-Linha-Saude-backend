@@ -42,7 +42,7 @@ def create_product(*, code: str, name: str, description: str | None) -> Product:
     try:
         with transaction.atomic():
             product = Product.objects.create(
-                tenant_id=tenant_id.value, code=code, name=name, description=description
+                tenant_id=tenant_id.value, code=code, name=name, description=description, status="ACTIVE"
             )
     except IntegrityError as exc:
         raise DuplicateCodeError(f"Product code '{code}' already exists for this tenant") from exc
