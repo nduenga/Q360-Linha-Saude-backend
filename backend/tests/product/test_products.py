@@ -211,3 +211,93 @@ def test_two_explicit_open_ended_versions_always_overlap(admin_client):
     )
     assert response.status_code == 400
     assert response.data["code"] == "VALIDATION-400"
+
+
+@pytest.mark.django_db
+def test_delete_product_without_versions(admin_client):
+    product = admin_client.post("/api/v1/products", {"code": "DEL-1", "name": "To delete"}).data
+
+    response = admin_client.delete(f"/api/v1/products/{product['id']}")
+    assert response.status_code == 204
+
+    get_response = admin_client.get(f"/api/v1/products/{product['id']}")
+    assert get_response.status_code == 404
+
+    # A code freed by deletion must be reusable - proves the row is truly
+    # gone, not just hidden by a soft-delete flag.
+    recreated = admin_client.post("/api/v1/products", {"code": "DEL-1", "name": "Recreated"})
+    assert recreated.status_code == 201
+
+
+@pytest.mark.django_db
+def test_delete_product_cascades_through_version_and_plans(admin_client):
+    """Product Owner requirement (2026-09-25): deleting a product must
+    work even when it already has versions and/or plans - not only a
+    fresh, never-versioned one."""
+    product = admin_client.post("/api/v1/products", {"code": "DEL-2", "name": "Has version"}).data
+    version = admin_client.post(
+        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
+    ).data
+    plan = admin_client.post(
+        "/api/v1/plans", {"productVersionId": version["id"], "code": "PLAN", "name": "A plan"}
+    ).data
+
+    response = admin_client.delete(f"/api/v1/products/{product['id']}")
+    assert response.status_code == 204
+
+    assert admin_client.get(f"/api/v1/products/{product['id']}").status_code == 404
+    assert admin_client.get(f"/api/v1/products/{product['id']}/versions").status_code == 404
+    assert admin_client.get(f"/api/v1/plans/{plan['id']}").status_code == 404
+
+
+@pytest.mark.django_db
+def test_cannot_delete_product_once_a_quote_references_it(admin_client):
+    """Still fail-safe underneath: a Quote that already pins one of this
+    product's ProductVersion/Plan rows must never be silently orphaned or
+    corrupted (OD-ANGOLA-004) - the plain FK from `quote` to
+    `product_version`/`plan` (0001_quote_baseline.py) makes Postgres
+    itself refuse the delete; this asserts it surfaces as a clean 409, not
+    a raw 500."""
+    product = admin_client.post("/api/v1/products", {"code": "DEL-4", "name": "Quoted"}).data
+    version = admin_client.post(
+        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
+    ).data
+    plan = admin_client.post(
+        "/api/v1/plans", {"productVersionId": version["id"], "code": "PLAN", "name": "A plan"}
+    ).data
+    admin_client.post(f"/api/v1/product-versions/{version['id']}/publish")
+    proposer = admin_client.post(
+        "/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "Holder"}
+    ).data
+    admin_client.post(
+        "/api/v1/quotes",
+        {
+            "productVersionId": version["id"],
+            "planId": plan["id"],
+            "proposerId": proposer["id"],
+            "effectiveDate": "2026-06-01",
+        },
+        format="json",
+    )
+
+    response = admin_client.delete(f"/api/v1/products/{product['id']}")
+    assert response.status_code == 409
+    assert response.data["code"] == "CONFLICT"
+
+    still_there = admin_client.get(f"/api/v1/products/{product['id']}")
+    assert still_there.status_code == 200
+
+
+@pytest.mark.django_db
+def test_delete_product_requires_product_manage_permission(admin_client, tenant):
+    from tests.product.conftest import make_client
+
+    product = admin_client.post("/api/v1/products", {"code": "DEL-3", "name": "Perm check"}).data
+    subscriber_client = make_client(tenant_id=tenant.id, roles=["SUBSCRIBER"], scope="q360.read q360.write")
+
+    response = subscriber_client.delete(f"/api/v1/products/{product['id']}")
+    assert response.status_code == 403
+    assert response.data["code"] == "AUTH-403"
+
+    still_there = admin_client.get(f"/api/v1/products/{product['id']}")
+    assert still_there.status_code == 200

@@ -121,6 +121,42 @@ def update_product(
     return product
 
 
+def delete_product(*, product: Product) -> None:
+    """Cascades through every ProductVersion/Plan/PlanBenefit the Product
+    owns (Product Owner requirement, 2026-09-25: deleting a product must
+    work even when it already has versions and/or plans, not only a
+    fresh, never-versioned one).
+
+    Still fail-safe underneath: `quote`, `pricing_run` and
+    `eligibility_evaluation` all hold a plain (non-CASCADE) foreign key to
+    `product_version`/`plan` (see their own `0001_*_baseline.py`
+    migrations) - if any of those already reference something this
+    product owns, Postgres raises IntegrityError, the whole delete rolls
+    back untouched, and this surfaces as a 409 instead of a raw 500
+    (OD-ANGOLA-004: a Quote that already exists must never be silently
+    orphaned or corrupted). `select_for_update()` on the Product also
+    closes the same create_plan()-vs-this race as everywhere else.
+    """
+    try:
+        with transaction.atomic():
+            locked_product = Product.objects.select_for_update().get(id=product.id)
+            versions = list(ProductVersion.objects.select_for_update().filter(product=locked_product))
+            plan_ids = list(Plan.objects.filter(product_version__in=versions).values_list("id", flat=True))
+            PlanBenefit.objects.filter(plan_id__in=plan_ids).delete()
+            Plan.objects.filter(id__in=plan_ids).delete()
+            ProductVersion.objects.filter(product=locked_product).delete()
+            Product.objects.filter(id=locked_product.id).delete()
+    except IntegrityError as exc:
+        raise ImmutableVersionError(
+            f"Product {product.id} cannot be deleted: at least one of its versions or plans is already "
+            "referenced by a Quote, PricingRun or eligibility evaluation"
+        ) from exc
+
+    _audit.record(
+        action="product.deleted", entity_type="Product", entity_id=str(product.id), metadata={"code": product.code}
+    )
+
+
 def create_next_version(*, product: Product) -> ProductVersion:
     """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 2 + 3: replaces the old
     explicit "create version" step. Retires the current latest (non-

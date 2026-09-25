@@ -79,10 +79,13 @@ class ProductListCreateView(APIView):
 
 @requires_idempotency
 class ProductDetailView(APIView):
-    """ART-006 `/api/v1/products/{productId}`: `getProduct` (GET), `updateProduct` (PUT)."""
+    """ART-006 `/api/v1/products/{productId}`: `getProduct` (GET),
+    `updateProduct` (PUT). `DELETE` is a pragmatic V1 addition, not in
+    ART-006 - only works while the product has no ProductVersion yet (409
+    CONFLICT otherwise; see product_service.delete_product)."""
 
     def get_permissions(self):
-        if self.request.method == "PUT":
+        if self.request.method in ("PUT", "DELETE"):
             return [require_scope(Scope.WRITE)(), require_permission(Permission.PRODUCT_MANAGE)()]
         return [require_scope(Scope.READ)()]
 
@@ -96,6 +99,11 @@ class ProductDetailView(APIView):
         body.is_valid(raise_exception=True)
         updated = product_service.update_product(product=product, **body.validated_data)
         return Response(ProductSerializer(updated).data)
+
+    def delete(self, request, product_id):
+        product = get_object_or_404(Product, id=product_id)
+        product_service.delete_product(product=product)
+        return Response(status=204)
 
 
 class ProductVersionCreateView(APIView):
