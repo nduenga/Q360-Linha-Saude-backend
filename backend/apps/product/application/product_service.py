@@ -23,7 +23,7 @@ from apps.product.application.benefit_service import (
     core_benefit_ids,
     resolve_complementary_benefits,
 )
-from apps.product.domain.enums import VersionedConfigStatus
+from apps.product.domain.enums import ProductStatus, VersionedConfigStatus
 from apps.product.domain.errors import (
     DuplicateCodeError,
     DuplicatePlanCoverageSetError,
@@ -38,11 +38,24 @@ _outbox = get_outbox_service()
 
 
 def create_product(*, code: str, name: str, description: str | None) -> Product:
+    # Product Owner decision (2026-09-25): a Product is ACTIVE from the
+    # moment it is created - an inactive product has no reason to exist in
+    # the catalogue, so there is no useful DRAFT holding state before a
+    # future product-management page can move it to INACTIVE/ARCHIVED (or
+    # briefly back to DRAFT for rework) via `PUT .../status`. This is the
+    # only thing that changed here: DRAFT/INACTIVE/ARCHIVED remain valid,
+    # reachable ProductStatus values, just never the *creation* default
+    # anymore (model field default stays DRAFT - only this service call
+    # overrides it, so nothing else needs to change).
     tenant_id = CurrentTenantProvider.require()
     try:
         with transaction.atomic():
             product = Product.objects.create(
-                tenant_id=tenant_id.value, code=code, name=name, description=description, status="ACTIVE"
+                tenant_id=tenant_id.value,
+                code=code,
+                name=name,
+                description=description,
+                status=ProductStatus.ACTIVE.value,
             )
     except IntegrityError as exc:
         raise DuplicateCodeError(f"Product code '{code}' already exists for this tenant") from exc
@@ -329,3 +342,50 @@ def create_plan(
         },
     )
     return plan
+
+
+def update_plan(*, plan: Plan, name: str, description: str | None, row_version: int) -> Plan:
+    """Only while the parent ProductVersion is DRAFT - same invariant
+    create_plan() already enforces for adding a Plan in the first place
+    (DOC-004 s7: immutable once published; a PUBLISHED version's plans are
+    exactly what a Quote already priced against). Coverages are edited
+    separately (PlanBenefitListCreateView/PlanBenefitDetailView, still
+    DRAFT-gated the same way via the plan's own version) - this only
+    covers name/description, mirroring update_product()'s optimistic
+    locking via rowVersion."""
+    with transaction.atomic():
+        locked_version = ProductVersion.objects.select_for_update().get(id=plan.product_version_id)
+        if locked_version.status != VersionedConfigStatus.DRAFT.value:
+            raise ImmutableVersionError(
+                f"ProductVersion {locked_version.id} is {locked_version.status}; "
+                "a Plan can only be edited while its version is DRAFT"
+            )
+        updated = Plan.objects.filter(id=plan.id, row_version=row_version).update(
+            name=name, description=description, row_version=row_version + 1
+        )
+    if updated == 0:
+        raise RowVersionMismatchError(
+            f"Plan {plan.id} rowVersion {row_version} does not match the current version"
+        )
+    plan.refresh_from_db()
+    _audit.record(
+        action="plan.updated", entity_type="Plan", entity_id=str(plan.id), metadata={"rowVersion": plan.row_version}
+    )
+    return plan
+
+
+def delete_plan(*, plan: Plan) -> None:
+    """Only while the parent ProductVersion is DRAFT - same reasoning as
+    update_plan(). `plan_benefit` has no `ON DELETE CASCADE`
+    (0001_product_baseline.py), so attached benefits are deleted first,
+    same pattern as delete_pricing_parameter_set/delete_rating_table."""
+    with transaction.atomic():
+        locked_version = ProductVersion.objects.select_for_update().get(id=plan.product_version_id)
+        if locked_version.status != VersionedConfigStatus.DRAFT.value:
+            raise ImmutableVersionError(
+                f"ProductVersion {locked_version.id} is {locked_version.status}; "
+                "a Plan can only be deleted while its version is DRAFT"
+            )
+        PlanBenefit.objects.filter(plan_id=plan.id).delete()
+        Plan.objects.filter(id=plan.id).delete()
+    _audit.record(action="plan.deleted", entity_type="Plan", entity_id=str(plan.id), metadata={"code": plan.code})

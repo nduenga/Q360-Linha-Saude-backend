@@ -64,6 +64,35 @@ def test_create_plan_requires_admin_scope_not_write(tenant):
 
 
 @pytest.mark.django_db
+def test_edit_and_delete_plan_require_product_manage_permission(admin_client, tenant):
+    """Same DOC-001 s18 gate as creating a plan (require_permission(PRODUCT_MANAGE))
+    - SUBSCRIBER can read a plan but not edit/delete it."""
+    product = admin_client.post("/api/v1/products", {"code": "PLAN-PERM", "name": "Plan Perm"}).data
+    version = admin_client.post(
+        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
+    ).data
+    plan = admin_client.post(
+        "/api/v1/plans", {"productVersionId": version["id"], "code": "PERM", "name": "Original"}
+    ).data
+
+    subscriber_client = make_client(tenant_id=tenant.id, roles=["SUBSCRIBER"], scope="q360.read q360.write")
+
+    patch_response = subscriber_client.patch(
+        f"/api/v1/plans/{plan['id']}", {"name": "Hijacked", "rowVersion": plan["rowVersion"]}, format="json"
+    )
+    assert patch_response.status_code == 403
+    assert patch_response.data["code"] == "AUTH-403"
+
+    delete_response = subscriber_client.delete(f"/api/v1/plans/{plan['id']}")
+    assert delete_response.status_code == 403
+    assert delete_response.data["code"] == "AUTH-403"
+
+    still_there = admin_client.get(f"/api/v1/plans/{plan['id']}")
+    assert still_there.status_code == 200
+    assert still_there.data["name"] == "Original"
+
+
+@pytest.mark.django_db
 def test_unauthenticated_request_is_401_not_403():
     from rest_framework.test import APIClient
 

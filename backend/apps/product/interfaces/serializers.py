@@ -93,6 +93,12 @@ class PlanCreateRequestSerializer(serializers.Serializer):
     )
 
 
+class PlanUpdateRequestSerializer(serializers.Serializer):
+    name = serializers.CharField(min_length=1, max_length=200)
+    description = serializers.CharField(allow_null=True, required=False, default=None)
+    rowVersion = serializers.IntegerField(source="row_version", min_value=0)
+
+
 class VersionedConfigHeaderSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     code = serializers.CharField()

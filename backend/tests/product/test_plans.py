@@ -201,3 +201,94 @@ def test_selecting_a_base_benefit_as_complementary_is_rejected(admin_client):
     )
     assert response.status_code == 400
     assert response.data["code"] == "VALIDATION-400"
+
+
+@pytest.mark.django_db
+def test_edit_plan_while_draft(admin_client):
+    _, version = _draft_version(admin_client, product_code="PLAN-EDIT-1")
+    plan = admin_client.post(
+        "/api/v1/plans", {"productVersionId": version["id"], "code": "EDIT", "name": "Original"}
+    ).data
+
+    response = admin_client.patch(
+        f"/api/v1/plans/{plan['id']}",
+        {"name": "Renamed", "description": "now described", "rowVersion": plan["rowVersion"]},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert response.data["name"] == "Renamed"
+    assert response.data["description"] == "now described"
+    assert response.data["rowVersion"] == plan["rowVersion"] + 1
+
+    get_response = admin_client.get(f"/api/v1/plans/{plan['id']}")
+    assert get_response.data["name"] == "Renamed"
+
+
+@pytest.mark.django_db
+def test_edit_plan_stale_row_version_is_version_conflict(admin_client):
+    _, version = _draft_version(admin_client, product_code="PLAN-EDIT-2")
+    plan = admin_client.post(
+        "/api/v1/plans", {"productVersionId": version["id"], "code": "STALE", "name": "Original"}
+    ).data
+
+    response = admin_client.patch(
+        f"/api/v1/plans/{plan['id']}",
+        {"name": "Renamed", "rowVersion": plan["rowVersion"] + 1},
+        format="json",
+    )
+    assert response.status_code == 409
+    assert response.data["code"] == "VERSION-CONFLICT"
+
+
+@pytest.mark.django_db
+def test_cannot_edit_plan_once_version_is_published(admin_client):
+    _, version = _draft_version(admin_client, product_code="PLAN-EDIT-3")
+    plan = admin_client.post(
+        "/api/v1/plans", {"productVersionId": version["id"], "code": "PUB", "name": "Original"}
+    ).data
+    admin_client.post(f"/api/v1/product-versions/{version['id']}/publish")
+
+    response = admin_client.patch(
+        f"/api/v1/plans/{plan['id']}",
+        {"name": "Renamed", "rowVersion": plan["rowVersion"]},
+        format="json",
+    )
+    assert response.status_code == 409
+    assert response.data["code"] == "CONFLICT"
+
+
+@pytest.mark.django_db
+def test_delete_plan_while_draft(admin_client):
+    _, version = _draft_version(admin_client, product_code="PLAN-DEL-1")
+    plan = admin_client.post(
+        "/api/v1/plans", {"productVersionId": version["id"], "code": "DEL", "name": "To delete"}
+    ).data
+
+    response = admin_client.delete(f"/api/v1/plans/{plan['id']}")
+    assert response.status_code == 204
+
+    get_response = admin_client.get(f"/api/v1/plans/{plan['id']}")
+    assert get_response.status_code == 404
+
+    # A deleted Plan's coverages must not be left as orphaned rows blocking
+    # a future Plan with the exact same coverage set from being created.
+    recreated = admin_client.post(
+        "/api/v1/plans", {"productVersionId": version["id"], "code": "DEL-2", "name": "Recreated"}
+    )
+    assert recreated.status_code == 201
+
+
+@pytest.mark.django_db
+def test_cannot_delete_plan_once_version_is_published(admin_client):
+    _, version = _draft_version(admin_client, product_code="PLAN-DEL-2")
+    plan = admin_client.post(
+        "/api/v1/plans", {"productVersionId": version["id"], "code": "PUB", "name": "Original"}
+    ).data
+    admin_client.post(f"/api/v1/product-versions/{version['id']}/publish")
+
+    response = admin_client.delete(f"/api/v1/plans/{plan['id']}")
+    assert response.status_code == 409
+    assert response.data["code"] == "CONFLICT"
+
+    still_there = admin_client.get(f"/api/v1/plans/{plan['id']}")
+    assert still_there.status_code == 200

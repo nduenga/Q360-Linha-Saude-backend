@@ -34,6 +34,7 @@ from apps.product.interfaces.serializers import (
     PlanBenefitSerializer,
     PlanCreateRequestSerializer,
     PlanSerializer,
+    PlanUpdateRequestSerializer,
     PricingParameterSetRequestSerializer,
     PricingParameterSetUpdateRequestSerializer,
     ProductCreateRequestSerializer,
@@ -169,14 +170,35 @@ class PlanListCreateView(APIView):
         return Response(PlanSerializer(plan).data, status=201)
 
 
+@requires_idempotency
 class PlanDetailView(APIView):
-    """ART-006 `/api/v1/plans/{planId}`: `getPlan` (GET)."""
+    """ART-006 `/api/v1/plans/{planId}`: `getPlan` (GET). `PATCH`/`DELETE`
+    are a pragmatic V1 addition, not in ART-006 - same posture and same
+    DRAFT-only gating as PricingParameterSetDetailView/RatingTableDetailView
+    (OD-ANGOLA-006: 'remover' on something whose parent is no longer DRAFT
+    is not possible at all for a Plan - a Plan has no PUBLISHED/RETIRED
+    state of its own to retire into, only its parent ProductVersion does)."""
 
-    permission_classes = [require_scope(Scope.READ)]
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "DELETE"):
+            return [require_scope(Scope.ADMIN)(), require_permission(Permission.PRODUCT_MANAGE)()]
+        return [require_scope(Scope.READ)()]
 
     def get(self, request, plan_id):
         plan = get_object_or_404(Plan, id=plan_id)
         return Response(PlanSerializer(plan).data)
+
+    def patch(self, request, plan_id):
+        plan = get_object_or_404(Plan, id=plan_id)
+        body = PlanUpdateRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        updated = product_service.update_plan(plan=plan, **body.validated_data)
+        return Response(PlanSerializer(updated).data)
+
+    def delete(self, request, plan_id):
+        plan = get_object_or_404(Plan, id=plan_id)
+        product_service.delete_plan(plan=plan)
+        return Response(status=204)
 
 
 @requires_idempotency

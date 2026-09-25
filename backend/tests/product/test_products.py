@@ -13,7 +13,7 @@ def test_create_and_get_product(admin_client):
     body = response.data
     assert set(body.keys()) == {"id", "code", "name", "description", "status", "rowVersion"}
     assert body["code"] == "HEALTH-ESSENTIAL"
-    assert body["status"] == "DRAFT"
+    assert body["status"] == "ACTIVE"
     assert body["rowVersion"] == 0
     assert body["description"] is None
 
@@ -53,23 +53,26 @@ def test_update_product_with_correct_row_version_succeeds(admin_client):
 def test_update_product_status(admin_client):
     """Pragmatic V1 addition, not in ART-006's ProductUpdateRequest - see
     DECISIONS_TAKEN.md#product-status-transition. Publishing a version never
-    implicitly changes this - it is set explicitly."""
+    implicitly changes this - it is set explicitly. A Product is ACTIVE from
+    creation (Product Owner decision, 2026-09-25); this exercises moving it
+    out of the catalogue and back, which a future product-management page
+    will do through this same field."""
     product = admin_client.post("/api/v1/products", {"code": "ACTIVATE-ME", "name": "Activate"}).data
-    assert product["status"] == "DRAFT"
+    assert product["status"] == "ACTIVE"
 
     response = admin_client.put(
         f"/api/v1/products/{product['id']}",
-        {"name": product["name"], "rowVersion": 0, "status": "ACTIVE"},
+        {"name": product["name"], "rowVersion": 0, "status": "ARCHIVED"},
     )
     assert response.status_code == 200
-    assert response.data["status"] == "ACTIVE"
+    assert response.data["status"] == "ARCHIVED"
 
     # Omitting `status` leaves it unchanged (backward compatible).
     unchanged = admin_client.put(
         f"/api/v1/products/{product['id']}",
-        {"name": "Still Active", "rowVersion": 1},
+        {"name": "Still Archived", "rowVersion": 1},
     )
-    assert unchanged.data["status"] == "ACTIVE"
+    assert unchanged.data["status"] == "ARCHIVED"
 
 
 @pytest.mark.django_db
@@ -100,18 +103,22 @@ def test_list_products_returns_page_envelope(admin_client):
 def test_list_products_filtered_by_status(admin_client):
     """`?status=` is a pragmatic V1 addition (not in ART-006, same posture
     as the equivalent filter on PricingParameterSet/RatingTable/
-    RuleVersion) - lets a product picker ask for ACTIVE only."""
-    draft = admin_client.post("/api/v1/products", {"code": "STATUS-DRAFT", "name": "Draft"}).data
-    active = admin_client.post("/api/v1/products", {"code": "STATUS-ACTIVE", "name": "Active"}).data
+    RuleVersion) - lets a product picker ask for ACTIVE only. A Product is
+    ACTIVE from creation (Product Owner decision, 2026-09-25), so getting
+    a non-ACTIVE one to filter out here means explicitly archiving it -
+    exactly what a future product-management page would do."""
+    archived = admin_client.post("/api/v1/products", {"code": "STATUS-ARCHIVED", "name": "Archived"}).data
     admin_client.put(
-        f"/api/v1/products/{active['id']}", {"name": "Active", "rowVersion": 0, "status": "ACTIVE"}
+        f"/api/v1/products/{archived['id']}", {"name": "Archived", "rowVersion": 0, "status": "ARCHIVED"}
     )
+    active = admin_client.post("/api/v1/products", {"code": "STATUS-ACTIVE", "name": "Active"}).data
 
     response = admin_client.get("/api/v1/products?status=ACTIVE")
     assert response.status_code == 200
     codes = {item["code"] for item in response.data["items"]}
     assert codes == {"STATUS-ACTIVE"}
-    assert draft["code"] not in codes
+    assert active["status"] == "ACTIVE"
+    assert archived["code"] not in codes
 
 
 @pytest.mark.django_db
