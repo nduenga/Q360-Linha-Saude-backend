@@ -128,12 +128,25 @@ def create_quote(
             "only a PUBLISHED (current) version can be used to start a new quote"
         )
 
+    # Product Owner decision (2026-09-25): every Quote gets its `COT-N`
+    # reference number immediately on creation, not only once APPROVED.
+    # Previously this was assigned in decide_quote() and doubled as the
+    # OD-ANGOLA-005 "apólice" (policy) number - it now means "cotação"
+    # reference number for the whole lifecycle instead; nothing downstream
+    # depends on it being null pre-approval (the customer portal login,
+    # apps.customer_portal.application.auth_service._resolve_proposer,
+    # already filters on `status="APPROVED"` explicitly, not on
+    # quote_number being set, so a DRAFT quote's number is still unusable
+    # there). Same safe, race-free numbering_service as document numbers.
+    quote_number = next_value(sequence_code="QUOTE_NUMBER", period_key=str(effective_date.year), prefix="COT-")
+
     quote = Quote.objects.create(
         tenant_id=tenant_id.value,
         proposer=proposer,
         product_version=product_version,
         plan=plan,
         status=QuoteStatus.DRAFT.value,
+        quote_number=quote_number,
         effective_date=effective_date,
         valid_until=_default_valid_until(effective_date),
         created_by=actor.actor_id if actor else "unknown",
@@ -558,16 +571,17 @@ def decide_quote(
         if decision == QuoteDecisionType.APPROVE.value:
             quote_fields.update(approved_by=actor_id, approved_at=timezone_now())
             if not quote.quote_number:
-                # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 4 (OD-ANGOLA-005):
-                # "apólice" = quoteNumber of an approved Quote. Sequential
-                # test/demo number via the same safe, race-free
-                # numbering_service already used for document numbers
-                # (DECISIONS_TAKEN.md#S06-QUOTE-001 item 4) — NOT a real
-                # ARSEG policy-number format (ART-011 PROH-008 still
+                # Product Owner decision (2026-09-25): `quote_number` is
+                # now assigned in create_quote() instead, so this only
+                # ever fires as a backfill for a Quote created before that
+                # change. Sequential test/demo number via the same safe,
+                # race-free numbering_service already used for document
+                # numbers (DECISIONS_TAKEN.md#S06-QUOTE-001 item 4) — NOT a
+                # real ARSEG policy-number format (ART-011 PROH-008 still
                 # prohibits inventing one), just enough of a stable,
                 # unique identifier for the lookup-by-number flow to work.
                 quote_fields["quote_number"] = next_value(
-                    sequence_code="QUOTE_NUMBER", period_key=str(quote.effective_date.year)
+                    sequence_code="QUOTE_NUMBER", period_key=str(quote.effective_date.year), prefix="COT-"
                 )
         elif decision == QuoteDecisionType.REJECT.value:
             quote_fields.update(rejected_by=actor_id, rejected_at=timezone_now())
