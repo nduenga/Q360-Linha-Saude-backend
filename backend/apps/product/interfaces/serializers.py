@@ -51,27 +51,12 @@ class ProductUpdateRequestSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=[s.value for s in ProductStatus], required=False, default=None)
 
 
-class ProductVersionSerializer(serializers.Serializer):
+class PlanSerializer(serializers.Serializer):
+    """DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): `productId` replaces
+    `productVersionId` — a Plan belongs directly to a Product now."""
+
     id = serializers.UUIDField()
     productId = serializers.UUIDField(source="product_id")
-    versionNo = serializers.IntegerField(source="version_no", min_value=1)
-    effectiveFrom = serializers.DateField(source="effective_from")
-    effectiveTo = serializers.DateField(source="effective_to", allow_null=True)
-    status = serializers.ChoiceField(choices=[s.value for s in VersionedConfigStatus])
-    checksum = serializers.CharField(allow_null=True)
-
-
-class ProductVersionCreateRequestSerializer(serializers.Serializer):
-    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 3: a product/version is never
-    given an expiry — `effectiveTo` is deliberately not a field here
-    anymore (previously optional and always None in practice)."""
-
-    effectiveFrom = serializers.DateField()
-
-
-class PlanSerializer(serializers.Serializer):
-    id = serializers.UUIDField()
-    productVersionId = serializers.UUIDField(source="product_version_id")
     code = serializers.CharField(max_length=60)
     name = serializers.CharField(max_length=200)
     description = serializers.CharField(allow_null=True)
@@ -80,7 +65,7 @@ class PlanSerializer(serializers.Serializer):
 
 
 class PlanCreateRequestSerializer(serializers.Serializer):
-    productVersionId = serializers.UUIDField()
+    productId = serializers.UUIDField()
     code = serializers.CharField(min_length=1, max_length=60)
     name = serializers.CharField(min_length=1, max_length=200)
     description = serializers.CharField(allow_null=True, required=False, default=None)

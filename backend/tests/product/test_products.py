@@ -267,7 +267,14 @@ def test_cannot_delete_product_once_a_quote_references_it(admin_client):
     ).data
     admin_client.post(f"/api/v1/product-versions/{version['id']}/publish")
     proposer = admin_client.post(
-        "/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "Holder"}
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Holder",
+            "registrationNumber": "123456789LA042",
+            "email": "holder@example.com",
+            "phone": "+244900000000",
+        },
     ).data
     admin_client.post(
         "/api/v1/quotes",

@@ -58,7 +58,16 @@ def _rating_table(client, *, code: str) -> str:
 
 
 def _member(client) -> str:
-    proposer = client.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "Holder"}).data
+    proposer = client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Holder",
+            "registrationNumber": "123456789LA042",
+            "email": "holder@example.com",
+            "phone": "+244900000000",
+        },
+    ).data
     member = client.post(
         "/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR"}
     ).data

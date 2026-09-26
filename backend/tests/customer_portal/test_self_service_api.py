@@ -16,7 +16,13 @@ _EMAIL = "cliente@example.com"
 def _setup_quote_with_member(admin_client, *, quote_number: str, registration_number: str) -> dict:
     proposer = admin_client.post(
         "/api/v1/proposers",
-        {"proposerType": "INDIVIDUAL", "displayName": "Cliente Teste", "registrationNumber": registration_number},
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Cliente Teste",
+            "registrationNumber": registration_number,
+            "email": _EMAIL,
+            "phone": "+244900000000",
+        },
     ).data
     product = admin_client.post(
         "/api/v1/products", {"code": f"PORTAL-{quote_number}", "name": "Portal Product"}

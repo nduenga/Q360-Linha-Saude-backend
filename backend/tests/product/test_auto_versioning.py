@@ -79,7 +79,14 @@ def test_old_plan_and_quote_still_readable_after_version_retired(admin_client):
     already references it."""
     refs = _product_with_plan_and_benefit(admin_client, code="AUTOV-3")
     proposer_id = admin_client.post(
-        "/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "Holder"}
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Holder",
+            "registrationNumber": "123456789LA042",
+            "email": "holder@example.com",
+            "phone": "+244900000000",
+        },
     ).data["id"]
     quote = admin_client.post(
         "/api/v1/quotes",

@@ -5,8 +5,9 @@ from apps.foundation.domain.problem import DomainProblem
 
 
 class ReferencedEntityNotFoundError(DomainProblem):
-    """A referenced `proposerId`/`productVersionId`/`planId`/`memberId` does
-    not resolve to a real row for this tenant. None of the Quote endpoints'
+    """A referenced `proposerId`/`planId`/`memberId` does not resolve to a
+    real row for this tenant (or, for `createQuote`, the plan is not
+    ACTIVE — DECISIONS_TAKEN.md#S09-POLICY-001). None of the Quote endpoints'
     ART-006 response sets include a 400 that maps this specifically, but
     `createQuote`/`addQuoteMember` do declare 400 (BadRequest) — same
     reasoning as apps.eligibility/apps.pricing's own

@@ -21,7 +21,9 @@ def create_proposer(
     proposer_type: str,
     display_name: str,
     external_reference: str | None,
-    registration_number: str | None,
+    registration_number: str,
+    email: str,
+    phone: str,
     attributes: dict[str, Any] | None,
 ) -> Proposer:
     tenant_id = CurrentTenantProvider.require()
@@ -33,6 +35,8 @@ def create_proposer(
                 display_name=display_name,
                 external_reference=external_reference,
                 registration_number=registration_number,
+                email=email,
+                phone=phone,
                 attributes_json=attributes or {},
             )
     except IntegrityError as exc:
@@ -59,13 +63,17 @@ def update_proposer(
     *,
     proposer: Proposer,
     display_name: str,
-    registration_number: str | None,
+    registration_number: str,
+    email: str,
+    phone: str,
     attributes: dict[str, Any] | None,
     row_version: int,
 ) -> Proposer:
     updated = Proposer.objects.filter(id=proposer.id, row_version=row_version).update(
         display_name=display_name,
         registration_number=registration_number,
+        email=email,
+        phone=phone,
         attributes_json=attributes or {},
         row_version=row_version + 1,
     )

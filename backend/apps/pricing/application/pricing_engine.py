@@ -55,7 +55,7 @@ from apps.pricing.infrastructure.models import PricingComponent, PricingRun, Pri
 from apps.pricing.infrastructure.parameter_repository import resolve_decimal_parameter, resolve_pricing_parameter_set
 from apps.pricing.infrastructure.rule_repository import parse_pricing_config, resolve_pricing_rule_version
 from apps.pricing.application.rating_table_service import resolve_factor, resolve_rating_table
-from apps.product.infrastructure.models import Plan, ProductVersion
+from apps.product.infrastructure.models import Plan
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
@@ -65,7 +65,6 @@ _BASE_PREMIUM_PARAMETER_CODE = "BASE_PREMIUM"
 
 def calculate_pricing(
     *,
-    product_version_id: uuid.UUID,
     plan_id: uuid.UUID,
     effective_date: datetime.date,
     member_ids: list[uuid.UUID],
@@ -73,7 +72,6 @@ def calculate_pricing(
     correlation_id: str | None,
 ) -> PricingRun:
     request_snapshot = {
-        "productVersionId": str(product_version_id),
         "planId": str(plan_id),
         "effectiveDate": effective_date.isoformat(),
         "memberIds": [str(m) for m in member_ids],
@@ -96,7 +94,7 @@ def create_pricing_scenario(
     actor = CurrentActorProvider.get()
 
     merged_snapshot = dict(base_pricing_run.input_snapshot_json)
-    for key in ("productVersionId", "planId", "effectiveDate", "memberIds"):
+    for key in ("planId", "effectiveDate", "memberIds"):
         if key in overrides:
             merged_snapshot[key] = overrides[key]
     if "context" in overrides and isinstance(overrides["context"], dict):
@@ -144,7 +142,6 @@ def get_pricing_run(pricing_run_id: uuid.UUID) -> PricingRun | None:
 def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) -> PricingRun:
     tenant_id = CurrentTenantProvider.require()
 
-    product_version_id = uuid.UUID(str(request_snapshot["productVersionId"]))
     plan_id = uuid.UUID(str(request_snapshot["planId"]))
     effective_date = datetime.date.fromisoformat(str(request_snapshot["effectiveDate"]))
     member_ids = [uuid.UUID(str(m)) for m in request_snapshot["memberIds"]]
@@ -158,10 +155,9 @@ def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) ->
             "(see apps/pricing/application/pricing_engine.py OPEN DECISION)"
         )
 
-    product_version = ProductVersion.objects.filter(id=product_version_id).first()
-    plan = Plan.objects.filter(id=plan_id, product_version_id=product_version_id).first()
-    if product_version is None or plan is None:
-        raise ReferencedEntityNotFoundError("Referenced productVersionId or planId does not exist for this tenant")
+    plan = Plan.objects.filter(id=plan_id).first()
+    if plan is None:
+        raise ReferencedEntityNotFoundError("Referenced planId does not exist for this tenant")
 
     if not member_ids:
         raise ReferencedEntityNotFoundError("memberIds must contain at least one member")
@@ -201,7 +197,6 @@ def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) ->
 
     pricing_run = PricingRun.objects.create(
         tenant_id=tenant_id.value,
-        product_version=product_version,
         plan=plan,
         rating_table=rating_table,
         parameter_set=parameter_set,
@@ -277,7 +272,7 @@ def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) ->
             "pricingRunId": str(pricing_run.id),
             "totalAmount": str(pricing_run.total_amount),
             "currencyCode": pricing_run.currency_code,
-            "productVersionId": str(product_version_id),
+            "productId": str(plan.product_id),
             "planId": str(plan_id),
             "effectiveDate": effective_date.isoformat(),
         },

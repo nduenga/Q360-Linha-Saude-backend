@@ -61,12 +61,14 @@ class QuoteListCreateView(APIView):
         status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
-        # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 4 (OD-ANGOLA-005 resolved:
-        # "apólice" = quoteNumber of an approved Quote, no new Policy
-        # entity): a pragmatic filter, not in ART-006, so a caller (e.g.
-        # the eligibility lookup-by-policy screen) can resolve every field
-        # it needs (productVersionId/planId/proposerId/effectiveDate) from
-        # a single number instead of asking for each piece separately.
+        # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 4 (OD-ANGOLA-005) is
+        # SUPERSEDED by DECISIONS_TAKEN.md#S09-POLICY-001 (2026-09-26):
+        # "apólice" is no longer the quoteNumber of an approved Quote — a
+        # real `Policy` entity (apps.policy) now exists, created only on
+        # signature (ROADMAP_APOLICES.md Fases 2-4). This filter is kept
+        # as a pragmatic lookup for the *quote* itself (still useful for
+        # underwriting/backoffice screens that need to resolve a quote's
+        # full context from its number), never as a policy lookup.
         quote_number = request.query_params.get("quoteNumber")
         if quote_number:
             queryset = queryset.filter(quote_number=quote_number)
@@ -80,7 +82,6 @@ class QuoteListCreateView(APIView):
         data = body.validated_data
         quote = quote_service.create_quote(
             proposer_id=data["proposerId"],
-            product_version_id=data["productVersionId"],
             plan_id=data["planId"],
             effective_date=data["effectiveDate"],
         )

@@ -27,7 +27,13 @@ class EligibilityEvaluation(TenantScopedModel):
     member = models.ForeignKey(
         InsuredMember, on_delete=models.DO_NOTHING, db_column="member_id", null=True, blank=True
     )
-    product_version = models.ForeignKey(ProductVersion, on_delete=models.DO_NOTHING, db_column="product_version_id")
+    # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): no more ProductVersion —
+    # `plan.product_id` already resolves the product. Kept nullable only
+    # for pre-existing rows (apps.eligibility 0003_product_version_optional);
+    # never written by new code.
+    product_version = models.ForeignKey(
+        ProductVersion, on_delete=models.DO_NOTHING, db_column="product_version_id", null=True, blank=True
+    )
     plan = models.ForeignKey(Plan, on_delete=models.DO_NOTHING, db_column="plan_id")
     rule_version = models.ForeignKey(
         RuleVersion, on_delete=models.DO_NOTHING, db_column="rule_version_id", null=True, blank=True

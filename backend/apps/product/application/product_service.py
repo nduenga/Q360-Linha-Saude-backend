@@ -1,20 +1,30 @@
-"""Product/ProductVersion/Plan orchestration (Q360-S2-01, S2-02).
+"""Product/Plan orchestration (Q360-S2-01, S2-02).
+
+DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26): ProductVersion is
+retired from the platform — a Plan belongs directly to a Product, and a
+Plan's own `status` (ACTIVE/INACTIVE) does the job the version's
+DRAFT/PUBLISHED/RETIRED lifecycle used to do: `ACTIVE` means "can start
+new business", `INACTIVE` means "no longer sold, but still fully readable"
+(existing Quotes/Policies never break — same OD-ANGOLA-004 guarantee as
+before, just expressed one level down). There is no more DRAFT-gating on
+a Plan's coverages: a Plan can be edited at any time, and what a Quote
+actually contracted is protected by its own immutable snapshot
+(apps.quote.application.quote_service._plan_content_snapshot), never by
+the Plan being locked.
 
 Plain functions rather than one-class-per-operation: DOC-004 s7 only names
-a dedicated use case for the operation with a real invariant to protect
-(`PublishProductVersionUseCase`, see use_cases.py) — everyday create/update
-is plumbing, not modelled as a separate class in the source document.
+a dedicated use case for the operation with a real invariant to protect —
+everyday create/update is plumbing, not modelled as a separate class in
+the source document.
 """
 from __future__ import annotations
 
 import uuid
-from datetime import date
 
 from django.db import IntegrityError, transaction
-from django.utils import timezone
 
 from apps.foundation.application.audit_service import AuditService
-from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
+from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.product.application.benefit_service import (
@@ -23,15 +33,14 @@ from apps.product.application.benefit_service import (
     core_benefit_ids,
     resolve_complementary_benefits,
 )
-from apps.product.domain.enums import ProductStatus, VersionedConfigStatus
+from apps.product.domain.enums import PlanStatus, ProductStatus
 from apps.product.domain.errors import (
     DuplicateCodeError,
     DuplicatePlanCoverageSetError,
-    EffectiveDateOverlapError,
     ImmutableVersionError,
     RowVersionMismatchError,
 )
-from apps.product.infrastructure.models import Plan, PlanBenefit, Product, ProductVersion
+from apps.product.infrastructure.models import Plan, PlanBenefit, Product
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
@@ -75,18 +84,14 @@ def update_product(
     # `status` is a pragmatic V1 addition, not in ART-006's
     # ProductUpdateRequest (see OPEN_DECISIONS.md#S04-LISTING-GAPS-001/
     # DECISIONS_TAKEN.md#product-status-transition): the contract has no
-    # documented way to move a Product out of DRAFT at all, and ART-011's
-    # own seed data keeps its demo product in DRAFT forever by design
-    # (CHK-008 "Draft-only commercial shells") — publishing a
-    # ProductVersion never implicitly activates the parent Product, those
-    # are two independent lifecycle fields (ART-005). Optional and
+    # documented way to move a Product out of DRAFT at all. Optional and
     # backward-compatible: omitted, behaviour is unchanged.
-    # Captured before the UPDATE below overwrites them - see the
-    # content_changed check further down (Product Owner requirement: a new
-    # ProductVersion only rolls forward when name/description actually
-    # change, never for e.g. a status-only edit).
-    content_changed = product.name != name or product.description != description
-
+    #
+    # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): editing name/description
+    # no longer rolls a ProductVersion forward — there is nothing to roll.
+    # The Product row is simply updated in place; its Plans are untouched
+    # and immediately reflect the new Product name/description on their
+    # next read (they reference the Product directly now).
     fields = {"name": name, "description": description, "row_version": row_version + 1}
     if status is not None:
         fields["status"] = status
@@ -102,53 +107,32 @@ def update_product(
         entity_id=str(product.id),
         metadata={"rowVersion": product.row_version},
     )
-
-    # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 2: an edit to a Product that
-    # actually changes name/description rolls its version forward
-    # automatically — the explicit "create version" step no longer exists
-    # from the caller's perspective for that case. A product with no
-    # version yet has nothing to roll forward (its first version is still
-    # created explicitly, once a Plan exists to put in it). A status-only
-    # edit (or a PUT that resends the same name/description) must NOT
-    # trigger a version rollover — Product Owner requirement: creating a
-    # new Plan is a completely separate action from creating a new
-    # ProductVersion, and only name/description changes justify a new one.
-    if content_changed and ProductVersion.objects.filter(product=product).exclude(
-        status=VersionedConfigStatus.RETIRED.value
-    ).exists():
-        create_next_version(product=product)
-
     return product
 
 
 def delete_product(*, product: Product) -> None:
-    """Cascades through every ProductVersion/Plan/PlanBenefit the Product
-    owns (Product Owner requirement, 2026-09-25: deleting a product must
-    work even when it already has versions and/or plans, not only a
-    fresh, never-versioned one).
+    """Cascades through every Plan/PlanBenefit the Product owns.
 
     Still fail-safe underneath: `quote`, `pricing_run` and
     `eligibility_evaluation` all hold a plain (non-CASCADE) foreign key to
-    `product_version`/`plan` (see their own `0001_*_baseline.py`
-    migrations) - if any of those already reference something this
-    product owns, Postgres raises IntegrityError, the whole delete rolls
-    back untouched, and this surfaces as a 409 instead of a raw 500
-    (OD-ANGOLA-004: a Quote that already exists must never be silently
-    orphaned or corrupted). `select_for_update()` on the Product also
-    closes the same create_plan()-vs-this race as everywhere else.
+    `plan` (see their own `0001_*_baseline.py` migrations) - if any of
+    those already reference a Plan this product owns, Postgres raises
+    IntegrityError, the whole delete rolls back untouched, and this
+    surfaces as a 409 instead of a raw 500 (OD-ANGOLA-004: a Quote that
+    already exists must never be silently orphaned or corrupted).
+    `select_for_update()` on the Product also closes the same
+    create_plan()-vs-this race as everywhere else.
     """
     try:
         with transaction.atomic():
             locked_product = Product.objects.select_for_update().get(id=product.id)
-            versions = list(ProductVersion.objects.select_for_update().filter(product=locked_product))
-            plan_ids = list(Plan.objects.filter(product_version__in=versions).values_list("id", flat=True))
+            plan_ids = list(Plan.objects.filter(product=locked_product).values_list("id", flat=True))
             PlanBenefit.objects.filter(plan_id__in=plan_ids).delete()
             Plan.objects.filter(id__in=plan_ids).delete()
-            ProductVersion.objects.filter(product=locked_product).delete()
             Product.objects.filter(id=locked_product.id).delete()
     except IntegrityError as exc:
         raise ImmutableVersionError(
-            f"Product {product.id} cannot be deleted: at least one of its versions or plans is already "
+            f"Product {product.id} cannot be deleted: at least one of its plans is already "
             "referenced by a Quote, PricingRun or eligibility evaluation"
         ) from exc
 
@@ -157,148 +141,9 @@ def delete_product(*, product: Product) -> None:
     )
 
 
-def create_next_version(*, product: Product) -> ProductVersion:
-    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 2 + 3: replaces the old
-    explicit "create version" step. Retires the current latest (non-
-    RETIRED) version, creates the next one effective today with no end
-    date (Épico 3: a product is never given an expiry), copies every Plan
-    and its PlanBenefit rows across unchanged, and publishes it
-    immediately (OD-ANGOLA-003 resolved as auto-publish: a single "edit
-    product" action should not require a separate manual publish step).
-
-    Existing Quotes/PricingRuns are unaffected: they pin a specific
-    ProductVersion by id, and retiring a version never deletes it or the
-    rows that reference it (OD-ANGOLA-004).
-    """
-    with transaction.atomic():
-        locked_product = Product.objects.select_for_update().get(id=product.id)
-        previous = (
-            ProductVersion.objects.select_for_update()
-            .filter(product=locked_product)
-            .exclude(status=VersionedConfigStatus.RETIRED.value)
-            .order_by("-version_no")
-            .first()
-        )
-        today = timezone.now().date()
-        next_version_no = (previous.version_no if previous else 0) + 1
-        actor = CurrentActorProvider.get()
-
-        if previous is not None:
-            ProductVersion.objects.filter(id=previous.id).update(
-                status=VersionedConfigStatus.RETIRED.value, effective_to=today
-            )
-
-        version = ProductVersion.objects.create(
-            tenant_id=CurrentTenantProvider.require().value,
-            product=locked_product,
-            version_no=next_version_no,
-            effective_from=today,
-            effective_to=None,
-            status=VersionedConfigStatus.PUBLISHED.value,
-            published_at=timezone.now(),
-            published_by=actor.actor_id if actor else None,
-        )
-
-        if previous is not None:
-            for plan in previous.plans.all():
-                new_plan = Plan.objects.create(
-                    tenant_id=version.tenant_id,
-                    product_version=version,
-                    code=plan.code,
-                    name=plan.name,
-                    description=plan.description,
-                )
-                for plan_benefit in plan.plan_benefits.all():
-                    PlanBenefit.objects.create(
-                        tenant_id=version.tenant_id,
-                        plan=new_plan,
-                        benefit=plan_benefit.benefit,
-                        configuration_json=plan_benefit.configuration_json,
-                    )
-
-    _audit.record(
-        action="product_version.created",
-        entity_type="ProductVersion",
-        entity_id=str(version.id),
-        metadata={"productId": str(product.id), "versionNo": version.version_no, "auto": True},
-    )
-    _outbox.append(
-        aggregate_type="ProductVersion",
-        aggregate_id=str(version.id),
-        event_type="PRODUCT.VERSION.PUBLISHED",
-        payload={
-            "productVersionId": str(version.id),
-            "productId": str(product.id),
-            "versionNo": version.version_no,
-            "publishedAt": version.published_at.isoformat() if version.published_at else None,
-            "publishedBy": version.published_by,
-        },
-    )
-    return version
-
-
-def _versions_overlap(
-    a_from: date, a_to: date | None, b_from: date, b_to: date | None
-) -> bool:
-    # Half-open interval overlap test; a missing "to" means "open-ended".
-    a_end = a_to if a_to is not None else date.max
-    b_end = b_to if b_to is not None else date.max
-    return a_from <= b_end and b_from <= a_end
-
-
-def create_product_version(*, product: Product, effective_from: date) -> ProductVersion:
-    # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 3: a ProductVersion is never
-    # given an expiry — `effective_to` is always None, so the only way an
-    # existing version stops being current is being RETIRED (see
-    # create_next_version below, the normal path once a product already
-    # has a version). This function remains for a product's very first
-    # version, before there is anything to roll forward from.
-    #
-    # DOC-004 s7 invariant: "vigências incompatíveis não se sobrepõem",
-    # checked against every non-RETIRED version of the same product (DRAFT
-    # included) — see domain/errors.py EffectiveDateOverlapError docstring
-    # for why this is enforced at create time rather than publish time.
-    #
-    # The overlap check AND the version_no assignment both read the
-    # product's existing versions, so both must happen after acquiring
-    # `select_for_update()` on the parent Product row: that serialises
-    # concurrent `create_product_version` calls for the same product,
-    # closing a TOCTOU race where two overlapping/duplicate-version_no
-    # versions could otherwise both pass their check before either commits.
-    with transaction.atomic():
-        locked_product = Product.objects.select_for_update().get(id=product.id)
-        existing = ProductVersion.objects.filter(product=locked_product).exclude(
-            status=VersionedConfigStatus.RETIRED.value
-        )
-        for other in existing:
-            if _versions_overlap(effective_from, None, other.effective_from, other.effective_to):
-                raise EffectiveDateOverlapError(
-                    f"Effective range overlaps existing version {other.version_no} of product {product.id}"
-                )
-
-        next_version_no = (
-            existing.order_by("-version_no").values_list("version_no", flat=True).first() or 0
-        ) + 1
-        version = ProductVersion.objects.create(
-            tenant_id=CurrentTenantProvider.require().value,
-            product=locked_product,
-            version_no=next_version_no,
-            effective_from=effective_from,
-            effective_to=None,
-        )
-
-    _audit.record(
-        action="product_version.created",
-        entity_type="ProductVersion",
-        entity_id=str(version.id),
-        metadata={"productId": str(product.id), "versionNo": version.version_no},
-    )
-    return version
-
-
 def create_plan(
     *,
-    product_version: ProductVersion,
+    product: Product,
     code: str,
     name: str,
     description: str | None,
@@ -312,55 +157,47 @@ def create_plan(
     )
     candidate_coverage_ids = core_benefit_ids(tenant_id) | {b.id for b in complementary_benefits}
 
-    # `select_for_update()` closes a race against a concurrent publish of
-    # the same version: without it, this check and
-    # `PublishProductVersionUseCase`'s conditional UPDATE could each read
-    # DRAFT before the other commits, letting a plan attach to a version
-    # that ends up PUBLISHED (DOC-004 s7: "publicação é operação explícita"
-    # / immutable once published). The same lock also serialises concurrent
-    # create_plan() calls against this version, which is what makes the
-    # duplicate-coverage-set check below race-free (no DB constraint can
-    # express "no two rows share the same computed set").
+    # `select_for_update()` serialises concurrent create_plan() calls
+    # against this product, which is what makes the duplicate-coverage-set
+    # check below race-free (no DB constraint can express "no two rows
+    # share the same computed set").
     try:
         with transaction.atomic():
-            locked_version = ProductVersion.objects.select_for_update().get(id=product_version.id)
-            if locked_version.status != VersionedConfigStatus.DRAFT.value:
-                raise ImmutableVersionError(
-                    f"ProductVersion {locked_version.id} is {locked_version.status}; "
-                    "plans can only be added to a DRAFT version"
-                )
+            locked_product = Product.objects.select_for_update().get(id=product.id)
 
             # Product Owner requirement: a Plan's coverages are its only
-            # real differentiator, so no two Plans of the same
-            # ProductVersion may end up with the exact same coverage set -
-            # this also covers "at most one basic plan" for free, since an
-            # empty `complementary_benefit_ids` candidate set equals BASE
+            # real differentiator, so no two Plans of the same Product may
+            # end up with the exact same coverage set - this also covers
+            # "at most one basic plan" for free, since an empty
+            # `complementary_benefit_ids` candidate set equals BASE
             # coverages only, same as any other existing basic plan's.
-            for existing_plan in Plan.objects.filter(product_version=locked_version):
+            for existing_plan in Plan.objects.filter(product=locked_product):
                 existing_ids = set(
                     PlanBenefit.objects.filter(plan=existing_plan).values_list("benefit_id", flat=True)
                 )
                 if existing_ids == candidate_coverage_ids:
                     raise DuplicatePlanCoverageSetError(
                         f"Plan '{existing_plan.code}' already has this exact set of coverages "
-                        f"in product version {locked_version.id}"
+                        f"in product {locked_product.id}"
                     )
 
             plan = Plan.objects.create(
                 tenant_id=tenant_id,
-                product_version=locked_version,
+                product=locked_product,
                 code=code,
                 name=name,
                 description=description,
+                status=PlanStatus.ACTIVE.value,
             )
     except IntegrityError as exc:
-        raise DuplicateCodeError(
-            f"Plan code '{code}' already exists for product version {product_version.id}"
-        ) from exc
+        raise DuplicateCodeError(f"Plan code '{code}' already exists for product {product.id}") from exc
 
     # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1: every Plan always carries the
     # 3 market-mandatory (BASE) coverages — never something a caller opts
     # into, and never skippable, so it happens here rather than in the view.
+    # (benefit_service.remove_plan_benefit refuses to ever detach one, so
+    # this invariant holds for the Plan's whole lifetime with no further
+    # check needed at any other transition.)
     attach_core_benefits(plan=plan)
     for benefit in complementary_benefits:
         add_plan_benefit(plan=plan, benefit=benefit)
@@ -372,7 +209,7 @@ def create_plan(
         event_type="PLAN.CREATED",
         payload={
             "planId": str(plan.id),
-            "productVersionId": str(product_version.id),
+            "productId": str(product.id),
             "code": plan.code,
             "name": plan.name,
         },
@@ -381,24 +218,16 @@ def create_plan(
 
 
 def update_plan(*, plan: Plan, name: str, description: str | None, row_version: int) -> Plan:
-    """Only while the parent ProductVersion is DRAFT - same invariant
-    create_plan() already enforces for adding a Plan in the first place
-    (DOC-004 s7: immutable once published; a PUBLISHED version's plans are
-    exactly what a Quote already priced against). Coverages are edited
-    separately (PlanBenefitListCreateView/PlanBenefitDetailView, still
-    DRAFT-gated the same way via the plan's own version) - this only
-    covers name/description, mirroring update_product()'s optimistic
-    locking via rowVersion."""
-    with transaction.atomic():
-        locked_version = ProductVersion.objects.select_for_update().get(id=plan.product_version_id)
-        if locked_version.status != VersionedConfigStatus.DRAFT.value:
-            raise ImmutableVersionError(
-                f"ProductVersion {locked_version.id} is {locked_version.status}; "
-                "a Plan can only be edited while its version is DRAFT"
-            )
-        updated = Plan.objects.filter(id=plan.id, row_version=row_version).update(
-            name=name, description=description, row_version=row_version + 1
-        )
+    """DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): a Plan can be edited
+    at any time now (no more parent-version DRAFT gate) — what a Quote
+    already contracted is protected by its own immutable content snapshot
+    (apps.quote), never by locking the Plan itself. Coverages are edited
+    separately (PlanBenefitListCreateView/PlanBenefitDetailView) - this
+    only covers name/description, via the same optimistic-locking
+    `rowVersion` pattern as update_product()."""
+    updated = Plan.objects.filter(id=plan.id, row_version=row_version).update(
+        name=name, description=description, row_version=row_version + 1
+    )
     if updated == 0:
         raise RowVersionMismatchError(
             f"Plan {plan.id} rowVersion {row_version} does not match the current version"
@@ -411,17 +240,19 @@ def update_plan(*, plan: Plan, name: str, description: str | None, row_version: 
 
 
 def delete_plan(*, plan: Plan) -> None:
-    """Only while the parent ProductVersion is DRAFT - same reasoning as
-    update_plan(). `plan_benefit` has no `ON DELETE CASCADE`
-    (0001_product_baseline.py), so attached benefits are deleted first,
-    same pattern as delete_pricing_parameter_set/delete_rating_table."""
-    with transaction.atomic():
-        locked_version = ProductVersion.objects.select_for_update().get(id=plan.product_version_id)
-        if locked_version.status != VersionedConfigStatus.DRAFT.value:
-            raise ImmutableVersionError(
-                f"ProductVersion {locked_version.id} is {locked_version.status}; "
-                "a Plan can only be deleted while its version is DRAFT"
-            )
-        PlanBenefit.objects.filter(plan_id=plan.id).delete()
-        Plan.objects.filter(id=plan.id).delete()
+    """`plan_benefit` has no `ON DELETE CASCADE` (0001_product_baseline.py),
+    so attached benefits are deleted first. `quote`/`pricing_run`/
+    `eligibility_evaluation` all hold a plain (non-CASCADE) FK to `plan`,
+    so Postgres raises IntegrityError (surfaced as 409) if any of them
+    already reference this Plan — same protection delete_product() relies
+    on, now the only gate left (no more DRAFT-only restriction)."""
+    try:
+        with transaction.atomic():
+            PlanBenefit.objects.filter(plan_id=plan.id).delete()
+            Plan.objects.filter(id=plan.id).delete()
+    except IntegrityError as exc:
+        raise ImmutableVersionError(
+            f"Plan {plan.id} cannot be deleted: it is already referenced by a Quote, PricingRun or "
+            "eligibility evaluation"
+        ) from exc
     _audit.record(action="plan.deleted", entity_type="Plan", entity_id=str(plan.id), metadata={"code": plan.code})

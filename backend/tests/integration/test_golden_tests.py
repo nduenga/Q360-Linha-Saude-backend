@@ -182,7 +182,14 @@ def test_GT_PRICE_005_base_plus_adjustment_reconciles_exactly(admin_client):
     admin_client.post(f"/api/v1/product-versions/{version['id']}/publish")
 
     proposer_id = admin_client.post(
-        "/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "H"}
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "H",
+            "registrationNumber": "123456789LA042",
+            "email": "h@example.com",
+            "phone": "+244900000000",
+        },
     ).data["id"]
     member_id = admin_client.post(
         "/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}

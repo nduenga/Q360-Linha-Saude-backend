@@ -85,8 +85,19 @@ class ProductVersion(TenantScopedModel):
 class Plan(TenantScopedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26): a Plan
+    # belongs directly to a Product — there is no more ProductVersion in
+    # between. `product_version` is kept only for pre-existing rows
+    # (nullable, apps.product 0002_plan_direct_to_product); no code writes
+    # it any more and it is never read for a decision.
+    product = models.ForeignKey(Product, on_delete=models.DO_NOTHING, db_column="product_id", related_name="plans")
     product_version = models.ForeignKey(
-        ProductVersion, on_delete=models.DO_NOTHING, db_column="product_version_id", related_name="plans"
+        ProductVersion,
+        on_delete=models.DO_NOTHING,
+        db_column="product_version_id",
+        related_name="plans_legacy",
+        null=True,
+        blank=True,
     )
     code = models.CharField(max_length=60)
     name = models.CharField(max_length=200)

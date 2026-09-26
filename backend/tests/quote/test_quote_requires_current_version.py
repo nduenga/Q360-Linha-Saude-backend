@@ -10,7 +10,16 @@ import pytest
 
 
 def _proposer(client) -> str:
-    return client.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "Holder"}).data["id"]
+    return client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Holder",
+            "registrationNumber": "123456789LA042",
+            "email": "holder@example.com",
+            "phone": "+244900000000",
+        },
+    ).data["id"]
 
 
 @pytest.mark.django_db

@@ -41,7 +41,13 @@ class Quote(TenantScopedModel):
     tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
     quote_number = models.CharField(max_length=100, null=True, blank=True)
     proposer = models.ForeignKey(Proposer, on_delete=models.DO_NOTHING, db_column="proposer_id")
-    product_version = models.ForeignKey(ProductVersion, on_delete=models.DO_NOTHING, db_column="product_version_id")
+    # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): no more ProductVersion —
+    # `plan.product_id` already resolves the product. Kept nullable only
+    # for pre-existing rows (apps.quote 0004_product_version_optional);
+    # never written by new code.
+    product_version = models.ForeignKey(
+        ProductVersion, on_delete=models.DO_NOTHING, db_column="product_version_id", null=True, blank=True
+    )
     plan = models.ForeignKey(Plan, on_delete=models.DO_NOTHING, db_column="plan_id")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=QuoteStatus.DRAFT.value)
     effective_date = models.DateField()
@@ -104,7 +110,11 @@ class QuoteSnapshot(TenantScopedModel):
     pricing_run = models.ForeignKey(
         PricingRun, on_delete=models.DO_NOTHING, db_column="pricing_run_id", null=True, blank=True
     )
-    product_version = models.ForeignKey(ProductVersion, on_delete=models.DO_NOTHING, db_column="product_version_id")
+    # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): see Quote.product_version
+    # above — nullable, legacy-only, never written by new code.
+    product_version = models.ForeignKey(
+        ProductVersion, on_delete=models.DO_NOTHING, db_column="product_version_id", null=True, blank=True
+    )
     plan = models.ForeignKey(Plan, on_delete=models.DO_NOTHING, db_column="plan_id")
     snapshot_json = models.JSONField()
     checksum = models.CharField(max_length=128)

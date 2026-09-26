@@ -26,7 +26,16 @@ def _setup_product_plan(client) -> dict:
 
 
 def _setup_member(client, *, date_of_birth: str, relationship_code: str = "TITULAR") -> dict:
-    proposer = client.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "P"}).data
+    proposer = client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "P",
+            "registrationNumber": "123456789LA042",
+            "email": "p@example.com",
+            "phone": "+244900000000",
+        },
+    ).data
     member = client.post(
         "/api/v1/members",
         {"proposerId": proposer["id"], "relationshipCode": relationship_code, "dateOfBirth": date_of_birth},

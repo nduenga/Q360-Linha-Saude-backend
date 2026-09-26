@@ -76,7 +76,13 @@ class PricingRun(TenantScopedModel):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
-    product_version = models.ForeignKey(ProductVersion, on_delete=models.DO_NOTHING, db_column="product_version_id")
+    # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): no more ProductVersion —
+    # `plan.product_id` already resolves the product. Kept nullable only
+    # for pre-existing rows (apps.pricing 0003_product_version_optional);
+    # never written by new code.
+    product_version = models.ForeignKey(
+        ProductVersion, on_delete=models.DO_NOTHING, db_column="product_version_id", null=True, blank=True
+    )
     plan = models.ForeignKey(Plan, on_delete=models.DO_NOTHING, db_column="plan_id")
     rating_table = models.ForeignKey(RatingTable, on_delete=models.DO_NOTHING, db_column="rating_table_id")
     parameter_set = models.ForeignKey(

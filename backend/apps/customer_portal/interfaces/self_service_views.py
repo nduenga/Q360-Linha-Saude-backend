@@ -23,13 +23,8 @@ from apps.customer_portal.interfaces.self_service_serializers import (
 from apps.eligibility.application.use_cases import EvaluateEligibilityUseCase
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.product.application.benefit_service import list_plan_benefits
-from apps.product.interfaces.serializers import (
-    PlanBenefitSerializer,
-    PlanSerializer,
-    ProductSerializer,
-    ProductVersionSerializer,
-)
-from apps.product.infrastructure.models import Plan, ProductVersion
+from apps.product.interfaces.serializers import PlanBenefitSerializer, PlanSerializer, ProductSerializer
+from apps.product.infrastructure.models import Plan
 from apps.quote.infrastructure.models import QuoteMember
 from apps.quote.interfaces.serializers import QuoteSerializer
 
@@ -39,24 +34,23 @@ class CustomerPortalMeView(APIView):
     permission_classes = [IsCustomerPortalActor]
 
     def get(self, request):
+        # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): a Plan resolves its
+        # Product directly (`plan.product_id`) — ProductVersion is legacy/
+        # nullable and no longer has a serializer; `productVersion` in the
+        # response is now always None (kept in the response shape since
+        # the frontend already treats it as nullable and doesn't render
+        # it — see Q360-Saude-Portal-Cliente PortalQuoteEntry).
         quotes = list_my_quotes()
-        product_versions = {
-            pv.id: pv
-            for pv in ProductVersion.objects.select_related("product").filter(
-                id__in=[q.product_version_id for q in quotes]
-            )
-        }
-        plans = {p.id: p for p in Plan.objects.filter(id__in=[q.plan_id for q in quotes])}
+        plans = {p.id: p for p in Plan.objects.select_related("product").filter(id__in=[q.plan_id for q in quotes])}
 
         items = []
         for quote in quotes:
-            product_version = product_versions.get(quote.product_version_id)
             plan = plans.get(quote.plan_id)
             items.append(
                 {
                     "quote": QuoteSerializer(quote).data,
-                    "product": ProductSerializer(product_version.product).data if product_version else None,
-                    "productVersion": ProductVersionSerializer(product_version).data if product_version else None,
+                    "product": ProductSerializer(plan.product).data if plan else None,
+                    "productVersion": None,
                     "plan": PlanSerializer(plan).data if plan else None,
                 }
             )
@@ -107,7 +101,6 @@ class CustomerPortalEligibilityView(APIView):
             evaluation = EvaluateEligibilityUseCase().execute(
                 proposer_id=quote.proposer_id,
                 member_id=quote_member.member_id,
-                product_version_id=quote.product_version_id,
                 plan_id=quote.plan_id,
                 effective_date=quote.effective_date,
                 context={},

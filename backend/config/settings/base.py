@@ -255,6 +255,17 @@ CUSTOMER_PORTAL_LOGIN_RATE_LIMIT = int(os.environ.get("CUSTOMER_PORTAL_LOGIN_RAT
 CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS = int(
     os.environ.get("CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS", "60")
 )
+# Compensating control for request-access now revealing exactly which of
+# quoteNumber/registrationNumber is wrong (Product Owner decision,
+# 2026-09-26 — see apps.customer_portal.domain.errors module docstring).
+# Deliberately much tighter than the pair above, and keyed by IP alone
+# (apps.customer_portal.interfaces.rate_limit.is_ip_rate_limited) - email
+# is attacker-controlled and unverified at this point, so a per-email
+# bucket alone is trivially bypassed by varying it on every request.
+CUSTOMER_PORTAL_LOGIN_RATE_LIMIT_PER_IP = int(os.environ.get("CUSTOMER_PORTAL_LOGIN_RATE_LIMIT_PER_IP", "5"))
+CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS_PER_IP = int(
+    os.environ.get("CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS_PER_IP", "900")
+)
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"

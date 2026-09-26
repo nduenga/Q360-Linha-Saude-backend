@@ -32,8 +32,8 @@ from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositor
 from apps.pricing.application.auto_resolve import resolve_default_parameter_set_code, resolve_default_rating_table_code
 from apps.pricing.application.pricing_engine import calculate_pricing
 from apps.pricing.domain.age_band import compute_age_band
-from apps.product.domain.enums import VersionedConfigStatus
-from apps.product.infrastructure.models import Plan, ProductVersion
+from apps.product.domain.enums import PlanStatus
+from apps.product.infrastructure.models import Plan, PlanBenefit
 from apps.quote.application.numbering_service import next_value
 from apps.quote.domain.enums import (
     QuoteDecisionType,
@@ -77,6 +77,37 @@ _ELIGIBILITY_TO_MEMBER_STATUS = {
 _PRICEABLE_MEMBER_STATUSES = [QuoteMemberStatus.INCLUDED.value, QuoteMemberStatus.REFERRAL.value]
 
 
+def _plan_content_snapshot(plan: Plan) -> dict:
+    """DECISIONS_TAKEN.md#S09-POLICY-001 (ROADMAP_APOLICES.md Fase 1,
+    pré-requisito de PO-APO-6): with ProductVersion retired, a Plan is no
+    longer immutable once "published" — it can be edited at any time
+    (apps.product.application.product_service.update_plan/
+    add_plan_benefit/remove_plan_benefit). Every PRICING/SUBMISSION/
+    APPROVAL snapshot therefore captures the Plan's full content (not just
+    its id), so what a Quote actually contracted stays frozen even if the
+    live Plan changes or is later made INACTIVE — the same historical-
+    correctness guarantee OD-ANGOLA-004 gave via version immutability
+    before this change, now given by the snapshot itself."""
+    benefits = [
+        {
+            "benefitId": str(pb.benefit_id),
+            "code": pb.benefit.code,
+            "name": pb.benefit.name,
+            "category": pb.benefit.benefit_type,
+            "configurationJson": pb.configuration_json,
+        }
+        for pb in PlanBenefit.objects.filter(plan=plan).select_related("benefit").order_by("benefit__code")
+    ]
+    return {
+        "productId": str(plan.product_id),
+        "planId": str(plan.id),
+        "planCode": plan.code,
+        "planName": plan.name,
+        "planStatus": plan.status,
+        "benefits": benefits,
+    }
+
+
 def _default_valid_until(effective_date: datetime.date) -> datetime.date:
     # OPEN DECISION: no approved document fixes the default quote validity
     # period. Configurable via QUOTE_DEFAULT_VALIDITY_DAYS (settings/env),
@@ -102,30 +133,23 @@ def _record_transition(
     )
 
 
-def create_quote(
-    *, proposer_id: uuid.UUID, product_version_id: uuid.UUID, plan_id: uuid.UUID, effective_date: datetime.date
-) -> Quote:
+def create_quote(*, proposer_id: uuid.UUID, plan_id: uuid.UUID, effective_date: datetime.date) -> Quote:
     tenant_id = CurrentTenantProvider.require()
     actor = CurrentActorProvider.get()
 
     proposer = Proposer.objects.filter(id=proposer_id).first()
-    product_version = ProductVersion.objects.filter(id=product_version_id).first()
-    plan = Plan.objects.filter(id=plan_id, product_version_id=product_version_id).first()
-    if proposer is None or product_version is None or plan is None:
+    plan = Plan.objects.filter(id=plan_id).first()
+    if proposer is None or plan is None:
+        raise ReferencedEntityNotFoundError("Referenced proposerId or planId does not exist for this tenant")
+    if plan.status != PlanStatus.ACTIVE.value:
+        # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): reformulation of the
+        # old OD-ANGOLA-009 ("versão antiga nunca inicia negócio novo") now
+        # that there is no ProductVersion — an INACTIVE Plan can never
+        # start new business, but a Quote already created against it keeps
+        # working after it goes INACTIVE (same OD-ANGOLA-004 guarantee,
+        # just expressed on the Plan instead of the version).
         raise ReferencedEntityNotFoundError(
-            "Referenced proposerId, productVersionId or planId does not exist for this tenant "
-            "(or planId does not belong to productVersionId)"
-        )
-    if product_version.status != VersionedConfigStatus.PUBLISHED.value:
-        # OD-002 (ROADMAP_ANGOLA_CUSTOMIZATION.md): once a product has a
-        # newer version, its earlier plans can never start new business
-        # again — DRAFT was never sellable, and RETIRED means a later edit
-        # already superseded it. A Quote already created against a version
-        # keeps working after it is retired (OD-ANGOLA-004, proven by
-        # test_auto_versioning.py) — this only blocks *new* quotes.
-        raise ReferencedEntityNotFoundError(
-            f"ProductVersion {product_version_id} is {product_version.status}; "
-            "only a PUBLISHED (current) version can be used to start a new quote"
+            f"Plan {plan_id} is {plan.status}; only an ACTIVE plan can be used to start a new quote"
         )
 
     # Product Owner decision (2026-09-25): every Quote gets its `COT-N`
@@ -143,7 +167,6 @@ def create_quote(
     quote = Quote.objects.create(
         tenant_id=tenant_id.value,
         proposer=proposer,
-        product_version=product_version,
         plan=plan,
         status=QuoteStatus.DRAFT.value,
         quote_number=quote_number,
@@ -160,7 +183,7 @@ def create_quote(
         payload={
             "quoteId": str(quote.id),
             "proposerId": str(proposer_id),
-            "productVersionId": str(product_version_id),
+            "productId": str(plan.product_id),
             "planId": str(plan_id),
             "effectiveDate": effective_date.isoformat(),
             "status": QuoteStatus.DRAFT.value,
@@ -193,7 +216,6 @@ def add_quote_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str 
     evaluation = EvaluateEligibilityUseCase().execute(
         proposer_id=quote.proposer_id,
         member_id=member.id,
-        product_version_id=quote.product_version_id,
         plan_id=quote.plan_id,
         effective_date=quote.effective_date,
         context={},
@@ -321,7 +343,6 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
         context["ruleVersionCode"] = rule_version
 
     pricing_run = calculate_pricing(
-        product_version_id=quote.product_version_id,
         plan_id=quote.plan_id,
         effective_date=quote.effective_date,
         member_ids=priceable_member_ids,
@@ -331,8 +352,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
 
     actor = CurrentActorProvider.get()
     snapshot_json = {
-        "productVersionId": str(quote.product_version_id),
-        "planId": str(quote.plan_id),
+        "plan": _plan_content_snapshot(quote.plan),
         "effectiveDate": quote.effective_date.isoformat(),
         "memberIds": [str(m) for m in priceable_member_ids],
         "context": context,
@@ -350,7 +370,6 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
         snapshot_no=next_snapshot_no,
         snapshot_type=QuoteSnapshotType.PRICING.value,
         pricing_run=pricing_run,
-        product_version=quote.product_version,
         plan=quote.plan,
         snapshot_json=snapshot_json,
         checksum=checksum,
@@ -423,8 +442,7 @@ def _create_snapshot(*, quote: Quote, snapshot_type: str) -> QuoteSnapshot:
     actor = CurrentActorProvider.get()
     snapshot_json = {
         "status": quote.status,
-        "productVersionId": str(quote.product_version_id),
-        "planId": str(quote.plan_id),
+        "plan": _plan_content_snapshot(quote.plan),
         "effectiveDate": quote.effective_date.isoformat(),
         "latestPricingRunId": str(quote.latest_pricing_run_id) if quote.latest_pricing_run_id else None,
     }
@@ -438,7 +456,6 @@ def _create_snapshot(*, quote: Quote, snapshot_type: str) -> QuoteSnapshot:
         snapshot_no=next_snapshot_no,
         snapshot_type=snapshot_type,
         pricing_run=quote.latest_pricing_run,
-        product_version=quote.product_version,
         plan=quote.plan,
         snapshot_json=snapshot_json,
         checksum=checksum,

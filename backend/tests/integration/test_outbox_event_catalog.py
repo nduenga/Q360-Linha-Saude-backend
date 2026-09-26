@@ -62,7 +62,16 @@ def test_outbox_event_catalog_end_to_end():
     publish_resp = owner.post(f"/api/v1/product-versions/{version['id']}/publish")
     assert publish_resp.status_code == 200
 
-    proposer = owner.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "Holder"}).data
+    proposer = owner.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Holder",
+            "registrationNumber": "123456789LA042",
+            "email": "holder@example.com",
+            "phone": "+244900000000",
+        },
+    ).data
     member = owner.post(
         "/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data

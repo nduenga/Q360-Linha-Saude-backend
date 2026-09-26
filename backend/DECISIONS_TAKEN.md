@@ -420,3 +420,98 @@ não há autoridade actuarial para inventar valores comerciais reais. Todos
 os dados usados em testes/demonstração (`BASE_PREMIUM`, `RatingFactor`,
 `PricingAdjustment`) continuam a ser fixtures técnicas explícitas, nunca
 tarifas Angolanas reais, exactamente como antes desta resolução.
+
+## S09-POLICY-001 — Apólice como contrato separado da cotação; fim das versões de produto (2026-09-26)
+
+**Contexto:** pedido directo do Product Owner (conversa 2026-09-26,
+`ROADMAP_APOLICES.md`) para tratar a apólice como um contrato distinto da
+cotação, com elegibilidade de subscrição (motor `evaluate()`, inalterado)
+separada de elegibilidade de cobertura (nova, `apps.policy`). Um parecer
+jurídico externo, recebido na mesma conversa, apontou 3 desconformidades
+ao desenho inicial — duas confirmadas contra fonte pública, uma (art.
+428.º do Código Comercial) ainda por confirmar pelo jurídico do cliente,
+tratada como prática de mercado configurável entretanto.
+
+**Decisões do Product Owner (PO-APO-1..7), ver `ROADMAP_APOLICES.md` para
+o detalhe completo:**
+
+1. **PO-APO-1**: o que transforma uma cotação em contrato é a
+   **assinatura** do tomador — nunca a aprovação por si só.
+2. **PO-APO-2**: um membro com elegibilidade pendente bloqueia **só o seu
+   próprio registo** na apólice, nunca a emissão.
+3. **PO-APO-3**: a duração do contrato é definida no momento da emissão
+   (não vem do produto nem da cotação).
+4. **PO-APO-5** (substitui a PO-APO-4 original, "sem suspensão", revogada
+   pelo parecer jurídico): o pagamento do prémio é condição de cobertura —
+   Decreto n.º 2/02 de 11/02, art. 17.º (a 1.ª fracção paga-se na data da
+   celebração) e art. 18.º (falta de pagamento dá lugar a suspensão por
+   carta registada com novo prazo, e só depois a resolução — nunca
+   suspensão automática e imediata).
+5. **PO-APO-6**: deixam de existir "versões" de produto na plataforma —
+   só produtos e planos. Ver Fase 1 de `ROADMAP_APOLICES.md` para o
+   racional (o snapshot de aprovação da cotação tinha de passar a guardar
+   o conteúdo integral do plano antes de este deixar de ser imutável por
+   versão, para não abrir uma janela onde editar um plano alterasse
+   retroactivamente o que já foi contratado).
+6. **PO-APO-7**: o mediador (corretor/agente) é validado contra a licença
+   ARSEG antes da emissão — Lei n.º 6/24 de 03/06 (Mediação e Corretagem
+   de Seguros). Não existe API pública da ARSEG; a validação é feita
+   contra um registo interno mantido pelo compliance a partir da lista
+   pública de entidades autorizadas, nunca uma integração inventada
+   (mantém DOC-000 s3 P-08).
+
+**Superseded por esta decisão** (histórico mantido, não apagado):
+- **OD-ANGOLA-005** ("apólice = `Quote.quoteNumber` de uma cotação
+  `APPROVED`", Épico 4 de `ROADMAP_ANGOLA_CUSTOMIZATION.md`): substituída
+  por uma entidade `Policy` real (`apps.policy`, Fase 2+ de
+  `ROADMAP_APOLICES.md`).
+- **Épico 2** (versionamento automático do produto, OD-ANGOLA-003/004) e
+  **Épico 3** (produtos sem data de término, `ProductVersion.effective_to`):
+  substituídos pela Fase 1 de `ROADMAP_APOLICES.md` — `Plan` liga
+  directamente a `Product`, sem `ProductVersion`, com estados
+  `ACTIVE`/`INACTIVE` a fazer o papel que a versão fazia.
+- **OD-ANGOLA-009** ("versão antiga nunca inicia negócio novo"):
+  reformulada como "plano `INACTIVE` nunca inicia negócio novo, mas
+  cotações/apólices existentes continuam válidas" — o mesmo princípio,
+  aplicado ao novo modelo sem versões.
+
+Nenhum valor de negócio (prazos de tolerância de pagamento, taxas de
+comissão, franquias) é inventado nesta decisão — o que a lei angolana
+exige mas não quantifica fica registado como Open Decision em
+`ROADMAP_APOLICES.md` e implementado como configurável.
+
+## S09-PORTAL-002 — request-access deixa de ser sempre 202 silencioso (2026-09-26)
+
+**Contexto:** o desenho original de `ROADMAP_PORTAL_CLIENTE.md` Fase 0
+fazia `POST /customer-portal/{tenant}/auth/request-access` responder
+sempre `202`, mesmo quando `quoteNumber`/`registrationNumber` não
+correspondiam a nada — para nunca confirmar a um chamador não autenticado
+que um número de cotação real existe.
+
+**Decisão do Product Owner (2026-09-26):** passa a responder de forma
+explícita:
+- `404 PORTAL-QUOTE-NOT-FOUND` quando `quoteNumber` não corresponde a
+  nenhuma cotação `APPROVED`;
+- `401 PORTAL-REGISTRATION-MISMATCH` quando `quoteNumber` é real mas
+  `registrationNumber` não corresponde ao tomador dessa cotação.
+
+**Controlo compensatório:** um limite de pedidos **por IP**
+(`apps.customer_portal.interfaces.rate_limit.is_ip_rate_limited`),
+independente do limite por email já existente, porque `email` não é
+verificado antes deste ponto — um chamador pode variar o email em cada
+pedido e contornar um limite só por email. As duas verificações correm
+em conjunto; qualquer uma delas bloqueia o pedido com `429`.
+
+**Efeito:** troca deliberada de sigilo anti-enumeração por feedback mais
+claro ao cliente final — aceite como troca válida dado o controlo
+compensatório acima. Código:
+`apps/customer_portal/domain/errors.py` (`PortalQuoteNotFoundError`,
+`PortalRegistrationMismatchError`), `apps/customer_portal/application/
+auth_service.py` (`_resolve_proposer` levanta em vez de devolver `None`),
+`apps/customer_portal/interfaces/rate_limit.py` (`is_ip_rate_limited`),
+`apps/foundation/interfaces/exception_handler.py` (títulos PT dos 2 novos
+códigos), `config/settings/base.py`
+(`CUSTOMER_PORTAL_LOGIN_RATE_LIMIT_PER_IP`/`_WINDOW_SECONDS_PER_IP`).
+Testado em `tests/customer_portal/test_portal_auth_api.py`
+(`test_request_access_reports_quote_not_found_for_a_nonexistent_quote`,
+`test_request_access_reports_registration_mismatch_for_a_real_quote`).

@@ -22,19 +22,12 @@ class DuplicateCodeError(DomainProblem):
     problem_code = "CONFLICT"
 
 
-class EffectiveDateOverlapError(DomainProblem):
-    """A new ProductVersion's [effectiveFrom, effectiveTo) range overlaps
-    an existing non-retired version of the same product (DOC-004 s7
-    invariant: "vigências incompatíveis não se sobrepõem")."""
-
-    http_status = 400
-    problem_code = "VALIDATION-400"
-
-
 class ImmutableVersionError(DomainProblem):
-    """An operation would mutate something DOC-004 s7 declares immutable
-    once published (adding a Plan to a non-DRAFT ProductVersion; publishing
-    a version that is not DRAFT)."""
+    """An operation would mutate/delete something still referenced
+    elsewhere — e.g. deleting a Product/Plan that a Quote, PricingRun or
+    EligibilityEvaluation already points to (DECISIONS_TAKEN.md#S09-POLICY-001,
+    PO-APO-6: since ProductVersion was retired, this is the only remaining
+    use of this error — see product_service.delete_product/delete_plan)."""
 
     http_status = 409
     problem_code = "CONFLICT"

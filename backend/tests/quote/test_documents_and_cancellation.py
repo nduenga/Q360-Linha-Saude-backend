@@ -46,7 +46,16 @@ def _approved_quote(client, *, code_suffix: str, tenant) -> dict:
     ).data
     client.post(f"/api/v1/configuration/rule-version/{rule['id']}/publish")
 
-    proposer_id = client.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "Holder"}).data["id"]
+    proposer_id = client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Holder",
+            "registrationNumber": "123456789LA042",
+            "email": "holder@example.com",
+            "phone": "+244900000000",
+        },
+    ).data["id"]
     member_id = client.post("/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}).data["id"]
     quote = client.post("/api/v1/quotes", {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"}, format="json").data
     client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")
@@ -85,7 +94,16 @@ def test_generate_proposal_without_template_is_not_found(admin_client, tenant):
 @pytest.mark.django_db
 def test_generate_proposal_before_approved_is_quote_state_error(admin_client):
     plan_ref = _plan(admin_client, product_code="DOC-PROD-2")
-    proposer_id = admin_client.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "H"}).data["id"]
+    proposer_id = admin_client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "H",
+            "registrationNumber": "123456789LA042",
+            "email": "h@example.com",
+            "phone": "+244900000000",
+        },
+    ).data["id"]
     quote = admin_client.post("/api/v1/quotes", {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"}, format="json").data
     response = admin_client.post(f"/api/v1/quotes/{quote['id']}/proposal")
     assert response.status_code == 409
@@ -126,7 +144,16 @@ def test_list_document_templates(admin_client):
 @pytest.mark.django_db
 def test_cancel_draft_quote_requires_reason(admin_client):
     plan_ref = _plan(admin_client, product_code="DOC-PROD-4")
-    proposer_id = admin_client.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "H"}).data["id"]
+    proposer_id = admin_client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "H",
+            "registrationNumber": "123456789LA042",
+            "email": "h@example.com",
+            "phone": "+244900000000",
+        },
+    ).data["id"]
     quote = admin_client.post("/api/v1/quotes", {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"}, format="json").data
 
     missing_reason = admin_client.post(f"/api/v1/quotes/{quote['id']}/cancel", {"rowVersion": 0}, format="json")
