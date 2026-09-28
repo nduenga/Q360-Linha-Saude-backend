@@ -15,6 +15,13 @@ class QuoteStatus(str, Enum):
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"
+    # DECISIONS_TAKEN.md#S09-POLICY-001 (ROADMAP_APOLICES.md Fase 2):
+    # deliberate deviation from ART-005/ART-009 (neither declares this
+    # value) — a Quote that has produced a Policy (apps.policy) is
+    # terminal, distinct from APPROVED, so it can never be signed twice
+    # nor expire out from under an already-issued contract. See
+    # apps/quote/infrastructure/migrations/0005_bound_status.py.
+    BOUND = "BOUND"
 
 
 class QuoteMemberStatus(str, Enum):

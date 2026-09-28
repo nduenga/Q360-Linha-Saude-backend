@@ -266,21 +266,40 @@ Não há integração com gateway nem banco.
 `installment_id`, `sent_at`, `registered_mail_reference`,
 `new_deadline`, `suspension_effective_at`, `outcome`.
 
-**`policy_commission`**: `policy_id`, `intermediary_id`,
-`commission_basis` e `rate` (do acordo de mediação em vigor à data da
-emissão, congelado), `status` (`ACCRUED`/`EARNED`/`VOID`), mais uma linha
-por recibo quando o prémio é pago. Fica **apenas registado**: o pagamento
-de comissões ao mediador está fora de âmbito.
+**`policy_commission`** (**adiada para a Fase 5**, junto com
+`intermediary`): `policy_id`, `intermediary_id`, `commission_basis` e
+`rate` (do acordo de mediação em vigor à data da emissão, congelado),
+`status` (`ACCRUED`/`EARNED`/`VOID`), mais uma linha por recibo quando o
+prémio é pago. Fica **apenas registado**: o pagamento de comissões ao
+mediador está fora de âmbito. Não entrou na migração da Fase 2 para não
+deixar uma FK pendurada para uma tabela `intermediary` que ainda não
+existe — ver `DECISIONS_TAKEN.md#S09-POLICY-003`.
 
 **`policy_endorsement`** (acta adicional) e **`policy_state_history`**.
 
 **Alteração à cotação**: `QuoteStatus.BOUND`, terminal, numa migração
 nova. `expire_quotes` e o cancelamento nunca lhe tocam.
 
-- [ ] App, enums, migração `0001_policy_baseline.py` com os CHECKs de
-      estado e de datas.
+- [x] App, enums, migração `0001_policy_baseline.py` com os CHECKs de
+      estado e de datas — implementado com `policy`, `policy_signature`,
+      `policy_member`, `premium_installment`, `premium_default_notice`,
+      `policy_endorsement` e `policy_state_history` (7 tabelas; falta só
+      `policy_commission`, adiada para a Fase 5 pela razão acima).
+      `QuoteStatus.BOUND` implementado (`apps/quote/infrastructure/
+      migrations/0005_bound_status.py`).
 - [ ] Permissões `POLICY_ISSUE`, `PREMIUM_REGISTER_PAYMENT`,
-      `POLICY_ENDORSE`, `POLICY_CANCEL`, `POLICY_SUSPEND`.
+      `POLICY_ENDORSE`, `POLICY_CANCEL`, `POLICY_SUSPEND` — **não
+      criadas**: `apps.foundation.domain.permissions` proíbe explicitamente
+      inventar permissões sem entrada aprovada em DOC-001 s18. Fica para a
+      Fase 3 decidir qual permissão já aprovada reutilizar (ver
+      `DECISIONS_TAKEN.md#S09-POLICY-003`), quando existirem endpoints
+      reais para gatear.
+- [x] Testes de esquema/constraints (`tests/policy/test_policy_models.py`,
+      9 casos: 1:1 Quote→Policy, unicidade de `policy_number`, `ck_policy_
+      status`, `ck_policy_dates`, 1:1 `PolicySignature`, unicidade de
+      `PolicyMember`, PO-APO-2 (pendente não acopla o resto), isolamento
+      por tenant). Suite completa do backend verde (`pytest -q`, 1 skip
+      esperado).
 
 ---
 

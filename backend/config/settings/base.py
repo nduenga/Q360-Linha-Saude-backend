@@ -23,6 +23,12 @@ if not SECRET_KEY:
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = [host for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if host]
+# Render assigns the public hostname at deploy time.  Trust only that exact
+# hostname automatically; custom domains remain an explicit DJANGO_ALLOWED_HOSTS
+# deployment setting.
+RENDER_EXTERNAL_HOSTNAME = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
@@ -35,6 +41,7 @@ INSTALLED_APPS = [
     "apps.eligibility",
     "apps.pricing",
     "apps.quote",
+    "apps.policy",
     "apps.customer_portal",
     "apps.staff_accounts",
     "drf_spectacular",
@@ -104,6 +111,7 @@ MIGRATION_MODULES = {
     "eligibility": "apps.eligibility.infrastructure.migrations",
     "pricing": "apps.pricing.infrastructure.migrations",
     "quote": "apps.quote.infrastructure.migrations",
+    "policy": "apps.policy.infrastructure.migrations",
     "customer_portal": "apps.customer_portal.infrastructure.migrations",
     "staff_accounts": "apps.staff_accounts.infrastructure.migrations",
 }
@@ -113,18 +121,33 @@ TEMPLATES = []
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("POSTGRES_DB", "q360"),
-        "USER": os.environ.get("POSTGRES_USER", "q360"),
-        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "q360"),
-        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
-        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
-        "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
-        "OPTIONS": {"options": f"-c search_path={DB_SCHEMA_SEARCH_PATH}"},
+_database_url = os.environ.get("DATABASE_URL")
+if _database_url:
+    # Render exposes its private Postgres connection through DATABASE_URL.
+    # Keep the explicit POSTGRES_* configuration below as the local/Docker
+    # fallback, so existing developer workflows remain unchanged.
+    import dj_database_url
+
+    _database_config = dj_database_url.parse(
+        _database_url,
+        conn_max_age=int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+        conn_health_checks=True,
+    )
+    _database_config.setdefault("OPTIONS", {})["options"] = f"-c search_path={DB_SCHEMA_SEARCH_PATH}"
+    DATABASES = {"default": _database_config}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("POSTGRES_DB", "q360"),
+            "USER": os.environ.get("POSTGRES_USER", "q360"),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "q360"),
+            "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
+            "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+            "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+            "OPTIONS": {"options": f"-c search_path={DB_SCHEMA_SEARCH_PATH}"},
+        }
     }
-}
 
 # Raw bytes of an uploaded member-import file (Q360-S3-04): ART-005 has no
 # blob/file-content column on `import_job` (only metadata: filename,
@@ -254,6 +277,17 @@ CUSTOMER_PORTAL_LOCKOUT_MINUTES = int(os.environ.get("CUSTOMER_PORTAL_LOCKOUT_MI
 CUSTOMER_PORTAL_LOGIN_RATE_LIMIT = int(os.environ.get("CUSTOMER_PORTAL_LOGIN_RATE_LIMIT", "10"))
 CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS = int(
     os.environ.get("CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS", "60")
+)
+# Compensating control for request-access now revealing exactly which of
+# quoteNumber/registrationNumber is wrong (Product Owner decision,
+# 2026-09-26 — see apps.customer_portal.domain.errors module docstring).
+# Deliberately much tighter than the pair above, and keyed by IP alone
+# (apps.customer_portal.interfaces.rate_limit.is_ip_rate_limited) - email
+# is attacker-controlled and unverified at this point, so a per-email
+# bucket alone is trivially bypassed by varying it on every request.
+CUSTOMER_PORTAL_LOGIN_RATE_LIMIT_PER_IP = int(os.environ.get("CUSTOMER_PORTAL_LOGIN_RATE_LIMIT_PER_IP", "5"))
+CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS_PER_IP = int(
+    os.environ.get("CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS_PER_IP", "900")
 )
 
 SECURE_CONTENT_TYPE_NOSNIFF = True

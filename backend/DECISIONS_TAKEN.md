@@ -515,3 +515,44 @@ códigos), `config/settings/base.py`
 Testado em `tests/customer_portal/test_portal_auth_api.py`
 (`test_request_access_reports_quote_not_found_for_a_nonexistent_quote`,
 `test_request_access_reports_registration_mismatch_for_a_real_quote`).
+
+## S09-POLICY-003 — Fundação de dados da apólice (2026-09-28)
+
+**Contexto:** ROADMAP_APOLICES.md Fase 2 — o modelo de dados da apólice,
+sem ainda a emissão (Fase 3). Nova app `apps.policy`, mesmas camadas das
+restantes (`domain/application/infrastructure/interfaces`),
+`managed = False`, migração forward-only em `q360.policy` +
+`policy_signature` + `policy_member` + `premium_installment` +
+`premium_default_notice` + `policy_endorsement` + `policy_state_history`.
+
+**Judgment calls feitos nesta fase:**
+1. **`policy.intermediary_id`/`policy_commission` deliberadamente fora
+   desta migração** — evita uma FK pendurada para uma tabela
+   `intermediary` que só a Fase 5 cria. Entram numa migração própria
+   dessa fase.
+2. **`QuoteStatus.BOUND`** adicionado (`apps/quote/infrastructure/
+   migrations/0005_bound_status.py`), alargando `ck_quote_status`/
+   `ck_quote_history_to`/`ck_quote_history_from` sem editar a baseline —
+   desvio deliberado de ART-005/ART-009 (nenhum dos dois declara este
+   valor), mesmo princípio que already levou a `Quote.status` ganhar
+   comportamento não coberto pelos artefactos originais nesta mesma
+   decisão (S09-POLICY-001). `CANCELLABLE_QUOTE_STATUSES` não inclui
+   `BOUND`, por isso `expire_quotes`/cancelamento nunca lhe tocam, sem
+   precisar de código novo.
+3. **Sem novo `Permission` enum** — `apps/foundation/domain/permissions.py`
+   proíbe explicitamente inventar permissões sem entrada aprovada em
+   DOC-001 s18 ("Regra de ouro da V1"). A Fase 3 (emissão real, com
+   endpoints) tem de reutilizar uma permissão já aprovada que sirva
+   (candidata natural: `QUOTE_APPROVE`, já concedida ao mesmo persona que
+   decidiria emitir uma apólice) em vez de inventar `policy:issue` — a
+   decidir explicitamente quando a Fase 3 construir os endpoints.
+4. **Testes desta fase são só de esquema/modelo**
+   (`tests/policy/test_policy_models.py`) — criam `Policy`/
+   `PolicySignature`/`PolicyMember` directamente via `all_tenants.create`,
+   porque ainda não existe nenhum serviço de aplicação (`issue_policy`)
+   nem endpoint — isso é explicitamente Fase 3. Provam: `Quote`→`Policy`
+   1:1 (`uq_policy_source_quote`), unicidade de `policy_number` por
+   tenant, `ck_policy_status`, `ck_policy_dates`, `PolicySignature` 1:1
+   por apólice, unicidade de `PolicyMember` por (apólice, membro), que um
+   membro `PENDING` nunca acopla o estado da apólice (PO-APO-2), e
+   isolamento por tenant via `TenantScopedManager`.
