@@ -338,24 +338,48 @@ nova. `expire_quotes` e o cancelamento nunca lhe tocam.
   passa a `CANCELLED` **sem efeitos**, porque nunca houve cobertura.
 
 ### API e frontend
-- [ ] `POST /quotes/{id}/policy` (emissão), `POST
-      /policies/{id}/installments/{n}/payment`, `GET /policies`,
-      `GET /policies/{id}`, `GET /policies/{id}/members`,
-      `GET /policies/{id}/installments`.
-- [ ] Documento `POLICY_SCHEDULE` (Condições Particulares), gerado a
-      partir do snapshot, com as datas e horas de início e fim do risco.
-- [ ] `QuoteSummaryPage`: "Registar assinatura e emitir apólice". Novas
-      `PoliciesListPage` e `PolicyDetailPage` (membros, recibos,
-      assinatura, histórico) e acção "Registar pagamento".
+- [x] `POST /quotes/{id}/policy` (emissão), `POST
+      /policies/{id}/installments/{n}/payment` (só `n=1` implementado —
+      `n>1` devolve `VALIDATION-400`, recibos recorrentes ficam para a
+      Fase 7), `GET /policies`, `GET /policies/{id}`,
+      `GET /policies/{id}/members`, `GET /policies/{id}/installments`,
+      `GET /policies/{id}/signature`.
+      Implementado sem comissão/mediador (`ACCRUED`) — adiado para a
+      Fase 5, tal como as tabelas correspondentes ficaram adiadas na
+      Fase 2.
+- [ ] Documento `POLICY_SCHEDULE` (Condições Particulares) — **não
+      implementado**. Âmbito de geração de documentos fica fora desta
+      sessão (mesma decisão de adiamento que o resto do trabalho de
+      frontend/documentos).
+- [ ] Frontend (`QuoteSummaryPage`, `PoliciesListPage`,
+      `PolicyDetailPage`) — **não implementado**, âmbito de backend
+      apenas nesta sessão.
 
 ### Testes
-- [ ] Assinatura às 14h de dia D e pagamento em D: o risco começa em
-      D+1 00h00.
-- [ ] Pagamento em D+3: o risco começa em D+4.
-- [ ] `requestedStartDate` anterior à regra: 400.
-- [ ] Sem pagamento: `PENDING_FIRST_PREMIUM` e `NOT_COVERED`.
-- [ ] Emissão dupla, cotação expirada, membros pendentes e excluídos,
-      isolamento por tenant.
+- [x] Assinatura às 14h de dia D e pagamento em D: o risco começa em
+      D+1 00h00 (`test_activation_when_paid_same_day_as_signature_still_
+      starts_next_day`).
+- [x] Pagamento em D+3: o risco começa em D+4
+      (`test_activation_starts_risk_the_day_after_signature_and_payment`).
+- [x] `requestedStartDate` anterior à regra: 400
+      (`test_requested_start_date_before_signature_is_rejected`).
+- [ ] "Sem pagamento: `PENDING_FIRST_PREMIUM` e `NOT_COVERED`" — o estado
+      `PENDING_FIRST_PREMIUM` já existe e é testado; o `NOT_COVERED` via
+      `check_coverage` é a Fase 4, testado lá.
+- [x] Emissão dupla (`test_cannot_issue_policy_twice_for_the_same_quote`),
+      só cotação `APPROVED` pode ser assinada
+      (`test_only_an_approved_quote_can_be_signed`), membro `HARD_STOP`
+      nunca copiado (`test_hard_stop_member_is_not_copied_onto_the_
+      policy`), plano mensal gera 12 recibos que somam o total
+      (`test_monthly_frequency_creates_12_installments`), procura por
+      número de apólice (`test_lookup_by_policy_number`). **Cotação
+      expirada e isolamento por tenant explícitos para `apps.policy`
+      não testados** — o isolamento por tenant é herdado de
+      `TenantScopedManager` (já provado genericamente na Fase 2), e a
+      cotação expirada seria um teste de `quote.valid_until`, não
+      construído nesta fase.
+- [x] Suite completa do backend verde (`pytest -q`, 1 skip esperado),
+      18 testes novos em `tests/policy/test_issuance.py`.
 
 ---
 

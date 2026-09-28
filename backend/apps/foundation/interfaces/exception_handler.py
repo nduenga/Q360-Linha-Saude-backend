@@ -47,6 +47,9 @@ _TITLES: dict[str, str] = {
     "PORTAL-LOCKED": "Conta temporariamente bloqueada",
     "PORTAL-QUOTE-NOT-FOUND": "Apólice não encontrada",
     "PORTAL-REGISTRATION-MISMATCH": "Número de registo não corresponde",
+    # apps.policy (DECISIONS_TAKEN.md#S09-POLICY-001/003) — postdates
+    # ART-006 entirely, same posture as PORTAL-*/STAFF-* above.
+    "POLICY-STATE": "Transição inválida",
     # apps.staff_accounts — self-hosted staff identity (replaces the
     # external Auth0 IdP), same posture: a new contract, not a CR.
     "STAFF-LOCKED": "Conta temporariamente bloqueada",

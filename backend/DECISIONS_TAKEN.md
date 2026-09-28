@@ -556,3 +556,55 @@ restantes (`domain/application/infrastructure/interfaces`),
    por apólice, unicidade de `PolicyMember` por (apólice, membro), que um
    membro `PENDING` nunca acopla o estado da apólice (PO-APO-2), e
    isolamento por tenant via `TenantScopedManager`.
+
+## S09-POLICY-004 — Emissão por assinatura e activação por pagamento (2026-09-28)
+
+**Contexto:** ROADMAP_APOLICES.md Fase 3. `apps/policy/application/
+issuance_service.py`: `issue_policy()` (PO-APO-1 — a assinatura transforma
+a cotação `APPROVED` em apólice `PENDING_FIRST_PREMIUM`, cotação passa a
+`BOUND`) e `register_first_premium_payment()` (Decreto 2/02 art. 17.º — o
+pagamento da 1.ª fracção activa a apólice e inicia o risco).
+
+**Judgment calls:**
+1. **Permissão reutilizada**: tanto emitir como activar usam
+   `Scope.APPROVE` + `Permission.QUOTE_APPROVE` — o mesmo persona
+   (Aprovador) que decide a cotação leva-a até à activação nesta fase.
+   Uma permissão de back-office/financeiro dedicada ao registo de
+   pagamentos do dia-a-dia fica para quando existir uma entrada aprovada
+   em DOC-001 s18 — continua a proibição de inventar permissões.
+2. **Início do risco — "dia seguinte" implementado literalmente**:
+   `start_date = dia_seguinte(max(data_assinatura, data_pagamento))`,
+   nunca no mesmo dia de nenhum dos dois — a leitura mais conservadora do
+   art. 428.º do Código Comercial (ainda por confirmar pelo jurídico,
+   ver ROADMAP_APOLICES.md), preferida por proteger a seguradora contra
+   fraude, nunca o contrário.
+3. **`requestedStartDate` — validação em duas partes**: a parte
+   verificável na emissão (`>= quote.effectiveDate` e estritamente
+   posterior à data de assinatura) é validada logo aí (400
+   `VALIDATION-400`); a parte que só é conhecida na activação (nunca
+   antes do pagamento) nunca gera erro — usa-se sempre o `max()` entre a
+   data pedida e a regra por defeito, silenciosamente.
+4. **Só o 1.º recibo é criado na emissão**; os restantes (2..N, conforme
+   `paymentFrequency`) são criados na activação, já com `period_from`/
+   `period_to` calculados a partir do `start_date` real — evita recalcular
+   depois.
+5. **`waiting_period_ends_json` lido do `plan` congelado no snapshot**,
+   nunca do Plan ao vivo (mantém a garantia da Fase 1). A chave é o
+   **`code`** do benefício (ex. `MATERNITY`), não `benefit_type` — resolve
+   a OD-APO-006 do roadmap na direcção que faz sentido com o catálogo real
+   (Épico 1: `MATERNITY` é um `code`, não um `benefit_type`).
+6. **Isenção de carência lida do `context.angola` gravado na
+   `EligibilityEvaluation` original** (nunca um campo novo) — reconstrói
+   `AngolaEvidence` a partir do `input_snapshot_json` já persistido na
+   avaliação de subscrição de cada membro.
+7. **Fora desta fase, deliberadamente**: gerar o documento "Condições
+   Particulares" (`POLICY_SCHEDULE`) e o cancelamento automático por falta
+   de pagamento da 1.ª fracção (precisa de um `scheduler`, como
+   `expire_quotes` — fica para a Fase 7).
+
+Testado em `tests/policy/test_issuance.py` (18 casos): emissão, apólice
+não pode ser emitida duas vezes (cotação `BOUND`), membro `HARD_STOP`
+nunca copiado, `requestedStartDate` inválido rejeitado, início do risco
+no dia seguinte (incl. quando assinatura e pagamento são no mesmo dia),
+plano mensal gera 12 recibos que somam o total, só cotação `APPROVED`
+pode ser assinada, procura por número de apólice.

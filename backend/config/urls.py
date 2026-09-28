@@ -9,6 +9,7 @@ urlpatterns = [
     path("api/v1/", include("apps.eligibility.interfaces.urls")),
     path("api/v1/", include("apps.pricing.interfaces.urls")),
     path("api/v1/", include("apps.quote.interfaces.urls")),
+    path("api/v1/", include("apps.policy.interfaces.urls")),
     path("api/v1/", include("apps.customer_portal.interfaces.urls")),
     path("api/v1/", include("apps.staff_accounts.interfaces.urls")),
     path("api/v1/schema", SpectacularAPIView.as_view(), name="openapi-schema"),

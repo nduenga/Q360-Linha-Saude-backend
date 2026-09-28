@@ -51,6 +51,10 @@ class Policy(TenantScopedModel):
     term_months = models.IntegerField()
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
+    # ROADMAP_APOLICES.md Fase 3 / OD-APO-003 (apps.policy 0002_requested_
+    # start_date): the tomador's requested vigência start, validated and
+    # used only by issuance_service — never read as the actual start_date.
+    requested_start_date = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=PolicyStatus.PENDING_FIRST_PREMIUM.value)
     payment_frequency = models.CharField(max_length=20, choices=PAYMENT_FREQUENCY_CHOICES)
     currency_code = models.CharField(max_length=3, null=True, blank=True)
