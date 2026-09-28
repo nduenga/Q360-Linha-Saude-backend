@@ -14,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.customer_portal.application.auth_service import CustomerPortalAuthService
-from apps.customer_portal.interfaces.rate_limit import is_rate_limited
+from apps.customer_portal.interfaces.rate_limit import is_ip_rate_limited, is_rate_limited
 from apps.customer_portal.interfaces.serializers import (
     PortalTokenResponseSerializer,
     RequestAccessSerializer,
@@ -67,23 +67,27 @@ class RequestAccessView(APIView):
         body = RequestAccessSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         data = body.validated_data
+        remote_addr = request.META.get("REMOTE_ADDR") or "unknown"
 
+        # Two independent buckets, both must pass: per-email (existing) and
+        # per-IP-only (new — email is unverified/attacker-controlled at
+        # this point, so a per-email bucket alone is trivially bypassed by
+        # varying it on every request; see is_ip_rate_limited docstring).
         if is_rate_limited(
-            tenant_id=str(tenant_id),
-            remote_addr=request.META.get("REMOTE_ADDR") or "unknown",
-            email=data["email"],
-        ):
+            tenant_id=str(tenant_id), remote_addr=remote_addr, email=data["email"]
+        ) or is_ip_rate_limited(tenant_id=str(tenant_id), remote_addr=remote_addr):
             return _too_many_requests()
 
         _bind_anonymous_customer_actor(tenant_id)
+        # Raises PortalQuoteNotFoundError (404) / PortalRegistrationMismatchError
+        # (401) if the pair doesn't resolve — Product Owner decision,
+        # 2026-09-26 (see CustomerPortalAuthService.request_access docstring).
         _auth_service.request_access(
             quote_number=data["quoteNumber"],
             registration_number=data["registrationNumber"],
             email=data["email"],
             correlation_id=get_correlation_id(),
         )
-        # Always 202, regardless of whether a match was found — see
-        # CustomerPortalAuthService.request_access docstring.
         return Response(status=202)
 
 

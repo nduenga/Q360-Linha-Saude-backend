@@ -106,7 +106,6 @@ class PricingCalculateView(APIView):
         body.is_valid(raise_exception=True)
         data = body.validated_data
         pricing_run = calculate_pricing(
-            product_version_id=data["productVersionId"],
             plan_id=data["planId"],
             effective_date=data["effectiveDate"],
             member_ids=data["memberIds"],

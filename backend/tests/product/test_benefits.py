@@ -1,7 +1,14 @@
 """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1 acceptance criteria: the 3
 market-mandatory (BASE) coverages are always present on every Plan and can
-never be removed; the 8 COMPLEMENTARY coverages are opt-in; a
-ProductVersion cannot publish while a Plan is missing a BASE coverage.
+never be removed; the 8 COMPLEMENTARY coverages are opt-in.
+
+DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26): the old "a
+ProductVersion cannot publish while a Plan is missing a BASE coverage"
+check is gone along with ProductVersion/publish itself — it was already
+unreachable in practice (attach_core_benefits always attaches all 3 BASE
+at creation, and remove_plan_benefit never lets one be detached), so no
+protection is lost; see apps.product.application.use_cases module
+docstring.
 """
 from __future__ import annotations
 
@@ -12,9 +19,8 @@ from apps.product.application.benefit_service import MARKET_CATALOG
 
 def _plan(client, *, product_code: str) -> dict:
     product = client.post("/api/v1/products", {"code": product_code, "name": product_code}).data
-    version = client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}).data
-    plan = client.post("/api/v1/plans", {"productVersionId": version["id"], "code": "BASIC", "name": "Basic"}).data
-    return {"productVersionId": version["id"], "planId": plan["id"]}
+    plan = client.post("/api/v1/plans", {"productId": product["id"], "code": "BASIC", "name": "Basic"}).data
+    return {"productId": product["id"], "planId": plan["id"]}
 
 
 @pytest.mark.django_db
@@ -79,24 +85,3 @@ def test_cannot_remove_a_base_coverage(admin_client):
 
     listed = admin_client.get(f"/api/v1/plans/{refs['planId']}/benefits").data
     assert any(item["benefit"]["code"] == "HOSPITALIZATION" for item in listed)
-
-
-@pytest.mark.django_db
-def test_publish_succeeds_when_plan_has_all_base_coverages(admin_client):
-    refs = _plan(admin_client, product_code="BEN-PROD-4")
-    resp = admin_client.post(f"/api/v1/product-versions/{refs['productVersionId']}/publish")
-    assert resp.status_code == 200
-
-
-@pytest.mark.django_db
-def test_publish_fails_when_a_base_coverage_was_removed_via_direct_orm(admin_client, tenant):
-    """Simulates data corruption/an old row predating this epic: a Plan
-    missing a BASE coverage must never be allowed to publish."""
-    from apps.product.infrastructure.models import PlanBenefit
-
-    refs = _plan(admin_client, product_code="BEN-PROD-5")
-    PlanBenefit.all_tenants.filter(plan_id=refs["planId"]).delete()
-
-    resp = admin_client.post(f"/api/v1/product-versions/{refs['productVersionId']}/publish")
-    assert resp.status_code == 400
-    assert resp.data["code"] == "VALIDATION-400"

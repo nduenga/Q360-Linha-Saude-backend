@@ -12,11 +12,8 @@ import pytest
 
 def _plan(client, *, product_code: str) -> dict:
     product = client.post("/api/v1/products", {"code": product_code, "name": product_code}).data
-    version = client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}).data
-    # Plans can only be added to a DRAFT version — publish AFTER creating it.
-    plan = client.post("/api/v1/plans", {"productVersionId": version["id"], "code": "BASIC", "name": "Basic"}).data
-    client.post(f"/api/v1/product-versions/{version['id']}/publish")
-    return {"productVersionId": version["id"], "planId": plan["id"]}
+    plan = client.post("/api/v1/plans", {"productId": product["id"], "code": "BASIC", "name": "Basic"}).data
+    return {"productId": product["id"], "planId": plan["id"]}
 
 
 def _parameter_set(client, *, code: str, base_premium: str = "100.00") -> None:
@@ -48,7 +45,16 @@ def _rating_table(client, *, code: str) -> None:
 
 
 def _proposer(client) -> str:
-    return client.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "Holder"}).data["id"]
+    return client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Holder",
+            "registrationNumber": "123456789LA042",
+            "email": "holder@example.com",
+            "phone": "+244900000000",
+        },
+    ).data["id"]
 
 
 def _member(client, *, proposer_id: str, date_of_birth: str = "1990-01-01") -> str:
@@ -75,7 +81,6 @@ def test_create_quote_starts_as_draft(admin_client):
         "/api/v1/quotes",
         {
             "proposerId": scope["proposerId"],
-            "productVersionId": scope["productVersionId"],
             "planId": scope["planId"],
             "effectiveDate": "2026-06-01",
         },
@@ -98,7 +103,6 @@ def test_create_quote_unknown_references_is_validation_400(admin_client):
         "/api/v1/quotes",
         {
             "proposerId": str(uuid.uuid4()),
-            "productVersionId": str(uuid.uuid4()),
             "planId": str(uuid.uuid4()),
             "effectiveDate": "2026-06-01",
         },
@@ -113,7 +117,7 @@ def test_add_eligible_member_is_included(admin_client):
     scope = _quote_scope(admin_client, code_suffix="2")
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "productVersionId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
         format="json",
     ).data
     member_id = _member(admin_client, proposer_id=scope["proposerId"])
@@ -132,7 +136,7 @@ def test_add_duplicate_member_is_conflict(admin_client):
     scope = _quote_scope(admin_client, code_suffix="3")
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "productVersionId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
         format="json",
     ).data
     member_id = _member(admin_client, proposer_id=scope["proposerId"])
@@ -148,7 +152,7 @@ def test_price_quote_promotes_to_ready_and_creates_snapshot(admin_client):
     scope = _quote_scope(admin_client, code_suffix="4")
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "productVersionId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
         format="json",
     ).data
     member_id = _member(admin_client, proposer_id=scope["proposerId"])
@@ -194,7 +198,7 @@ def test_editing_ready_quote_demotes_to_draft(admin_client):
     scope = _quote_scope(admin_client, code_suffix="5")
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "productVersionId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
         format="json",
     ).data
     member_id = _member(admin_client, proposer_id=scope["proposerId"])
@@ -234,7 +238,7 @@ def test_update_quote_stale_row_version_is_version_conflict(admin_client):
     scope = _quote_scope(admin_client, code_suffix="6")
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "productVersionId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
         format="json",
     ).data
 
@@ -267,7 +271,7 @@ def test_list_quotes_filters_by_status(admin_client):
     scope = _quote_scope(admin_client, code_suffix="8")
     admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "productVersionId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
         format="json",
     )
     response = admin_client.get("/api/v1/quotes?status=DRAFT")

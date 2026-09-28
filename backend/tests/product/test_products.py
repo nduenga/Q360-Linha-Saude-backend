@@ -1,6 +1,10 @@
-"""Q360-S2-01 acceptance criteria: "Versões identificáveis • Vigências não
-se sobrepõem • Publicado fica imutável". Response shapes asserted here are
-ART-006 `Product`/`ProductVersion` schemas verbatim (camelCase)."""
+"""Q360-S2-01 acceptance criteria (Product CRUD). Response shapes asserted
+here are ART-006 `Product` schema verbatim (camelCase).
+
+DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26): ProductVersion
+was retired — a Plan belongs directly to a Product now (tests/product/
+test_plans.py covers Plan CRUD/lifecycle; this file only covers Product
+itself and delete-cascade behaviour)."""
 from __future__ import annotations
 
 import pytest
@@ -52,8 +56,7 @@ def test_update_product_with_correct_row_version_succeeds(admin_client):
 @pytest.mark.django_db
 def test_update_product_status(admin_client):
     """Pragmatic V1 addition, not in ART-006's ProductUpdateRequest - see
-    DECISIONS_TAKEN.md#product-status-transition. Publishing a version never
-    implicitly changes this - it is set explicitly. A Product is ACTIVE from
+    DECISIONS_TAKEN.md#product-status-transition. A Product is ACTIVE from
     creation (Product Owner decision, 2026-09-25); this exercises moving it
     out of the catalogue and back, which a future product-management page
     will do through this same field."""
@@ -122,99 +125,7 @@ def test_list_products_filtered_by_status(admin_client):
 
 
 @pytest.mark.django_db
-def test_create_and_publish_product_version(admin_client):
-    product = admin_client.post("/api/v1/products", {"code": "VER", "name": "Versioned"}).data
-
-    v1 = admin_client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    )
-    assert v1.status_code == 201
-    assert v1.data["versionNo"] == 1
-    assert v1.data["status"] == "DRAFT"
-
-    published = admin_client.post(f"/api/v1/product-versions/{v1.data['id']}/publish")
-    assert published.status_code == 200
-    assert published.data["status"] == "PUBLISHED"
-
-    republish = admin_client.post(f"/api/v1/product-versions/{v1.data['id']}/publish")
-    assert republish.status_code == 409
-    assert republish.data["code"] == "CONFLICT"
-
-
-@pytest.mark.django_db
-def test_list_product_versions(admin_client):
-    """Pragmatic V1 addition (OPEN_DECISIONS.md#S04-LISTING-GAPS-001):
-    ART-006 has no listProductVersions, but the frontend needs a way to
-    show a product's versions without a per-browser cache.
-
-    ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 2: the second version is no
-    longer created via a second explicit POST (that would now correctly
-    be rejected as an overlap — every version is open-ended, see Épico 3)
-    but via editing the product, which auto-rolls the version forward."""
-    product = admin_client.post("/api/v1/products", {"code": "VERLIST", "name": "VerList"}).data
-    admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"})
-    admin_client.put(
-        f"/api/v1/products/{product['id']}", {"name": "VerList renamed", "rowVersion": 0}
-    )
-
-    response = admin_client.get(f"/api/v1/products/{product['id']}/versions")
-    assert response.status_code == 200
-    assert response.data["page"]["totalElements"] == 2
-    assert [v["versionNo"] for v in response.data["items"]] == [2, 1]
-    assert response.data["items"][0]["status"] == "PUBLISHED"
-    assert response.data["items"][1]["status"] == "RETIRED"
-
-
-@pytest.mark.django_db
-def test_editing_a_product_auto_creates_and_publishes_the_next_version(admin_client):
-    product = admin_client.post("/api/v1/products", {"code": "SEQ", "name": "Sequenced"}).data
-    admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"})
-
-    updated = admin_client.put(
-        f"/api/v1/products/{product['id']}", {"name": "Sequenced renamed", "rowVersion": 0}
-    )
-    assert updated.status_code == 200
-
-    versions = admin_client.get(f"/api/v1/products/{product['id']}/versions").data["items"]
-    assert len(versions) == 2
-    new_version = next(v for v in versions if v["versionNo"] == 2)
-    assert new_version["status"] == "PUBLISHED"
-    assert new_version["effectiveTo"] is None
-
-
-@pytest.mark.django_db
-def test_overlapping_effective_dates_are_rejected(admin_client):
-    product = admin_client.post("/api/v1/products", {"code": "OVL", "name": "Overlap"}).data
-    admin_client.post(
-        f"/api/v1/products/{product['id']}/versions",
-        {"effectiveFrom": "2026-01-01", "effectiveTo": "2026-12-31"},
-    )
-    response = admin_client.post(
-        f"/api/v1/products/{product['id']}/versions",
-        {"effectiveFrom": "2026-06-01", "effectiveTo": "2026-08-31"},
-    )
-    assert response.status_code == 400
-    assert response.data["code"] == "VALIDATION-400"
-
-
-@pytest.mark.django_db
-def test_two_explicit_open_ended_versions_always_overlap(admin_client):
-    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 3: every version is open-ended
-    (no effectiveTo), so a second version can only ever coexist with the
-    first by retiring it first — which the explicit create-version
-    endpoint does not do (see create_next_version for the real path, used
-    automatically when a product with an existing version is edited)."""
-    product = admin_client.post("/api/v1/products", {"code": "OPEN", "name": "Open ended"}).data
-    admin_client.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2025-01-01"})
-    response = admin_client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    )
-    assert response.status_code == 400
-    assert response.data["code"] == "VALIDATION-400"
-
-
-@pytest.mark.django_db
-def test_delete_product_without_versions(admin_client):
+def test_delete_product_without_plans(admin_client):
     product = admin_client.post("/api/v1/products", {"code": "DEL-1", "name": "To delete"}).data
 
     response = admin_client.delete(f"/api/v1/products/{product['id']}")
@@ -230,49 +141,46 @@ def test_delete_product_without_versions(admin_client):
 
 
 @pytest.mark.django_db
-def test_delete_product_cascades_through_version_and_plans(admin_client):
+def test_delete_product_cascades_through_plans(admin_client):
     """Product Owner requirement (2026-09-25): deleting a product must
-    work even when it already has versions and/or plans - not only a
-    fresh, never-versioned one."""
-    product = admin_client.post("/api/v1/products", {"code": "DEL-2", "name": "Has version"}).data
-    version = admin_client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    ).data
+    work even when it already has plans - not only a fresh, plan-less
+    one."""
+    product = admin_client.post("/api/v1/products", {"code": "DEL-2", "name": "Has plan"}).data
     plan = admin_client.post(
-        "/api/v1/plans", {"productVersionId": version["id"], "code": "PLAN", "name": "A plan"}
+        "/api/v1/plans", {"productId": product["id"], "code": "PLAN", "name": "A plan"}
     ).data
 
     response = admin_client.delete(f"/api/v1/products/{product['id']}")
     assert response.status_code == 204
 
     assert admin_client.get(f"/api/v1/products/{product['id']}").status_code == 404
-    assert admin_client.get(f"/api/v1/products/{product['id']}/versions").status_code == 404
     assert admin_client.get(f"/api/v1/plans/{plan['id']}").status_code == 404
 
 
 @pytest.mark.django_db
 def test_cannot_delete_product_once_a_quote_references_it(admin_client):
     """Still fail-safe underneath: a Quote that already pins one of this
-    product's ProductVersion/Plan rows must never be silently orphaned or
-    corrupted (OD-ANGOLA-004) - the plain FK from `quote` to
-    `product_version`/`plan` (0001_quote_baseline.py) makes Postgres
-    itself refuse the delete; this asserts it surfaces as a clean 409, not
-    a raw 500."""
+    product's Plan rows must never be silently orphaned or corrupted
+    (OD-ANGOLA-004) - the plain FK from `quote` to `plan`
+    (0001_quote_baseline.py) makes Postgres itself refuse the delete; this
+    asserts it surfaces as a clean 409, not a raw 500."""
     product = admin_client.post("/api/v1/products", {"code": "DEL-4", "name": "Quoted"}).data
-    version = admin_client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    ).data
     plan = admin_client.post(
-        "/api/v1/plans", {"productVersionId": version["id"], "code": "PLAN", "name": "A plan"}
+        "/api/v1/plans", {"productId": product["id"], "code": "PLAN", "name": "A plan"}
     ).data
-    admin_client.post(f"/api/v1/product-versions/{version['id']}/publish")
     proposer = admin_client.post(
-        "/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "Holder"}
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Holder",
+            "registrationNumber": "123456789LA042",
+            "email": "holder@example.com",
+            "phone": "+244900000000",
+        },
     ).data
     admin_client.post(
         "/api/v1/quotes",
         {
-            "productVersionId": version["id"],
             "planId": plan["id"],
             "proposerId": proposer["id"],
             "effectiveDate": "2026-06-01",

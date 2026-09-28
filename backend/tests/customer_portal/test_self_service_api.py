@@ -16,18 +16,20 @@ _EMAIL = "cliente@example.com"
 def _setup_quote_with_member(admin_client, *, quote_number: str, registration_number: str) -> dict:
     proposer = admin_client.post(
         "/api/v1/proposers",
-        {"proposerType": "INDIVIDUAL", "displayName": "Cliente Teste", "registrationNumber": registration_number},
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Cliente Teste",
+            "registrationNumber": registration_number,
+            "email": _EMAIL,
+            "phone": "+244900000000",
+        },
     ).data
     product = admin_client.post(
         "/api/v1/products", {"code": f"PORTAL-{quote_number}", "name": "Portal Product"}
     ).data
-    version = admin_client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    ).data
     plan = admin_client.post(
-        "/api/v1/plans", {"productVersionId": version["id"], "code": "PLAN-A", "name": "Plan A"}
+        "/api/v1/plans", {"productId": product["id"], "code": "PLAN-A", "name": "Plan A"}
     ).data
-    admin_client.post(f"/api/v1/product-versions/{version['id']}/publish")
 
     member = admin_client.post(
         "/api/v1/members",
@@ -38,7 +40,6 @@ def _setup_quote_with_member(admin_client, *, quote_number: str, registration_nu
         "/api/v1/quotes",
         {
             "proposerId": proposer["id"],
-            "productVersionId": version["id"],
             "planId": plan["id"],
             "effectiveDate": "2026-06-01",
         },

@@ -54,7 +54,7 @@ def make_client(*, tenant_id, roles: list[str], scope: str, actor_id: str = "act
 
 @pytest.mark.django_db
 class TestProductTenantIsolation:
-    """TENANT-001 … TENANT-003: Product / ProductVersion / Plan."""
+    """TENANT-001 … TENANT-003: Product / Plan."""
 
     def test_TENANT_001_cross_tenant_product_is_404_not_403(self, db):
         t1 = _make_tenant(suffix="A")
@@ -83,10 +83,9 @@ class TestProductTenantIsolation:
         t2 = _make_tenant(suffix="B")
         owner = make_client(tenant_id=t1.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin")
         product = owner.post("/api/v1/products", {"code": "P", "name": "P"}).data
-        version = owner.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}).data
         plan = owner.post(
             "/api/v1/plans",
-            {"productVersionId": version["id"], "code": "BASE", "name": "Base Plan"},
+            {"productId": product["id"], "code": "BASE", "name": "Base Plan"},
         ).data
 
         other = make_client(tenant_id=t2.id, roles=["ADMIN"], scope="q360.read")
@@ -106,7 +105,9 @@ class TestClientTenantIsolation:
                 "proposerType": "INDIVIDUAL",
                 "displayName": "Maria Silva",
                 "registrationNumber": f"doc-{uuid.uuid4().hex[:8]}",
-                "attributes": {"email": "maria@example.com"},
+                "email": "maria@example.com",
+                "phone": "+244900000000",
+                "attributes": {},
             },
         ).data
 
@@ -185,23 +186,19 @@ class TestConfigTenantIsolation:
         t1 = _make_tenant(suffix="A")
         t2 = _make_tenant(suffix="B")
         owner = make_client(tenant_id=t1.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin")
-        product = owner.post("/api/v1/products", {"code": "PP", "name": "PP"}).data
-        version = owner.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}).data
         owner.post(
-            f"/api/v1/products/{product['id']}/versions/{version['id']}/pricing-parameter-sets",
+            "/api/v1/pricing-parameter-sets",
             {
-                "parameterSetCode": "PPS",
-                "name": "My Params",
-                "currencyCode": "BRL",
-                "decimalParameters": [],
-                "ratingTableParameters": [],
+                "code": "PPS",
+                "effectiveFrom": "2026-01-01",
+                "parameters": [{"code": "BASE_PREMIUM", "valueType": "DECIMAL", "value": "100.00"}],
             },
         )
 
         other = make_client(tenant_id=t2.id, roles=["ADMIN"], scope="q360.read")
-        resp = other.get(f"/api/v1/products/{product['id']}/versions/{version['id']}/pricing-parameter-sets")
-        # Cross-tenant should not even see the product version → 404 on the path's parent
-        assert resp.status_code == 404
+        resp = other.get("/api/v1/pricing-parameter-sets")
+        assert resp.status_code == 200
+        assert resp.data["items"] == []
 
     def test_TENANT_009_cross_tenant_rating_table_not_listed(self, db):
         t1 = _make_tenant(suffix="A")
@@ -255,12 +252,9 @@ class TestQuotePricingEligibilityTenantIsolation:
     def _make_product_and_plan(self, admin_client):
         suffix = uuid.uuid4().hex[:8]
         product = admin_client.post("/api/v1/products", {"code": f"QP-{suffix}", "name": "QP"}).data
-        version = admin_client.post(
-            f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-        ).data
         plan = admin_client.post(
             "/api/v1/plans",
-            {"productVersionId": version["id"], "code": "B", "name": "B"},
+            {"productId": product["id"], "code": "B", "name": "B"},
         ).data
         rule = admin_client.post(
             "/api/v1/rule-versions",
@@ -294,10 +288,9 @@ class TestQuotePricingEligibilityTenantIsolation:
             },
         ).data
         admin_client.post(f"/api/v1/configuration/rating-table/{table['id']}/publish")
-        admin_client.post(f"/api/v1/product-versions/{version['id']}/publish")
-        from apps.product.infrastructure.models import Plan, ProductVersion
+        from apps.product.infrastructure.models import Plan
 
-        return product, ProductVersion.all_tenants.get(id=version["id"]), Plan.all_tenants.get(id=plan["id"])
+        return product, Plan.all_tenants.get(id=plan["id"])
 
     def _make_proposer_and_principal_member(self, admin_client):
         from apps.client.infrastructure.models import InsuredMember, Proposer
@@ -348,11 +341,11 @@ class TestQuotePricingEligibilityTenantIsolation:
         t1 = _make_tenant(suffix="A")
         t2 = _make_tenant(suffix="B")
         owner = make_client(tenant_id=t1.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin")
-        _, version, plan = self._make_product_and_plan(owner)
+        _, plan = self._make_product_and_plan(owner)
         proposer, member = self._make_proposer_and_principal_member(owner)
         quote = owner.post(
             "/api/v1/quotes",
-            {"proposerId": str(proposer.id), "productVersionId": "placeholder", "planId": "placeholder", "effectiveDate": "2026-06-01"},
+            {"proposerId": str(proposer.id), "planId": "placeholder", "effectiveDate": "2026-06-01"},
         )
         # We don't need a successful quote creation — as long as we have a quote ID,
         # we can test cross-tenant visibility. Let's bypass the request and create directly.
@@ -361,7 +354,6 @@ class TestQuotePricingEligibilityTenantIsolation:
         real_quote = Quote.all_tenants.create(
             tenant_id=t1.id,
             proposer=proposer,
-            product_version=version,
             plan=plan,
             effective_date="2026-06-01",
             status="DRAFT",
@@ -378,12 +370,11 @@ class TestQuotePricingEligibilityTenantIsolation:
         t1 = _make_tenant(suffix="A")
         t2 = _make_tenant(suffix="B")
         owner = make_client(tenant_id=t1.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin")
-        _, version, plan = self._make_product_and_plan(owner)
+        _, plan = self._make_product_and_plan(owner)
         proposer, _ = self._make_proposer_and_principal_member(owner)
         Quote.all_tenants.create(
             tenant_id=t1.id,
             proposer=proposer,
-            product_version=version,
             plan=plan,
             effective_date="2026-06-01",
             status="DRAFT",
@@ -401,7 +392,7 @@ class TestQuotePricingEligibilityTenantIsolation:
         t1 = _make_tenant(suffix="A")
         t2 = _make_tenant(suffix="B")
         owner = make_client(tenant_id=t1.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin")
-        _, version, plan = self._make_product_and_plan(owner)
+        _, plan = self._make_product_and_plan(owner)
         rating_table = RatingTable.all_tenants.create(
             tenant_id=t1.id, code="RT", name="RT", version_no=1,
             effective_from="2026-01-01", currency_code="BRL",
@@ -411,7 +402,6 @@ class TestQuotePricingEligibilityTenantIsolation:
         )
         run = PricingRun.all_tenants.create(
             tenant_id=t1.id,
-            product_version=version,
             plan=plan,
             rating_table=rating_table,
             parameter_set=parameter_set,
@@ -432,8 +422,8 @@ class TestQuotePricingEligibilityTenantIsolation:
     def test_TENANT_014_cross_tenant_eligibility_evaluate_rejects_foreign_references(self, db):
         """ART-006 `evaluateEligibility` has no listing endpoint at all
         (only `POST /eligibility/evaluate`), so isolation is exercised by
-        proving a tenant cannot reference another tenant's productVersion/
-        plan: `EvaluateEligibilityUseCase` resolves both via the tenant-
+        proving a tenant cannot reference another tenant's plan:
+        `EvaluateEligibilityUseCase` resolves it via the tenant-
         scoped manager, so a foreign id resolves to nothing and the use
         case raises ReferencedEntityNotFoundError (400 VALIDATION-400) —
         never evaluates against, or leaks the existence of, tenant A's
@@ -441,7 +431,7 @@ class TestQuotePricingEligibilityTenantIsolation:
         t1 = _make_tenant(suffix="A")
         t2 = _make_tenant(suffix="B")
         owner = make_client(tenant_id=t1.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin")
-        _, version, plan = self._make_product_and_plan(owner)
+        _, plan = self._make_product_and_plan(owner)
 
         other = make_client(tenant_id=t2.id, roles=["ADMIN"], scope="q360.read q360.write")
         resp = other.post(
@@ -449,7 +439,6 @@ class TestQuotePricingEligibilityTenantIsolation:
             {
                 "proposerId": None,
                 "memberId": None,
-                "productVersionId": str(version.id),
                 "planId": str(plan.id),
                 "effectiveDate": "2026-06-01",
                 "context": {},
@@ -468,11 +457,10 @@ class TestQuotePricingEligibilityTenantIsolation:
         from apps.quote.domain.enums import DocumentStatus, DocumentTemplateStatus, DocumentType
 
         proposer, _ = self._make_proposer_and_principal_member(admin_client)
-        _, version, plan = self._make_product_and_plan(admin_client)
+        _, plan = self._make_product_and_plan(admin_client)
         quote = Quote.all_tenants.create(
             tenant_id=tenant.id,
             proposer=proposer,
-            product_version=version,
             plan=plan,
             effective_date="2026-06-01",
             status="APPROVED",
@@ -482,7 +470,6 @@ class TestQuotePricingEligibilityTenantIsolation:
             quote=quote,
             snapshot_no=1,
             snapshot_type="SUBMISSION",
-            product_version=version,
             plan=plan,
             snapshot_json={},
             checksum="snap-checksum",
@@ -545,11 +532,10 @@ class TestQuotePricingEligibilityTenantIsolation:
         t2 = _make_tenant(suffix="B")
         owner = make_client(tenant_id=t1.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin")
         proposer, _ = self._make_proposer_and_principal_member(owner)
-        _, version, plan = self._make_product_and_plan(owner)
+        _, plan = self._make_product_and_plan(owner)
         quote = Quote.all_tenants.create(
             tenant_id=t1.id,
             proposer=proposer,
-            product_version=version,
             plan=plan,
             effective_date="2026-06-01",
             status=QuoteStatus.IN_REVIEW.value,

@@ -11,16 +11,8 @@ import pytest
 
 def _plan(client, *, product_code: str) -> dict:
     product = client.post("/api/v1/products", {"code": product_code, "name": product_code}).data
-    version = client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    ).data
-    # Plans can only be added to a DRAFT version (Q360-S2-02) — publish
-    # AFTER creating the plan, not before.
-    plan = client.post(
-        "/api/v1/plans", {"productVersionId": version["id"], "code": "BASIC", "name": "Basic"}
-    ).data
-    client.post(f"/api/v1/product-versions/{version['id']}/publish")
-    return {"productVersionId": version["id"], "planId": plan["id"]}
+    plan = client.post("/api/v1/plans", {"productId": product["id"], "code": "BASIC", "name": "Basic"}).data
+    return {"productId": product["id"], "planId": plan["id"]}
 
 
 def _parameter_set(client, *, code: str, base_premium: str = "100.00") -> str:
@@ -58,7 +50,16 @@ def _rating_table(client, *, code: str) -> str:
 
 
 def _member(client) -> str:
-    proposer = client.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "Holder"}).data
+    proposer = client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Holder",
+            "registrationNumber": "123456789LA042",
+            "email": "holder@example.com",
+            "phone": "+244900000000",
+        },
+    ).data
     member = client.post(
         "/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR"}
     ).data
@@ -67,7 +68,6 @@ def _member(client) -> str:
 
 def _calc_body(*, plan_ref: dict, param_code: str, table_code: str, member_id: str, age_band: str = "30-39") -> dict:
     return {
-        "productVersionId": plan_ref["productVersionId"],
         "planId": plan_ref["planId"],
         "effectiveDate": "2026-06-01",
         "memberIds": [member_id],
@@ -120,7 +120,7 @@ def test_calculate_pricing_with_idempotency_enabled(admin_client, settings):
         "/api/v1/pricing/calculate", body, format="json", HTTP_IDEMPOTENCY_KEY="pricing-idemp-1"
     )
     assert first.status_code == 200
-    assert first.data["versions"]["productVersionId"] == plan_ref["productVersionId"]
+    assert first.data["versions"]["productId"] == plan_ref["productId"]
 
     replay = admin_client.post(
         "/api/v1/pricing/calculate", body, format="json", HTTP_IDEMPOTENCY_KEY="pricing-idemp-1"
@@ -150,7 +150,6 @@ def test_missing_context_keys_rejected(admin_client):
     response = admin_client.post(
         "/api/v1/pricing/calculate",
         {
-            "productVersionId": plan_ref["productVersionId"],
             "planId": plan_ref["planId"],
             "effectiveDate": "2026-06-01",
             "memberIds": [member_id],

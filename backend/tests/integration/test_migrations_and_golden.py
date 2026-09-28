@@ -36,7 +36,7 @@ from apps.foundation.infrastructure.models import (
 )
 from apps.pricing.domain.enums import PricingRunStatus
 from apps.pricing.infrastructure.models import PricingRun, RatingFactor, RatingTable
-from apps.product.infrastructure.models import Plan, Product, ProductVersion
+from apps.product.infrastructure.models import Plan, Product
 from apps.quote.infrastructure.models import Quote
 
 
@@ -162,12 +162,7 @@ def test_MIG_003_eligibility_rule_produces_deterministic_decision():
         )
 
         product = Product.objects.create(tenant_id=tenant.id, code="P-MIG3", name="P Mig3")
-        pv = ProductVersion.objects.create(
-            tenant_id=tenant.id, product=product, version_no=1, effective_from=datetime.date(2026, 1, 1)
-        )
-        plan = Plan.objects.create(
-            tenant_id=tenant.id, product_version=pv, code="BASE", name="Base"
-        )
+        plan = Plan.objects.create(tenant_id=tenant.id, product=product, code="BASE", name="Base")
 
         from apps.eligibility.application.use_cases import EvaluateEligibilityUseCase
         from apps.client.infrastructure.models import Proposer, InsuredMember
@@ -194,7 +189,6 @@ def test_MIG_003_eligibility_rule_produces_deterministic_decision():
         eval_date = datetime.date(2026, 6, 1)
         ev1 = uc.execute(
             proposer_id=proposer.id,
-            product_version_id=pv.id,
             plan_id=plan.id,
             effective_date=eval_date,
             member_id=member.id,
@@ -203,7 +197,6 @@ def test_MIG_003_eligibility_rule_produces_deterministic_decision():
         )
         ev2 = uc.execute(
             proposer_id=proposer.id,
-            product_version_id=pv.id,
             plan_id=plan.id,
             effective_date=eval_date,
             member_id=member.id,

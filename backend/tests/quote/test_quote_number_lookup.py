@@ -4,8 +4,8 @@ every Quote is assigned a stable, sequential "COT-N" quote_number as soon
 as it is created (DECISIONS_TAKEN.md#S06-QUOTE-001 item 4), not only once
 approved - it stays the same number through submit/approve/reject/return.
 GET /quotes?quoteNumber= resolves everything a lookup-by-number flow needs
-(productVersionId, planId, proposerId, effectiveDate) from that single
-number, at any status.
+(planId, proposerId, effectiveDate) from that single number, at any
+status.
 """
 from __future__ import annotations
 
@@ -84,7 +84,6 @@ def test_lookup_by_quote_number_resolves_full_context(admin_client, tenant):
     assert len(found.data["items"]) == 1
     resolved = found.data["items"][0]
     assert resolved["id"] == quote["id"]
-    assert resolved["productVersionId"] == quote["productVersionId"]
     assert resolved["planId"] == quote["planId"]
     assert resolved["proposerId"] == quote["proposerId"]
     assert resolved["effectiveDate"] == quote["effectiveDate"]

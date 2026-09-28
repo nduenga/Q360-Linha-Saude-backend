@@ -55,12 +55,9 @@ def test_create_plan_requires_admin_scope_not_write(tenant):
     # createPlan's ART-006 security block is q360.admin, not q360.write.
     client = make_client(tenant_id=tenant.id, roles=["ADMIN"], scope="q360.read q360.write")
     product = client.post("/api/v1/products", {"code": "SCOPE", "name": "Scope"}).data
-    version = client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    )
-    # createProductVersion is also q360.admin-only.
-    assert version.status_code == 403
-    assert version.data["code"] == "AUTH-403"
+    plan = client.post("/api/v1/plans", {"productId": product["id"], "code": "P1", "name": "P1"})
+    assert plan.status_code == 403
+    assert plan.data["code"] == "AUTH-403"
 
 
 @pytest.mark.django_db
@@ -68,11 +65,8 @@ def test_edit_and_delete_plan_require_product_manage_permission(admin_client, te
     """Same DOC-001 s18 gate as creating a plan (require_permission(PRODUCT_MANAGE))
     - SUBSCRIBER can read a plan but not edit/delete it."""
     product = admin_client.post("/api/v1/products", {"code": "PLAN-PERM", "name": "Plan Perm"}).data
-    version = admin_client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    ).data
     plan = admin_client.post(
-        "/api/v1/plans", {"productVersionId": version["id"], "code": "PERM", "name": "Original"}
+        "/api/v1/plans", {"productId": product["id"], "code": "PERM", "name": "Original"}
     ).data
 
     subscriber_client = make_client(tenant_id=tenant.id, roles=["SUBSCRIBER"], scope="q360.read q360.write")

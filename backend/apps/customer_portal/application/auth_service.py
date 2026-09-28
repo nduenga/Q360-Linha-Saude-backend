@@ -21,7 +21,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.client.infrastructure.models import Proposer
-from apps.customer_portal.domain.errors import InvalidPortalCredentialsError, PortalAccountLockedError
+from apps.customer_portal.domain.errors import (
+    InvalidPortalCredentialsError,
+    PortalAccountLockedError,
+    PortalQuoteNotFoundError,
+    PortalRegistrationMismatchError,
+)
 from apps.customer_portal.domain.lockout import LockoutState, is_locked, register_failure, register_success
 from apps.customer_portal.infrastructure.email_sender import send_otp_email
 from apps.customer_portal.infrastructure.models import (
@@ -45,13 +50,13 @@ class CustomerPortalAuthService:
     def request_access(
         self, *, quote_number: str, registration_number: str, email: str, correlation_id: str | None
     ) -> None:
-        """Always completes without raising — the response must not reveal
-        whether quoteNumber/registrationNumber matched anything (avoids
-        confirming a real policy/document number to an unauthenticated
-        caller)."""
+        """Raises PortalQuoteNotFoundError / PortalRegistrationMismatchError
+        telling the caller exactly which of quoteNumber/registrationNumber
+        is wrong (Product Owner decision, 2026-09-26 — trades the
+        original always-202/never-reveal-anything design for clearer
+        feedback; see apps.customer_portal.domain.errors module docstring
+        for the compensating rate-limit control this relies on)."""
         proposer = self._resolve_proposer(quote_number=quote_number, registration_number=registration_number)
-        if proposer is None:
-            return
 
         tenant_id = CurrentTenantProvider.require().value
         with transaction.atomic():
@@ -87,12 +92,16 @@ class CustomerPortalAuthService:
         self, *, quote_number: str, registration_number: str, email: str, otp: str, correlation_id: str | None
     ) -> tuple[str, int]:
         tenant_id = CurrentTenantProvider.require().value
-        proposer = self._resolve_proposer(quote_number=quote_number, registration_number=registration_number)
-        account = None
-        if proposer is not None:
-            account = CustomerAccount.objects.filter(tenant_id=tenant_id, email=email).first()
+        # Raises PortalQuoteNotFoundError/PortalRegistrationMismatchError
+        # the same way request_access() does — same fields, same honesty
+        # policy either way.
+        self._resolve_proposer(quote_number=quote_number, registration_number=registration_number)
+        account = CustomerAccount.objects.filter(tenant_id=tenant_id, email=email).first()
         if account is None:
-            raise InvalidPortalCredentialsError("Credentials do not match any active account")
+            raise InvalidPortalCredentialsError(
+                "No access request was made for this quoteNumber/registrationNumber/email combination "
+                "— request a new code first"
+            )
 
         now = timezone.now()
         state = LockoutState(failed_attempts=account.failed_otp_attempts, locked_until=account.locked_until)
@@ -153,14 +162,23 @@ class CustomerPortalAuthService:
         return token, ttl_seconds
 
     @staticmethod
-    def _resolve_proposer(*, quote_number: str, registration_number: str) -> Proposer | None:
+    def _resolve_proposer(*, quote_number: str, registration_number: str) -> Proposer:
+        # PENDING MIGRATION (DECISIONS_TAKEN.md#S09-POLICY-001,
+        # ROADMAP_APOLICES.md Fase 6): login should resolve by
+        # `Policy.policy_number` against an ACTIVE/EXPIRED policy, not by
+        # `Quote.quote_number`+APPROVED. Left as-is (quote-based) until
+        # Fase 6 lands, since `apps.policy` does not exist yet and the
+        # portal must keep working end-to-end in the meantime — this is a
+        # known, tracked gap, not an oversight.
         quote = (
             Quote.objects.filter(quote_number=quote_number, status="APPROVED")
             .select_related("proposer")
             .first()
         )
         if quote is None or quote.proposer is None:
-            return None
+            raise PortalQuoteNotFoundError(f"No approved quote found for quoteNumber '{quote_number}'")
         if quote.proposer.registration_number != registration_number:
-            return None
+            raise PortalRegistrationMismatchError(
+                "registrationNumber does not match the proposer of this quote"
+            )
         return quote.proposer

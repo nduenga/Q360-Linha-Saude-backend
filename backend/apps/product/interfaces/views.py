@@ -26,8 +26,7 @@ from apps.product.application.pricing_parameter_service import (
     delete_pricing_parameter_set,
     update_pricing_parameter_set,
 )
-from apps.product.application.use_cases import PublishProductVersionUseCase
-from apps.product.infrastructure.models import Benefit, Plan, PricingParameterSet, Product, ProductVersion
+from apps.product.infrastructure.models import Benefit, Plan, PricingParameterSet, Product
 from apps.product.interfaces.serializers import (
     AddPlanBenefitRequestSerializer,
     BenefitSerializer,
@@ -40,8 +39,6 @@ from apps.product.interfaces.serializers import (
     ProductCreateRequestSerializer,
     ProductSerializer,
     ProductUpdateRequestSerializer,
-    ProductVersionCreateRequestSerializer,
-    ProductVersionSerializer,
     VersionedConfigHeaderSerializer,
 )
 from shared.pagination import Q360PageNumberPagination
@@ -106,49 +103,12 @@ class ProductDetailView(APIView):
         return Response(status=204)
 
 
-class ProductVersionCreateView(APIView):
-    """ART-006 `/api/v1/products/{productId}/versions`: `createProductVersion`
-    (POST). `GET` (list a product's versions) is a pragmatic V1 addition,
-    not in ART-006 — see OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md;
-    same shape/pagination as every other list endpoint, no invented field."""
-
-    def get_permissions(self):
-        if self.request.method == "POST":
-            return [require_scope(Scope.ADMIN)(), require_permission(Permission.PRODUCT_MANAGE)()]
-        return [require_scope(Scope.READ)()]
-
-    def get(self, request, product_id):
-        get_object_or_404(Product, id=product_id)
-        queryset = ProductVersion.objects.filter(product_id=product_id).order_by("-version_no")
-        paginator = Q360PageNumberPagination()
-        page = paginator.paginate_queryset(queryset, request)
-        return paginator.get_paginated_response(ProductVersionSerializer(page, many=True).data)
-
-    def post(self, request, product_id):
-        product = get_object_or_404(Product, id=product_id)
-        body = ProductVersionCreateRequestSerializer(data=request.data)
-        body.is_valid(raise_exception=True)
-        version = product_service.create_product_version(
-            product=product,
-            effective_from=body.validated_data["effectiveFrom"],
-        )
-        return Response(ProductVersionSerializer(version).data, status=201)
-
-
-@requires_idempotency
-class ProductVersionPublishView(APIView):
-    """ART-006 `/api/v1/product-versions/{versionId}/publish`: `publishProductVersion` (POST)."""
-
-    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
-
-    def post(self, request, version_id):
-        version = get_object_or_404(ProductVersion, id=version_id)
-        published = PublishProductVersionUseCase().execute(version)
-        return Response(ProductVersionSerializer(published).data)
-
-
 class PlanListCreateView(APIView):
-    """ART-006 `/api/v1/plans`: `listPlans` (GET), `createPlan` (POST)."""
+    """ART-006 `/api/v1/plans`: `listPlans` (GET), `createPlan` (POST).
+
+    DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26): no more
+    `/products/{id}/versions` or `/product-versions/{id}/publish` — a Plan
+    is created directly under a Product, filterable by `productId`."""
 
     def get_permissions(self):
         if self.request.method == "POST":
@@ -157,9 +117,9 @@ class PlanListCreateView(APIView):
 
     def get(self, request):
         queryset = Plan.objects.all().order_by("code")
-        product_version_id = request.query_params.get("productVersionId")
-        if product_version_id:
-            queryset = queryset.filter(product_version_id=product_version_id)
+        product_id = request.query_params.get("productId")
+        if product_id:
+            queryset = queryset.filter(product_id=product_id)
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(PlanSerializer(page, many=True).data)
@@ -167,9 +127,9 @@ class PlanListCreateView(APIView):
     def post(self, request):
         body = PlanCreateRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        product_version = get_object_or_404(ProductVersion, id=body.validated_data["productVersionId"])
+        product = get_object_or_404(Product, id=body.validated_data["productId"])
         plan = product_service.create_plan(
-            product_version=product_version,
+            product=product,
             code=body.validated_data["code"],
             name=body.validated_data["name"],
             description=body.validated_data["description"],
@@ -181,11 +141,11 @@ class PlanListCreateView(APIView):
 @requires_idempotency
 class PlanDetailView(APIView):
     """ART-006 `/api/v1/plans/{planId}`: `getPlan` (GET). `PATCH`/`DELETE`
-    are a pragmatic V1 addition, not in ART-006 - same posture and same
-    DRAFT-only gating as PricingParameterSetDetailView/RatingTableDetailView
-    (OD-ANGOLA-006: 'remover' on something whose parent is no longer DRAFT
-    is not possible at all for a Plan - a Plan has no PUBLISHED/RETIRED
-    state of its own to retire into, only its parent ProductVersion does)."""
+    are a pragmatic V1 addition, not in ART-006. DECISIONS_TAKEN.md#S09-
+    POLICY-001 (PO-APO-6): a Plan can be edited/deleted at any time now (no
+    more parent-version DRAFT gate) — delete is still blocked with 409 if a
+    Quote/PricingRun/eligibility evaluation already references this Plan
+    (product_service.delete_plan)."""
 
     def get_permissions(self):
         if self.request.method in ("PATCH", "DELETE"):

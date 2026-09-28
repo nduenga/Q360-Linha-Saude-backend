@@ -19,7 +19,7 @@ class ImmutableVersionError(DomainProblem):
 
 
 class ReferencedEntityNotFoundError(DomainProblem):
-    """`productVersionId`/`planId`/a memberId does not resolve to a real
+    """`planId`/a memberId does not resolve to a real
     row for this tenant. `calculatePricing`'s response set (ART-006) has
     no 404, so this is a request error (400) — same reasoning as
     apps.eligibility.domain.errors.ReferencedEntityNotFoundError."""

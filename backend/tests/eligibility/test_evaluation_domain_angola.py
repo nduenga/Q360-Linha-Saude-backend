@@ -15,11 +15,9 @@ from apps.eligibility.domain.evaluation import (
     EligibilityRuleConfig,
     EvaluationInput,
     PlanFacts,
-    ProductVersionFacts,
     evaluate,
 )
 
-_PV = ProductVersionFacts(effective_from=datetime.date(2026, 1, 1), effective_to=None)
 _PLAN_ACTIVE = PlanFacts(is_active=True)
 _EFFECTIVE = datetime.date(2026, 6, 1)
 
@@ -48,7 +46,6 @@ def _input(**overrides) -> EvaluationInput:
         member_id="m-1",
         relationship_code="FILHO",
         date_of_birth=datetime.date(2005, 1, 1),  # 21 on _EFFECTIVE
-        product_version_id="pv-1",
         plan_id="plan-1",
         effective_date=_EFFECTIVE,
         relationship_category="CHILD",
@@ -58,7 +55,7 @@ def _input(**overrides) -> EvaluationInput:
 
 
 def _evaluate(data, config):
-    return evaluate(data=data, product_version=_PV, plan=_PLAN_ACTIVE, config=config)
+    return evaluate(data=data, plan=_PLAN_ACTIVE, config=config)
 
 
 # --- CHILD ---------------------------------------------------------------

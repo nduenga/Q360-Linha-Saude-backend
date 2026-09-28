@@ -5,8 +5,8 @@ HTTP surface (OPEN_DECISIONS.md#S02-CONTRACT-001) — this module gives them
 real behaviour: a fixed catalogue of the 11 coverages from the ARSEG-market
 guide supplied by the Product Owner (3 BASE, always attached to every
 Plan automatically; 8 COMPLEMENTARY, opt-in per Plan), and the invariant
-that a ProductVersion cannot publish while any of its Plans is missing a
-BASE coverage.
+that every Plan carries the 3 BASE coverages for its whole lifetime — never
+optional, never removable (DECISIONS_TAKEN.md#S09-POLICY-001).
 
 `Benefit` is `TenantScopedModel` (ART-012 has no cross-tenant catalog
 table), so the fixed catalogue is seeded per-tenant, idempotently, the

@@ -6,9 +6,11 @@ from rest_framework import serializers
 
 
 class EligibilityRequestSerializer(serializers.Serializer):
+    """DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): `productVersionId`
+    dropped — `planId` alone resolves the product via `Plan.productId`."""
+
     proposerId = serializers.UUIDField(allow_null=True, required=False, default=None)
     memberId = serializers.UUIDField(allow_null=True, required=False, default=None)
-    productVersionId = serializers.UUIDField()
     planId = serializers.UUIDField()
     effectiveDate = serializers.DateField()
     context = serializers.JSONField()

@@ -18,10 +18,12 @@ from apps.quote.domain.enums import (
 
 
 class QuoteSerializer(serializers.Serializer):
+    """DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): `productVersionId`
+    dropped — `planId` alone resolves the product via `Plan.productId`."""
+
     id = serializers.UUIDField()
     quoteNumber = serializers.CharField(source="quote_number", allow_null=True)
     proposerId = serializers.UUIDField(source="proposer_id")
-    productVersionId = serializers.UUIDField(source="product_version_id")
     planId = serializers.UUIDField(source="plan_id")
     status = serializers.ChoiceField(choices=[s.value for s in QuoteStatus])
     effectiveDate = serializers.DateField(source="effective_date")
@@ -33,7 +35,6 @@ class QuoteSerializer(serializers.Serializer):
 
 class QuoteCreateRequestSerializer(serializers.Serializer):
     proposerId = serializers.UUIDField()
-    productVersionId = serializers.UUIDField()
     planId = serializers.UUIDField()
     effectiveDate = serializers.DateField()
 

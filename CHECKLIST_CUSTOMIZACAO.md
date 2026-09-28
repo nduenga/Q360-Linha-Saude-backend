@@ -26,20 +26,20 @@ ficam marcados `(frontend — outra pessoa)` e não são construídos aqui.
 - [x] Verificado E2E contra o servidor real
 - [ ] Em aberto: OD-ANGOLA-002 (limites/franquias), OD-ANGOLA-007 (codes)
 
-## 2 — Versionamento automático do produto ✅ backend concluído (2026-09-19)
+## 2 — Versionamento automático do produto ⚠️ substituído (2026-09-26, ver `ROADMAP_APOLICES.md` Fase 1)
 - [x] OD-ANGOLA-003 resolvida: auto-publica (sem passo DRAFT manual)
 - [x] OD-ANGOLA-004 resolvida e testada: não quebra cotações em curso
 - [x] **Backend**: editar produto cria sempre a próxima versão (herda
       planos/coberturas reais, nunca hardcoded) — `create_next_version()`
 - [ ] *(frontend — outra pessoa)* remover botão "Criar versão"
 
-## 3 — Produtos sem data de término ✅ backend concluído (2026-09-19)
+## 3 — Produtos sem data de término ⚠️ substituído (2026-09-26, sem `ProductVersion`, ver `ROADMAP_APOLICES.md` Fase 1)
 - [x] **Backend**: `effectiveTo` removido do serializer de criação de versão
 - [x] Efeito colateral tratado: GT-ELIG-002 (golden test) adaptado —
       exercita `evaluate()` directamente, já não via API (ver roadmap)
 - [ ] *(frontend — outra pessoa)* remover campo "Data de término" da UI
 
-## 4 — Elegibilidade por número de apólice ✅ backend concluído (2026-09-19)
+## 4 — Elegibilidade por número de apólice ⚠️ substituído (2026-09-26, apólice = `Policy` real, ver `ROADMAP_APOLICES.md`)
 - [x] OD-ANGOLA-005 resolvida: apólice = `Quote.quoteNumber` (aprovação)
 - [x] **Backend**: `quote_number` atribuído em APPROVE (numbering_service)
 - [x] **Backend**: `GET /quotes?quoteNumber=` resolve o contexto completo

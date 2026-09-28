@@ -21,21 +21,22 @@ _EMAIL = "cliente@example.com"
 def _setup_approved_quote(admin_client) -> dict:
     proposer = admin_client.post(
         "/api/v1/proposers",
-        {"proposerType": "INDIVIDUAL", "displayName": "Cliente Teste", "registrationNumber": _REGISTRATION_NUMBER},
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Cliente Teste",
+            "registrationNumber": _REGISTRATION_NUMBER,
+            "email": _EMAIL,
+            "phone": "+244900000000",
+        },
     ).data
     product = admin_client.post("/api/v1/products", {"code": "PORTAL-PROD", "name": "Portal Product"}).data
-    version = admin_client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    ).data
     plan = admin_client.post(
-        "/api/v1/plans", {"productVersionId": version["id"], "code": "PLAN-A", "name": "Plan A"}
+        "/api/v1/plans", {"productId": product["id"], "code": "PLAN-A", "name": "Plan A"}
     ).data
-    admin_client.post(f"/api/v1/product-versions/{version['id']}/publish")
     quote = admin_client.post(
         "/api/v1/quotes",
         {
             "proposerId": proposer["id"],
-            "productVersionId": version["id"],
             "planId": plan["id"],
             "effectiveDate": "2026-06-01",
         },
@@ -69,15 +70,33 @@ def test_request_access_sends_otp_email_for_valid_quote_and_document(admin_clien
 
 
 @pytest.mark.django_db
-def test_request_access_is_silent_for_a_nonexistent_quote(tenant):
+def test_request_access_reports_quote_not_found_for_a_nonexistent_quote(tenant):
+    # Product Owner decision (2026-09-26): no longer a silent 202 — see
+    # apps.customer_portal.domain.errors module docstring.
     client = APIClient()
     response = client.post(
         f"/api/v1/customer-portal/{tenant.id}/auth/request-access",
         {"quoteNumber": "DOES-NOT-EXIST", "registrationNumber": "000000000LA000", "email": _EMAIL},
         format="json",
     )
-    # Same response as a real match — never reveals whether anything matched.
-    assert response.status_code == 202
+    assert response.status_code == 404
+    assert response.data["code"] == "PORTAL-QUOTE-NOT-FOUND"
+    assert len(mail.outbox) == 0
+
+
+@pytest.mark.django_db
+def test_request_access_reports_registration_mismatch_for_a_real_quote(admin_client, tenant):
+    # Same Product Owner decision as above: a real quoteNumber with the
+    # wrong registrationNumber is now distinguishable from a nonexistent one.
+    scope = _setup_approved_quote(admin_client)
+    client = APIClient()
+    response = client.post(
+        f"/api/v1/customer-portal/{tenant.id}/auth/request-access",
+        {"quoteNumber": scope["quoteNumber"], "registrationNumber": "000000000LA000", "email": _EMAIL},
+        format="json",
+    )
+    assert response.status_code == 401
+    assert response.data["code"] == "PORTAL-REGISTRATION-MISMATCH"
     assert len(mail.outbox) == 0
 
 

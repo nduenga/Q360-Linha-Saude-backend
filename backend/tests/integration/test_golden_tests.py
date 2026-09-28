@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -63,39 +62,26 @@ def test_golden_directory_has_no_unexpected_new_cases():
     assert on_disk == known, f"Unrecognised golden files (add a case for them): {on_disk - known}"
 
 
-def test_GT_ELIG_002_product_not_effective_is_hard_stop():
-    """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 3 ("produtos não podem ter
-    data de término de vigência") removed `effectiveTo` from
-    `POST /products/{id}/versions` — GT-ELIG-002's exact input (a
-    ProductVersion with a bounded effective range) is no longer
-    constructible through the real HTTP API, per the golden-test README's
-    own rule ("a baseline change must be explained by an approved change
-    in input semantics"). The ELIG-006 rule itself is untouched, so this
-    exercises the same domain function directly instead of retiring the
-    case outright."""
-    from apps.eligibility.domain.evaluation import EvaluationInput, PlanFacts, ProductVersionFacts, evaluate
-
-    case = _load("GT-ELIG-002")
-    snap = case["inputSnapshot"]
-
-    decision, messages = evaluate(
-        data=EvaluationInput(
-            member_id="m1",
-            relationship_code="TITULAR",
-            date_of_birth=None,
-            product_version_id="pv1",
-            plan_id="p1",
-            effective_date=date.fromisoformat(snap["quoteEffectiveDate"]),
-        ),
-        product_version=ProductVersionFacts(
-            effective_from=date.fromisoformat(snap["productEffectiveFrom"]),
-            effective_to=date.fromisoformat(snap["productEffectiveTo"]),
-        ),
-        plan=PlanFacts(is_active=True),
-        config=None,
+@pytest.mark.skip(
+    reason=(
+        "DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26) retired "
+        "ProductVersion entirely, and with it ELIG-006 ('product version "
+        "not effective on quote date') — folded into ELIG-007 ('plan "
+        "inactive'), see apps.eligibility.domain.evaluation.evaluate() "
+        "docstring. GT-ELIG-002's exact scenario (a bounded product "
+        "effective range) can no longer occur in the domain at all, so "
+        "unlike the Épico 3 change (which only narrowed how the case "
+        "could be *constructed* and was still exercisable by calling "
+        "evaluate() directly), there is no equivalent case left to run — "
+        "retiring the case outright is the correct move this time, per "
+        "the golden-test README's own rule. GT-ELIG-002.json is kept on "
+        "disk (docs/artifacts/ART-013 is not this session's to edit) and "
+        "in the tripwire's `known` set below, with this skip as the "
+        "explanation."
     )
-    assert decision.value == case["expected"]["decision"]
-    assert {m.code for m in messages} == {case["expected"]["code"]}
+)
+def test_GT_ELIG_002_product_not_effective_is_hard_stop():
+    pass
 
 
 @pytest.mark.django_db
@@ -135,11 +121,8 @@ def test_GT_PRICE_005_base_plus_adjustment_reconciles_exactly(admin_client):
     adjustment_amount = Decimal(case["inputSnapshot"]["syntheticComponents"][1]["amount"])
 
     product = admin_client.post("/api/v1/products", {"code": f"GT-PRICE-{suffix}", "name": "P"}).data
-    version = admin_client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    ).data
     plan = admin_client.post(
-        "/api/v1/plans", {"productVersionId": version["id"], "code": "B", "name": "B"}
+        "/api/v1/plans", {"productId": product["id"], "code": "B", "name": "B"}
     ).data
     params = admin_client.post(
         "/api/v1/pricing-parameter-sets",
@@ -179,17 +162,23 @@ def test_GT_PRICE_005_base_plus_adjustment_reconciles_exactly(admin_client):
         format="json",
     ).data
     admin_client.post(f"/api/v1/configuration/rule-version/{elig_rule['id']}/publish")
-    admin_client.post(f"/api/v1/product-versions/{version['id']}/publish")
 
     proposer_id = admin_client.post(
-        "/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "H"}
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "H",
+            "registrationNumber": "123456789LA042",
+            "email": "h@example.com",
+            "phone": "+244900000000",
+        },
     ).data["id"]
     member_id = admin_client.post(
         "/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data["id"]
     quote = admin_client.post(
         "/api/v1/quotes",
-        {"productVersionId": version["id"], "planId": plan["id"], "proposerId": proposer_id, "effectiveDate": "2026-06-01"},
+        {"planId": plan["id"], "proposerId": proposer_id, "effectiveDate": "2026-06-01"},
         format="json",
     ).data
     admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")

@@ -38,22 +38,6 @@ def _run_concurrently(*targets: callable) -> list:
 
 
 @pytest.mark.django_db(transaction=True)
-def test_concurrent_publish_only_one_succeeds(tenant):
-    client = make_client(tenant_id=tenant.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin")
-    product = client.post("/api/v1/products", {"code": "RACE", "name": "Race"}).data
-    version = client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    ).data
-
-    def publish():
-        return client.post(f"/api/v1/product-versions/{version['id']}/publish").status_code
-
-    statuses = _run_concurrently(publish, publish)
-
-    assert sorted(statuses) == [200, 409]
-
-
-@pytest.mark.django_db(transaction=True)
 def test_concurrent_pricing_parameter_set_publish_only_one_succeeds(tenant):
     client = make_client(tenant_id=tenant.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin")
     created = client.post(

@@ -120,6 +120,12 @@ em vez de partir do zero.
 
 ## Épico 2 — Versionamento automático do produto ✅ Backend concluído (2026-09-19)
 
+> **⚠️ Substituído em 2026-09-26 (PO-APO-6, `DECISIONS_TAKEN.md#S09-POLICY-001`):**
+> deixam de existir "versões" de produto. `Plan` passa a ligar directamente
+> a `Product`, com estados `ACTIVE`/`INACTIVE` a fazer o papel que a
+> retirada de versão fazia. Ver `ROADMAP_APOLICES.md` Fase 1. Esta secção
+> fica só como histórico do desenho anterior.
+
 **Pedido:** qualquer alteração ao produto (mesmo a mais básica) cria
 automaticamente uma nova versão; deixa de existir a opção "criar versão" —
 passa a ser sempre "editar produto".
@@ -165,6 +171,11 @@ Coexistiam **dois caminhos inconsistentes**:
 
 ## Épico 3 — Produtos sem data de término de vigência ✅ Backend concluído (2026-09-19)
 
+> **⚠️ Substituído em 2026-09-26 (PO-APO-6, `DECISIONS_TAKEN.md#S09-POLICY-001`):**
+> sem `ProductVersion`, a pergunta "tem data de término?" deixa de se
+> aplicar — um `Plan` fica `ACTIVE` até passar a `INACTIVE`, sem datas.
+> Ver `ROADMAP_APOLICES.md` Fase 1.
+
 ### Estado actual (antes desta implementação)
 
 `ProductVersion.effective_to` já era opcional (nullable) na BD e no
@@ -197,6 +208,12 @@ Nenhuma.
 ---
 
 ## Épico 4 — Elegibilidade por número de apólice
+
+> **⚠️ Substituído em 2026-09-26 (PO-APO-1, `DECISIONS_TAKEN.md#S09-POLICY-001`):**
+> a OD-ANGOLA-005 abaixo ("apólice = `Quote.quoteNumber`") deixa de valer.
+> A apólice passa a ser a entidade `Policy` (`apps.policy`), criada só na
+> assinatura do tomador — nunca na aprovação da cotação. Ver
+> `ROADMAP_APOLICES.md` Fases 2-4.
 
 **Pedido:** em vez de pedir os dados um a um, pedir o ID da apólice e
 preencher tudo automaticamente.
@@ -385,6 +402,11 @@ Product Owner criar a conta Auth0.
 Ver detalhe completo em `AUTH0_SETUP.md`.
 
 ### OD-ANGOLA-009 (pedido "OD-002") - versao antiga nunca inicia negocio novo
+
+> **⚠️ Reformulada em 2026-09-26 (`DECISIONS_TAKEN.md#S09-POLICY-001`):**
+> sem `ProductVersion`, o mesmo princípio passa a ser "um `Plan`
+> `INACTIVE` nunca inicia negócio novo, mas cotações/apólices existentes
+> continuam válidas". Ver `ROADMAP_APOLICES.md` Fase 1.
 
 **Pedido (resumido):** quando existe uma versao nova de um produto, a
 versao anterior deixa de poder ser usada para **novas** cotacoes - mas

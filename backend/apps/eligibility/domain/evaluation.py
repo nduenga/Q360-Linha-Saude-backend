@@ -233,7 +233,6 @@ class EvaluationInput:
     member_id: str | None
     relationship_code: str | None
     date_of_birth: datetime.date | None
-    product_version_id: str | None
     plan_id: str | None
     effective_date: datetime.date
     # MOTOR_ELEGIBILIDADE.md Fase A additions — all optional so existing
@@ -242,12 +241,6 @@ class EvaluationInput:
     relationship_category: str | None = None
     organisation_proposer_id: str | None = None
     angola_evidence: AngolaEvidence | None = None
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class ProductVersionFacts:
-    effective_from: datetime.date
-    effective_to: datetime.date | None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -353,38 +346,32 @@ def _waiting_period_message(*, data: EvaluationInput, config: EligibilityRuleCon
 def evaluate(
     *,
     data: EvaluationInput,
-    product_version: ProductVersionFacts | None,
     plan: PlanFacts | None,
     config: EligibilityRuleConfig | None,
 ) -> tuple[EligibilityDecision, list[EligibilityMessage]]:
     """Pure function: same inputs always produce the same decision (DOC-004
     s9/DOC-000 P-02 determinism). Rule IDs referenced in comments are
     ART-008 Rule Matrix rows.
+
+    DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26): ELIG-006
+    ("product version not effective on quote date") is retired along with
+    ProductVersion itself — a Plan has no [effectiveFrom, effectiveTo)
+    range of its own, only a commercializable/not `status`, so this folds
+    into ELIG-007 below (a Plan is either usable for new business or it
+    isn't; there is no separate date-range check any more).
     """
     # ELIG-001 — Completeness (PUBLISHED-CANDIDATE, no open parameter).
-    if not (data.member_id and data.product_version_id and data.plan_id and data.effective_date):
+    if not (data.member_id and data.plan_id and data.effective_date):
         return EligibilityDecision.HARD_STOP, [
             EligibilityMessage("VALIDATION-400", "ERROR", "Required input missing")
         ]
 
-    # Referenced entities must actually exist — not itself an ART-008 rule
-    # (which assumes they resolve), but a precondition for evaluating
-    # ELIG-006/007 at all.
-    if product_version is None or plan is None:
+    # Referenced entity must actually exist — not itself an ART-008 rule
+    # (which assumes it resolves), but a precondition for evaluating
+    # ELIG-007 at all.
+    if plan is None:
         return EligibilityDecision.HARD_STOP, [
-            EligibilityMessage(
-                "ELIG-REFERENCE-NOT-FOUND", "ERROR", "Referenced productVersion or plan does not exist"
-            )
-        ]
-
-    # ELIG-006 — Product version not effective.
-    if data.effective_date < product_version.effective_from or (
-        product_version.effective_to is not None and data.effective_date > product_version.effective_to
-    ):
-        return EligibilityDecision.HARD_STOP, [
-            EligibilityMessage(
-                "ELIG-PRODUCT-DATE", "ERROR", "Product version not effective on quote date"
-            )
+            EligibilityMessage("ELIG-REFERENCE-NOT-FOUND", "ERROR", "Referenced plan does not exist")
         ]
 
     # ELIG-007 — Plan inactive.

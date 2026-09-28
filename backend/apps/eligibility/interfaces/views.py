@@ -24,7 +24,6 @@ class EligibilityEvaluateView(APIView):
         evaluation = EvaluateEligibilityUseCase().execute(
             proposer_id=data["proposerId"],
             member_id=data["memberId"],
-            product_version_id=data["productVersionId"],
             plan_id=data["planId"],
             effective_date=data["effectiveDate"],
             context=data["context"],

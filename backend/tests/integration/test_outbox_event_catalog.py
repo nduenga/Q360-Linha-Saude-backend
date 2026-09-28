@@ -2,11 +2,16 @@
 .trae/specs/s09-s11-restantes/spec.md): exercising a real, already-
 implemented operation appends an `outbox_event` row with the exact
 ART-007 `eventType` (uppercase-with-dots) and non-null minimal payload
-fields — covering PRODUCT.VERSION.PUBLISHED, PROPOSER.CREATED,
-MEMBER.CREATED, ELIGIBILITY.EVALUATED, PRICING.CALCULATED, QUOTE.CREATED,
-QUOTE.SUBMITTED and QUOTE.APPROVED, driven through one realistic end-to-end
-flow (product -> proposer/member -> quote -> price -> submit -> approve)
-rather than eight disconnected fixtures.
+fields — covering PLAN.CREATED, PROPOSER.CREATED, MEMBER.CREATED,
+ELIGIBILITY.EVALUATED, PRICING.CALCULATED, QUOTE.CREATED, QUOTE.SUBMITTED
+and QUOTE.APPROVED, driven through one realistic end-to-end flow (product
+-> plan -> proposer/member -> quote -> price -> submit -> approve) rather
+than eight disconnected fixtures.
+
+DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26): PRODUCT.VERSION.
+PUBLISHED no longer fires — there is no more ProductVersion/publish step
+— replaced here by PLAN.CREATED, which `product_service.create_plan`
+already emits.
 """
 from __future__ import annotations
 
@@ -32,8 +37,7 @@ def test_outbox_event_catalog_end_to_end():
     )
 
     product = owner.post("/api/v1/products", {"code": "OUTBOX-P", "name": "P"}).data
-    version = owner.post(f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}).data
-    plan = owner.post("/api/v1/plans", {"productVersionId": version["id"], "code": "B", "name": "B"}).data
+    plan = owner.post("/api/v1/plans", {"productId": product["id"], "code": "B", "name": "B"}).data
 
     elig_rule = owner.post(
         "/api/v1/rule-versions",
@@ -59,17 +63,23 @@ def test_outbox_event_catalog_end_to_end():
     ).data
     owner.post(f"/api/v1/configuration/rating-table/{table['id']}/publish")
 
-    publish_resp = owner.post(f"/api/v1/product-versions/{version['id']}/publish")
-    assert publish_resp.status_code == 200
-
-    proposer = owner.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "Holder"}).data
+    proposer = owner.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Holder",
+            "registrationNumber": "123456789LA042",
+            "email": "holder@example.com",
+            "phone": "+244900000000",
+        },
+    ).data
     member = owner.post(
         "/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data
 
     quote = owner.post(
         "/api/v1/quotes",
-        {"productVersionId": version["id"], "planId": plan["id"], "proposerId": proposer["id"], "effectiveDate": "2026-06-01"},
+        {"planId": plan["id"], "proposerId": proposer["id"], "effectiveDate": "2026-06-01"},
         format="json",
     ).data
     owner.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member["id"]}, format="json")
@@ -85,11 +95,11 @@ def test_outbox_event_catalog_end_to_end():
     ).data
     assert approved["status"] == "APPROVED"
 
-    # PRODUCT.VERSION.PUBLISHED
-    events = _events_for(tenant.id, "PRODUCT.VERSION.PUBLISHED")
+    # PLAN.CREATED
+    events = _events_for(tenant.id, "PLAN.CREATED")
     assert len(events) == 1
     payload = events[0].payload_json["payload"]
-    assert payload["productVersionId"] == version["id"]
+    assert payload["planId"] == plan["id"]
     assert payload["productId"] == product["id"]
 
     # PROPOSER.CREATED

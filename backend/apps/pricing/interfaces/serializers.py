@@ -72,7 +72,9 @@ class RatingTableUpdateRequestSerializer(serializers.Serializer):
 
 
 class PricingCalculateRequestSerializer(serializers.Serializer):
-    productVersionId = serializers.UUIDField()
+    """DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): `productVersionId`
+    dropped — `planId` alone resolves the product via `Plan.productId`."""
+
     planId = serializers.UUIDField()
     effectiveDate = serializers.DateField()
     memberIds = serializers.ListField(child=serializers.UUIDField(), allow_empty=False)
@@ -146,7 +148,7 @@ class PricingResponseSerializer(serializers.Serializer):
             return str(value) if value is not None else None
 
         return {
-            "productVersionId": _id(obj.product_version_id),
+            "productId": _id(obj.plan.product_id),
             "ratingTableId": _id(obj.rating_table_id),
             "parameterSetId": _id(obj.parameter_set_id),
             "ruleVersionId": _id(obj.rule_version_id),

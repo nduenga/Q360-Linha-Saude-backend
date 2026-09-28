@@ -146,8 +146,9 @@ def retire_pricing_parameter_set(parameter_set: PricingParameterSet) -> PricingP
 
 def publish_pricing_parameter_set(parameter_set: PricingParameterSet) -> PricingParameterSet:
     actor = CurrentActorProvider.get()
-    # Conditional UPDATE, not read-then-save — see PublishProductVersionUseCase
-    # for why this matters under concurrent publish attempts.
+    # Conditional UPDATE, not read-then-save — closes the same TOCTOU race
+    # a concurrent publish attempt could otherwise hit (two requests both
+    # reading DRAFT before either commits).
     updated = PricingParameterSet.objects.filter(
         id=parameter_set.id, status=VersionedConfigStatus.DRAFT.value
     ).update(

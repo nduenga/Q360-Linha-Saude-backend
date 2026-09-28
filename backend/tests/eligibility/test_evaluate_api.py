@@ -13,20 +13,21 @@ import pytest
 
 def _setup_product_plan(client) -> dict:
     product = client.post("/api/v1/products", {"code": "ELIG-PROD", "name": "Eligibility Product"}).data
-    version = client.post(
-        f"/api/v1/products/{product['id']}/versions", {"effectiveFrom": "2026-01-01"}
-    ).data
-    # Plans can only be added to a DRAFT version (Q360-S2 immutability
-    # invariant) — must create the plan BEFORE publishing the version.
-    plan = client.post(
-        "/api/v1/plans", {"productVersionId": version["id"], "code": "PLAN-A", "name": "Plan A"}
-    ).data
-    client.post(f"/api/v1/product-versions/{version['id']}/publish")
-    return {"productVersionId": version["id"], "planId": plan["id"]}
+    plan = client.post("/api/v1/plans", {"productId": product["id"], "code": "PLAN-A", "name": "Plan A"}).data
+    return {"productId": product["id"], "planId": plan["id"]}
 
 
 def _setup_member(client, *, date_of_birth: str, relationship_code: str = "TITULAR") -> dict:
-    proposer = client.post("/api/v1/proposers", {"proposerType": "INDIVIDUAL", "displayName": "P"}).data
+    proposer = client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "P",
+            "registrationNumber": "123456789LA042",
+            "email": "p@example.com",
+            "phone": "+244900000000",
+        },
+    ).data
     member = client.post(
         "/api/v1/members",
         {"proposerId": proposer["id"], "relationshipCode": relationship_code, "dateOfBirth": date_of_birth},
@@ -167,15 +168,13 @@ def test_missing_required_fields_is_400():
 
 
 @pytest.mark.django_db
-def test_unknown_product_version_is_400_not_500(admin_client):
-    plan_scope = _setup_product_plan(admin_client)
+def test_unknown_plan_is_400_not_500(admin_client):
     who = _setup_member(admin_client, date_of_birth="1990-01-01")
 
     response = admin_client.post(
         "/api/v1/eligibility/evaluate",
         {
-            "productVersionId": "11111111-1111-1111-1111-111111111111",
-            "planId": plan_scope["planId"],
+            "planId": "11111111-1111-1111-1111-111111111111",
             **who,
             "effectiveDate": "2026-06-01",
             "context": {},
