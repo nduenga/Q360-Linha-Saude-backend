@@ -401,14 +401,25 @@ check_coverage(policy, member, installments, on_date, benefit_category?) →
 ```
 
 A suspensão avalia-se **por data**: um acto anterior à suspensão
-continua coberto. As mensagens ficam em `messages_pt.py`, com o tom
-definido (o que falta e qual é o próximo passo).
+continua coberto (implementado desde já — `SUSPENDED` é verificado
+mesmo sem nada ainda o atribuir, ver `DECISIONS_TAKEN.md#S09-POLICY-005`).
+As mensagens ficaram directamente em `apps/policy/domain/coverage.py`
+(dicionário `_MESSAGES`), não num `messages_pt.py` próprio — o volume não
+justificou um módulo à parte como o de `apps.eligibility`.
 
-- [ ] Endpoints `GET /policies/{id}/coverage?memberId=&date=&benefitCategory=`
-      e `GET /coverage?policyNumber=&date=`.
-- [ ] `EligibilityPage.tsx`: pesquisa por **número de apólice**. O
-      filtro `GET /quotes?quoteNumber=` deixa de servir de "lookup de
-      apólice".
+- [x] Endpoints `GET /policies/{id}/coverage?memberId=&date=&benefitCategory=`
+      (`memberId` omitido avalia todos os membros) e
+      `GET /coverage?policyNumber=&date=&memberId=&benefitCategory=`.
+      Gate só por `Scope.READ`, sem `Permission` (leitura pura).
+- [ ] `EligibilityPage.tsx` — **não implementado**, âmbito de frontend
+      fora desta sessão.
+- [x] Testes: `tests/policy/test_coverage_domain.py` (14 casos puros,
+      um por cada ramo da ordem documentada acima, mais determinismo) e
+      `tests/policy/test_coverage_api.py` (7 casos via API real —
+      incluindo um cenário completo de carência de maternidade a 300
+      dias calculada a partir da `inclusion_date` real de uma apólice
+      activada). Suite completa do backend verde (`pytest -q`, 1 skip
+      esperado).
 
 ---
 

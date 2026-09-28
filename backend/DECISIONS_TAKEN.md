@@ -608,3 +608,39 @@ nunca copiado, `requestedStartDate` inválido rejeitado, início do risco
 no dia seguinte (incl. quando assinatura e pagamento são no mesmo dia),
 plano mensal gera 12 recibos que somam o total, só cotação `APPROVED`
 pode ser assinada, procura por número de apólice.
+
+## S09-POLICY-005 — Verificação de cobertura (2026-09-28)
+
+**Contexto:** ROADMAP_APOLICES.md Fase 4 — a elegibilidade "do dia a
+dia" (distinta da elegibilidade de subscrição, `apps.eligibility`).
+`apps/policy/domain/coverage.py::check_coverage()` — função pura, sem
+BD, mesma disciplina de `apps.eligibility.domain.evaluation.evaluate()` —
+avalia pela ordem exacta documentada no roadmap (`POLICY_AWAITING_FIRST_
+PREMIUM` → `POLICY_SUSPENDED_NO_PAYMENT` → `POLICY_NOT_IN_FORCE` →
+`MEMBER_PENDING`/`MEMBER_NOT_IN_FORCE` → `BENEFIT_NOT_IN_PLAN` →
+`IN_WAITING_PERIOD` → `COVERED`).
+
+**Judgment calls:**
+1. **`SUSPENDED` verificado embora nada o atribua ainda** — o `check`
+   está pronto desde já; quando a Fase 7 implementar a suspensão por
+   falta de pagamento, não precisa de tocar em `coverage.py`.
+2. **Qualquer estado de `Policy` não reconhecido falha fechado** como
+   `POLICY_NOT_IN_FORCE` — mesma postura fail-closed do `CONFIG_ERROR`
+   em `apps.eligibility`.
+3. **Intervalo semi-aberto `[inclusion_date, exclusion_date)`** — a
+   própria data de exclusão já não tem cobertura, para nunca sobrepor um
+   dia entre a saída de um membro e uma eventual nova inclusão.
+4. **Sem `benefitCategory`**, os checks 6/7 (cobertura contratada,
+   carência) são saltados — a pergunta genérica "está coberto hoje?" não
+   precisa de nomear uma cobertura específica.
+5. **Endpoints**: `GET /policies/{id}/coverage` (com ou sem `memberId` —
+   omitido avalia todos os membros, mesma postura já estabelecida no
+   Portal do Cliente) e `GET /coverage?policyNumber=` (lookup pragmático
+   pelo número, o que um operador/prestador tem à mão). Gate só por
+   `Scope.READ` — leitura pura, sem `Permission` associada, mesma
+   postura de todas as leituras simples no projecto.
+
+Testado em `tests/policy/test_coverage_domain.py` (14 casos puros,
+incluindo determinismo) e `tests/policy/test_coverage_api.py` (7 casos
+via API real, incluindo um cenário completo de carência de maternidade
+de 300 dias a partir da `inclusion_date` real).
