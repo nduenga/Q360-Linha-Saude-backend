@@ -70,6 +70,7 @@ def _coverage_payload(result: CoverageResult) -> dict:
     }
 
 
+
 class CustomerPortalMeView(APIView):
     authentication_classes = [CustomerPortalJwtAuthentication]
     permission_classes = [IsCustomerPortalActor]

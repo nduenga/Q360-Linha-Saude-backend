@@ -63,6 +63,7 @@ def test_outbox_event_catalog_end_to_end():
     ).data
     owner.post(f"/api/v1/configuration/rating-table/{table['id']}/publish")
 
+
     proposer = owner.post(
         "/api/v1/proposers",
         {
