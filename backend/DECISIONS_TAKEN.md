@@ -644,3 +644,48 @@ Testado em `tests/policy/test_coverage_domain.py` (14 casos puros,
 incluindo determinismo) e `tests/policy/test_coverage_api.py` (7 casos
 via API real, incluindo um cenário completo de carência de maternidade
 de 300 dias a partir da `inclusion_date` real).
+
+## S09-POLICY-006 — Portal do Cliente migrado para Policy (2026-09-28)
+
+**Contexto:** ROADMAP_APOLICES.md Fase 6. O Portal do Cliente
+(ROADMAP_PORTAL_CLIENTE.md Fase 1) autenticava e resolvia tudo por
+`Quote.quoteNumber`+`APPROVED` — uma decisão sempre marcada como
+"PENDING MIGRATION" no próprio código desde a Fase 0 de
+`ROADMAP_APOLICES.md`. Passa a resolver por `Policy.policyNumber`.
+
+**Mudanças, todas de rutura (breaking change deliberada — sem consumidor
+externo estável ainda contra o contrato antigo):**
+1. **Login** (`request-access`/`verify-otp`): campo `quoteNumber` →
+   `policyNumber`; resolve contra `Policy.status IN (ACTIVE, EXPIRED)`,
+   nunca `PENDING_FIRST_PREMIUM`/`SUSPENDED`/`TERMINATED`/`CANCELLED`
+   (nada aí é uma apólice que um cliente deva conseguir consultar).
+2. **Código de erro renomeado**: `PORTAL-QUOTE-NOT-FOUND` →
+   `PORTAL-POLICY-NOT-FOUND` (classe `PortalQuoteNotFoundError` →
+   `PortalPolicyNotFoundError`).
+3. **`GET /me`**: lista `Policy` em vez de `Quote` — resposta
+   `{"policies": [{"policy", "product", "plan"}]}`, reaproveitando
+   `PolicySerializer`/`ProductSerializer`/`PlanSerializer` já existentes
+   (mesma disciplina "nunca duplicar serializers" da Fase 1 original).
+4. **`/coverage` e `/eligibility` passam a `check_coverage`**: já não
+   respondem "achas que este membro é elegível para subscrever"
+   (`EvaluateEligibilityUseCase`), mas sim "este membro está coberto
+   hoje" (`apps.policy.domain.coverage.check_coverage`) — a pergunta que
+   um cliente final com uma apólice em vigor realmente tem. O antigo
+   comportamento de `/coverage` (listar as coberturas contratadas)
+   mudou-se para um endpoint novo, `GET /plan-benefits?policyNumber=`,
+   para libertar `/coverage` para a verificação real.
+5. **`apps.customer_portal.application.self_service`**: `list_my_quotes`/
+   `resolve_my_quote` renomeados para `list_my_policies`/
+   `resolve_my_policy`, agora sobre `Policy.proposer_id` em vez de
+   `Quote.proposer_id` — a mesma disciplina fail-closed via
+   `require_customer_proposer_ids` mantém-se inalterada.
+
+**Fora desta fase**: nenhuma alteração ao mecanismo de autenticação em si
+(OTP por email, bloqueio ao fim de 5 tentativas) nem à ligação
+`CustomerAccountProposer` — ambos continuam correctos porque `Policy`
+também tem `proposer_id`, exactamente como `Quote` tinha.
+
+Testado em `tests/customer_portal/test_portal_auth_api.py` (6 casos,
+reescritos para `Policy`) e `tests/customer_portal/test_self_service_api.py`
+(9 casos, incluindo o novo endpoint `/plan-benefits` e a verificação real
+de cobertura via `check_coverage`).

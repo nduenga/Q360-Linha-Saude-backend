@@ -26,6 +26,7 @@ from apps.client.interfaces.serializers import (
     MemberSerializer,
     MemberUpdateRequestSerializer,
     ProposerCreateRequestSerializer,
+    ProposerDeleteRequestSerializer,
     ProposerSerializer,
     ProposerUpdateRequestSerializer,
     RelationshipCodeSerializer,
@@ -69,22 +70,74 @@ class ProposerListCreateView(APIView):
 
 
 @requires_idempotency
+@requires_idempotency
 class ProposerDetailView(APIView):
+
     def get_permissions(self):
-        scope = Scope.WRITE if self.request.method == "PUT" else Scope.READ
-        return [require_scope(scope)()]
+        return [
+            require_scope(
+                Scope.WRITE
+                if self.request.method in ["PUT", "DELETE"]
+                else Scope.READ
+            )()
+        ]
 
     def get(self, request, proposer_id):
-        proposer = get_object_or_404(Proposer, id=proposer_id)
-        return Response(ProposerSerializer(proposer).data)
+        proposer = get_object_or_404(
+            Proposer,
+            id=proposer_id,
+        )
+
+        return Response(
+            ProposerSerializer(proposer).data
+        )
 
     def put(self, request, proposer_id):
-        proposer = get_object_or_404(Proposer, id=proposer_id)
-        body = ProposerUpdateRequestSerializer(data=request.data)
-        body.is_valid(raise_exception=True)
-        updated = proposer_service.update_proposer(proposer=proposer, **body.validated_data)
-        return Response(ProposerSerializer(updated).data)
+        proposer = get_object_or_404(
+            Proposer,
+            id=proposer_id,
+        )
 
+        body = ProposerUpdateRequestSerializer(
+            data=request.data
+        )
+
+        body.is_valid(
+            raise_exception=True
+        )
+
+        updated = proposer_service.update_proposer(
+            proposer=proposer,
+            **body.validated_data,
+        )
+
+        return Response(
+            ProposerSerializer(updated).data
+        )
+
+    def delete(self, request, proposer_id):
+        proposer = get_object_or_404(
+            Proposer,
+            id=proposer_id,
+        )
+
+        body = ProposerDeleteRequestSerializer(
+            data=request.data
+        )
+
+        body.is_valid(
+            raise_exception=True
+        )
+
+        proposer = proposer_service.deactivate_proposer(
+            proposer=proposer,
+            row_version=body.validated_data["rowVersion"],
+        )
+
+        return Response(
+            ProposerSerializer(proposer).data,
+            status=200,
+        )
 
 @requires_idempotency
 class MemberListCreateView(APIView):

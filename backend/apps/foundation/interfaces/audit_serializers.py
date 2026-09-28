@@ -11,6 +11,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.foundation.infrastructure.models import AuditEvent
+from apps.staff_accounts.infrastructure.models import StaffAccount
 
 _FORBIDDEN_KEYS = {
     "token", "password", "secret", "authorization", "access_token",
@@ -32,13 +33,57 @@ def _safe_metadata(value):
 
 class AuditEventSerializer(serializers.Serializer):
     id = serializers.UUIDField()
-    actorId = serializers.CharField(source="actor_id", allow_null=True, default=None)
+
+    actorId = serializers.CharField(
+        source="actor_id",
+        allow_null=True,
+        default=None,
+    )
+
+    authorName = serializers.SerializerMethodField()
+
     action = serializers.CharField()
-    entityType = serializers.CharField(source="entity_type")
-    entityId = serializers.CharField(source="entity_id", allow_null=True, default=None)
-    occurredAt = serializers.DateTimeField(source="occurred_at")
-    correlationId = serializers.CharField(source="correlation_id", allow_null=True, default=None)
+
+    entityType = serializers.CharField(
+        source="entity_type"
+    )
+
+    entityId = serializers.CharField(
+        source="entity_id",
+        allow_null=True,
+        default=None,
+    )
+
+    occurredAt = serializers.DateTimeField(
+        source="occurred_at"
+    )
+
+    correlationId = serializers.CharField(
+        source="correlation_id",
+        allow_null=True,
+        default=None,
+    )
+
     metadata = serializers.SerializerMethodField()
 
+    def get_authorName(self, obj):
+        if not obj.actor_id:
+            return None
+
+        return (
+            StaffAccount.objects
+            .filter(
+                id=obj.actor_id,
+                tenant_id=obj.tenant_id,
+            )
+            .values_list("name", flat=True)
+            .first()
+        )
+
     def get_metadata(self, obj):
-        return _safe_metadata(obj.metadata_json or {})
+        return _safe_metadata(
+            obj.metadata_json or {}
+        )
+        
+        
+

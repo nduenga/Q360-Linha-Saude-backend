@@ -4,6 +4,8 @@ from apps.pricing.interfaces.views import (
     PricingCalculateView,
     PricingExplanationView,
     PricingScenarioView,
+    PricingExecutionListView,
+    PricingExecutionDetailView,
     RatingTableCreateView,
     RatingTableDetailView,
 )
@@ -18,4 +20,15 @@ urlpatterns = [
         name="pricing-explanation",
     ),
     path("pricing/scenarios", PricingScenarioView.as_view(), name="pricing-scenario-create"),
+    path(
+        "pricing/runs",
+        PricingExecutionListView.as_view(),
+        name="pricing-execution-list",
+    ),
+    path(
+        "pricing/runs/<uuid:pricing_run_id>",
+        PricingExecutionDetailView.as_view(),
+        name="pricing-execution-detail",
+    ),
+
 ]

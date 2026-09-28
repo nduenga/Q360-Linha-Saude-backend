@@ -185,3 +185,76 @@ class VersionedConfigHeaderSerializer(serializers.Serializer):
     effectiveTo = serializers.DateField(source="effective_to", allow_null=True)
     status = serializers.CharField()
     checksum = serializers.CharField(allow_null=True)
+
+
+class PricingExecutionSerializer(serializers.Serializer):
+    pricingRunId = serializers.UUIDField(source="id")
+
+    status = serializers.CharField()
+
+    planId = serializers.UUIDField(
+        source="plan_id",
+    )
+
+    ratingTableId = serializers.UUIDField(
+        source="rating_table_id",
+    )
+
+    parameterSetId = serializers.UUIDField(
+        source="parameter_set_id",
+    )
+
+    ruleVersionId = serializers.UUIDField(
+        source="rule_version_id",
+        allow_null=True,
+    )
+
+    effectiveDate = serializers.DateField(
+        source="effective_date",
+    )
+
+    currencyCode = serializers.CharField(
+        source="currency_code",
+    )
+
+    totalAmount = serializers.SerializerMethodField()
+
+    inputSnapshot = serializers.JSONField(
+        source="input_snapshot_json",
+    )
+
+    failureCode = serializers.CharField(
+        source="failure_code",
+        allow_null=True,
+    )
+
+    failureMessage = serializers.CharField(
+        source="failure_message_safe",
+        allow_null=True,
+    )
+
+    startedAt = serializers.DateTimeField(
+        source="started_at",
+        allow_null=True,
+    )
+
+    completedAt = serializers.DateTimeField(
+        source="completed_at",
+        allow_null=True,
+    )
+
+    correlationId = serializers.CharField(
+        source="correlation_id",
+        allow_null=True,
+    )
+
+    components = serializers.SerializerMethodField()
+
+    def get_totalAmount(self, obj):
+        return _money_str(obj.total_amount)
+
+    def get_components(self, obj):
+        return PricingComponentSerializer(
+            obj.components.order_by("component_order"),
+            many=True,
+        ).data

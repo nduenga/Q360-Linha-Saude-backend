@@ -168,6 +168,21 @@ de um cliente final herdar permissões de staff.
 
 ## Fase 1 — Consulta de elegibilidade e estado da apólice (MVP) — IMPLEMENTADA (2026-09-22)
 
+> **⚠️ Migrada para `Policy` em 2026-09-28** (`DECISIONS_TAKEN.md#S09-
+> POLICY-001`, detalhe completo em `ROADMAP_APOLICES.md` Fase 6): o login
+> e todos os endpoints abaixo deixaram de resolver por
+> `Quote.quoteNumber`/`APPROVED` e passaram a resolver por
+> `Policy.policyNumber` (`ACTIVE`/`EXPIRED`). `/coverage` e `/eligibility`
+> deixaram de reaproveitar `EvaluateEligibilityUseCase` (elegibilidade de
+> **subscrição**) e passaram a reaproveitar `apps.policy.domain.coverage.
+> check_coverage` (elegibilidade de **cobertura do dia-a-dia** — a
+> pergunta que um cliente final realmente tem). O catálogo de coberturas
+> contratadas que `/coverage` costumava devolver mudou-se para
+> `GET /customer-portal/plan-benefits?policyNumber=`, para libertar o
+> nome `/coverage` para a verificação real. As tarefas abaixo ficam como
+> registo histórico da Fase 1 original; o código e os testes já reflectem
+> a versão migrada.
+
 ### Pedido
 Depois de autenticado (Fase 0), o cliente final deve conseguir ver o
 estado da sua própria apólice sem ligar para o call center.

@@ -1,11 +1,12 @@
 """Public (pre-auth) endpoints for the customer portal login flow —
-ROADMAP_PORTAL_CLIENTE.md Fase 0. `tenantId` comes from the URL path (the
-portal frontend is deployed per-tenant and always knows its own tenant),
-never from a client-asserted body/header field — it is only ever used to
-select which tenant's rows a lookup runs against; the actual security
-check is still the quoteNumber+registrationNumber(+OTP) match. Namespaced
-under `/api/v1/customer-portal/...`, never reusing `/api/v1/quotes` or any
-other backoffice path (Fase 0 task list).
+ROADMAP_PORTAL_CLIENTE.md Fase 0, migrated to Policy in Fase 6
+(DECISIONS_TAKEN.md#S09-POLICY-001). `tenantId` comes from the URL path
+(the portal frontend is deployed per-tenant and always knows its own
+tenant), never from a client-asserted body/header field — it is only ever
+used to select which tenant's rows a lookup runs against; the actual
+security check is still the policyNumber+registrationNumber(+OTP) match.
+Namespaced under `/api/v1/customer-portal/...`, never reusing
+`/api/v1/policies` or any other backoffice path (Fase 0 task list).
 """
 from __future__ import annotations
 
@@ -79,11 +80,11 @@ class RequestAccessView(APIView):
             return _too_many_requests()
 
         _bind_anonymous_customer_actor(tenant_id)
-        # Raises PortalQuoteNotFoundError (404) / PortalRegistrationMismatchError
+        # Raises PortalPolicyNotFoundError (404) / PortalRegistrationMismatchError
         # (401) if the pair doesn't resolve — Product Owner decision,
         # 2026-09-26 (see CustomerPortalAuthService.request_access docstring).
         _auth_service.request_access(
-            quote_number=data["quoteNumber"],
+            policy_number=data["policyNumber"],
             registration_number=data["registrationNumber"],
             email=data["email"],
             correlation_id=get_correlation_id(),
@@ -112,7 +113,7 @@ class VerifyOtpView(APIView):
         # to apps.foundation.interfaces.exception_handler.q360_exception_handler
         # unhandled — both are DomainProblem subclasses, handled generically.
         token, ttl_seconds = _auth_service.verify_otp(
-            quote_number=data["quoteNumber"],
+            policy_number=data["policyNumber"],
             registration_number=data["registrationNumber"],
             email=data["email"],
             otp=data["otp"],

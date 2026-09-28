@@ -452,11 +452,22 @@ tempo da emissão.
 
 ## Fase 6 — Portal do Cliente passa a usar a apólice
 
-- [ ] O login passa a usar `policyNumber` + `registrationNumber` + email,
-      sobre `Policy`, em vez de `Quote APPROVED`.
-- [ ] `/me` lista apólices e o seu estado, incluindo recibos em dívida.
-      `/coverage` e `/eligibility` passam a usar `check_coverage`.
-- [ ] Actualizar `ROADMAP_PORTAL_CLIENTE.md` e `tests/customer_portal/`.
+- [x] O login passa a usar `policyNumber` + `registrationNumber` + email,
+      sobre `Policy.status IN (ACTIVE, EXPIRED)`, em vez de
+      `Quote APPROVED`. Mudança de rutura deliberada: o código de erro
+      `PORTAL-QUOTE-NOT-FOUND` passou a `PORTAL-POLICY-NOT-FOUND`
+      (`PortalPolicyNotFoundError`) — ver `DECISIONS_TAKEN.md#S09-POLICY-006`.
+- [x] `/me` lista apólices e o seu estado, incluindo recibos em dívida
+      (`outstandingInstallments`: contagem e total das `premium_
+      installment` `DUE`/`OVERDUE`, não a lista completa). `/coverage` e
+      `/eligibility` passam a usar `check_coverage` (Fase 4), não
+      `EvaluateEligibilityUseCase`. O catálogo de coberturas contratadas
+      que `/coverage` costumava devolver mudou-se para
+      `GET /plan-benefits?policyNumber=`, novo endpoint, para libertar o
+      nome `/coverage` para a verificação real.
+- [x] `ROADMAP_PORTAL_CLIENTE.md` actualizado (nota no topo da Fase 1
+      original) e `tests/customer_portal/` reescritos: 6 casos em
+      `test_portal_auth_api.py`, 10 em `test_self_service_api.py`.
 
 ---
 

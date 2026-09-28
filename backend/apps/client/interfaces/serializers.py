@@ -128,3 +128,9 @@ class ImportCommitRequestSerializer(serializers.Serializer):
         if value is not True:
             raise serializers.ValidationError("confirm must be true.")
         return value
+
+
+class ProposerDeleteRequestSerializer(serializers.Serializer):
+    rowVersion = serializers.IntegerField(
+        min_value=0
+    )

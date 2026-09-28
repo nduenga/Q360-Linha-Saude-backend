@@ -7,13 +7,13 @@ from rest_framework import serializers
 
 
 class RequestAccessSerializer(serializers.Serializer):
-    quoteNumber = serializers.CharField(max_length=100)
+    policyNumber = serializers.CharField(max_length=100)
     registrationNumber = serializers.CharField(max_length=100)
     email = serializers.EmailField(max_length=320)
 
 
 class VerifyOtpSerializer(serializers.Serializer):
-    quoteNumber = serializers.CharField(max_length=100)
+    policyNumber = serializers.CharField(max_length=100)
     registrationNumber = serializers.CharField(max_length=100)
     email = serializers.EmailField(max_length=320)
     otp = serializers.CharField(min_length=6, max_length=6)

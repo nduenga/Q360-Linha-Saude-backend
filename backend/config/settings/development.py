@@ -34,4 +34,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [r"^http://localhost:\d+$", r"^http://127\.0\.0\.1
 CUSTOMER_PORTAL_JWT_SECRET = CUSTOMER_PORTAL_JWT_SECRET or "s01-development-only-portal-secret-change-me"
 # No real SMTP configured locally — print emails to the console instead of
 # sending them (Django's own, real console backend, not a fake one).
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.smtp.EmailBackend",
+)

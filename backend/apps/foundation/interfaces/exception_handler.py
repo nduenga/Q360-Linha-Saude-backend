@@ -45,7 +45,9 @@ _TITLES: dict[str, str] = {
     # Customer portal (ROADMAP_PORTAL_CLIENTE.md) — a new actor/contract
     # outside ART-006's catalog, not a Change Request against it.
     "PORTAL-LOCKED": "Conta temporariamente bloqueada",
-    "PORTAL-QUOTE-NOT-FOUND": "Apólice não encontrada",
+    # DECISIONS_TAKEN.md#S09-POLICY-001/Fase 6: renamed from
+    # PORTAL-QUOTE-NOT-FOUND — login resolves by Policy.policyNumber now.
+    "PORTAL-POLICY-NOT-FOUND": "Apólice não encontrada",
     "PORTAL-REGISTRATION-MISMATCH": "Número de registo não corresponde",
     # apps.policy (DECISIONS_TAKEN.md#S09-POLICY-001/003) — postdates
     # ART-006 entirely, same posture as PORTAL-*/STAFF-* above.

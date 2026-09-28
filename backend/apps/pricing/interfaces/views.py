@@ -24,6 +24,7 @@ from apps.pricing.application.rating_table_service import (
 from apps.pricing.infrastructure.models import PricingRun, RatingTable
 from apps.pricing.interfaces.serializers import (
     PricingCalculateRequestSerializer,
+    PricingExecutionSerializer,
     PricingExplanationSerializer,
     PricingResponseSerializer,
     PricingScenarioRequestSerializer,
@@ -149,3 +150,62 @@ class PricingScenarioView(APIView):
             correlation_id=get_correlation_id(),
         )
         return Response(PricingResponseSerializer(scenario.result_pricing_run).data, status=201)
+
+
+class PricingExecutionListView(APIView):
+    """
+    GET /api/v1/pricing/runs
+
+    Lista todas as tarifaçōes executadas.
+    """
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request):
+        queryset = PricingRun.objects.all().order_by(
+            "-created_at"
+        )
+
+        status = request.query_params.get("status")
+        plan_id = request.query_params.get("planId")
+
+        if status:
+            queryset = queryset.filter(status=status)
+
+        if plan_id:
+            queryset = queryset.filter(plan_id=plan_id)
+
+        paginator = Q360PageNumberPagination()
+        page = paginator.paginate_queryset(
+            queryset,
+            request,
+        )
+
+        return paginator.get_paginated_response(
+            PricingExecutionSerializer(
+                page,
+                many=True,
+            ).data
+        )
+
+
+class PricingExecutionDetailView(APIView):
+    """
+    GET /api/v1/pricing/runs/{id}
+
+    Devolve uma execução completa da tarifação.
+    """
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, pricing_run_id):
+        pricing_run = get_object_or_404(
+            PricingRun,
+            id=pricing_run_id,
+        )
+
+        return Response(
+            PricingExecutionSerializer(
+                pricing_run
+            ).data
+        )

@@ -9,6 +9,7 @@ from apps.customer_portal.interfaces.self_service_views import (
     CustomerPortalCoverageView,
     CustomerPortalEligibilityView,
     CustomerPortalMeView,
+    CustomerPortalPlanBenefitsView,
 )
 from apps.customer_portal.interfaces.views import RequestAccessView, VerifyOtpView
 
@@ -29,6 +30,11 @@ urlpatterns = [
     # 2 pre-auth routes above, which have no token yet to carry it).
     path("customer-portal/me", CustomerPortalMeView.as_view(), name="customer-portal-me"),
     path("customer-portal/coverage", CustomerPortalCoverageView.as_view(), name="customer-portal-coverage"),
+    path(
+        "customer-portal/plan-benefits",
+        CustomerPortalPlanBenefitsView.as_view(),
+        name="customer-portal-plan-benefits",
+    ),
     path(
         "customer-portal/eligibility",
         CustomerPortalEligibilityView.as_view(),

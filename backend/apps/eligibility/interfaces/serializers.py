@@ -31,3 +31,50 @@ class EligibilityResponseSerializer(serializers.Serializer):
 
     def get_messages(self, obj) -> list[dict]:
         return obj.evidence_json
+
+
+class EligibilityExecutionSerializer(serializers.Serializer):
+    evaluationId = serializers.UUIDField(source="id")
+    decision = serializers.CharField()
+
+    proposerId = serializers.UUIDField(
+        source="proposer_id",
+        allow_null=True,
+    )
+
+    memberId = serializers.UUIDField(
+        source="member_id",
+        allow_null=True,
+    )
+
+    planId = serializers.UUIDField(
+        source="plan_id",
+    )
+
+    ruleVersionId = serializers.UUIDField(
+        source="rule_version_id",
+        allow_null=True,
+    )
+
+    effectiveDate = serializers.SerializerMethodField()
+
+    reasons = serializers.JSONField(
+        source="evidence_json",
+    )
+
+    inputSnapshot = serializers.JSONField(
+        source="input_snapshot_json",
+    )
+
+    evaluatedAt = serializers.DateTimeField(
+        source="evaluated_at",
+    )
+
+    correlationId = serializers.CharField(
+        source="correlation_id",
+        allow_null=True,
+    )
+
+    def get_effectiveDate(self, obj):
+        snapshot = obj.input_snapshot_json or {}
+        return snapshot.get("effectiveDate")

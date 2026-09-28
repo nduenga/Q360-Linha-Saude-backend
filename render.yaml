@@ -1,0 +1,37 @@
+# Render Blueprint for the Q360 Django API.  The repository is a monorepo;
+# only backend/ is the service root.
+services:
+  - type: web
+    name: q360-health-api
+    runtime: python
+    region: frankfurt
+    plan: free
+    rootDir: backend
+    buildCommand: pip install --no-cache-dir -r requirements.render.txt && python manage.py migrate --noinput
+    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers $WEB_CONCURRENCY --access-logfile -
+    healthCheckPath: /api/v1/health/ready
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: DJANGO_DEBUG
+        value: "false"
+      - key: WEB_CONCURRENCY
+        value: "2"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: Q360_JWT_SIGNING_KEY
+        generateValue: true
+      - key: CUSTOMER_PORTAL_JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: q360-health-db
+          property: connectionString
+
+databases:
+  - name: q360-health-db
+    databaseName: q360
+    user: q360
+    postgresMajorVersion: "16"
+    region: frankfurt
+    plan: free

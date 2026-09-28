@@ -1,6 +1,10 @@
 from .base import *
 
 DEBUG = False
+# Render terminates TLS at its proxy and forwards the original scheme to the
+# application.  Without this Django would see every request as HTTP and
+# SECURE_SSL_REDIRECT would loop indefinitely.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "true").lower() == "true"
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True

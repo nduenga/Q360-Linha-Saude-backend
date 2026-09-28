@@ -99,3 +99,50 @@ def update_proposer(
         },
     )
     return proposer
+
+
+def deactivate_proposer(
+    *,
+    proposer: Proposer,
+    row_version: int,
+) -> Proposer:
+    updated = (
+        Proposer.objects
+        .filter(
+            id=proposer.id,
+            row_version=row_version,
+        )
+        .update(
+            status="INACTIVE",
+            row_version=row_version + 1,
+        )
+    )
+
+    if updated == 0:
+        raise RowVersionMismatchError(
+            f"Proposer {proposer.id} rowVersion "
+            f"{row_version} does not match the current version"
+        )
+
+    proposer.refresh_from_db()
+
+    _audit.record(
+        action="proposer.deactivated",
+        entity_type="Proposer",
+        entity_id=str(proposer.id),
+        metadata={
+            "rowVersion": proposer.row_version,
+        },
+    )
+
+    _outbox.append(
+        aggregate_type="Proposer",
+        aggregate_id=str(proposer.id),
+        event_type="PROPOSER.DEACTIVATED",
+        payload={
+            "proposerId": str(proposer.id),
+            "rowVersion": proposer.row_version,
+        },
+    )
+
+    return proposer

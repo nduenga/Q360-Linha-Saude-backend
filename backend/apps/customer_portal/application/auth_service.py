@@ -1,14 +1,15 @@
-"""CustomerPortalAuthService (ROADMAP_PORTAL_CLIENTE.md Fase 0).
+"""CustomerPortalAuthService (ROADMAP_PORTAL_CLIENTE.md Fase 0, migrated
+to Policy in Fase 6 — DECISIONS_TAKEN.md#S09-POLICY-001).
 
 Orchestrates the two-step login: `request_access` resolves
-quoteNumber+registrationNumber+email to a (CustomerAccount, Proposer) pair
-— creating the pair the first time it's seen — and emails an OTP;
+policyNumber+registrationNumber+email to a (CustomerAccount, Proposer)
+pair — creating the pair the first time it's seen — and emails an OTP;
 `verify_otp` checks the OTP against the lockout policy (OD-PORTAL-003) and,
 on success, issues a signed customer-portal session token.
 
 Both methods assume `CurrentActorProvider` is already bound, by the view,
 to a `actor_type="CUSTOMER"` Actor scoped to the tenant resolved from the
-request URL — so every Proposer/Quote/CustomerAccount query below is
+request URL — so every Proposer/Policy/CustomerAccount query below is
 automatically tenant-scoped by `TenantScopedManager`, exactly like every
 other module in this project (apps.customer_portal.interfaces.views).
 """
@@ -24,7 +25,7 @@ from apps.client.infrastructure.models import Proposer
 from apps.customer_portal.domain.errors import (
     InvalidPortalCredentialsError,
     PortalAccountLockedError,
-    PortalQuoteNotFoundError,
+    PortalPolicyNotFoundError,
     PortalRegistrationMismatchError,
 )
 from apps.customer_portal.domain.lockout import LockoutState, is_locked, register_failure, register_success
@@ -40,23 +41,29 @@ from apps.customer_portal.infrastructure.portal_token import PortalTokenService
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
-from apps.quote.infrastructure.models import Quote
+from apps.policy.infrastructure.models import Policy
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _tokens = PortalTokenService()
 
+# A customer can log in with a Policy that is currently in force or one
+# that has simply run its course (EXPIRED) — never one that never took
+# effect (PENDING_FIRST_PREMIUM) or was terminated/cancelled, which have
+# never had, or no longer have, anything a customer needs to self-serve.
+_LOGINABLE_POLICY_STATUSES = ("ACTIVE", "EXPIRED")
+
 
 class CustomerPortalAuthService:
     def request_access(
-        self, *, quote_number: str, registration_number: str, email: str, correlation_id: str | None
+        self, *, policy_number: str, registration_number: str, email: str, correlation_id: str | None
     ) -> None:
-        """Raises PortalQuoteNotFoundError / PortalRegistrationMismatchError
-        telling the caller exactly which of quoteNumber/registrationNumber
+        """Raises PortalPolicyNotFoundError / PortalRegistrationMismatchError
+        telling the caller exactly which of policyNumber/registrationNumber
         is wrong (Product Owner decision, 2026-09-26 — trades the
         original always-202/never-reveal-anything design for clearer
         feedback; see apps.customer_portal.domain.errors module docstring
         for the compensating rate-limit control this relies on)."""
-        proposer = self._resolve_proposer(quote_number=quote_number, registration_number=registration_number)
+        proposer = self._resolve_proposer(policy_number=policy_number, registration_number=registration_number)
 
         tenant_id = CurrentTenantProvider.require().value
         with transaction.atomic():
@@ -89,17 +96,17 @@ class CustomerPortalAuthService:
         )
 
     def verify_otp(
-        self, *, quote_number: str, registration_number: str, email: str, otp: str, correlation_id: str | None
+        self, *, policy_number: str, registration_number: str, email: str, otp: str, correlation_id: str | None
     ) -> tuple[str, int]:
         tenant_id = CurrentTenantProvider.require().value
-        # Raises PortalQuoteNotFoundError/PortalRegistrationMismatchError
+        # Raises PortalPolicyNotFoundError/PortalRegistrationMismatchError
         # the same way request_access() does — same fields, same honesty
         # policy either way.
-        self._resolve_proposer(quote_number=quote_number, registration_number=registration_number)
+        self._resolve_proposer(policy_number=policy_number, registration_number=registration_number)
         account = CustomerAccount.objects.filter(tenant_id=tenant_id, email=email).first()
         if account is None:
             raise InvalidPortalCredentialsError(
-                "No access request was made for this quoteNumber/registrationNumber/email combination "
+                "No access request was made for this policyNumber/registrationNumber/email combination "
                 "— request a new code first"
             )
 
@@ -162,23 +169,19 @@ class CustomerPortalAuthService:
         return token, ttl_seconds
 
     @staticmethod
-    def _resolve_proposer(*, quote_number: str, registration_number: str) -> Proposer:
-        # PENDING MIGRATION (DECISIONS_TAKEN.md#S09-POLICY-001,
-        # ROADMAP_APOLICES.md Fase 6): login should resolve by
-        # `Policy.policy_number` against an ACTIVE/EXPIRED policy, not by
-        # `Quote.quote_number`+APPROVED. Left as-is (quote-based) until
-        # Fase 6 lands, since `apps.policy` does not exist yet and the
-        # portal must keep working end-to-end in the meantime — this is a
-        # known, tracked gap, not an oversight.
-        quote = (
-            Quote.objects.filter(quote_number=quote_number, status="APPROVED")
+    def _resolve_proposer(*, policy_number: str, registration_number: str) -> Proposer:
+        # DECISIONS_TAKEN.md#S09-POLICY-001, ROADMAP_APOLICES.md Fase 6:
+        # login now resolves by `Policy.policy_number` — a real contract —
+        # instead of `Quote.quote_number`+APPROVED (a mere proposal).
+        policy = (
+            Policy.objects.filter(policy_number=policy_number, status__in=_LOGINABLE_POLICY_STATUSES)
             .select_related("proposer")
             .first()
         )
-        if quote is None or quote.proposer is None:
-            raise PortalQuoteNotFoundError(f"No approved quote found for quoteNumber '{quote_number}'")
-        if quote.proposer.registration_number != registration_number:
+        if policy is None or policy.proposer is None:
+            raise PortalPolicyNotFoundError(f"No policy found for policyNumber '{policy_number}'")
+        if policy.proposer.registration_number != registration_number:
             raise PortalRegistrationMismatchError(
-                "registrationNumber does not match the proposer of this quote"
+                "registrationNumber does not match the proposer of this policy"
             )
-        return quote.proposer
+        return policy.proposer
