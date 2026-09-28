@@ -13,16 +13,25 @@ class ProposerSerializer(serializers.Serializer):
     externalReference = serializers.CharField(source="external_reference", allow_null=True)
     displayName = serializers.CharField(source="display_name")
     registrationNumber = serializers.CharField(source="registration_number", allow_null=True)
+    email = serializers.CharField(allow_null=True)
+    phone = serializers.CharField(allow_null=True)
     attributes = serializers.JSONField(source="attributes_json")
     status = serializers.ChoiceField(choices=[s.value for s in ProposerStatus])
     rowVersion = serializers.IntegerField(source="row_version")
 
 
 class ProposerCreateRequestSerializer(serializers.Serializer):
+    """Product Owner decision (2026-09-26): registrationNumber (NIF), email
+    and phone are mandatory when creating a Proposer — no longer optional
+    identity/contact fields. `email`/`phone` columns added to `proposer`
+    by apps/client/infrastructure/migrations/0003_proposer_contact_fields.py."""
+
     proposerType = serializers.ChoiceField(choices=[t.value for t in ProposerType])
     externalReference = serializers.CharField(allow_null=True, required=False, default=None)
     displayName = serializers.CharField(min_length=1, max_length=250)
-    registrationNumber = serializers.CharField(allow_null=True, required=False, default=None)
+    registrationNumber = serializers.CharField(min_length=1, max_length=100)
+    email = serializers.EmailField(max_length=254)
+    phone = serializers.CharField(min_length=1, max_length=30)
     attributes = serializers.JSONField(required=False, default=dict)
 
     def validate(self, attrs: dict) -> dict:
@@ -31,13 +40,17 @@ class ProposerCreateRequestSerializer(serializers.Serializer):
             "external_reference": attrs["externalReference"],
             "display_name": attrs["displayName"],
             "registration_number": attrs["registrationNumber"],
+            "email": attrs["email"],
+            "phone": attrs["phone"],
             "attributes": attrs["attributes"],
         }
 
 
 class ProposerUpdateRequestSerializer(serializers.Serializer):
     displayName = serializers.CharField(min_length=1, max_length=250)
-    registrationNumber = serializers.CharField(allow_null=True, required=False, default=None)
+    registrationNumber = serializers.CharField(min_length=1, max_length=100)
+    email = serializers.EmailField(max_length=254)
+    phone = serializers.CharField(min_length=1, max_length=30)
     attributes = serializers.JSONField(required=False, default=dict)
     rowVersion = serializers.IntegerField(min_value=0)
 
@@ -45,6 +58,8 @@ class ProposerUpdateRequestSerializer(serializers.Serializer):
         return {
             "display_name": attrs["displayName"],
             "registration_number": attrs["registrationNumber"],
+            "email": attrs["email"],
+            "phone": attrs["phone"],
             "attributes": attrs["attributes"],
             "row_version": attrs["rowVersion"],
         }

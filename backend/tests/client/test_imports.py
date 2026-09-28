@@ -11,7 +11,16 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 
 
 def _proposer(client) -> dict:
-    return client.post("/api/v1/proposers", {"proposerType": "ORGANISATION", "displayName": "Group Co"}).data
+    return client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "ORGANISATION",
+            "displayName": "Group Co",
+            "registrationNumber": "5417000000",
+            "email": "group@example.com",
+            "phone": "+244900000000",
+        },
+    ).data
 
 
 def _csv_file(rows: list[str], name: str = "members.csv") -> SimpleUploadedFile:

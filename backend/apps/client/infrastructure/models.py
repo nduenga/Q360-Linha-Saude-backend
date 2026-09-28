@@ -31,6 +31,8 @@ class Proposer(TenantScopedModel):
     external_reference = models.CharField(max_length=100, null=True, blank=True)
     display_name = models.CharField(max_length=250)
     registration_number = models.CharField(max_length=100, null=True, blank=True)
+    email = models.CharField(max_length=254, null=True, blank=True)
+    phone = models.CharField(max_length=30, null=True, blank=True)
     attributes_json = models.JSONField(default=dict)
     status = models.CharField(
         max_length=20, choices=[(s.value, s.value) for s in ProposerStatus], default=ProposerStatus.ACTIVE.value
