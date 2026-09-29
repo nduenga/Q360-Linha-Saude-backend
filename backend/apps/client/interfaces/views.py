@@ -23,6 +23,7 @@ from apps.client.interfaces.serializers import (
     ImportCommitRequestSerializer,
     ImportJobSerializer,
     MemberCreateRequestSerializer,
+    MemberDeleteRequestSerializer,
     MemberSerializer,
     MemberUpdateRequestSerializer,
     ProposerCreateRequestSerializer,
@@ -175,7 +176,7 @@ class MemberListCreateView(APIView):
 @requires_idempotency
 class MemberDetailView(APIView):
     def get_permissions(self):
-        scope = Scope.WRITE if self.request.method == "PUT" else Scope.READ
+        scope = Scope.WRITE if self.request.method in ("PUT", "DELETE") else Scope.READ
         return [require_scope(scope)()]
 
     def get(self, request, member_id):
@@ -198,6 +199,16 @@ class MemberDetailView(APIView):
             row_version=data["rowVersion"],
         )
         return Response(MemberSerializer(updated).data)
+
+    def delete(self, request, member_id):
+        member = get_object_or_404(InsuredMember, id=member_id)
+        body = MemberDeleteRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        deactivated = member_service.deactivate_member(
+            member=member,
+            row_version=body.validated_data["rowVersion"],
+        )
+        return Response(MemberSerializer(deactivated).data)
 
 
 @requires_idempotency

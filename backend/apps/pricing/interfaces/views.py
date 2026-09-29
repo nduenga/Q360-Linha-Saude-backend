@@ -162,8 +162,17 @@ class PricingExecutionListView(APIView):
     permission_classes = [require_scope(Scope.READ)]
 
     def get(self, request):
-        queryset = PricingRun.objects.all().order_by(
-            "-created_at"
+        queryset = (
+            PricingRun.objects
+            .select_related(
+                "plan",
+                "plan__product",
+            )
+            .prefetch_related(
+                "components__member",
+            )
+            .all()
+            .order_by("-created_at")
         )
 
         status = request.query_params.get("status")
@@ -200,7 +209,14 @@ class PricingExecutionDetailView(APIView):
 
     def get(self, request, pricing_run_id):
         pricing_run = get_object_or_404(
-            PricingRun,
+            PricingRun.objects
+            .select_related(
+                "plan",
+                "plan__product",
+            )
+            .prefetch_related(
+                "components__member",
+            ),
             id=pricing_run_id,
         )
 

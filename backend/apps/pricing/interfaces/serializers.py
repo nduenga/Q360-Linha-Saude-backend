@@ -192,9 +192,25 @@ class PricingExecutionSerializer(serializers.Serializer):
 
     status = serializers.CharField()
 
+    # Plano
     planId = serializers.UUIDField(
         source="plan_id",
     )
+    planName = serializers.CharField(
+        source="plan.name",
+    )
+
+    # Produto
+    productId = serializers.UUIDField(
+        source="plan.product_id",
+    )
+    productName = serializers.CharField(
+        source="plan.product.name",
+    )
+
+    # Membros executados
+    memberIds = serializers.SerializerMethodField()
+    memberNames = serializers.SerializerMethodField()
 
     ratingTableId = serializers.UUIDField(
         source="rating_table_id",
@@ -249,6 +265,39 @@ class PricingExecutionSerializer(serializers.Serializer):
     )
 
     components = serializers.SerializerMethodField()
+
+    def get_memberIds(self, obj):
+        member_ids = []
+
+        for component in obj.components.order_by("component_order"):
+            if component.member_id:
+                if component.member_id not in member_ids:
+                    member_ids.append(component.member_id)
+
+        return member_ids
+
+    def get_memberNames(self, obj):
+        member_names = []
+
+        for component in obj.components.order_by("component_order"):
+            member = component.member
+
+            if not member:
+                continue
+
+            name = " ".join(
+                part
+                for part in (
+                    member.first_name,
+                    member.last_name,
+                )
+                if part
+            ).strip()
+
+            if name and name not in member_names:
+                member_names.append(name)
+
+        return member_names
 
     def get_totalAmount(self, obj):
         return _money_str(obj.total_amount)

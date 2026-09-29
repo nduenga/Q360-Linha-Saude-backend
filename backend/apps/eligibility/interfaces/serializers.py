@@ -34,21 +34,44 @@ class EligibilityResponseSerializer(serializers.Serializer):
 
 
 class EligibilityExecutionSerializer(serializers.Serializer):
-    evaluationId = serializers.UUIDField(source="id")
+    evaluationId = serializers.UUIDField(
+        source="id"
+    )
+
     decision = serializers.CharField()
 
+    # Proponente
     proposerId = serializers.UUIDField(
         source="proposer_id",
         allow_null=True,
     )
 
+    proposerName = serializers.SerializerMethodField()
+
+    # Membro
     memberId = serializers.UUIDField(
         source="member_id",
         allow_null=True,
     )
 
+    memberName = serializers.SerializerMethodField()
+
+    # Plano
     planId = serializers.UUIDField(
         source="plan_id",
+    )
+
+    planName = serializers.CharField(
+        source="plan.name",
+    )
+
+    # Produto
+    productId = serializers.UUIDField(
+        source="plan.product_id",
+    )
+
+    productName = serializers.CharField(
+        source="plan.product.name",
     )
 
     ruleVersionId = serializers.UUIDField(
@@ -74,6 +97,25 @@ class EligibilityExecutionSerializer(serializers.Serializer):
         source="correlation_id",
         allow_null=True,
     )
+
+    def get_proposerName(self, obj):
+        if not obj.proposer:
+            return None
+
+        return obj.proposer.display_name
+
+    def get_memberName(self, obj):
+        if not obj.member:
+            return None
+
+        return " ".join(
+            part
+            for part in (
+                obj.member.first_name,
+                obj.member.last_name,
+            )
+            if part
+        ).strip() or None
 
     def get_effectiveDate(self, obj):
         snapshot = obj.input_snapshot_json or {}

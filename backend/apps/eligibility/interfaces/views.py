@@ -48,8 +48,16 @@ class EligibilityExecutionListView(APIView):
     permission_classes = [require_scope(Scope.READ)]
 
     def get(self, request):
-        queryset = EligibilityEvaluation.objects.all().order_by(
-            "-evaluated_at"
+        queryset = (
+            EligibilityEvaluation.objects
+            .select_related(
+                "proposer",
+                "member",
+                "plan",
+                "plan__product",
+            )
+            .all()
+            .order_by("-evaluated_at")
         )
 
         decision = request.query_params.get("decision")
@@ -70,7 +78,11 @@ class EligibilityExecutionListView(APIView):
             queryset = queryset.filter(plan_id=plan_id)
 
         paginator = Q360PageNumberPagination()
-        page = paginator.paginate_queryset(queryset, request)
+
+        page = paginator.paginate_queryset(
+            queryset,
+            request,
+        )
 
         return paginator.get_paginated_response(
             EligibilityExecutionSerializer(
@@ -78,7 +90,6 @@ class EligibilityExecutionListView(APIView):
                 many=True,
             ).data
         )
-
 
 class EligibilityExecutionDetailView(APIView):
     """
@@ -91,7 +102,12 @@ class EligibilityExecutionDetailView(APIView):
 
     def get(self, request, evaluation_id):
         evaluation = get_object_or_404(
-            EligibilityEvaluation,
+            EligibilityEvaluation.objects.select_related(
+                "proposer",
+                "member",
+                "plan",
+                "plan__product",
+            ),
             id=evaluation_id,
         )
 

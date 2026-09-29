@@ -111,6 +111,13 @@ class MemberUpdateRequestSerializer(serializers.Serializer):
     rowVersion = serializers.IntegerField(min_value=0)
 
 
+class MemberDeleteRequestSerializer(serializers.Serializer):
+    """Deletion is a reversible deactivation so quotes and pricing history
+    that already reference a member remain intact."""
+
+    rowVersion = serializers.IntegerField(min_value=0)
+
+
 class ImportJobSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     proposerId = serializers.UUIDField(source="proposer_id", allow_null=True)

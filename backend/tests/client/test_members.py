@@ -78,3 +78,17 @@ def test_list_members_filtered_by_proposer(admin_client):
     assert response.status_code == 200
     assert len(response.data["items"]) == 1
     assert response.data["items"][0]["proposerId"] == proposer_a["id"]
+
+
+@pytest.mark.django_db
+def test_delete_member_deactivates_it_with_optimistic_lock(admin_client):
+    proposer = _proposer(admin_client)
+    member = admin_client.post(
+        "/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR"}
+    ).data
+
+    response = admin_client.delete(f"/api/v1/members/{member['id']}", {"rowVersion": 0}, format="json")
+
+    assert response.status_code == 200
+    assert response.data["status"] == "INACTIVE"
+    assert response.data["rowVersion"] == 1

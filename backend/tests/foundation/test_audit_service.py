@@ -75,3 +75,11 @@ def test_record_sanitises_nested_credentials():
         metadata={"request": {"authorization": "Bearer leaked", "safe": "kept"}},
     )
     assert repository.calls[0]["metadata"] == {"request": {"safe": "kept"}}
+
+
+def test_audit_serializer_accepts_a_technical_actor_id_without_staff_lookup():
+    from types import SimpleNamespace
+
+    from apps.foundation.interfaces.audit_serializers import AuditEventSerializer
+
+    assert AuditEventSerializer().get_authorName(SimpleNamespace(actor_id="anonymous-portal-login")) is None

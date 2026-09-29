@@ -29,6 +29,7 @@ from apps.client.domain.errors import (
     IncoherentDateError,
     RowVersionMismatchError,
 )
+from apps.client.domain.enums import MemberStatus
 from apps.client.infrastructure.models import InsuredMember, Proposer
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
@@ -133,5 +134,35 @@ def update_member(
             "lastName": member.last_name,
             "rowVersion": member.row_version,
         },
+    )
+    return member
+
+
+def deactivate_member(*, member: InsuredMember, row_version: int) -> InsuredMember:
+    """The DELETE endpoint performs a safe soft delete.
+
+    Members can be referenced by quotes, eligibility evaluations and pricing
+    evidence, so physically deleting one would corrupt historical records.
+    """
+    updated = InsuredMember.objects.filter(
+        id=member.id,
+        row_version=row_version,
+    ).update(status=MemberStatus.INACTIVE.value, row_version=row_version + 1)
+    if updated == 0:
+        raise RowVersionMismatchError(
+            f"InsuredMember {member.id} rowVersion {row_version} does not match the current version"
+        )
+    member.refresh_from_db()
+    _audit.record(
+        action="member.deactivated",
+        entity_type="InsuredMember",
+        entity_id=str(member.id),
+        metadata={"rowVersion": member.row_version},
+    )
+    _outbox.append(
+        aggregate_type="InsuredMember",
+        aggregate_id=str(member.id),
+        event_type="MEMBER.DEACTIVATED",
+        payload={"memberId": str(member.id), "rowVersion": member.row_version},
     )
     return member

@@ -8,6 +8,8 @@ using the same `metadata` wire name the contract names it.
 """
 from __future__ import annotations
 
+from uuid import UUID
+
 from rest_framework import serializers
 
 from apps.foundation.infrastructure.models import AuditEvent
@@ -70,10 +72,19 @@ class AuditEventSerializer(serializers.Serializer):
         if not obj.actor_id:
             return None
 
+        # Audit events may be emitted by technical actors (for example the
+        # customer portal's anonymous login flow), whose identifiers are
+        # deliberately not StaffAccount UUIDs. Do not turn a readable audit
+        # trail into a 500 merely because there is no staff account to join.
+        try:
+            actor_id = UUID(str(obj.actor_id))
+        except (TypeError, ValueError, AttributeError):
+            return None
+
         return (
             StaffAccount.objects
             .filter(
-                id=obj.actor_id,
+                id=actor_id,
                 tenant_id=obj.tenant_id,
             )
             .values_list("name", flat=True)
@@ -86,4 +97,3 @@ class AuditEventSerializer(serializers.Serializer):
         )
         
         
-
