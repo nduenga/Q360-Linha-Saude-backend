@@ -368,7 +368,10 @@ class ReviewQueueView(APIView):
     permission_classes = [require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_REVIEW)]
 
     def get(self, request):
-        queryset = ReviewTask.objects.all().order_by("created_at")
+        queryset = ReviewTask.objects.select_related(
+            "quote__proposer",
+            "quote__plan__product",
+        ).order_by("created_at")
         status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)

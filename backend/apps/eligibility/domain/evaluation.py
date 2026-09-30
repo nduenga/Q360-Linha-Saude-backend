@@ -456,7 +456,88 @@ def evaluate(
             )
         ]
 
-    eligible_messages = [EligibilityMessage("ELIG-OK", "INFO", "Member is eligible")]
+    eligible_messages = [
+        EligibilityMessage("ELIG-OK", "INFO", "Membro elegível segundo as regras aplicáveis."),
+        EligibilityMessage("ELIG-PLAN-ACTIVE", "INFO", "O plano está ativo."),
+    ]
+
+    if age is not None and age_rule_configured:
+        age_limits: list[str] = []
+        if config.min_entry_age is not None:
+            age_limits.append(f"mínimo {config.min_entry_age}")
+        if config.max_entry_age is not None:
+            age_limits.append(f"máximo {config.max_entry_age}")
+        eligible_messages.append(
+            EligibilityMessage(
+                "ELIG-AGE-WITHIN-RANGE",
+                "INFO",
+                f"Idade de {age} anos dentro dos limites de entrada configurados ({' e '.join(age_limits)} anos).",
+            )
+        )
+
+    if config.allowed_relationship_codes is not None:
+        eligible_messages.append(
+            EligibilityMessage(
+                "ELIG-RELATIONSHIP-ALLOWED",
+                "INFO",
+                f"A relação familiar ({data.relationship_code or 'não informada'}) está permitida para o plano.",
+            )
+        )
+
+    category_rule = config.category_rule_for(
+        data.relationship_category,
+        organisation_proposer_id=data.organisation_proposer_id,
+    )
+    category_evidence = data.angola_evidence or AngolaEvidence()
+    if category_rule and data.relationship_category == "CHILD" and age is not None:
+        if category_rule.max_age_without_proof is not None and age <= category_rule.max_age_without_proof:
+            eligible_messages.append(
+                EligibilityMessage(
+                    "ELIG-CHILD-AGE",
+                    "INFO",
+                    f"A idade cumpre o limite de {category_rule.max_age_without_proof} anos para filhos sem comprovativo escolar.",
+                )
+            )
+        elif (
+            category_rule.max_age_with_proof is not None
+            and age <= category_rule.max_age_with_proof
+            and category_evidence.has_enrollment_certificate
+        ):
+            eligible_messages.append(
+                EligibilityMessage(
+                    "ELIG-CHILD-ENROLLMENT-PROOF",
+                    "INFO",
+                    "A idade está dentro do limite alargado e foi indicado comprovativo de matrícula.",
+                )
+            )
+    elif (
+        category_rule
+        and data.relationship_category == "SPOUSE"
+        and category_rule.requires_union_proof_for
+        and category_evidence.union_bond_type in category_rule.requires_union_proof_for
+        and category_evidence.has_union_homologation_document
+    ):
+        eligible_messages.append(
+            EligibilityMessage(
+                "ELIG-UNION-PROOF",
+                "INFO",
+                "O comprovativo de homologação da união exigido para esta relação foi indicado.",
+            )
+        )
+    elif (
+        category_rule
+        and data.relationship_category == "ASCENDANT"
+        and category_rule.requires_cohabitation_or_financial_dependency
+        and category_evidence.has_cohabitation_or_financial_dependency_proof
+    ):
+        eligible_messages.append(
+            EligibilityMessage(
+                "ELIG-ASCENDANT-DEPENDENCY-PROOF",
+                "INFO",
+                "Foi indicado comprovativo de coabitação ou dependência financeira exigido para ascendentes.",
+            )
+        )
+
     wp_message = _waiting_period_message(data=data, config=config)
     if wp_message is not None:
         eligible_messages.append(wp_message)

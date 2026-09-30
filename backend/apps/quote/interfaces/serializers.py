@@ -78,9 +78,22 @@ class DecisionRequestSerializer(serializers.Serializer):
 class ReviewTaskSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     quoteId = serializers.UUIDField(source="quote_id")
+    quoteName = serializers.SerializerMethodField(method_name="get_quote_name")
+    quoteNumber = serializers.CharField(source="quote.quote_number", allow_null=True)
+    proposerName = serializers.CharField(source="quote.proposer.display_name")
+    planName = serializers.CharField(source="quote.plan.name")
+    productName = serializers.CharField(source="quote.plan.product.name")
     status = serializers.ChoiceField(choices=[s.value for s in ReviewTaskStatus])
     assignedTo = serializers.CharField(source="assigned_to", allow_null=True)
     createdAt = serializers.DateTimeField(source="created_at")
+
+    def get_quote_name(self, obj) -> str:
+        """Quote has no standalone name; compose a readable queue label."""
+        proposer_name = obj.quote.proposer.display_name
+        plan_name = obj.quote.plan.name
+        if proposer_name and plan_name:
+            return f"{proposer_name} · {plan_name}"
+        return proposer_name or plan_name or obj.quote.quote_number or f"Cotação {str(obj.quote_id)[:8]}"
 
 
 class StateHistoryItemSerializer(serializers.Serializer):
