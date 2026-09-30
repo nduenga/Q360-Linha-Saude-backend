@@ -9,7 +9,7 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
-from apps.client.domain.errors import DuplicateExternalReferenceError, RowVersionMismatchError
+from apps.client.domain.errors import DuplicateExternalReferenceError, DuplicateNifError, RowVersionMismatchError
 from apps.client.infrastructure.models import Proposer
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
@@ -21,6 +21,7 @@ def create_proposer(
     proposer_type: str,
     display_name: str,
     external_reference: str | None,
+    nif: str,
     registration_number: str,
     email: str,
     phone: str,
@@ -29,17 +30,22 @@ def create_proposer(
     tenant_id = CurrentTenantProvider.require()
     try:
         with transaction.atomic():
+            if Proposer.objects.filter(nif=nif).exists():
+                raise DuplicateNifError(f"Já existe um proponente com o NIF '{nif}' neste tenant.")
             proposer = Proposer.objects.create(
                 tenant_id=tenant_id.value,
                 proposer_type=proposer_type,
                 display_name=display_name,
                 external_reference=external_reference,
+                nif=nif,
                 registration_number=registration_number,
                 email=email,
                 phone=phone,
                 attributes_json=attributes or {},
             )
     except IntegrityError as exc:
+        if Proposer.objects.filter(nif=nif).exists():
+            raise DuplicateNifError(f"Já existe um proponente com o NIF '{nif}' neste tenant.") from exc
         raise DuplicateExternalReferenceError(
             f"externalReference '{external_reference}' already exists for this tenant"
         ) from exc
@@ -63,20 +69,25 @@ def update_proposer(
     *,
     proposer: Proposer,
     display_name: str,
+    nif: str,
     registration_number: str,
     email: str,
     phone: str,
     attributes: dict[str, Any] | None,
     row_version: int,
 ) -> Proposer:
-    updated = Proposer.objects.filter(id=proposer.id, row_version=row_version).update(
-        display_name=display_name,
-        registration_number=registration_number,
-        email=email,
-        phone=phone,
-        attributes_json=attributes or {},
-        row_version=row_version + 1,
-    )
+    try:
+        updated = Proposer.objects.filter(id=proposer.id, row_version=row_version).update(
+            display_name=display_name,
+            registration_number=registration_number,
+            nif=nif,
+            email=email,
+            phone=phone,
+            attributes_json=attributes or {},
+            row_version=row_version + 1,
+        )
+    except IntegrityError as exc:
+        raise DuplicateNifError(f"Já existe um proponente com o NIF '{nif}' neste tenant.") from exc
     if updated == 0:
         raise RowVersionMismatchError(
             f"Proposer {proposer.id} rowVersion {row_version} does not match the current version"

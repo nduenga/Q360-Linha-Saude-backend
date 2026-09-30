@@ -5,6 +5,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from apps.client.domain.enums import ImportJobStatus, MemberStatus, ProposerStatus, ProposerType
+from apps.client.domain.nif import NifFormatError, validate_agt_nif
 
 
 class ProposerSerializer(serializers.Serializer):
@@ -12,6 +13,7 @@ class ProposerSerializer(serializers.Serializer):
     proposerType = serializers.ChoiceField(source="proposer_type", choices=[t.value for t in ProposerType])
     externalReference = serializers.CharField(source="external_reference", allow_null=True)
     displayName = serializers.CharField(source="display_name")
+    nif = serializers.CharField(allow_null=True)
     registrationNumber = serializers.CharField(source="registration_number", allow_null=True)
     email = serializers.CharField(allow_null=True)
     phone = serializers.CharField(allow_null=True)
@@ -20,7 +22,40 @@ class ProposerSerializer(serializers.Serializer):
     rowVersion = serializers.IntegerField(source="row_version")
 
 
-class ProposerCreateRequestSerializer(serializers.Serializer):
+class _ProposerNifRequestSerializer(serializers.Serializer):
+    """Shared input handling for the canonical NIF and its legacy alias."""
+
+    nif = serializers.CharField(min_length=1, max_length=30, required=False)
+    registrationNumber = serializers.CharField(min_length=1, max_length=100, required=False)
+
+    def _validated_nif(self, attrs: dict) -> tuple[str, str]:
+        raw_nif = attrs.get("nif")
+        legacy_registration_number = attrs.get("registrationNumber")
+
+        if raw_nif is None and legacy_registration_number is None:
+            raise serializers.ValidationError({"nif": "Indique o NIF."})
+
+        try:
+            nif = validate_agt_nif(raw_nif if raw_nif is not None else legacy_registration_number)
+        except NifFormatError as exc:
+            raise serializers.ValidationError({"nif": str(exc)}) from exc
+
+        if raw_nif is not None and legacy_registration_number is not None:
+            try:
+                legacy_nif = validate_agt_nif(legacy_registration_number)
+            except NifFormatError as exc:
+                raise serializers.ValidationError({"registrationNumber": str(exc)}) from exc
+            if nif != legacy_nif:
+                raise serializers.ValidationError(
+                    {"registrationNumber": "O NIF e o registrationNumber devem coincidir quando ambos são enviados."}
+                )
+
+        # Keep old consumers (including the customer portal) working while
+        # `nif` becomes the source of truth in the physical schema.
+        return nif, nif
+
+
+class ProposerCreateRequestSerializer(_ProposerNifRequestSerializer):
     """Product Owner decision (2026-09-26): registrationNumber (NIF), email
     and phone are mandatory when creating a Proposer — no longer optional
     identity/contact fields. `email`/`phone` columns added to `proposer`
@@ -29,35 +64,37 @@ class ProposerCreateRequestSerializer(serializers.Serializer):
     proposerType = serializers.ChoiceField(choices=[t.value for t in ProposerType])
     externalReference = serializers.CharField(allow_null=True, required=False, default=None)
     displayName = serializers.CharField(min_length=1, max_length=250)
-    registrationNumber = serializers.CharField(min_length=1, max_length=100)
     email = serializers.EmailField(max_length=254)
     phone = serializers.CharField(min_length=1, max_length=30)
     attributes = serializers.JSONField(required=False, default=dict)
 
     def validate(self, attrs: dict) -> dict:
+        nif, registration_number = self._validated_nif(attrs)
         return {
             "proposer_type": attrs["proposerType"],
             "external_reference": attrs["externalReference"],
             "display_name": attrs["displayName"],
-            "registration_number": attrs["registrationNumber"],
+            "nif": nif,
+            "registration_number": registration_number,
             "email": attrs["email"],
             "phone": attrs["phone"],
             "attributes": attrs["attributes"],
         }
 
 
-class ProposerUpdateRequestSerializer(serializers.Serializer):
+class ProposerUpdateRequestSerializer(_ProposerNifRequestSerializer):
     displayName = serializers.CharField(min_length=1, max_length=250)
-    registrationNumber = serializers.CharField(min_length=1, max_length=100)
     email = serializers.EmailField(max_length=254)
     phone = serializers.CharField(min_length=1, max_length=30)
     attributes = serializers.JSONField(required=False, default=dict)
     rowVersion = serializers.IntegerField(min_value=0)
 
     def validate(self, attrs: dict) -> dict:
+        nif, registration_number = self._validated_nif(attrs)
         return {
             "display_name": attrs["displayName"],
-            "registration_number": attrs["registrationNumber"],
+            "nif": nif,
+            "registration_number": registration_number,
             "email": attrs["email"],
             "phone": attrs["phone"],
             "attributes": attrs["attributes"],

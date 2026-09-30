@@ -219,3 +219,26 @@ def test_list_rule_versions_filters_by_domain(admin_client):
     codes = [item["code"] for item in response.data["items"]]
     assert "LIST-PRICE" in codes
     assert "LIST-ELIG" not in codes
+
+@pytest.mark.django_db
+def test_member_from_another_proposer_is_400(admin_client):
+    scope = _setup_product_plan(admin_client)
+    who = _setup_member(admin_client, date_of_birth="1990-01-01")
+    other = admin_client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Other",
+            "registrationNumber": "123456789LA043",
+            "email": "other@example.com",
+            "phone": "+244900000001",
+        },
+    ).data
+
+    response = admin_client.post(
+        "/api/v1/eligibility/evaluate",
+        {**scope, "proposerId": other["id"], "memberId": who["memberId"],
+         "effectiveDate": "2026-06-01", "context": {}},
+        format="json",
+    )
+    assert response.status_code == 400

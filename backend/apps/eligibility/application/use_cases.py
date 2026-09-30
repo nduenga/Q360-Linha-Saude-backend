@@ -42,6 +42,14 @@ class EvaluateEligibilityUseCase:
         proposer = Proposer.objects.filter(id=proposer_id).first() if proposer_id else None
         member = InsuredMember.objects.filter(id=member_id).first() if member_id else None
         plan = Plan.objects.filter(id=plan_id).first()
+        
+        if proposer_id and proposer is None:
+            raise ReferencedEntityNotFoundError("Referenced proposerId does not exist for this tenant")
+        if member_id and member is None:
+            raise ReferencedEntityNotFoundError("Referenced memberId does not exist for this tenant")
+        if member is not None and proposer_id and member.proposer_id != proposer_id:
+            raise ReferencedEntityNotFoundError("Referenced memberId does not belong to the given proposerId")
+
 
         if plan is None:
             raise ReferencedEntityNotFoundError("Referenced planId does not exist for this tenant")

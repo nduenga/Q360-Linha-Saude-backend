@@ -18,6 +18,13 @@ class DuplicateExternalReferenceError(DomainProblem):
     problem_code = "CONFLICT"
 
 
+class DuplicateNifError(DomainProblem):
+    """A NIF identifies at most one proposer inside a tenant."""
+
+    http_status = 409
+    problem_code = "CONFLICT"
+
+
 class RowVersionMismatchError(DomainProblem):
     """Optimistic-locking `rowVersion` supplied by the client does not
     match the current persisted value."""

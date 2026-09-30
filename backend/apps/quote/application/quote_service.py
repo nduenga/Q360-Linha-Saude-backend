@@ -59,11 +59,20 @@ from apps.quote.infrastructure.models import (
     ReviewTask,
 )
 
+from apps.client.domain.enums import MemberStatus
+
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
 
 _ELIGIBILITY_TO_MEMBER_STATUS = {
     EligibilityDecision.ELIGIBLE.value: QuoteMemberStatus.INCLUDED.value,
+    # Angola eligibility has three non-blocking outcomes in addition to
+    # the original ART-008 vocabulary.  A loading remains priceable, while
+    # documentary/medical cases require an underwriter's review before
+    # they can become active on the issued policy.
+    EligibilityDecision.ELIGIBLE_WITH_LOADING.value: QuoteMemberStatus.INCLUDED.value,
+    EligibilityDecision.PENDING_DOCUMENT.value: QuoteMemberStatus.REFERRAL.value,
+    EligibilityDecision.PENDING_MEDICAL_BOARD.value: QuoteMemberStatus.REFERRAL.value,
     EligibilityDecision.WARNING.value: QuoteMemberStatus.INCLUDED.value,
     EligibilityDecision.REFERRAL.value: QuoteMemberStatus.REFERRAL.value,
     EligibilityDecision.HARD_STOP.value: QuoteMemberStatus.EXCLUDED.value,
@@ -212,6 +221,14 @@ def add_quote_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str 
     member = InsuredMember.objects.filter(id=member_id).first()
     if member is None:
         raise ReferencedEntityNotFoundError(f"memberId {member_id} does not exist for this tenant")
+    if member.proposer_id != quote.proposer_id:
+        raise ReferencedEntityNotFoundError(
+            f"memberId {member_id} does not belong to the proposer associated with quote {quote.id}"
+        )
+    if member.status != MemberStatus.ACTIVE.value:
+        raise ReferencedEntityNotFoundError(
+            f"memberId {member_id} is {member.status} and cannot be added to a quote"
+        )
 
     evaluation = EvaluateEligibilityUseCase().execute(
         proposer_id=quote.proposer_id,

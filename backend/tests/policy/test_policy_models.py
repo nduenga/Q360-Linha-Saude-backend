@@ -42,12 +42,18 @@ def _proposer(client, *, registration_number: str = "123456789LA042") -> str:
     ).data["id"]
 
 
+def _nif_for_suffix(suffix: str) -> str:
+    """Generate a structurally valid, deterministic singular NIF for a test."""
+    numeric_part = sum((index + 1) * ord(char) for index, char in enumerate(suffix))
+    return f"{numeric_part:09d}LA042"
+
+
 def _quote_with_snapshot(client, *, tenant, suffix: str) -> tuple[Quote, QuoteSnapshot, str]:
     """A DRAFT Quote plus a real QuoteSnapshot (PRICING-typed — good enough
     to satisfy the FK/NOT NULL, since Fase 2 only tests the Policy schema
     itself, not which snapshot type Fase 3's issuance use case picks)."""
     plan_ref = _plan(client, product_code=f"POL-PLAN-{suffix}")
-    proposer_id = _proposer(client, registration_number=f"1234567{suffix}LA042"[:14])
+    proposer_id = _proposer(client, registration_number=_nif_for_suffix(suffix))
     quote_data = client.post(
         "/api/v1/quotes",
         {"proposerId": proposer_id, "planId": plan_ref["planId"], "effectiveDate": "2026-06-01"},

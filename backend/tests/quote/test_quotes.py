@@ -44,14 +44,14 @@ def _rating_table(client, *, code: str) -> None:
     client.post(f"/api/v1/configuration/rating-table/{created['id']}/publish")
 
 
-def _proposer(client) -> str:
+def _proposer(client, *, registration_number: str = "123456789LA042", email: str = "holder@example.com") -> str:
     return client.post(
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
             "displayName": "Holder",
-            "registrationNumber": "123456789LA042",
-            "email": "holder@example.com",
+            "registrationNumber": registration_number,
+            "email": email,
             "phone": "+244900000000",
         },
     ).data["id"]
@@ -129,6 +129,50 @@ def test_add_eligible_member_is_included(admin_client):
     assert len(members) == 1
     # No eligibility RuleVersion published for this tenant -> CONFIG_ERROR -> EXCLUDED (fail-closed).
     assert members[0]["status"] == "EXCLUDED"
+
+
+@pytest.mark.django_db
+def test_add_member_from_another_proposer_is_validation_error(admin_client):
+    scope = _quote_scope(admin_client, code_suffix="member-proposer-match")
+    quote = admin_client.post(
+        "/api/v1/quotes",
+        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
+        format="json",
+    ).data
+    other_proposer_id = _proposer(
+        admin_client, registration_number="123456789LA043", email="other-holder@example.com"
+    )
+    other_member_id = _member(admin_client, proposer_id=other_proposer_id)
+
+    response = admin_client.post(
+        f"/api/v1/quotes/{quote['id']}/members", {"memberId": other_member_id}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert response.data["code"] == "VALIDATION-400"
+    assert admin_client.get(f"/api/v1/quotes/{quote['id']}/members").data["items"] == []
+    
+    
+@pytest.mark.django_db
+def test_add_inactive_member_is_validation_error(admin_client):
+    from apps.client.infrastructure.models import InsuredMember
+
+    scope = _quote_scope(admin_client, code_suffix="inactive-member")
+    quote = admin_client.post(
+        "/api/v1/quotes",
+        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
+        format="json",
+    ).data
+    member_id = _member(admin_client, proposer_id=scope["proposerId"])
+    InsuredMember.all_tenants.filter(id=member_id).update(status="INACTIVE")
+
+    response = admin_client.post(
+        f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json"
+    )
+
+    assert response.status_code == 400
+    assert response.data["code"] == "VALIDATION-400"
+    assert admin_client.get(f"/api/v1/quotes/{quote['id']}/members").data["items"] == []
 
 
 @pytest.mark.django_db

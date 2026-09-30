@@ -29,12 +29,13 @@ def test_create_and_get_proposer(admin_client):
     body = response.data
     assert set(body.keys()) == {
         "id", "proposerType", "externalReference", "displayName",
-        "registrationNumber", "email", "phone", "attributes", "status", "rowVersion",
+        "nif", "registrationNumber", "email", "phone", "attributes", "status", "rowVersion",
     }
     assert body["status"] == "ACTIVE"
     assert body["rowVersion"] == 0
     assert body["email"] == "ana@example.com"
     assert body["phone"] == "+244900000000"
+    assert body["nif"] == "123456789LA042"
 
     get_response = admin_client.get(f"/api/v1/proposers/{body['id']}")
     assert get_response.status_code == 200
@@ -47,6 +48,49 @@ def test_create_proposer_without_registration_number_is_rejected(admin_client):
     del payload["registrationNumber"]
     response = admin_client.post("/api/v1/proposers", payload)
     assert response.status_code == 400
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("nif", "expected"),
+    [
+        ("5402132186", "5402132186"),
+        (" 002345678 la 041 ", "002345678LA041"),
+    ],
+)
+def test_create_proposer_accepts_and_normalises_agt_nif(admin_client, nif, expected):
+    payload = _valid_payload(nif=nif)
+    del payload["registrationNumber"]
+    response = admin_client.post("/api/v1/proposers", payload)
+
+    assert response.status_code == 201, response.data
+    assert response.data["nif"] == expected
+    assert response.data["registrationNumber"] == expected
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("nif", ["540213218", "54021321860", "002345678L041", "5402132186A"])
+def test_create_proposer_rejects_nif_outside_agt_formats(admin_client, nif):
+    payload = _valid_payload(nif=nif)
+    del payload["registrationNumber"]
+    response = admin_client.post("/api/v1/proposers", payload)
+
+    assert response.status_code == 400
+    assert "nif" in response.data
+
+
+@pytest.mark.django_db
+def test_nif_is_unique_within_a_tenant(admin_client):
+    first_payload = _valid_payload(nif="5402132186")
+    duplicate_payload = _valid_payload(displayName="Same NIF", nif="5402132186")
+    del first_payload["registrationNumber"]
+    del duplicate_payload["registrationNumber"]
+    first = admin_client.post("/api/v1/proposers", first_payload)
+    duplicate = admin_client.post("/api/v1/proposers", duplicate_payload)
+
+    assert first.status_code == 201
+    assert duplicate.status_code == 409
+    assert duplicate.data["code"] == "CONFLICT"
 
 
 @pytest.mark.django_db

@@ -30,6 +30,7 @@ class Proposer(TenantScopedModel):
     proposer_type = models.CharField(max_length=20, choices=[(t.value, t.value) for t in ProposerType])
     external_reference = models.CharField(max_length=100, null=True, blank=True)
     display_name = models.CharField(max_length=250)
+    nif = models.CharField(max_length=14, null=True, blank=True)
     registration_number = models.CharField(max_length=100, null=True, blank=True)
     email = models.CharField(max_length=254, null=True, blank=True)
     phone = models.CharField(max_length=30, null=True, blank=True)

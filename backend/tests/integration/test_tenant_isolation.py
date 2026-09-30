@@ -104,7 +104,7 @@ class TestClientTenantIsolation:
             {
                 "proposerType": "INDIVIDUAL",
                 "displayName": "Maria Silva",
-                "registrationNumber": f"doc-{uuid.uuid4().hex[:8]}",
+                "registrationNumber": f"{uuid.uuid4().int % 1_000_000_000:09d}LA042",
                 "email": "maria@example.com",
                 "phone": "+244900000000",
                 "attributes": {},

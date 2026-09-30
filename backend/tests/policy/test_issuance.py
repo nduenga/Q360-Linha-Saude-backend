@@ -51,6 +51,12 @@ def _approver(tenant, *, actor_id: str = "approver-1"):
     )
 
 
+def _nif_for_suffix(suffix: str) -> str:
+    """Generate a structurally valid, deterministic singular NIF for a test."""
+    numeric_part = sum((index + 1) * ord(char) for index, char in enumerate(suffix))
+    return f"{numeric_part:09d}LA042"
+
+
 def _approved_quote(admin_client, tenant, *, suffix: str, min_entry_age: int | None = None) -> dict:
     """Full setup: product/plan + published pricing config + eligibility
     rule + 1 titular member, priced, submitted and APPROVED."""
@@ -65,7 +71,7 @@ def _approved_quote(admin_client, tenant, *, suffix: str, min_entry_age: int | N
         {
             "proposerType": "INDIVIDUAL",
             "displayName": "Holder",
-            "registrationNumber": f"12345{suffix}LA042"[:14],
+            "registrationNumber": _nif_for_suffix(suffix),
             "email": "holder@example.com",
             "phone": "+244900000000",
         },
