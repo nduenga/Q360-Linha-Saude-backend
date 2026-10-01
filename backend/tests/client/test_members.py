@@ -9,13 +9,18 @@ import datetime
 import pytest
 
 
+_COUNTER = iter(range(100000000, 999999999))
+
+
 def _proposer(client) -> dict:
+    """Each call gets its own valid NIF: `registrationNumber` is mirrored in
+    `nif`, which is unique per tenant."""
     return client.post(
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
             "displayName": "Holder",
-            "registrationNumber": "123456789LA042",
+            "registrationNumber": f"{next(_COUNTER)}LA042",
             "email": "holder@example.com",
             "phone": "+244900000000",
         },

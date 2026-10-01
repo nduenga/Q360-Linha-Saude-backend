@@ -60,6 +60,7 @@ class AuditEventListView(APIView):
         entity_id = request.query_params.get("entityId")
         correlation_id = request.query_params.get("correlationId")
         actor_id = request.query_params.get("actorId")
+        action = request.query_params.get("action")
         occurred_from = request.query_params.get("from")
         occurred_to = request.query_params.get("to")
 
@@ -72,6 +73,8 @@ class AuditEventListView(APIView):
             filters &= Q(correlation_id=correlation_id)
         if actor_id:
             filters &= Q(actor_id=actor_id)
+        if action:
+            filters &= Q(action=action)
         if occurred_from:
             filters &= Q(occurred_at__gte=occurred_from)
         if occurred_to:

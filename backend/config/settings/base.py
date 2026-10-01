@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "apps.pricing",
     "apps.quote",
     "apps.policy",
+    "apps.claims",
     "apps.customer_portal",
     "apps.staff_accounts",
     "drf_spectacular",
@@ -112,6 +113,7 @@ MIGRATION_MODULES = {
     "pricing": "apps.pricing.infrastructure.migrations",
     "quote": "apps.quote.infrastructure.migrations",
     "policy": "apps.policy.infrastructure.migrations",
+    "claims": "apps.claims.infrastructure.migrations",
     "customer_portal": "apps.customer_portal.infrastructure.migrations",
     "staff_accounts": "apps.staff_accounts.infrastructure.migrations",
 }
@@ -186,7 +188,7 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ],
     "EXCEPTION_HANDLER": "apps.foundation.interfaces.exception_handler.q360_exception_handler",
-    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_SCHEMA_CLASS": "config.openapi.schema.Q360AutoSchema",
 }
 
 # OpenTelemetry is optional at import time so a local developer can still run
@@ -212,8 +214,42 @@ SPECTACULAR_SETTINGS = {
         "Auto-generated from the current Django code — for internal debugging only. "
         "The approved contract is ART-006 (Q360-MVP-ART-006), not this document."
     ),
-    "VERSION": "0.0.0-dev",
+    "VERSION": "1.4.0",
+    "OAS_VERSION": "3.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": False,
+    "ENUM_NAME_OVERRIDES": {
+        "QuoteStatusEnum": "apps.quote.domain.enums.QuoteStatus",
+        "QuoteMemberStatusEnum": "apps.quote.domain.enums.QuoteMemberStatus",
+        "ReviewTaskStatusEnum": "apps.quote.domain.enums.ReviewTaskStatus",
+        "DocumentStatusEnum": "apps.quote.domain.enums.DocumentStatus",
+        "PolicyStatusEnum": "apps.policy.domain.enums.PolicyStatus",
+        "PolicyMemberStatusEnum": "apps.policy.domain.enums.PolicyMemberStatus",
+        "ProductStatusEnum": "apps.product.domain.enums.ProductStatus",
+        "PlanStatusEnum": "apps.product.domain.enums.PlanStatus",
+        "VersionedConfigStatusEnum": "apps.product.domain.enums.VersionedConfigStatus",
+    },
+    "SCHEMA_PATH_PREFIX": "/api/v1",
+    "SECURITY": [{"oauth2": ["q360.read"]}],
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "oauth2": {
+                "type": "oauth2",
+                "flows": {
+                    "clientCredentials": {
+                        "tokenUrl": "/api/v1/auth/login",
+                        "scopes": {
+                            "q360.read": "Leitura",
+                            "q360.write": "Escrita",
+                            "q360.approve": "Aprovação",
+                            "q360.admin": "Administração/configuração",
+                            "q360.audit": "Auditoria",
+                        },
+                    }
+                },
+            }
+        }
+    },
 }
 
 # --- OAuth2/OIDC Resource Server (Q360-S1-03) --------------------------

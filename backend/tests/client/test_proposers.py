@@ -76,7 +76,7 @@ def test_create_proposer_rejects_nif_outside_agt_formats(admin_client, nif):
     response = admin_client.post("/api/v1/proposers", payload)
 
     assert response.status_code == 400
-    assert "nif" in response.data
+    assert any(e["field"] == "nif" for e in response.data["fieldErrors"])
 
 
 @pytest.mark.django_db

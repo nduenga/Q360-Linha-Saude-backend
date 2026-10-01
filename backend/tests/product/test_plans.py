@@ -25,7 +25,7 @@ def test_create_plan_under_product(admin_client):
     )
     assert response.status_code == 201
     body = response.data
-    assert set(body.keys()) == {"id", "productId", "code", "name", "description", "status", "rowVersion"}
+    assert set(body.keys()) == {"id", "productId", "code", "name", "description", "status", "settings", "rowVersion"}
     assert body["productId"] == product["id"]
     assert body["status"] == "ACTIVE"
 
@@ -83,7 +83,7 @@ def test_create_plan_with_complementary_coverages(admin_client):
     attached = admin_client.get(f"/api/v1/plans/{response.data['id']}/benefits").data
     codes = {item["benefit"]["code"] for item in attached}
     # BASE coverages always auto-attached, plus the 2 chosen COMPLEMENTARY ones.
-    assert codes == {"HOSPITALIZATION", "OUTPATIENT", "EMERGENCY", "DENTAL", "OPTICAL"}
+    assert codes == {"HOSPITALIZATION", "AMBULATORY_SURGERY", "EMERGENCY", "DENTAL", "OPTICAL"}
 
 
 @pytest.mark.django_db

@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 from decimal import Decimal, InvalidOperation
 
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
 from apps.pricing.domain.money import round_amount
@@ -101,6 +102,7 @@ def _money_str(value) -> str | None:
 
 class PricingComponentSerializer(serializers.Serializer):
     order = serializers.IntegerField(source="component_order")
+    memberId = serializers.UUIDField(source="member_id", allow_null=True)
     code = serializers.CharField(source="component_code")
     type = serializers.CharField(source="component_type")
     baseAmount = serializers.SerializerMethodField()
@@ -133,6 +135,15 @@ class PricingResponseSerializer(serializers.Serializer):
     components = serializers.SerializerMethodField()
     versions = serializers.SerializerMethodField()
     calculatedAt = serializers.DateTimeField(source="completed_at")
+    warnings = serializers.SerializerMethodField()
+
+    def get_warnings(self, obj) -> list[dict]:
+        """Non-blocking calculation notes (e.g. an optional coverage was
+        chosen but no COVERAGE_LOADING_<CODE> parameter exists)."""
+        return [
+            {"code": step.rule_code, "message": step.message}
+            for step in obj.trace_steps.filter(step_code="WARNING").order_by("sequence_no")
+        ]
 
     def get_status(self, obj) -> str:
         return "CALCULATED"
@@ -157,6 +168,15 @@ class PricingResponseSerializer(serializers.Serializer):
         }
 
 
+def render_preview(pricing_run) -> dict:
+    """Response of a preview calculation (nothing persisted): the usual
+    `PricingResponse` with `pricingRunId: null` and `preview: true`."""
+    payload = dict(PricingResponseSerializer(pricing_run).data)
+    payload["pricingRunId"] = None
+    payload["preview"] = True
+    return payload
+
+
 class PricingTraceStepSerializer(serializers.Serializer):
     sequence = serializers.IntegerField(source="sequence_no")
     stepCode = serializers.CharField(source="step_code")
@@ -174,6 +194,7 @@ class PricingExplanationSerializer(serializers.Serializer):
         return PricingTraceStepSerializer(obj.trace_steps.order_by("sequence_no"), many=True).data
 
 
+@extend_schema_serializer(component_name="RatingTableHeader")
 class VersionedConfigHeaderSerializer(serializers.Serializer):
     """Re-declared here rather than imported from `apps.product`: `pricing`
     and `product` are sibling modules (see domain/enums.py note)."""
@@ -266,7 +287,7 @@ class PricingExecutionSerializer(serializers.Serializer):
 
     components = serializers.SerializerMethodField()
 
-    def get_memberIds(self, obj):
+    def get_memberIds(self, obj) -> list[str]:
         member_ids = []
 
         for component in obj.components.order_by("component_order"):
@@ -276,7 +297,7 @@ class PricingExecutionSerializer(serializers.Serializer):
 
         return member_ids
 
-    def get_memberNames(self, obj):
+    def get_memberNames(self, obj) -> list[str]:
         member_names = []
 
         for component in obj.components.order_by("component_order"):
@@ -299,10 +320,10 @@ class PricingExecutionSerializer(serializers.Serializer):
 
         return member_names
 
-    def get_totalAmount(self, obj):
+    def get_totalAmount(self, obj) -> str | None:
         return _money_str(obj.total_amount)
 
-    def get_components(self, obj):
+    def get_components(self, obj) -> list[dict]:
         return PricingComponentSerializer(
             obj.components.order_by("component_order"),
             many=True,

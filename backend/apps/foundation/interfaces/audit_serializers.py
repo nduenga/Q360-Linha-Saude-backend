@@ -68,7 +68,7 @@ class AuditEventSerializer(serializers.Serializer):
 
     metadata = serializers.SerializerMethodField()
 
-    def get_authorName(self, obj):
+    def get_authorName(self, obj) -> str | None:
         if not obj.actor_id:
             return None
 
@@ -91,7 +91,7 @@ class AuditEventSerializer(serializers.Serializer):
             .first()
         )
 
-    def get_metadata(self, obj):
+    def get_metadata(self, obj) -> dict:
         return _safe_metadata(
             obj.metadata_json or {}
         )

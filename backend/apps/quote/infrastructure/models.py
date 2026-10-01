@@ -64,6 +64,11 @@ class Quote(TenantScopedModel):
     rejected_at = models.DateTimeField(null=True, blank=True)
     cancellation_reason = models.TextField(null=True, blank=True)
     created_by = models.CharField(max_length=200)
+    # Simulador GTE (0006): escolhas do cliente, tipo de cotação e renovação.
+    selection_json = models.JSONField(default=dict)
+    quote_type = models.CharField(max_length=20, default="NEW")
+    source_policy_id = models.UUIDField(null=True, blank=True)
+    renewal_json = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     row_version = models.BigIntegerField(default=0)
@@ -91,12 +96,40 @@ class QuoteMember(TenantScopedModel):
         null=True,
         blank=True,
     )
+    pre_existing_json = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         managed = False
         db_table = "quote_member"
+
+
+class QuoteAdjustment(TenantScopedModel):
+    """Agravamento/desconto aplicado a uma cotação (R3). Nunca se apaga:
+    remover marca `REMOVED` com autor e motivo (auditoria)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    quote = models.ForeignKey(Quote, on_delete=models.CASCADE, db_column="quote_id", related_name="adjustments")
+    kind = models.CharField(max_length=30)
+    value = models.DecimalField(max_digits=30, decimal_places=8)
+    scope = models.CharField(max_length=20)
+    member = models.ForeignKey(
+        InsuredMember, on_delete=models.DO_NOTHING, db_column="member_id", null=True, blank=True
+    )
+    reason = models.TextField()
+    status = models.CharField(max_length=20, default="ACTIVE")
+    impact_json = models.JSONField(default=dict)
+    applied_by = models.CharField(max_length=200)
+    applied_at = models.DateTimeField(auto_now_add=True)
+    removed_by = models.CharField(max_length=200, null=True, blank=True)
+    removed_at = models.DateTimeField(null=True, blank=True)
+    removed_reason = models.TextField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "quote_adjustment"
 
 
 class QuoteSnapshot(TenantScopedModel):
@@ -306,7 +339,61 @@ class Document(TenantScopedModel):
     requested_by = models.CharField(max_length=200)
     requested_at = models.DateTimeField(auto_now_add=True)
     generated_at = models.DateTimeField(null=True, blank=True)
+    format = models.CharField(max_length=10, default="JSON")
+    scenario_id = models.UUIDField(null=True, blank=True)
+    content_type = models.CharField(max_length=100, null=True, blank=True)
+    file_name = models.CharField(max_length=200, null=True, blank=True)
+    proposal_no = models.IntegerField(null=True, blank=True)
 
     class Meta:
         managed = False
         db_table = "document"
+
+
+class QuoteScenario(TenantScopedModel):
+    """Cenário de cotação (R5). `parameters_json` = {selection, adjustments};
+    `result_json` = último cálculo (pré-visualização, nada persistido no
+    motor); `inputs_hash` deteta quando o resultado ficou desatualizado
+    (plano, tarifas, membros ou parâmetros mudaram)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    quote = models.ForeignKey(Quote, on_delete=models.CASCADE, db_column="quote_id", related_name="scenarios")
+    name = models.CharField(max_length=200)
+    description = models.TextField(null=True, blank=True)
+    parameters_json = models.JSONField(default=dict)
+    result_json = models.JSONField(default=dict)
+    inputs_hash = models.CharField(max_length=64, null=True, blank=True)
+    base_scenario = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, db_column="base_scenario_id", null=True, blank=True, related_name="clones"
+    )
+    is_selected = models.BooleanField(default=False)
+    created_by = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    row_version = models.BigIntegerField(default=0)
+
+    class Meta:
+        managed = False
+        db_table = "quote_scenario"
+
+
+class QuoteVersion(TenantScopedModel):
+    """Ponto de gravação imutável do estado editável de uma cotação."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    quote = models.ForeignKey(Quote, on_delete=models.CASCADE, db_column="quote_id", related_name="versions")
+    version_no = models.IntegerField()
+    source = models.CharField(max_length=30)
+    reason = models.TextField(null=True, blank=True)
+    snapshot_json = models.JSONField()
+    checksum = models.CharField(max_length=64)
+    total_amount = models.DecimalField(max_digits=30, decimal_places=8, null=True, blank=True)
+    currency_code = models.CharField(max_length=3, null=True, blank=True)
+    created_by = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "quote_version"

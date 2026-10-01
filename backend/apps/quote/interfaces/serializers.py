@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from apps.pricing.domain.money import round_amount
+
 from apps.quote.domain.enums import (
     DocumentStatus,
     DocumentTemplateStatus,
@@ -30,6 +32,10 @@ class QuoteSerializer(serializers.Serializer):
     validUntil = serializers.DateField(source="valid_until", allow_null=True)
     currencyCode = serializers.CharField(source="currency_code", allow_null=True)
     latestPricingRunId = serializers.UUIDField(source="latest_pricing_run_id", allow_null=True)
+    selection = serializers.JSONField(source="selection_json")
+    quoteType = serializers.CharField(source="quote_type")
+    sourcePolicyId = serializers.UUIDField(source="source_policy_id", allow_null=True)
+    renewal = serializers.JSONField(source="renewal_json")
     rowVersion = serializers.IntegerField(source="row_version")
 
 
@@ -48,6 +54,56 @@ class QuoteMemberRequestSerializer(serializers.Serializer):
     memberId = serializers.UUIDField()
 
 
+class QuoteSelectionRequestSerializer(serializers.Serializer):
+    """Coberturas opcionais escolhidas, opção A–E e "e se..." de capitais —
+    ver apps.pricing.application.plan_dimensions."""
+
+    selection = serializers.JSONField()
+    rowVersion = serializers.IntegerField(min_value=0)
+
+
+class QuotePreviewRequestSerializer(serializers.Serializer):
+    selection = serializers.JSONField(required=False, default=None, allow_null=True)
+    adjustments = serializers.ListField(child=serializers.JSONField(), required=False, default=list)
+
+
+class AdjustmentRequestSerializer(serializers.Serializer):
+    kind = serializers.CharField()
+    value = serializers.JSONField()
+    scope = serializers.CharField(required=False, default="QUOTE")
+    memberId = serializers.UUIDField(required=False, allow_null=True, default=None)
+    reason = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+
+
+class AdjustmentRemoveRequestSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+
+
+class QuoteAdjustmentSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    quoteId = serializers.UUIDField(source="quote_id")
+    kind = serializers.CharField()
+    value = serializers.SerializerMethodField()
+    scope = serializers.CharField()
+    memberId = serializers.UUIDField(source="member_id", allow_null=True)
+    reason = serializers.CharField()
+    status = serializers.CharField()
+    impact = serializers.JSONField(source="impact_json")
+    appliedBy = serializers.CharField(source="applied_by")
+    appliedAt = serializers.DateTimeField(source="applied_at")
+    removedBy = serializers.CharField(source="removed_by", allow_null=True)
+    removedAt = serializers.DateTimeField(source="removed_at", allow_null=True)
+    removedReason = serializers.CharField(source="removed_reason", allow_null=True)
+
+    def get_value(self, obj) -> str:
+        return format(obj.value.normalize(), "f")
+
+
+class PreExistingDecisionRequestSerializer(serializers.Serializer):
+    decision = serializers.JSONField()
+    reason = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+
+
 class QuotePriceRequestSerializer(serializers.Serializer):
     recalculate = serializers.BooleanField(required=False, default=False)
 
@@ -62,6 +118,7 @@ class QuoteMemberSerializer(serializers.Serializer):
     memberId = serializers.UUIDField(source="member_id")
     status = serializers.CharField()
     eligibilityEvaluationId = serializers.UUIDField(source="eligibility_evaluation_id", allow_null=True)
+    preExisting = serializers.JSONField(source="pre_existing_json")
 
 
 class QuoteSubmitRequestSerializer(serializers.Serializer):
@@ -147,3 +204,114 @@ class DocumentTemplateHeaderSerializer(serializers.Serializer):
     effectiveFrom = serializers.DateField(source="effective_from")
     effectiveTo = serializers.DateField(source="effective_to", allow_null=True)
     checksum = serializers.CharField(allow_null=True)
+
+
+class ScenarioSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    quoteId = serializers.UUIDField(source="quote_id")
+    name = serializers.CharField()
+    description = serializers.CharField(allow_null=True)
+    parameters = serializers.JSONField(source="parameters_json")
+    result = serializers.JSONField(source="result_json")
+    isSelected = serializers.BooleanField(source="is_selected")
+    baseScenarioId = serializers.UUIDField(source="base_scenario_id", allow_null=True)
+    stale = serializers.SerializerMethodField()
+    createdBy = serializers.CharField(source="created_by")
+    createdAt = serializers.DateTimeField(source="created_at")
+    updatedAt = serializers.DateTimeField(source="updated_at")
+    rowVersion = serializers.IntegerField(source="row_version")
+
+    def get_stale(self, obj) -> bool:
+        from apps.quote.application import scenario_service
+
+        return scenario_service.is_stale(obj)
+
+
+class ScenarioCreateRequestSerializer(serializers.Serializer):
+    name = serializers.CharField(min_length=1, max_length=200)
+    description = serializers.CharField(allow_null=True, required=False, default=None)
+    # Omitted/null = start from the current state of the quote.
+    parameters = serializers.JSONField(required=False, default=None, allow_null=True)
+
+
+class ScenarioUpdateRequestSerializer(serializers.Serializer):
+    name = serializers.CharField(min_length=1, max_length=200)
+    description = serializers.CharField(allow_null=True, required=False, default=None)
+    parameters = serializers.JSONField(required=False, default=None, allow_null=True)
+    rowVersion = serializers.IntegerField(min_value=0)
+
+
+class ScenarioCloneRequestSerializer(serializers.Serializer):
+    name = serializers.CharField(min_length=1, max_length=200, required=False, allow_null=True, default=None)
+
+
+class ScenarioApplyRequestSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+
+
+class QuoteRenewalRequestSerializer(serializers.Serializer):
+    sourcePolicyId = serializers.UUIDField()
+    effectiveDate = serializers.DateField(required=False, allow_null=True, default=None)
+    planId = serializers.UUIDField(required=False, allow_null=True, default=None)
+
+
+class QuoteCloneRequestSerializer(serializers.Serializer):
+    effectiveDate = serializers.DateField(required=False, allow_null=True, default=None)
+    reason = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+
+
+class QuoteVersionSerializer(serializers.Serializer):
+    versionNo = serializers.IntegerField(source="version_no")
+    source = serializers.CharField()
+    reason = serializers.CharField(allow_null=True)
+    totalAmount = serializers.SerializerMethodField()
+    currencyCode = serializers.CharField(source="currency_code", allow_null=True)
+    createdBy = serializers.CharField(source="created_by")
+    createdAt = serializers.DateTimeField(source="created_at")
+
+    def get_totalAmount(self, obj) -> str | None:
+        return None if obj.total_amount is None else str(round_amount(obj.total_amount))
+
+
+class QuoteVersionDetailSerializer(QuoteVersionSerializer):
+    snapshot = serializers.JSONField(source="snapshot_json")
+    checksum = serializers.CharField()
+
+
+class QuoteVersionSaveRequestSerializer(serializers.Serializer):
+    reason = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+
+
+class QuoteIndexationRequestSerializer(serializers.Serializer):
+    medicalInflationPct = serializers.JSONField(required=False, allow_null=True, default=None)
+    roundTo = serializers.JSONField(required=False, allow_null=True, default=None)
+    reason = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+
+
+class ProposalRequestSerializer(serializers.Serializer):
+    templateCode = serializers.CharField(required=False, allow_null=True, default=None)
+    scenarioId = serializers.UUIDField(required=False, allow_null=True, default=None)
+    format = serializers.CharField(required=False, default="PDF")
+
+
+class ProposalDocumentSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    quoteId = serializers.UUIDField(source="quote_id")
+    documentNumber = serializers.CharField(source="document_number", allow_null=True)
+    proposalNo = serializers.IntegerField(source="proposal_no", allow_null=True)
+    format = serializers.CharField()
+    status = serializers.CharField()
+    scenarioId = serializers.UUIDField(source="scenario_id", allow_null=True)
+    templateCode = serializers.CharField(source="template_version.template_code")
+    templateVersion = serializers.IntegerField(source="template_version.version_no")
+    fileName = serializers.CharField(source="file_name", allow_null=True)
+    contentType = serializers.CharField(source="content_type", allow_null=True)
+    checksum = serializers.CharField(allow_null=True)
+    failure = serializers.CharField(source="failure_code", allow_null=True)
+    requestedBy = serializers.CharField(source="requested_by")
+    requestedAt = serializers.DateTimeField(source="requested_at")
+    generatedAt = serializers.DateTimeField(source="generated_at", allow_null=True)
+    downloadUrl = serializers.SerializerMethodField()
+
+    def get_downloadUrl(self, obj) -> str | None:
+        return f"/api/v1/documents/{obj.id}/download" if obj.status == "GENERATED" else None

@@ -3,6 +3,7 @@ from django.urls import path
 from apps.pricing.interfaces.views import (
     PricingCalculateView,
     PricingExplanationView,
+    PricingPreviewView,
     PricingScenarioView,
     PricingExecutionListView,
     PricingExecutionDetailView,
@@ -14,6 +15,7 @@ urlpatterns = [
     path("rating-tables", RatingTableCreateView.as_view(), name="rating-table-create"),
     path("rating-tables/<uuid:rating_table_id>", RatingTableDetailView.as_view(), name="rating-table-detail"),
     path("pricing/calculate", PricingCalculateView.as_view(), name="pricing-calculate"),
+    path("pricing/preview", PricingPreviewView.as_view(), name="pricing-preview"),
     path(
         "pricing/<uuid:pricing_run_id>/explanation",
         PricingExplanationView.as_view(),

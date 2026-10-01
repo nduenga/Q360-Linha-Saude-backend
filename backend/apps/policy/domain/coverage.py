@@ -19,7 +19,8 @@ ROADMAP_APOLICES.md Fase 4):
   6. BENEFIT_NOT_IN_PLAN — the requested `benefit_category` was not
      contracted (checked only when a category is actually asked for).
   7. IN_WAITING_PERIOD — `on_date` is still before the benefit's
-     `waiting_period_ends_json` entry.
+     `waiting_period_ends_json` entry (not for an accident on a coverage
+     configured with `accidentWaived`).
   8. COVERED.
 """
 from __future__ import annotations
@@ -34,6 +35,9 @@ class PolicyFacts:
     start_date: datetime.date | None
     end_date: datetime.date | None
     benefit_codes: frozenset[str]
+    # Coverages whose waiting period does not apply to an accident (PDF:
+    # "em acidente, as carências não se aplicam na generalidade dos produtos").
+    accident_waived_codes: frozenset[str] = frozenset()
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -81,6 +85,7 @@ def check_coverage(
     member: PolicyMemberFacts | None,
     on_date: datetime.date,
     benefit_category: str | None,
+    accident: bool = False,
 ) -> CoverageResult:
     # 1 — awaiting first premium.
     if policy.status == "PENDING_FIRST_PREMIUM":
@@ -113,7 +118,7 @@ def check_coverage(
         return _not_covered("BENEFIT_NOT_IN_PLAN")
 
     # 7 — waiting period, only for the benefit actually being checked.
-    if benefit_category is not None:
+    if benefit_category is not None and not (accident and benefit_category in policy.accident_waived_codes):
         ends = member.waiting_period_ends.get(benefit_category)
         if ends is not None and on_date < ends:
             return _not_covered("IN_WAITING_PERIOD", waiting_period_ends=ends)

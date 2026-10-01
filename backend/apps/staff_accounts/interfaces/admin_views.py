@@ -49,7 +49,7 @@ class StaffAccountRolesView(APIView):
     def patch(self, request, account_id):
         body = UpdateRolesRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        view = account_service.update_roles(account_id=uuid.UUID(account_id), roles=body.validated_data["roles"])
+        view = account_service.update_roles(account_id=account_id, roles=body.validated_data["roles"])
         return Response(account_view_to_dict(view))
 
 
@@ -59,7 +59,7 @@ class StaffAccountStatusView(APIView):
     def patch(self, request, account_id):
         body = SetStatusRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        view = account_service.set_status(account_id=uuid.UUID(account_id), status=body.validated_data["status"])
+        view = account_service.set_status(account_id=account_id, status=body.validated_data["status"])
         return Response(account_view_to_dict(view))
 
 
@@ -67,5 +67,5 @@ class StaffAccountResetPasswordView(APIView):
     permission_classes = [IsAdminRole]
 
     def post(self, request, account_id):
-        new_password = account_service.reset_password(account_id=uuid.UUID(account_id))
+        new_password = account_service.reset_password(account_id=account_id)
         return Response(GeneratedPasswordSerializer({"temporaryPassword": new_password}).data)

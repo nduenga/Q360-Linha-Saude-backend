@@ -98,13 +98,13 @@ class EligibilityExecutionSerializer(serializers.Serializer):
         allow_null=True,
     )
 
-    def get_proposerName(self, obj):
+    def get_proposerName(self, obj) -> str | None:
         if not obj.proposer:
             return None
 
         return obj.proposer.display_name
 
-    def get_memberName(self, obj):
+    def get_memberName(self, obj) -> str | None:
         if not obj.member:
             return None
 
@@ -117,6 +117,6 @@ class EligibilityExecutionSerializer(serializers.Serializer):
             if part
         ).strip() or None
 
-    def get_effectiveDate(self, obj):
+    def get_effectiveDate(self, obj) -> str | None:
         snapshot = obj.input_snapshot_json or {}
         return snapshot.get("effectiveDate")

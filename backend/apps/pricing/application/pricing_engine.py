@@ -40,6 +40,7 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
+from apps.pricing.domain.commercial_adjustments import CommercialAdjustment, parse_commercial_adjustments
 from apps.pricing.domain.enums import PricingComponentType, PricingRunStatus
 from apps.pricing.domain.errors import (
     PricingCalculationFailedError,
@@ -51,9 +52,18 @@ from apps.pricing.domain.money import (
     ROUNDING_POLICY_VERSION,
     round_amount,
 )
-from apps.pricing.infrastructure.models import PricingComponent, PricingRun, PricingScenario, PricingTrace
+from apps.foundation.infrastructure.models import RuleVersion
+from apps.pricing.infrastructure.models import (
+    PricingComponent,
+    PricingRun,
+    PricingScenario,
+    PricingTrace,
+    RatingTable,
+)
+from apps.product.infrastructure.models import PricingParameterSet
 from apps.pricing.infrastructure.parameter_repository import resolve_decimal_parameter, resolve_pricing_parameter_set
 from apps.pricing.infrastructure.rule_repository import parse_pricing_config, resolve_pricing_rule_version
+from apps.pricing.application.plan_dimensions import PlanPricingContext, resolve_plan_pricing_context
 from apps.pricing.application.rating_table_service import resolve_factor, resolve_rating_table
 from apps.product.infrastructure.models import Plan
 
@@ -78,6 +88,48 @@ def calculate_pricing(
         "context": context,
     }
     return _execute(request_snapshot=request_snapshot, correlation_id=correlation_id)
+
+
+class _PreviewRollback(Exception):
+    """Raised on purpose to roll back a preview calculation."""
+
+
+def preview_pricing(
+    *,
+    plan_id: uuid.UUID,
+    effective_date: datetime.date,
+    member_ids: list[uuid.UUID],
+    context: dict[str, Any],
+    correlation_id: str | None,
+    render,
+    allow_config_overrides: bool = False,
+) -> dict[str, Any]:
+    """Runs the exact same calculation as `calculate_pricing` (same engine,
+    same validations, same components/trace) but **persists nothing**: the
+    whole run, its audit rows and outbox events are rolled back, and
+    `render(pricing_run)` (called while the run still exists) produces the
+    response. This is what makes "alterar parâmetros e ver o prémio
+    recalculado em tempo real" safe — a preview never creates a PricingRun,
+    never writes audit/outbox and never touches a Quote (R4)."""
+    request_snapshot = {
+        "planId": str(plan_id),
+        "effectiveDate": effective_date.isoformat(),
+        "memberIds": [str(m) for m in member_ids],
+        "context": context,
+    }
+    rendered: dict[str, Any] = {}
+    try:
+        with transaction.atomic():
+            run = _execute(
+                request_snapshot=request_snapshot,
+                correlation_id=correlation_id,
+                allow_config_overrides=allow_config_overrides,
+            )
+            rendered = dict(render(run))
+            raise _PreviewRollback
+    except _PreviewRollback:
+        pass
+    return rendered
 
 
 def create_pricing_scenario(
@@ -139,7 +191,9 @@ def get_pricing_run(pricing_run_id: uuid.UUID) -> PricingRun | None:
     return PricingRun.objects.filter(id=pricing_run_id).first()
 
 
-def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) -> PricingRun:
+def _execute(
+    *, request_snapshot: dict[str, Any], correlation_id: str | None, allow_config_overrides: bool = False
+) -> PricingRun:
     tenant_id = CurrentTenantProvider.require()
 
     plan_id = uuid.UUID(str(request_snapshot["planId"]))
@@ -159,6 +213,16 @@ def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) ->
     if plan is None:
         raise ReferencedEntityNotFoundError("Referenced planId does not exist for this tenant")
 
+    # PDF "Coberturas e Capitais": plan settings, coverage capitals, the A-E
+    # participation option and the optional coverages the customer chose all
+    # feed the calculation (see plan_dimensions.py) — validated up front so a
+    # bad selection is a 400, never a half-built PricingRun.
+    plan_context = resolve_plan_pricing_context(plan=plan, selection=context.get("selection"))
+    commercial_adjustments = parse_commercial_adjustments(context.get("adjustments"))
+    pre_existing: dict[str, dict[str, Any]] = context.get("preExisting") or {}
+    if not isinstance(pre_existing, dict):
+        raise ReferencedEntityNotFoundError("context.preExisting must be an object keyed by memberId")
+
     if not member_ids:
         raise ReferencedEntityNotFoundError("memberIds must contain at least one member")
     members = list(InsuredMember.objects.filter(id__in=member_ids))
@@ -167,13 +231,22 @@ def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) ->
     if missing:
         raise ReferencedEntityNotFoundError(f"Unknown memberIds: {', '.join(missing)}")
 
+    # Impact simulation (R7): a DRAFT/other version can be priced "as if it
+    # were the published one" — only ever inside a preview (rolled back),
+    # never in a real calculation.
+    config_overrides: dict[str, Any] = (context.get("configOverrides") or {}) if allow_config_overrides else {}
+
     rating_table = resolve_rating_table(code=rating_table_code, effective_date=effective_date)
+    if config_overrides.get("ratingTableId"):
+        rating_table = RatingTable.objects.filter(id=config_overrides["ratingTableId"]).first()
     if rating_table is None:
         raise PricingConfigError(f"No published RatingTable '{rating_table_code}' effective on {effective_date}")
     if not rating_table.currency_code:
         raise PricingConfigError(f"RatingTable '{rating_table_code}' has no currencyCode")
 
     parameter_set = resolve_pricing_parameter_set(code=parameter_set_code, effective_date=effective_date)
+    if config_overrides.get("parameterSetId"):
+        parameter_set = PricingParameterSet.objects.filter(id=config_overrides["parameterSetId"]).first()
     if parameter_set is None:
         raise PricingConfigError(
             f"No published PricingParameterSet '{parameter_set_code}' effective on {effective_date}"
@@ -191,6 +264,11 @@ def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) ->
         rule_version = resolve_pricing_rule_version(code=rule_version_code, effective_date=effective_date)
         if rule_version is None:
             raise PricingConfigError(f"No published PRICING RuleVersion '{rule_version_code}' effective on {effective_date}")
+        rule_config = parse_pricing_config(rule_version)
+    if config_overrides.get("ruleVersionId"):
+        rule_version = RuleVersion.objects.select_related("rule_set").filter(id=config_overrides["ruleVersionId"]).first()
+        if rule_version is None:
+            raise PricingConfigError("configOverrides.ruleVersionId does not exist")
         rule_config = parse_pricing_config(rule_version)
 
     per_member_context: dict[str, dict[str, Any]] = context.get("members") or {}
@@ -224,6 +302,9 @@ def _execute(*, request_snapshot: dict[str, Any], correlation_id: str | None) ->
                 rating_table_code=rating_table_code,
                 base_premium=base_premium,
                 rule_config=rule_config,
+                plan_context=plan_context,
+                commercial_adjustments=commercial_adjustments,
+                pre_existing=pre_existing,
             )
             PricingRun.objects.filter(id=pricing_run.id).update(
                 status=PricingRunStatus.CALCULATED.value,
@@ -290,6 +371,9 @@ def _run_calculation(
     rating_table_code: str,
     base_premium: Decimal,
     rule_config,
+    plan_context: PlanPricingContext,
+    commercial_adjustments: list[CommercialAdjustment],
+    pre_existing: dict[str, dict[str, Any]],
 ) -> Decimal:
     members_by_id = {str(m.id): m for m in members}
     order = 0
@@ -315,11 +399,24 @@ def _run_calculation(
         output_data={"ratingTableCode": rating_table_code, "basePremium": str(base_premium)},
     )
 
+    for note in plan_context.warnings:
+        trace("WARNING", rule_code=note.get("code"), message=f"{note.get('scope')}: {note.get('message')}")
+
+    priced_member_ids = {str(m) for m in member_ids}
+    for adjustment in commercial_adjustments:
+        if adjustment.scope == "MEMBER" and adjustment.member_id not in priced_member_ids:
+            trace(
+                "WARNING",
+                rule_code=adjustment.code,
+                message=f"Ajuste {adjustment.code} refere um membro que não faz parte do cálculo: ignorado.",
+            )
+
     # Preserve the caller's requested memberIds order for determinism
     # (same input -> same component order -> same output, S4-02 AC).
     for member_id in member_ids:
         member = members_by_id[str(member_id)]
-        member_context = per_member_context.get(str(member_id), {})
+        # Plan/selection dimensions first, the member's own values win.
+        member_context = {**plan_context.dimensions, **per_member_context.get(str(member_id), {})}
 
         running_amount = round_amount(base_premium)
         _guard_amount(running_amount)
@@ -371,6 +468,70 @@ def _run_calculation(
             )
             order += 1
 
+        option = plan_context.participation_option
+        if option is not None:
+            # "Quanto maior a participação escolhida, menor o prémio" — the
+            # A-E option's premium adjustment (a GTE-configured plan setting).
+            option_factor = Decimal("1") + option.adjustment_pct / Decimal("100")
+            running_amount = round_amount(running_amount * option_factor)
+            _guard_amount(running_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id,
+                pricing_run=pricing_run,
+                member=member,
+                component_order=order,
+                component_code=f"PARTICIPATION_OPTION_{option.code}",
+                component_type=PricingComponentType.FACTOR.value,
+                factor_value=option_factor,
+                result_amount=running_amount,
+                source_code=pricing_run.plan.code,
+                metadata_json={"participationOption": option.code, "adjustmentPct": str(option.adjustment_pct)},
+            )
+            trace(
+                "PARTICIPATION_OPTION_APPLIED",
+                rule_code=option.code,
+                input_data={"memberId": str(member_id), "adjustmentPct": str(option.adjustment_pct)},
+                output_data={"resultAmount": str(running_amount)},
+            )
+            order += 1
+
+        for coverage_code in plan_context.optional_coverage_codes:
+            loading_pct = resolve_decimal_parameter(pricing_run.parameter_set, f"COVERAGE_LOADING_{coverage_code}")
+            if loading_pct is None:
+                trace(
+                    "WARNING",
+                    rule_code=f"COVERAGE_LOADING_{coverage_code}",
+                    message=(
+                        f"Cobertura opcional '{coverage_code}' escolhida mas o conjunto de parâmetros "
+                        f"'{pricing_run.parameter_set.code}' não define COVERAGE_LOADING_{coverage_code}: "
+                        "sem custo adicional aplicado."
+                    ),
+                )
+                continue
+            loading_amount = round_amount(round_amount(base_premium) * loading_pct / Decimal("100"))
+            running_amount = round_amount(running_amount + loading_amount)
+            _guard_amount(running_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id,
+                pricing_run=pricing_run,
+                member=member,
+                component_order=order,
+                component_code=f"COVERAGE_{coverage_code}",
+                component_type=PricingComponentType.ADJUSTMENT.value,
+                adjustment_amount=loading_amount,
+                result_amount=running_amount,
+                source_code=f"COVERAGE:{coverage_code}",
+                source_version=str(pricing_run.parameter_set.version_no),
+                metadata_json={"optionalCoverage": coverage_code, "loadingPct": str(loading_pct)},
+            )
+            trace(
+                "COVERAGE_LOADING_APPLIED",
+                rule_code=coverage_code,
+                input_data={"memberId": str(member_id), "loadingPct": str(loading_pct)},
+                output_data={"resultAmount": str(running_amount)},
+            )
+            order += 1
+
         if rule_config is not None:
             for adjustment in rule_config.adjustments:
                 if not adjustment.matches(member_context):
@@ -397,9 +558,103 @@ def _run_calculation(
                 )
                 order += 1
 
+        decision = pre_existing.get(str(member_id)) or {}
+        if decision.get("mode") == "ACCEPTED_WITH_LOADING" and decision.get("loadingPct") is not None:
+            # PDF "Aceitação com sobreprémio": coberta com agravamento do prémio.
+            loading_pct = Decimal(str(decision["loadingPct"]))
+            before_loading = running_amount
+            running_amount = round_amount(running_amount * (Decimal("1") + loading_pct / Decimal("100")))
+            _guard_amount(running_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id,
+                pricing_run=pricing_run,
+                member=member,
+                component_order=order,
+                component_code="PRE_EXISTING_LOADING",
+                component_type=PricingComponentType.ADJUSTMENT.value,
+                factor_value=Decimal("1") + loading_pct / Decimal("100"),
+                adjustment_amount=round_amount(running_amount - before_loading),
+                result_amount=running_amount,
+                source_code="PRE_EXISTING_CONDITION",
+                metadata_json={"mode": "ACCEPTED_WITH_LOADING", "loadingPct": str(loading_pct)},
+            )
+            trace(
+                "PRE_EXISTING_LOADING_APPLIED",
+                rule_code="PRE_EXISTING_LOADING",
+                input_data={"memberId": str(member_id), "loadingPct": str(loading_pct)},
+                output_data={"resultAmount": str(running_amount)},
+            )
+            order += 1
+
+        for adjustment in commercial_adjustments:
+            if adjustment.scope == "MEMBER" and adjustment.member_id != str(member_id):
+                continue
+            if adjustment.scope == "QUOTE" and not adjustment.is_percent:
+                continue  # fixed quote-level amounts are applied once, on the total
+            before = running_amount
+            if adjustment.is_percent:
+                running_amount = round_amount(running_amount * adjustment.factor())
+            else:
+                running_amount = round_amount(running_amount + adjustment.signed_amount())
+            _guard_amount(running_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id,
+                pricing_run=pricing_run,
+                member=member,
+                component_order=order,
+                component_code=adjustment.code,
+                component_type=PricingComponentType.ADJUSTMENT.value,
+                factor_value=adjustment.factor() if adjustment.is_percent else None,
+                adjustment_amount=round_amount(running_amount - before),
+                result_amount=running_amount,
+                source_code="COMMERCIAL_ADJUSTMENT",
+                metadata_json={
+                    "adjustmentId": adjustment.id,
+                    "kind": adjustment.kind,
+                    "value": str(adjustment.value),
+                    "reason": adjustment.reason,
+                },
+            )
+            trace(
+                "COMMERCIAL_ADJUSTMENT_APPLIED",
+                rule_code=adjustment.code,
+                input_data={"memberId": str(member_id), "kind": adjustment.kind, "value": str(adjustment.value)},
+                output_data={"resultAmount": str(running_amount)},
+            )
+            order += 1
+
         total_amount += running_amount
 
     total_amount = round_amount(total_amount)
+    for adjustment in commercial_adjustments:
+        if adjustment.scope == "QUOTE" and not adjustment.is_percent:
+            before_total = total_amount
+            total_amount = round_amount(total_amount + adjustment.signed_amount())
+            _guard_amount(total_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id,
+                pricing_run=pricing_run,
+                member=None,
+                component_order=order,
+                component_code=adjustment.code,
+                component_type=PricingComponentType.ADJUSTMENT.value,
+                adjustment_amount=round_amount(total_amount - before_total),
+                result_amount=total_amount,
+                source_code="COMMERCIAL_ADJUSTMENT",
+                metadata_json={
+                    "adjustmentId": adjustment.id,
+                    "kind": adjustment.kind,
+                    "value": str(adjustment.value),
+                    "reason": adjustment.reason,
+                },
+            )
+            trace(
+                "COMMERCIAL_ADJUSTMENT_APPLIED",
+                rule_code=adjustment.code,
+                input_data={"kind": adjustment.kind, "value": str(adjustment.value), "scope": "QUOTE"},
+                output_data={"totalAmount": str(total_amount)},
+            )
+            order += 1
     PricingComponent.objects.create(
         tenant_id=tenant_id,
         pricing_run=pricing_run,

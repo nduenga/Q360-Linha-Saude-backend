@@ -34,6 +34,7 @@ from apps.product.application.benefit_service import (
     resolve_complementary_benefits,
 )
 from apps.product.domain.enums import PlanStatus, ProductStatus
+from apps.product.domain.plan_settings import validate_plan_settings
 from apps.product.domain.errors import (
     DuplicateCodeError,
     DuplicatePlanCoverageSetError,
@@ -141,6 +142,11 @@ def delete_product(*, product: Product) -> None:
     )
 
 
+def _plan_signature(settings: dict | None) -> tuple:
+    settings = settings or {}
+    return (settings.get("segment"), settings.get("tier"), settings.get("category"))
+
+
 def create_plan(
     *,
     product: Product,
@@ -148,8 +154,10 @@ def create_plan(
     name: str,
     description: str | None,
     complementary_benefit_ids: list[uuid.UUID] | None = None,
+    settings: dict | None = None,
 ) -> Plan:
     tenant_id = CurrentTenantProvider.require().value
+    plan_settings, _warnings = validate_plan_settings(settings)
     # Resolved *before* the locked transaction below: a bad id here must
     # 400 (InvalidBenefitSelectionError) without ever touching a row lock.
     complementary_benefits = resolve_complementary_benefits(
@@ -171,11 +179,16 @@ def create_plan(
             # "at most one basic plan" for free, since an empty
             # `complementary_benefit_ids` candidate set equals BASE
             # coverages only, same as any other existing basic plan's.
+            # PDF "Coberturas e Capitais" (Saúde Grupo): the 2-3 professional
+            # categories (Colaboradores/Quadros/Administração) share the same
+            # coverages and differ only in capitals — so plans that declare a
+            # different segment/tier/category are *not* duplicates.
+            candidate_signature = _plan_signature(plan_settings)
             for existing_plan in Plan.objects.filter(product=locked_product):
                 existing_ids = set(
                     PlanBenefit.objects.filter(plan=existing_plan).values_list("benefit_id", flat=True)
                 )
-                if existing_ids == candidate_coverage_ids:
+                if existing_ids == candidate_coverage_ids and _plan_signature(existing_plan.settings_json) == candidate_signature:
                     raise DuplicatePlanCoverageSetError(
                         f"Plan '{existing_plan.code}' already has this exact set of coverages "
                         f"in product {locked_product.id}"
@@ -188,6 +201,7 @@ def create_plan(
                 name=name,
                 description=description,
                 status=PlanStatus.ACTIVE.value,
+                settings_json=plan_settings,
             )
     except IntegrityError as exc:
         raise DuplicateCodeError(f"Plan code '{code}' already exists for product {product.id}") from exc
@@ -217,7 +231,9 @@ def create_plan(
     return plan
 
 
-def update_plan(*, plan: Plan, name: str, description: str | None, row_version: int) -> Plan:
+def update_plan(
+    *, plan: Plan, name: str, description: str | None, row_version: int, settings: dict | None = None
+) -> Plan:
     """DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): a Plan can be edited
     at any time now (no more parent-version DRAFT gate) — what a Quote
     already contracted is protected by its own immutable content snapshot
@@ -225,9 +241,12 @@ def update_plan(*, plan: Plan, name: str, description: str | None, row_version: 
     separately (PlanBenefitListCreateView/PlanBenefitDetailView) - this
     only covers name/description, via the same optimistic-locking
     `rowVersion` pattern as update_product()."""
-    updated = Plan.objects.filter(id=plan.id, row_version=row_version).update(
-        name=name, description=description, row_version=row_version + 1
-    )
+    fields: dict = {"name": name, "description": description, "row_version": row_version + 1}
+    if settings is not None:
+        # Plan-level PDF rules (segment, ages, group rules, A-E options...);
+        # omitted = unchanged. See apps.product.domain.plan_settings.
+        fields["settings_json"] = validate_plan_settings(settings)[0]
+    updated = Plan.objects.filter(id=plan.id, row_version=row_version).update(**fields)
     if updated == 0:
         raise RowVersionMismatchError(
             f"Plan {plan.id} rowVersion {row_version} does not match the current version"

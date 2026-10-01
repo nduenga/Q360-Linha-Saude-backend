@@ -15,7 +15,12 @@ from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
-from apps.pricing.application.pricing_engine import calculate_pricing, create_pricing_scenario, get_pricing_run
+from apps.pricing.application.pricing_engine import (
+    calculate_pricing,
+    create_pricing_scenario,
+    get_pricing_run,
+    preview_pricing,
+)
 from apps.pricing.application.rating_table_service import (
     create_rating_table,
     delete_rating_table,
@@ -31,6 +36,7 @@ from apps.pricing.interfaces.serializers import (
     RatingTableRequestSerializer,
     RatingTableUpdateRequestSerializer,
     VersionedConfigHeaderSerializer,
+    render_preview,
 )
 from shared.pagination import Q360PageNumberPagination
 
@@ -114,6 +120,30 @@ class PricingCalculateView(APIView):
             correlation_id=get_correlation_id(),
         )
         return Response(PricingResponseSerializer(pricing_run).data, status=200)
+
+
+class PricingPreviewView(APIView):
+    """`POST /pricing/preview` — same request/response as `/pricing/calculate`
+    but nothing is persisted (no PricingRun, audit or outbox): the GTE
+    changes capitals/participation/options and sees the premium immediately.
+    The response has `preview: true` and `pricingRunId: null`."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_CALCULATE)]
+
+    def post(self, request):
+        body = PricingCalculateRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+
+        result = preview_pricing(
+            plan_id=data["planId"],
+            effective_date=data["effectiveDate"],
+            member_ids=data["memberIds"],
+            context=data["context"],
+            correlation_id=get_correlation_id(),
+            render=render_preview,
+        )
+        return Response(result, status=200)
 
 
 class PricingExplanationView(APIView):

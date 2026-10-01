@@ -111,10 +111,10 @@ class CustomerPortalCoverageView(APIView):
 
         if member_id:
             _assert_member_belongs_to_policy(policy=policy, member_id=member_id)
-            result = get_member_coverage(policy=policy, member_id=member_id, on_date=on_date, benefit_category=benefit_category)
+            result = get_member_coverage(policy=policy, member_id=member_id, on_date=on_date, benefit_category=benefit_category, accident=request.query_params.get("eventType", "").upper() == "ACCIDENT")
             return Response({"policyNumber": policy.policy_number, "memberId": member_id, **_coverage_payload(result)})
 
-        results = get_policy_coverage(policy=policy, on_date=on_date, benefit_category=benefit_category)
+        results = get_policy_coverage(policy=policy, on_date=on_date, benefit_category=benefit_category, accident=request.query_params.get("eventType", "").upper() == "ACCIDENT")
         return Response(
             {
                 "policyNumber": policy.policy_number,
@@ -143,11 +143,18 @@ class CustomerPortalPlanBenefitsView(APIView):
         if plan is None:
             raise PortalResourceNotFoundError("No plan found for this policy")
 
-        benefits = list_plan_benefits(plan=plan)
-        return Response(
-            {"policyNumber": policy.policy_number, "benefits": PlanBenefitSerializer(benefits, many=True).data},
-            status=200,
-        )
+        # What the customer actually has — from the contracted snapshot (never
+        # the live plan, never the optional coverages that were only offered),
+        # with the capitals/participation/waiting days that were contracted.
+        snapshot_plan = (policy.contracted_terms_snapshot.snapshot_json or {}).get("plan") or {}
+        contracted = {
+            b["code"]: b for b in snapshot_plan.get("benefits", []) if b.get("code") and b.get("contracted", True)
+        }
+        rows = [pb for pb in list_plan_benefits(plan=plan) if pb.benefit.code in contracted]
+        data = PlanBenefitSerializer(rows, many=True).data
+        for row in data:
+            row["configurationJson"] = contracted[row["benefit"]["code"]].get("configurationJson", row["configurationJson"])
+        return Response({"policyNumber": policy.policy_number, "benefits": data}, status=200)
 
 
 @requires_idempotency
@@ -171,11 +178,14 @@ class CustomerPortalEligibilityView(APIView):
         if member_id is not None:
             _assert_member_belongs_to_policy(policy=policy, member_id=member_id)
             result = get_member_coverage(
-                policy=policy, member_id=member_id, on_date=on_date, benefit_category=data["benefitCategory"]
+                policy=policy, member_id=member_id, on_date=on_date, benefit_category=data["benefitCategory"],
+                accident=data["eventType"] == "ACCIDENT",
             )
             results = [{"memberId": str(member_id), "result": result}]
         else:
-            results = get_policy_coverage(policy=policy, on_date=on_date, benefit_category=data["benefitCategory"])
+            results = get_policy_coverage(
+                policy=policy, on_date=on_date, benefit_category=data["benefitCategory"], accident=data["eventType"] == "ACCIDENT"
+            )
 
         return Response(
             {

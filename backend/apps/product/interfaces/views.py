@@ -5,7 +5,11 @@ docstring to cross-check against docs/artifacts/ART-006-openapi/."""
 
 from __future__ import annotations
 
+import uuid
+
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -14,8 +18,13 @@ from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.product.application import product_service
+from apps.foundation.application.context import CurrentTenantProvider
+from apps.product.application import benefit_library_service as library
+from apps.product.application import configuration_lifecycle
+from apps.product.application import market_template_service, plan_configuration_service
 from apps.product.application.benefit_service import (
     add_plan_benefit,
+    ensure_market_catalog,
     list_benefits,
     list_plan_benefits,
     remove_plan_benefit,
@@ -26,10 +35,16 @@ from apps.product.application.pricing_parameter_service import (
     delete_pricing_parameter_set,
     update_pricing_parameter_set,
 )
-from apps.product.infrastructure.models import Benefit, Plan, PricingParameterSet, Product
+from apps.product.infrastructure.models import Benefit, Plan, PlanBenefit, PricingParameterSet, Product
 from apps.product.interfaces.serializers import (
     AddPlanBenefitRequestSerializer,
+    BenefitCreateRequestSerializer,
+    BenefitReasonRequestSerializer,
+    BenefitRevisionSerializer,
+    BenefitRollbackRequestSerializer,
     BenefitSerializer,
+    BenefitUpdateRequestSerializer,
+    PlanBenefitConfigRequestSerializer,
     PlanBenefitSerializer,
     PlanCreateRequestSerializer,
     PlanSerializer,
@@ -134,6 +149,7 @@ class PlanListCreateView(APIView):
             name=body.validated_data["name"],
             description=body.validated_data["description"],
             complementary_benefit_ids=body.validated_data["complementaryBenefitIds"],
+            settings=body.validated_data["settings"],
         )
         return Response(PlanSerializer(plan).data, status=201)
 
@@ -257,20 +273,160 @@ class ConfigurationRetireView(APIView):
         return Response(retired)
 
 
+@requires_idempotency
 class BenefitListView(APIView):
-    """Pragmatic V1 addition, not in ART-006 — see
-    apps/product/application/benefit_service.py module docstring and
-    ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1. Lists the fixed 11-coverage
-    market catalogue (3 BASE + 8 COMPLEMENTARY), seeding it for the
-    tenant on first use."""
+    """Biblioteca de coberturas (R6). `GET` lists (filters: `category`,
+    `status` = ACTIVE|INACTIVE|ALL, default ACTIVE, and free-text `q`);
+    `POST` creates a COMPLEMENTARY coverage (never BASE). Seeds the market
+    catalogue for the tenant on first use."""
 
-    permission_classes = [require_scope(Scope.READ)]
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [require_scope(Scope.ADMIN)(), require_permission(Permission.PRODUCT_MANAGE)()]
+        return [require_scope(Scope.READ)()]
 
     def get(self, request):
-        queryset = list_benefits(category=request.query_params.get("category"))
+        queryset = list_benefits(
+            category=request.query_params.get("category"),
+            status=request.query_params.get("status", "ACTIVE"),
+            search=request.query_params.get("q"),
+        )
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(BenefitSerializer(page, many=True).data)
+
+    def post(self, request):
+        body = BenefitCreateRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        benefit = library.create_benefit(
+            code=data["code"], name=data["name"], description=data["description"], definition=data["definition"]
+        )
+        return Response(BenefitSerializer(benefit).data, status=201)
+
+
+class BenefitDetailView(APIView):
+    def get_permissions(self):
+        if self.request.method == "PATCH":
+            return [require_scope(Scope.ADMIN)(), require_permission(Permission.PRODUCT_MANAGE)()]
+        return [require_scope(Scope.READ)()]
+
+    def get(self, request, benefit_id):
+        ensure_market_catalog(CurrentTenantProvider.require().value)
+        return Response(BenefitSerializer(get_object_or_404(Benefit, id=benefit_id)).data)
+
+    def patch(self, request, benefit_id):
+        benefit = get_object_or_404(Benefit, id=benefit_id)
+        body = BenefitUpdateRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        updated = library.update_benefit(
+            benefit=benefit,
+            name=data["name"],
+            description=data["description"],
+            definition=data["definition"],
+            row_version=data["row_version"],
+            reason=data["reason"],
+        )
+        return Response(BenefitSerializer(updated).data)
+
+
+class _BenefitAdminMixin:
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+
+@requires_idempotency
+class BenefitDeactivateView(_BenefitAdminMixin, APIView):
+    def post(self, request, benefit_id):
+        benefit = get_object_or_404(Benefit, id=benefit_id)
+        body = BenefitReasonRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        return Response(
+            BenefitSerializer(
+                library.set_benefit_status(benefit=benefit, active=False, reason=body.validated_data["reason"])
+            ).data
+        )
+
+
+@requires_idempotency
+class BenefitReactivateView(_BenefitAdminMixin, APIView):
+    def post(self, request, benefit_id):
+        benefit = get_object_or_404(Benefit, id=benefit_id)
+        body = BenefitReasonRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        return Response(
+            BenefitSerializer(
+                library.set_benefit_status(benefit=benefit, active=True, reason=body.validated_data["reason"])
+            ).data
+        )
+
+
+class BenefitRevisionListView(APIView):
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, benefit_id):
+        benefit = get_object_or_404(Benefit, id=benefit_id)
+        return Response(BenefitRevisionSerializer(library.list_revisions(benefit=benefit), many=True).data)
+
+
+@requires_idempotency
+class BenefitRollbackView(_BenefitAdminMixin, APIView):
+    def post(self, request, benefit_id):
+        benefit = get_object_or_404(Benefit, id=benefit_id)
+        body = BenefitRollbackRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        restored = library.rollback_benefit(
+            benefit=benefit, revision_no=body.validated_data["revisionNo"], reason=body.validated_data["reason"]
+        )
+        return Response(BenefitSerializer(restored).data)
+
+
+class BenefitUsageView(APIView):
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, benefit_id):
+        benefit = get_object_or_404(Benefit, id=benefit_id)
+        usage = library.benefit_usage(benefit=benefit)
+        return Response({"benefitId": str(benefit.id), "plansUsingBenefit": len(usage), "plans": usage})
+
+
+class BenefitExportView(APIView):
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request):
+        fmt = request.query_params.get("fileType", "xlsx").lower()
+        benefits = list_benefits(
+            category=request.query_params.get("category"),
+            status=request.query_params.get("status", "ALL"),
+            search=request.query_params.get("q"),
+        )
+        if fmt == "csv":
+            content, content_type, name = library.export_csv(benefits=benefits), "text/csv", "coberturas.csv"
+        elif fmt == "xlsx":
+            content = library.export_xlsx(benefits=benefits)
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            name = "coberturas.xlsx"
+        else:
+            return Response({"fileType": "Use xlsx or csv."}, status=400)
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{name}"'
+        return response
+
+
+@requires_idempotency
+class BenefitImportView(_BenefitAdminMixin, APIView):
+    """Multipart upload (`file`, optional `dryRun=true`). Same parser
+    override as the member import: every other endpoint is JSON-only."""
+
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+        uploaded = request.FILES.get("file")
+        if uploaded is None:
+            return Response({"file": "This field is required."}, status=400)
+        dry_run = str(request.data.get("dryRun", "false")).lower() in ("1", "true", "yes")
+        result = library.import_benefits(filename=uploaded.name, content=uploaded.read(), dry_run=dry_run)
+        return Response(result, status=200)
 
 
 @requires_idempotency
@@ -301,15 +457,100 @@ class PlanBenefitListCreateView(APIView):
 
 
 class PlanBenefitDetailView(APIView):
-    """Pragmatic V1 addition, not in ART-006. `DELETE` detaches a
-    COMPLEMENTARY coverage from a Plan — a BASE coverage can never be
-    removed this way (benefit_service.remove_plan_benefit raises
-    MissingCoreBenefitsError, mapped to 400 VALIDATION-400)."""
+    """`PUT` upserts the coverage configuration of a Plan (capitals,
+    participation, waiting periods, B/O inclusion, currency) and returns
+    non-blocking `warnings`. `DELETE` detaches a COMPLEMENTARY coverage — a
+    BASE coverage can never be removed (MissingCoreBenefitsError -> 400)."""
 
-    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [require_scope(Scope.READ)()]
+        return [require_scope(Scope.ADMIN)(), require_permission(Permission.PRODUCT_MANAGE)()]
+
+    def get(self, request, plan_id, benefit_id):
+        plan = get_object_or_404(Plan, id=plan_id)
+        plan_benefit = get_object_or_404(PlanBenefit, plan=plan, benefit_id=benefit_id)
+        return Response(PlanBenefitSerializer(plan_benefit).data)
+
+    def put(self, request, plan_id, benefit_id):
+        plan = get_object_or_404(Plan, id=plan_id)
+        benefit = get_object_or_404(Benefit, id=benefit_id)
+        body = PlanBenefitConfigRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        plan_benefit, warnings = plan_configuration_service.configure_plan_benefit(
+            plan=plan, benefit=benefit, configuration=body.validated_data["configuration"]
+        )
+        return Response({**PlanBenefitSerializer(plan_benefit).data, "warnings": warnings})
 
     def delete(self, request, plan_id, benefit_id):
         plan = get_object_or_404(Plan, id=plan_id)
         benefit = get_object_or_404(Benefit, id=benefit_id)
         remove_plan_benefit(plan=plan, benefit=benefit)
         return Response(status=204)
+
+
+class PlanValidationView(APIView):
+    """`GET /plans/{planId}/validation` — every error/warning of the plan
+    (settings, each coverage configuration, completeness) in one answer."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, plan_id):
+        plan = get_object_or_404(Plan, id=plan_id)
+        return Response(plan_configuration_service.validate_plan(plan=plan))
+
+
+@requires_idempotency
+class MarketTemplatesView(APIView):
+    """`POST /product-templates/market` — loads the Individual/Familiar and
+    Grupo products and plans from the PDF "Coberturas e Capitais" for the
+    tenant (indicative values, editable). Idempotent: existing products and
+    plans are never touched."""
+
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+    def post(self, request):
+        return Response(market_template_service.apply_market_templates(), status=200)
+
+
+class ConfigurationVersionsView(APIView):
+    """GET /configuration/{type}/{id}/versions - every version of the same
+    code (history) with who published it and when."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, config_type, config_id):
+        return Response(configuration_lifecycle.history(config_type=config_type, config_id=config_id))
+
+
+class ConfigurationDiffView(APIView):
+    """GET /configuration/{type}/{id}/diff?against=<otherVersionId> - what
+    was added/removed/changed between two versions of the same code."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, config_type, config_id):
+        against = request.query_params.get("against")
+        if not against:
+            return Response({"against": "This query parameter is required."}, status=400)
+        return Response(
+            configuration_lifecycle.diff(config_type=config_type, config_id=config_id, against_id=uuid.UUID(against))
+        )
+
+
+@requires_idempotency
+class ConfigurationRollbackView(APIView):
+    """POST /configuration/{type}/{id}/rollback - restores a previous version
+    of a rating table / parameter set / rule as a NEW published version and
+    retires the newer published ones (reason required, audited)."""
+
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRICING_CONFIG_MANAGE)]
+
+    def post(self, request, config_type, config_id):
+        body = BenefitReasonRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        return Response(
+            configuration_lifecycle.rollback(
+                config_type=config_type, config_id=config_id, reason=body.validated_data["reason"]
+            )
+        )
