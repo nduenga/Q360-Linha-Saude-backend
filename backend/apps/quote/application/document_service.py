@@ -27,9 +27,10 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
-from apps.quote.application.numbering_service import next_value
+from apps.quote.application.numbering_service import next_continuous_value
 from apps.quote.domain.enums import DocumentStatus, DocumentTemplateStatus, DocumentType, QuoteSnapshotType, QuoteStatus
 from apps.quote.domain.errors import QuoteStateError
+from apps.quote.domain.proposal_template import validate_template_body
 from apps.quote.infrastructure.models import Document, DocumentTemplateVersion, Quote, QuoteSnapshot
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
@@ -55,6 +56,7 @@ def create_document_template(
     *, template_code: str, storage_ref: str, effective_from, effective_to=None
 ) -> DocumentTemplateVersion:
     tenant_id = CurrentTenantProvider.require()
+    validate_template_body(storage_ref)
     checksum = hashlib.sha256(storage_ref.encode("utf-8")).hexdigest()
     try:
         with transaction.atomic():
@@ -98,6 +100,7 @@ def update_document_template(
 ) -> DocumentTemplateVersion:
     """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6: only a DRAFT template can
     be edited."""
+    validate_template_body(storage_ref)
     checksum = hashlib.sha256(storage_ref.encode("utf-8")).hexdigest()
     updated = DocumentTemplateVersion.objects.filter(
         id=template.id, status=DocumentTemplateStatus.DRAFT.value
@@ -224,7 +227,7 @@ def generate_quote_proposal(*, quote: Quote) -> Document:
         file_path = documents_dir / f"{document.id}.json"
         file_path.write_bytes(content)
 
-        document_number = next_value(sequence_code="QUOTE_PROPOSAL", period_key=str(quote.effective_date.year))
+        document_number = next_continuous_value(sequence_code="QUOTE_PROPOSAL")
 
         Document.objects.filter(id=document.id).update(
             status=DocumentStatus.GENERATED.value,

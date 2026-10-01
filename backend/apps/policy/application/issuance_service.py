@@ -43,7 +43,7 @@ from apps.policy.domain.errors import (
     RowVersionMismatchError,
 )
 from apps.policy.infrastructure.models import Policy, PolicyMember, PolicySignature, PremiumInstallment
-from apps.quote.application.numbering_service import next_value
+from apps.quote.application.numbering_service import next_continuous_value
 from apps.quote.domain.enums import QuoteMemberStatus, QuoteStatus
 from apps.quote.infrastructure.models import Quote, QuoteSnapshot
 
@@ -120,7 +120,7 @@ def issue_policy(
         if quote.proposer.proposer_type == ProposerType.ORGANISATION.value
         else PolicyType.INDIVIDUAL.value
     )
-    policy_number = next_value(sequence_code="POLICY_NUMBER", period_key=str(signed_at.year), prefix="APO-")
+    policy_number = next_continuous_value(sequence_code="POLICY_NUMBER", prefix="APO-")
 
     total_amount = (
         quote.latest_pricing_run.total_amount
@@ -239,27 +239,48 @@ def _plan_benefit_codes(policy: Policy) -> list[str]:
     Plan (DECISIONS_TAKEN.md#S09-POLICY-001 Fase 1: what was contracted
     must never drift with a later Plan edit)."""
     plan_json = (policy.contracted_terms_snapshot.snapshot_json or {}).get("plan") or {}
-    return [b["code"] for b in plan_json.get("benefits", []) if b.get("code")]
+    return [b["code"] for b in plan_json.get("benefits", []) if b.get("code") and b.get("contracted", True)]
+
+
+def _coverage_waiting_days(policy: Policy) -> dict[str, int]:
+    """Waiting days configured on each contracted coverage of the plan (PDF:
+    carência por cobertura, individual vs grupo). Frozen in the snapshot."""
+    plan_json = (policy.contracted_terms_snapshot.snapshot_json or {}).get("plan") or {}
+    key = "group" if (plan_json.get("settings") or {}).get("segment") == "GROUP" else "individual"
+    out: dict[str, int] = {}
+    for benefit in plan_json.get("benefits", []):
+        if not benefit.get("contracted", True):
+            continue
+        days = ((benefit.get("configurationJson") or {}).get("waitingDays") or {}).get(key)
+        if isinstance(days, int) and days > 0:
+            out[benefit["code"]] = days
+    return out
 
 
 def _waiting_period_ends(*, policy: Policy, policy_member: PolicyMember, inclusion_date: datetime.date) -> dict:
-    if policy_member.rule_version is None:
-        return {}
-    config = parse_config(policy_member.rule_version)
-    if config is None or config.waiting_period is None:
-        return {}
-    wp = config.waiting_period
+    config = parse_config(policy_member.rule_version) if policy_member.rule_version is not None else None
+    wp = config.waiting_period if config is not None else None
 
     evaluation = policy_member.eligibility_evaluation
     context = (evaluation.input_snapshot_json.get("context") if evaluation else None) or {}
     evidence = AngolaEvidence.from_dict(context.get("angola"))
-    waived = wp.waived_on_verified_portability and bool(evidence.previous_policy_number) and evidence.previous_policy_continuous
+    waived = (
+        wp is not None
+        and wp.waived_on_verified_portability
+        and bool(evidence.previous_policy_number)
+        and evidence.previous_policy_continuous
+    )
     if waived:
         return {}
 
+    coverage_days = _coverage_waiting_days(policy)
     ends: dict[str, str] = {}
     for code in _plan_benefit_codes(policy):
-        days = wp.default_days_by_benefit_category.get(code, wp.default_days)
+        # The coverage's own waiting period (plan configuration) wins; the
+        # eligibility rule's generic one is the fallback.
+        days = coverage_days.get(code)
+        if days is None and wp is not None:
+            days = wp.default_days_by_benefit_category.get(code, wp.default_days)
         if days and days > 0:
             ends[code] = (inclusion_date + datetime.timedelta(days=days)).isoformat()
     return ends

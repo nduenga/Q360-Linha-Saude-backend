@@ -29,6 +29,10 @@ def _coverage_payload(result: CoverageResult) -> dict:
     }
 
 
+def _accident(request) -> bool:
+    return request.query_params.get("eventType", "").upper() == "ACCIDENT"
+
+
 def _parse_date(request) -> datetime.date:
     raw = request.query_params.get("date")
     if not raw:
@@ -53,10 +57,10 @@ class PolicyCoverageView(APIView):
         member_id = request.query_params.get("memberId")
 
         if member_id:
-            result = get_member_coverage(policy=policy, member_id=member_id, on_date=on_date, benefit_category=benefit_category)
+            result = get_member_coverage(policy=policy, member_id=member_id, on_date=on_date, benefit_category=benefit_category, accident=_accident(request))
             return Response({"policyId": str(policy.id), **_coverage_payload(result)})
 
-        results = get_policy_coverage(policy=policy, on_date=on_date, benefit_category=benefit_category)
+        results = get_policy_coverage(policy=policy, on_date=on_date, benefit_category=benefit_category, accident=_accident(request))
         return Response(
             {
                 "policyId": str(policy.id),
@@ -83,10 +87,10 @@ class CoverageLookupView(APIView):
         member_id = request.query_params.get("memberId")
 
         if member_id:
-            result = get_member_coverage(policy=policy, member_id=member_id, on_date=on_date, benefit_category=benefit_category)
+            result = get_member_coverage(policy=policy, member_id=member_id, on_date=on_date, benefit_category=benefit_category, accident=_accident(request))
             return Response({"policyId": str(policy.id), "policyNumber": policy.policy_number, **_coverage_payload(result)})
 
-        results = get_policy_coverage(policy=policy, on_date=on_date, benefit_category=benefit_category)
+        results = get_policy_coverage(policy=policy, on_date=on_date, benefit_category=benefit_category, accident=_accident(request))
         return Response(
             {
                 "policyId": str(policy.id),

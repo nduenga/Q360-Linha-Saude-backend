@@ -227,3 +227,36 @@ class ConsumerInbox(TenantScopedModel):
 
     def __str__(self) -> str:  # pragma: no cover - debug helper
         return f"{self.consumer_name}:{self.event_id}"
+
+
+class SystemParameter(TenantScopedModel):
+    """Valor atual de um parâmetro global (as definições vivem em
+    `apps.foundation.domain.system_parameters`; sem linha = valor por omissão)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    code = models.CharField(max_length=100)
+    value_json = models.JSONField()
+    updated_by = models.CharField(max_length=200)
+    updated_at = models.DateTimeField(auto_now=True)
+    row_version = models.BigIntegerField(default=0)
+
+    class Meta:
+        managed = False
+        db_table = "system_parameter"
+
+
+class SystemParameterRevision(TenantScopedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    code = models.CharField(max_length=100)
+    revision_no = models.IntegerField()
+    action = models.CharField(max_length=30)
+    value_json = models.JSONField()
+    reason = models.TextField(null=True, blank=True)
+    changed_by = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "system_parameter_revision"

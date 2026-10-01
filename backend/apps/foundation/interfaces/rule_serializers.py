@@ -6,6 +6,7 @@ not depend on a business module (DOC-004 s3.1).
 """
 from __future__ import annotations
 
+from drf_spectacular.utils import extend_schema_serializer
 from rest_framework import serializers
 
 
@@ -41,6 +42,7 @@ class RuleVersionUpdateRequestSerializer(serializers.Serializer):
     )
 
 
+@extend_schema_serializer(component_name="RuleVersionHeader")
 class VersionedConfigHeaderSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     code = serializers.SerializerMethodField()

@@ -1,11 +1,24 @@
 from django.urls import path
 
 from apps.product.interfaces.views import (
+    BenefitDeactivateView,
+    BenefitDetailView,
+    BenefitExportView,
+    BenefitImportView,
     BenefitListView,
+    BenefitReactivateView,
+    BenefitRevisionListView,
+    BenefitRollbackView,
+    BenefitUsageView,
     ConfigurationPublishView,
+    ConfigurationDiffView,
     ConfigurationRetireView,
+    ConfigurationRollbackView,
+    ConfigurationVersionsView,
+    MarketTemplatesView,
     PlanBenefitDetailView,
     PlanBenefitListCreateView,
+    PlanValidationView,
     PlanDetailView,
     PlanListCreateView,
     PricingParameterSetCreateView,
@@ -16,6 +29,14 @@ from apps.product.interfaces.views import (
 
 urlpatterns = [
     path("benefits", BenefitListView.as_view(), name="benefit-list"),
+    path("benefits/export", BenefitExportView.as_view(), name="benefit-export"),
+    path("benefits/import", BenefitImportView.as_view(), name="benefit-import"),
+    path("benefits/<uuid:benefit_id>", BenefitDetailView.as_view(), name="benefit-detail"),
+    path("benefits/<uuid:benefit_id>/deactivate", BenefitDeactivateView.as_view(), name="benefit-deactivate"),
+    path("benefits/<uuid:benefit_id>/reactivate", BenefitReactivateView.as_view(), name="benefit-reactivate"),
+    path("benefits/<uuid:benefit_id>/revisions", BenefitRevisionListView.as_view(), name="benefit-revisions"),
+    path("benefits/<uuid:benefit_id>/rollback", BenefitRollbackView.as_view(), name="benefit-rollback"),
+    path("benefits/<uuid:benefit_id>/usage", BenefitUsageView.as_view(), name="benefit-usage"),
     path(
         "plans/<uuid:plan_id>/benefits",
         PlanBenefitListCreateView.as_view(),
@@ -26,10 +47,27 @@ urlpatterns = [
         PlanBenefitDetailView.as_view(),
         name="plan-benefit-detail",
     ),
+    path(
+        "configuration/<str:config_type>/<uuid:config_id>/versions",
+        ConfigurationVersionsView.as_view(),
+        name="configuration-versions",
+    ),
+    path(
+        "configuration/<str:config_type>/<uuid:config_id>/diff",
+        ConfigurationDiffView.as_view(),
+        name="configuration-diff",
+    ),
+    path(
+        "configuration/<str:config_type>/<uuid:config_id>/rollback",
+        ConfigurationRollbackView.as_view(),
+        name="configuration-rollback",
+    ),
+    path("product-templates/market", MarketTemplatesView.as_view(), name="product-templates-market"),
     path("products", ProductListCreateView.as_view(), name="product-list-create"),
     path("products/<uuid:product_id>", ProductDetailView.as_view(), name="product-detail"),
     path("plans", PlanListCreateView.as_view(), name="plan-list-create"),
     path("plans/<uuid:plan_id>", PlanDetailView.as_view(), name="plan-detail"),
+    path("plans/<uuid:plan_id>/validation", PlanValidationView.as_view(), name="plan-validation"),
     path(
         "pricing-parameter-sets",
         PricingParameterSetCreateView.as_view(),

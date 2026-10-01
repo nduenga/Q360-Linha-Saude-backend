@@ -16,17 +16,17 @@ urlpatterns = [
     path("auth/logout", LogoutView.as_view(), name="staff-logout"),
     path("admin/staff-accounts", StaffAccountListCreateView.as_view(), name="staff-accounts-list-create"),
     path(
-        "admin/staff-accounts/<str:account_id>/roles",
+        "admin/staff-accounts/<uuid:account_id>/roles",
         StaffAccountRolesView.as_view(),
         name="staff-accounts-roles",
     ),
     path(
-        "admin/staff-accounts/<str:account_id>/status",
+        "admin/staff-accounts/<uuid:account_id>/status",
         StaffAccountStatusView.as_view(),
         name="staff-accounts-status",
     ),
     path(
-        "admin/staff-accounts/<str:account_id>/reset-password",
+        "admin/staff-accounts/<uuid:account_id>/reset-password",
         StaffAccountResetPasswordView.as_view(),
         name="staff-accounts-reset-password",
     ),

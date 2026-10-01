@@ -1,73 +1,85 @@
-"""Coberturas do mercado angolano (ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1).
+"""Coberturas do mercado angolano (PDF "Coberturas e Capitais", 1-Out-2026).
 
-`Benefit`/`PlanBenefit` already exist in the schema (ART-012 V006) with no
-HTTP surface (OPEN_DECISIONS.md#S02-CONTRACT-001) — this module gives them
-real behaviour: a fixed catalogue of the 11 coverages from the ARSEG-market
-guide supplied by the Product Owner (3 BASE, always attached to every
-Plan automatically; 8 COMPLEMENTARY, opt-in per Plan), and the invariant
-that every Plan carries the 3 BASE coverages for its whole lifetime — never
-optional, never removable (DECISIONS_TAKEN.md#S09-POLICY-001).
+`Benefit`/`PlanBenefit` already exist in the schema (ART-012 V006). The
+catalogue (`apps.product.domain.market_catalog`) follows the PDF: only the
+3 coverages marked "B" in every column of its comparison matrix
+(Hospitalização, Cirurgia de ambulatório, Urgências/ambulância) are `BASE` —
+attached to every Plan automatically, never removable. Every other coverage
+is `COMPLEMENTARY`; whether a given Plan includes it from the start ("B") or
+merely offers it as optional ("O") is a Plan-level decision stored in
+`PlanBenefit.configuration_json` (see `plan_configuration_service`).
 
 `Benefit` is `TenantScopedModel` (ART-012 has no cross-tenant catalog
-table), so the fixed catalogue is seeded per-tenant, idempotently, the
-first time it is needed — never assumed to already exist.
+table), so the catalogue is seeded per-tenant, idempotently, the first time
+it is needed — never assumed to already exist. The seed only ever *adds*:
+it never overwrites a name/description/definition a tenant already edited.
 """
 from __future__ import annotations
 
 import uuid
 from typing import Any
 
+from django.db.models import Q
+
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.product.domain.enums import BenefitStatus
 from apps.product.domain.errors import InvalidBenefitSelectionError, MissingCoreBenefitsError
+from apps.product.domain.market_catalog import BASE, CATALOG, CATALOG_BY_CODE, COMPLEMENTARY
 from apps.product.infrastructure.models import Benefit, Plan, PlanBenefit
 
-BASE = "BASE"
-COMPLEMENTARY = "COMPLEMENTARY"
-
-# ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1 — matriz ARSEG fornecida pelo
-# Product Owner (2026-09-19). Os `code` são uma proposta técnica minha
-# (OD-ANGOLA-007, ainda em aberto) — fáceis de renomear agora, caros depois
-# de haver dados reais a referenciá-los.
-_CORE_BENEFITS: list[dict[str, str]] = [
-    {"code": "HOSPITALIZATION", "name": "Internamento Hospitalar e Cirurgia", "benefit_type": BASE},
-    {"code": "OUTPATIENT", "name": "Ambulatório", "benefit_type": BASE},
-    {"code": "EMERGENCY", "name": "Urgência Médica", "benefit_type": BASE},
+# Kept for callers/tests that only need code/name/category.
+MARKET_CATALOG: list[dict[str, str]] = [
+    {"code": e["code"], "name": e["name"], "benefit_type": e["benefit_type"]} for e in CATALOG
 ]
-
-_COMPLEMENTARY_BENEFITS: list[dict[str, str]] = [
-    {"code": "PHARMACY", "name": "Medicamentos / Farmácia", "benefit_type": COMPLEMENTARY},
-    {"code": "MATERNITY", "name": "Maternidade e Parto", "benefit_type": COMPLEMENTARY},
-    {"code": "DENTAL", "name": "Estomatologia (Medicina Dentária)", "benefit_type": COMPLEMENTARY},
-    {"code": "OPTICAL", "name": "Oftalmologia e Óptica", "benefit_type": COMPLEMENTARY},
-    {"code": "PROSTHESIS", "name": "Próteses e Ortóteses", "benefit_type": COMPLEMENTARY},
-    {"code": "PHYSIOTHERAPY", "name": "Fisioterapia e Reabilitação", "benefit_type": COMPLEMENTARY},
-    {"code": "MEDICAL_EVACUATION", "name": "Evacuação Médica Internacional", "benefit_type": COMPLEMENTARY},
-    {"code": "TRAVEL_ASSISTANCE", "name": "Assistência em Viagem", "benefit_type": COMPLEMENTARY},
-]
-
-MARKET_CATALOG: list[dict[str, str]] = [*_CORE_BENEFITS, *_COMPLEMENTARY_BENEFITS]
 
 
 def ensure_market_catalog(tenant_id: uuid.UUID) -> None:
-    """Idempotent: creates the 11 fixed coverages for a tenant if any are
-    missing. Never touches a row that already exists (a tenant may have
-    edited name/description; this must not clobber that)."""
-    for entry in MARKET_CATALOG:
-        Benefit.objects.get_or_create(
-            tenant_id=tenant_id,
-            code=entry["code"],
-            defaults={"name": entry["name"], "benefit_type": entry["benefit_type"]},
+    """Idempotent. Creates any catalogue coverage the tenant is missing and
+    back-fills an *empty* `definition_json`/`description` on rows that
+    pre-date the library (never touches a non-empty one: a tenant may have
+    edited it). Two queries in the steady state."""
+    existing = {b.code: b for b in Benefit.objects.filter(code__in=list(CATALOG_BY_CODE))}
+    missing = [e for e in CATALOG if e["code"] not in existing]
+    if missing:
+        Benefit.objects.bulk_create(
+            [
+                Benefit(
+                    tenant_id=tenant_id,
+                    code=e["code"],
+                    name=e["name"],
+                    benefit_type=e["benefit_type"],
+                    description=e["description"],
+                    definition_json=e["definition"],
+                )
+                for e in missing
+            ]
         )
+    for code, benefit in existing.items():
+        entry = CATALOG_BY_CODE[code]
+        updates: dict[str, Any] = {}
+        if not benefit.definition_json:
+            updates["definition_json"] = entry["definition"]
+        if not benefit.description:
+            updates["description"] = entry["description"]
+        if updates:
+            Benefit.objects.filter(id=benefit.id).update(**updates)
 
 
-def list_benefits(*, category: str | None = None) -> Any:
+def list_benefits(
+    *, category: str | None = None, status: str | None = BenefitStatus.ACTIVE.value, search: str | None = None
+) -> Any:
+    """`status=None`/`"ALL"` lists every status; the default (ACTIVE) keeps
+    the original behaviour for callers that only offer selectable coverages."""
     tenant_id = CurrentTenantProvider.require().value
     ensure_market_catalog(tenant_id)
-    queryset = Benefit.objects.filter(status=BenefitStatus.ACTIVE.value).order_by("benefit_type", "code")
+    queryset = Benefit.objects.all()
+    if status and status != "ALL":
+        queryset = queryset.filter(status=status)
     if category:
         queryset = queryset.filter(benefit_type=category)
-    return queryset
+    if search:
+        queryset = queryset.filter(Q(name__icontains=search) | Q(code__icontains=search))
+    return queryset.order_by("benefit_type", "code")
 
 
 def attach_core_benefits(*, plan: Plan) -> None:
@@ -77,7 +89,7 @@ def attach_core_benefits(*, plan: Plan) -> None:
     core_benefits = Benefit.objects.filter(benefit_type=BASE)
     for benefit in core_benefits:
         PlanBenefit.objects.get_or_create(
-            tenant_id=plan.tenant_id, plan=plan, benefit=benefit, defaults={"configuration_json": {}}
+            tenant_id=plan.tenant_id, plan=plan, benefit=benefit, defaults={"configuration_json": {"inclusion": "INCLUDED"}}
         )
 
 
@@ -117,7 +129,7 @@ def list_plan_benefits(*, plan: Plan) -> Any:
 
 def add_plan_benefit(*, plan: Plan, benefit: Benefit) -> PlanBenefit:
     plan_benefit, _ = PlanBenefit.objects.get_or_create(
-        tenant_id=plan.tenant_id, plan=plan, benefit=benefit, defaults={"configuration_json": {}}
+        tenant_id=plan.tenant_id, plan=plan, benefit=benefit, defaults={"configuration_json": {"inclusion": "INCLUDED"}}
     )
     return plan_benefit
 

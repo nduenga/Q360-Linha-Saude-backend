@@ -26,6 +26,7 @@ from apps.client.infrastructure.models import InsuredMember, Proposer
 from apps.eligibility.application.use_cases import EvaluateEligibilityUseCase
 from apps.eligibility.domain.enums import EligibilityDecision
 from apps.foundation.application.audit_service import AuditService
+from apps.foundation.domain.problem import DomainProblem
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
@@ -34,7 +35,7 @@ from apps.pricing.application.pricing_engine import calculate_pricing
 from apps.pricing.domain.age_band import compute_age_band
 from apps.product.domain.enums import PlanStatus
 from apps.product.infrastructure.models import Plan, PlanBenefit
-from apps.quote.application.numbering_service import next_value
+from apps.quote.application.numbering_service import next_continuous_value
 from apps.quote.domain.enums import (
     QuoteDecisionType,
     QuoteMemberStatus,
@@ -52,6 +53,7 @@ from apps.quote.domain.errors import (
 from apps.quote.infrastructure.models import (
     AuthorityPolicy,
     Quote,
+    QuoteAdjustment,
     QuoteDecision,
     QuoteMember,
     QuoteSnapshot,
@@ -86,7 +88,7 @@ _ELIGIBILITY_TO_MEMBER_STATUS = {
 _PRICEABLE_MEMBER_STATUSES = [QuoteMemberStatus.INCLUDED.value, QuoteMemberStatus.REFERRAL.value]
 
 
-def _plan_content_snapshot(plan: Plan) -> dict:
+def _plan_content_snapshot(plan: Plan, selection: dict | None = None) -> dict:
     """DECISIONS_TAKEN.md#S09-POLICY-001 (ROADMAP_APOLICES.md Fase 1,
     pré-requisito de PO-APO-6): with ProductVersion retired, a Plan is no
     longer immutable once "published" — it can be edited at any time
@@ -96,16 +98,41 @@ def _plan_content_snapshot(plan: Plan) -> dict:
     its id), so what a Quote actually contracted stays frozen even if the
     live Plan changes or is later made INACTIVE — the same historical-
     correctness guarantee OD-ANGOLA-004 gave via version immutability
-    before this change, now given by the snapshot itself."""
+    before this change, now given by the snapshot itself.
+
+    PDF "Coberturas e Capitais": a plan *offers* optional ("O") coverages
+    but the customer only *has* the ones chosen. Each benefit therefore
+    carries `contracted` (included, or an optional one the quote selected)
+    and its **effective** configuration (capitals/participation/waiting days
+    after any "e se" override) — policy coverage checks, waiting periods and
+    the customer portal read `contracted`, never the bare list of what the
+    plan merely offers."""
+    from apps.pricing.application.plan_dimensions import resolve_plan_pricing_context
+
+    plan_benefits = {pb.benefit.code: pb for pb in PlanBenefit.objects.filter(plan=plan).select_related("benefit")}
+    try:
+        context = resolve_plan_pricing_context(plan=plan, selection=selection or {})
+        rows = [
+            (c["code"], c["contracted"], c["inclusion"], c["configuration"]) for c in context.coverages
+        ]
+        normalised_selection = context.selection
+    except DomainProblem:
+        rows = [
+            (code, (pb.configuration_json or {}).get("inclusion", "INCLUDED") == "INCLUDED", (pb.configuration_json or {}).get("inclusion", "INCLUDED"), pb.configuration_json)
+            for code, pb in plan_benefits.items()
+        ]
+        normalised_selection = selection or {}
     benefits = [
         {
-            "benefitId": str(pb.benefit_id),
-            "code": pb.benefit.code,
-            "name": pb.benefit.name,
-            "category": pb.benefit.benefit_type,
-            "configurationJson": pb.configuration_json,
+            "benefitId": str(plan_benefits[code].benefit_id),
+            "code": code,
+            "name": plan_benefits[code].benefit.name,
+            "category": plan_benefits[code].benefit.benefit_type,
+            "contracted": contracted,
+            "inclusion": inclusion,
+            "configurationJson": configuration,
         }
-        for pb in PlanBenefit.objects.filter(plan=plan).select_related("benefit").order_by("benefit__code")
+        for code, contracted, inclusion, configuration in sorted(rows)
     ]
     return {
         "productId": str(plan.product_id),
@@ -113,6 +140,8 @@ def _plan_content_snapshot(plan: Plan) -> dict:
         "planCode": plan.code,
         "planName": plan.name,
         "planStatus": plan.status,
+        "settings": plan.settings_json or {},
+        "selection": normalised_selection,
         "benefits": benefits,
     }
 
@@ -121,7 +150,13 @@ def _default_valid_until(effective_date: datetime.date) -> datetime.date:
     # OPEN DECISION: no approved document fixes the default quote validity
     # period. Configurable via QUOTE_DEFAULT_VALIDITY_DAYS (settings/env),
     # never hardcoded in business logic — see DECISIONS_TAKEN.md#S06-QUOTE-001.
-    days = getattr(settings, "QUOTE_DEFAULT_VALIDITY_DAYS", 30)
+    # R7: the GTE can change it without a deploy (system parameter
+    # `quote.validity_days`); until they do, the env setting still rules.
+    from apps.foundation.application import system_parameter_service
+
+    days = system_parameter_service.get_stored_value("quote.validity_days")
+    if days is None:
+        days = getattr(settings, "QUOTE_DEFAULT_VALIDITY_DAYS", 30)
     return effective_date + datetime.timedelta(days=days)
 
 
@@ -171,7 +206,7 @@ def create_quote(*, proposer_id: uuid.UUID, plan_id: uuid.UUID, effective_date: 
     # already filters on `status="APPROVED"` explicitly, not on
     # quote_number being set, so a DRAFT quote's number is still unusable
     # there). Same safe, race-free numbering_service as document numbers.
-    quote_number = next_value(sequence_code="QUOTE_NUMBER", period_key=str(effective_date.year), prefix="COT-")
+    quote_number = next_continuous_value(sequence_code="QUOTE_NUMBER", prefix="COT-")
 
     quote = Quote.objects.create(
         tenant_id=tenant_id.value,
@@ -328,6 +363,74 @@ def update_quote(*, quote: Quote, effective_date: datetime.date, row_version: in
     return quote
 
 
+def active_adjustments_for_context(quote: Quote) -> list[dict]:
+    """ACTIVE `QuoteAdjustment` rows in the shape the pricing engine reads
+    (`context.adjustments`), oldest first so the order of application is
+    stable and explainable."""
+    return [
+        {
+            "id": str(adj.id),
+            "kind": adj.kind,
+            "value": str(adj.value),
+            "scope": adj.scope,
+            "memberId": str(adj.member_id) if adj.member_id else None,
+            "reason": adj.reason,
+        }
+        for adj in QuoteAdjustment.objects.filter(quote=quote, status="ACTIVE").order_by("applied_at", "id")
+    ]
+
+
+def pre_existing_for_context(quote: Quote) -> dict[str, dict]:
+    return {
+        str(qm.member_id): qm.pre_existing_json
+        for qm in quote.members.all()
+        if qm.pre_existing_json
+    }
+
+
+def build_pricing_context(
+    quote: Quote,
+    *,
+    selection: dict | None = None,
+    adjustments: list[dict] | None = None,
+    pre_existing: dict[str, dict] | None = None,
+) -> tuple[dict, list[uuid.UUID]]:
+    """The exact pricing `context` of a quote (and the member ids it prices).
+    By default it reflects the quote's *saved* state (selection, ACTIVE
+    adjustments, per-member pre-existing decisions); the keyword overrides
+    let previews/scenarios ask "and if...?" without touching the quote."""
+    priceable_member_ids = list(
+        quote.members.filter(status__in=_PRICEABLE_MEMBER_STATUSES).values_list("member_id", flat=True)
+    )
+    members_by_id = {m.id: m for m in InsuredMember.objects.filter(id__in=priceable_member_ids)}
+
+    context: dict = {
+        "ratingTableCode": resolve_default_rating_table_code(effective_date=quote.effective_date),
+        "parameterSetCode": resolve_default_parameter_set_code(effective_date=quote.effective_date),
+        "members": {
+            str(member_id): (
+                {"ageBand": band}
+                if (band := compute_age_band(members_by_id[member_id].date_of_birth, quote.effective_date))
+                else {}
+            )
+            for member_id in priceable_member_ids
+        },
+    }
+    rule_version = resolve_pricing_rule_version_optional(effective_date=quote.effective_date)
+    if rule_version:
+        context["ruleVersionCode"] = rule_version
+    chosen_selection = quote.selection_json if selection is None else selection
+    if chosen_selection:
+        context["selection"] = chosen_selection
+    chosen_adjustments = active_adjustments_for_context(quote) if adjustments is None else adjustments
+    if chosen_adjustments:
+        context["adjustments"] = chosen_adjustments
+    chosen_pre_existing = pre_existing_for_context(quote) if pre_existing is None else pre_existing
+    if chosen_pre_existing:
+        context["preExisting"] = chosen_pre_existing
+    return context, priceable_member_ids
+
+
 def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
     if quote.status not in (QuoteStatus.DRAFT.value, QuoteStatus.READY.value):
         raise QuoteStateError(f"Quote {quote.id} is {quote.status}; pricing can only run while DRAFT or READY")
@@ -335,29 +438,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
     if not recalculate and quote.latest_pricing_run_id and quote.latest_pricing_run.status == "CALCULATED":
         return quote.latest_pricing_run
 
-    priceable_member_ids = list(
-        quote.members.filter(status__in=_PRICEABLE_MEMBER_STATUSES).values_list("member_id", flat=True)
-    )
-    members_by_id = {
-        m.id: m for m in InsuredMember.objects.filter(id__in=priceable_member_ids)
-    }
-
-    rating_table_code = resolve_default_rating_table_code(effective_date=quote.effective_date)
-    parameter_set_code = resolve_default_parameter_set_code(effective_date=quote.effective_date)
-    rule_version = resolve_pricing_rule_version_optional(effective_date=quote.effective_date)
-
-    context = {
-        "ratingTableCode": rating_table_code,
-        "parameterSetCode": parameter_set_code,
-        "members": {
-            str(member_id): (
-                {"ageBand": band} if (band := compute_age_band(members_by_id[member_id].date_of_birth, quote.effective_date)) else {}
-            )
-            for member_id in priceable_member_ids
-        },
-    }
-    if rule_version:
-        context["ruleVersionCode"] = rule_version
+    context, priceable_member_ids = build_pricing_context(quote)
 
     pricing_run = calculate_pricing(
         plan_id=quote.plan_id,
@@ -369,7 +450,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
 
     actor = CurrentActorProvider.get()
     snapshot_json = {
-        "plan": _plan_content_snapshot(quote.plan),
+        "plan": _plan_content_snapshot(quote.plan, quote.selection_json),
         "effectiveDate": quote.effective_date.isoformat(),
         "memberIds": [str(m) for m in priceable_member_ids],
         "context": context,
@@ -400,6 +481,12 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
         Quote.objects.filter(id=quote.id, status=QuoteStatus.DRAFT.value).update(status=QuoteStatus.READY.value)
         quote.refresh_from_db()
         _record_transition(quote, from_status=QuoteStatus.DRAFT.value, to_status=QuoteStatus.READY.value, correlation_id=correlation_id)
+
+    # R1: a calculation that leaves the editable state different from the
+    # last saved version is itself a version (same state = nothing to save).
+    from apps.quote.application import quote_version_service
+
+    quote_version_service.record_version(quote=quote, source="PRICED")
 
     _audit.record(
         action="quote.priced",
@@ -459,7 +546,7 @@ def _create_snapshot(*, quote: Quote, snapshot_type: str) -> QuoteSnapshot:
     actor = CurrentActorProvider.get()
     snapshot_json = {
         "status": quote.status,
-        "plan": _plan_content_snapshot(quote.plan),
+        "plan": _plan_content_snapshot(quote.plan, quote.selection_json),
         "effectiveDate": quote.effective_date.isoformat(),
         "latestPricingRunId": str(quote.latest_pricing_run_id) if quote.latest_pricing_run_id else None,
     }
@@ -487,6 +574,12 @@ def submit_quote(*, quote: Quote, row_version: int, correlation_id: str | None) 
     the quote to still be READY."""
     if quote.status != QuoteStatus.READY.value:
         raise QuoteStateError(f"Quote {quote.id} is {quote.status}; only a READY quote can be submitted")
+
+    # Plan-level underwriting rules (group minimum size, age limits,
+    # household) — only evaluated for plans that configured them.
+    from apps.quote.application import requirements_service
+
+    requirements_service.enforce_requirements(quote)
 
     actor = CurrentActorProvider.get()
     actor_id = actor.actor_id if actor else "unknown"
@@ -614,9 +707,7 @@ def decide_quote(
                 # real ARSEG policy-number format (ART-011 PROH-008 still
                 # prohibits inventing one), just enough of a stable,
                 # unique identifier for the lookup-by-number flow to work.
-                quote_fields["quote_number"] = next_value(
-                    sequence_code="QUOTE_NUMBER", period_key=str(quote.effective_date.year), prefix="COT-"
-                )
+                quote_fields["quote_number"] = next_continuous_value(sequence_code="QUOTE_NUMBER", prefix="COT-")
         elif decision == QuoteDecisionType.REJECT.value:
             quote_fields.update(rejected_by=actor_id, rejected_at=timezone_now())
         updated = Quote.objects.filter(id=quote.id, status=QuoteStatus.IN_REVIEW.value, row_version=row_version).update(

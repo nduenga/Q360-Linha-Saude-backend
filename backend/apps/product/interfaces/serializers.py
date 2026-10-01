@@ -61,6 +61,7 @@ class PlanSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=200)
     description = serializers.CharField(allow_null=True)
     status = serializers.ChoiceField(choices=[s.value for s in PlanStatus])
+    settings = serializers.JSONField(source="settings_json")
     rowVersion = serializers.IntegerField(source="row_version")
 
 
@@ -76,12 +77,16 @@ class PlanCreateRequestSerializer(serializers.Serializer):
     complementaryBenefitIds = serializers.ListField(
         child=serializers.UUIDField(), required=False, default=list
     )
+    # PDF "Coberturas e Capitais": segment, tier, access system, ages, group
+    # rules, A-E participation options... — see apps.product.domain.plan_settings.
+    settings = serializers.JSONField(required=False, default=dict)
 
 
 class PlanUpdateRequestSerializer(serializers.Serializer):
     name = serializers.CharField(min_length=1, max_length=200)
     description = serializers.CharField(allow_null=True, required=False, default=None)
     rowVersion = serializers.IntegerField(source="row_version", min_value=0)
+    settings = serializers.JSONField(required=False, default=None)
 
 
 class VersionedConfigHeaderSerializer(serializers.Serializer):
@@ -163,9 +168,8 @@ class PricingParameterSetUpdateRequestSerializer(serializers.Serializer):
 
 
 class BenefitSerializer(serializers.Serializer):
-    """Pragmatic V1 addition, not in ART-006 — see
-    apps/product/application/benefit_service.py module docstring and
-    ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1."""
+    """Biblioteca de coberturas (PDF "Coberturas e Capitais") — ver
+    apps/product/application/benefit_service.py e benefit_library_service.py."""
 
     id = serializers.UUIDField()
     code = serializers.CharField()
@@ -173,6 +177,41 @@ class BenefitSerializer(serializers.Serializer):
     category = serializers.CharField(source="benefit_type")
     description = serializers.CharField(allow_null=True)
     status = serializers.CharField()
+    definition = serializers.JSONField(source="definition_json")
+    rowVersion = serializers.IntegerField(source="row_version")
+
+
+class BenefitCreateRequestSerializer(serializers.Serializer):
+    code = serializers.CharField(min_length=2, max_length=60)
+    name = serializers.CharField(min_length=1, max_length=200)
+    description = serializers.CharField(allow_null=True, required=False, default=None)
+    definition = serializers.JSONField(required=False, default=dict)
+
+
+class BenefitUpdateRequestSerializer(serializers.Serializer):
+    name = serializers.CharField(min_length=1, max_length=200)
+    description = serializers.CharField(allow_null=True, required=False, default=None)
+    definition = serializers.JSONField(required=False, default=dict)
+    rowVersion = serializers.IntegerField(source="row_version", min_value=0)
+    reason = serializers.CharField(allow_null=True, required=False, default=None)
+
+
+class BenefitReasonRequestSerializer(serializers.Serializer):
+    reason = serializers.CharField(allow_blank=True, allow_null=True, required=False, default=None)
+
+
+class BenefitRollbackRequestSerializer(serializers.Serializer):
+    revisionNo = serializers.IntegerField(min_value=1)
+    reason = serializers.CharField(allow_blank=True, allow_null=True, required=False, default=None)
+
+
+class BenefitRevisionSerializer(serializers.Serializer):
+    revisionNo = serializers.IntegerField(source="revision_no")
+    action = serializers.CharField()
+    snapshot = serializers.JSONField(source="snapshot_json")
+    reason = serializers.CharField(allow_null=True)
+    changedBy = serializers.CharField(source="changed_by")
+    createdAt = serializers.DateTimeField(source="created_at")
 
 
 class PlanBenefitSerializer(serializers.Serializer):
@@ -184,3 +223,10 @@ class PlanBenefitSerializer(serializers.Serializer):
 
 class AddPlanBenefitRequestSerializer(serializers.Serializer):
     benefitId = serializers.UUIDField()
+
+
+class PlanBenefitConfigRequestSerializer(serializers.Serializer):
+    """Capitais, participação, carências, inclusão B/O e moeda de uma
+    cobertura num plano — ver apps.product.domain.coverage_config."""
+
+    configuration = serializers.JSONField()

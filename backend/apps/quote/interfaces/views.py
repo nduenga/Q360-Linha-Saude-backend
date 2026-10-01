@@ -6,7 +6,10 @@ docs/artifacts/ART-006-openapi/ — plus DOC-001 s18 `quote:*` permissions
 """
 from __future__ import annotations
 
-from django.http import Http404
+import json
+import uuid
+
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
@@ -17,27 +20,58 @@ from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
-from apps.pricing.interfaces.serializers import PricingResponseSerializer
-from apps.quote.application import document_service, quote_service
+from apps.pricing.interfaces.serializers import PricingResponseSerializer, render_preview
+from apps.quote.application import (
+    config_impact_service,
+    document_service,
+    proposal_service,
+    quote_lifecycle_service,
+    quote_service,
+    quote_version_service,
+    requirements_service,
+    scenario_service,
+    simulator_service,
+)
 from apps.quote.domain.enums import QuoteDecisionType
 from apps.quote.infrastructure.models import DocumentTemplateVersion, Quote, ReviewTask
 from apps.quote.interfaces.serializers import (
+    AdjustmentRemoveRequestSerializer,
+    AdjustmentRequestSerializer,
     CancelQuoteRequestSerializer,
     DecisionRequestSerializer,
     DocumentSerializer,
     DocumentTemplateCreateRequestSerializer,
     DocumentTemplateHeaderSerializer,
     DocumentTemplateUpdateRequestSerializer,
+    PreExistingDecisionRequestSerializer,
+    ProposalDocumentSerializer,
+    ProposalRequestSerializer,
+    QuoteAdjustmentSerializer,
+    QuoteCloneRequestSerializer,
     QuoteCreateRequestSerializer,
+    QuoteIndexationRequestSerializer,
+    QuoteRenewalRequestSerializer,
+    QuoteVersionDetailSerializer,
+    QuoteVersionSaveRequestSerializer,
+    QuoteVersionSerializer,
     QuoteMemberRequestSerializer,
     QuoteMemberSerializer,
+    QuotePreviewRequestSerializer,
     QuotePriceRequestSerializer,
+    QuoteSelectionRequestSerializer,
     QuoteSerializer,
+    ScenarioApplyRequestSerializer,
+    ScenarioCloneRequestSerializer,
+    ScenarioCreateRequestSerializer,
+    ScenarioSerializer,
+    ScenarioUpdateRequestSerializer,
     QuoteSubmitRequestSerializer,
     QuoteUpdateRequestSerializer,
     ReviewTaskSerializer,
     StateHistoryItemSerializer,
 )
+from apps.quote.domain import proposal_template
+from apps.quote.domain.proposal_template import default_body
 from shared.pagination import Q360PageNumberPagination
 
 _DECISION_PERMISSION = {
@@ -72,6 +106,12 @@ class QuoteListCreateView(APIView):
         quote_number = request.query_params.get("quoteNumber")
         if quote_number:
             queryset = queryset.filter(quote_number=quote_number)
+        quote_type = request.query_params.get("quoteType")
+        if quote_type:
+            queryset = queryset.filter(quote_type=quote_type)
+        source_policy_id = request.query_params.get("sourcePolicyId")
+        if source_policy_id:
+            queryset = queryset.filter(source_policy_id=source_policy_id)
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(QuoteSerializer(page, many=True).data)
@@ -378,3 +418,563 @@ class ReviewQueueView(APIView):
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(ReviewTaskSerializer(page, many=True).data)
+
+
+@requires_idempotency
+class QuoteSelectionView(APIView):
+    """`PUT /quotes/{id}/selection` — optional coverages chosen by the
+    customer (PDF "O"), the A-E participation option and "what if" capital
+    overrides. Re-prices the quote (it returns to READY when it was ready)."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_EDIT)]
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        return Response({"selection": quote.selection_json, "rowVersion": quote.row_version})
+
+    def put(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = QuoteSelectionRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        updated, warnings = simulator_service.set_selection(
+            quote=quote, selection=body.validated_data["selection"], row_version=body.validated_data["rowVersion"]
+        )
+        return Response({**QuoteSerializer(updated).data, "warnings": warnings})
+
+
+class QuotePreviewView(APIView):
+    """`POST /quotes/{id}/preview` — recalculates with a different selection
+    and/or extra adjustments WITHOUT saving anything (no pricing run, audit
+    or outbox); answers with the full calculation, the saved baseline and the
+    delta."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_CALCULATE)]
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = QuotePreviewRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        result = simulator_service.preview_quote(
+            quote=quote,
+            selection=body.validated_data["selection"],
+            extra_adjustments=body.validated_data["adjustments"],
+            render=render_preview,
+        )
+        return Response(result)
+
+
+@requires_idempotency
+class QuoteAdjustmentListCreateView(APIView):
+    """`GET` lists the adjustments (agravamentos/descontos). `POST` applies
+    one (reason required, re-prices) — or only simulates it with
+    `?dryRun=true`."""
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [require_scope(Scope.WRITE)(), require_permission(Permission.QUOTE_CALCULATE)()]
+        return [require_scope(Scope.READ)()]
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        adjustments = simulator_service.list_adjustments(quote=quote, status=request.query_params.get("status"))
+        return Response(QuoteAdjustmentSerializer(adjustments, many=True).data)
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = AdjustmentRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        spec = {"kind": data["kind"], "value": data["value"], "scope": data["scope"], "memberId": data["memberId"]}
+        if str(request.query_params.get("dryRun", "false")).lower() in ("1", "true", "yes"):
+            return Response(simulator_service.simulate_adjustment(quote=quote, spec={**spec, "reason": data["reason"]}))
+        adjustment, updated = simulator_service.apply_adjustment(quote=quote, spec=spec, reason=data["reason"])
+        return Response(
+            {
+                "adjustment": QuoteAdjustmentSerializer(adjustment).data,
+                "quote": QuoteSerializer(updated).data,
+                "impact": adjustment.impact_json,
+            },
+            status=201,
+        )
+
+
+@requires_idempotency
+class QuoteAdjustmentDetailView(APIView):
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_CALCULATE)]
+
+    def delete(self, request, quote_id, adjustment_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = AdjustmentRemoveRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        adjustment, updated = simulator_service.remove_adjustment(
+            quote=quote, adjustment_id=adjustment_id, reason=body.validated_data["reason"]
+        )
+        return Response({"adjustment": QuoteAdjustmentSerializer(adjustment).data, "quote": QuoteSerializer(updated).data})
+
+
+@requires_idempotency
+class QuoteMemberPreExistingView(APIView):
+    """`PUT /quotes/{id}/members/{memberId}/pre-existing` — the underwriting
+    decision for a pre-existing condition (6 treatments of the PDF);
+    `DELETE` clears it. Both need a reason and re-price the quote."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_EDIT)]
+
+    def put(self, request, quote_id, member_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = PreExistingDecisionRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        quote_member, updated, warnings = simulator_service.set_member_pre_existing(
+            quote=quote, member_id=member_id, decision=body.validated_data["decision"], reason=body.validated_data["reason"]
+        )
+        return Response(
+            {"memberId": str(member_id), "preExisting": quote_member.pre_existing_json, "quote": QuoteSerializer(updated).data, "warnings": warnings}
+        )
+
+    def delete(self, request, quote_id, member_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = AdjustmentRemoveRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        updated = simulator_service.clear_member_pre_existing(quote=quote, member_id=member_id, reason=body.validated_data["reason"])
+        return Response(QuoteSerializer(updated).data)
+
+
+def _ids_param(request) -> list[uuid.UUID] | None:
+    raw = request.query_params.get("ids")
+    if not raw:
+        return None
+    try:
+        return [uuid.UUID(part) for part in raw.split(",") if part]
+    except ValueError:
+        raise PermissionDenied("ids must be a comma-separated list of scenario ids") from None
+
+
+@requires_idempotency
+class QuoteScenarioListCreateView(APIView):
+    """R5: GET lists the scenarios of a quote (with `stale` when their stored
+    result no longer matches the current plan/tariffs/population); POST
+    creates one (from the current state of the quote unless `parameters` is
+    given) and calculates it."""
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [require_scope(Scope.WRITE)(), require_permission(Permission.QUOTE_CALCULATE)()]
+        return [require_scope(Scope.READ)()]
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        return Response(ScenarioSerializer(scenario_service.list_scenarios(quote=quote), many=True).data)
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = ScenarioCreateRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        scenario = scenario_service.create_scenario(
+            quote=quote, name=data["name"], description=data["description"], parameters=data["parameters"], render=render_preview
+        )
+        return Response(ScenarioSerializer(scenario).data, status=201)
+
+
+class QuoteScenarioCompareView(APIView):
+    """GET /quotes/{id}/scenarios/compare?ids=a,b - side by side: total premium
+    and delta, coverages (capital, participation, waiting days) with what
+    differs, premium components, adjustments and the A-E option."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        return Response(scenario_service.compare_scenarios(quote=quote, scenario_ids=_ids_param(request)))
+
+
+class QuoteScenarioCompareExportView(APIView):
+    """GET /quotes/{id}/scenarios/compare/export?fileType=xlsx|csv&ids=..."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, quote_id):
+        import csv
+        import io
+
+        quote = get_object_or_404(Quote, id=quote_id)
+        comparison = scenario_service.compare_scenarios(quote=quote, scenario_ids=_ids_param(request))
+        sheets = scenario_service.comparison_sheets(comparison)
+        file_type = request.query_params.get("fileType", "xlsx").lower()
+        if file_type == "csv":
+            buffer = io.StringIO()
+            writer = csv.writer(buffer)
+            for title, rows in sheets.items():
+                writer.writerow([f"# {title}"])
+                writer.writerows(rows)
+                writer.writerow([])
+            response = HttpResponse(buffer.getvalue().encode("utf-8-sig"), content_type="text/csv")
+            response["Content-Disposition"] = 'attachment; filename="comparacao-cenarios.csv"'
+            return response
+        if file_type != "xlsx":
+            return Response({"fileType": "Use xlsx or csv."}, status=400)
+        from openpyxl import Workbook
+
+        workbook = Workbook()
+        workbook.remove(workbook.active)
+        for title, rows in sheets.items():
+            sheet = workbook.create_sheet(title)
+            for row in rows:
+                sheet.append(row)
+        out = io.BytesIO()
+        workbook.save(out)
+        response = HttpResponse(
+            out.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response["Content-Disposition"] = 'attachment; filename="comparacao-cenarios.xlsx"'
+        return response
+
+
+@requires_idempotency
+class ScenarioDetailView(APIView):
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "DELETE"):
+            return [require_scope(Scope.WRITE)(), require_permission(Permission.QUOTE_CALCULATE)()]
+        return [require_scope(Scope.READ)()]
+
+    def get(self, request, scenario_id):
+        return Response(ScenarioSerializer(scenario_service.get_scenario(scenario_id)).data)
+
+    def patch(self, request, scenario_id):
+        scenario = scenario_service.get_scenario(scenario_id)
+        body = ScenarioUpdateRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        updated = scenario_service.update_scenario(
+            scenario=scenario,
+            name=data["name"],
+            description=data["description"],
+            parameters=data["parameters"],
+            row_version=data["rowVersion"],
+            render=render_preview,
+        )
+        return Response(ScenarioSerializer(updated).data)
+
+    def delete(self, request, scenario_id):
+        scenario_service.delete_scenario(scenario=scenario_service.get_scenario(scenario_id))
+        return Response(status=204)
+
+
+class _ScenarioActionMixin:
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_CALCULATE)]
+
+
+@requires_idempotency
+class ScenarioCloneView(_ScenarioActionMixin, APIView):
+    def post(self, request, scenario_id):
+        scenario = scenario_service.get_scenario(scenario_id)
+        body = ScenarioCloneRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        clone = scenario_service.clone_scenario(scenario=scenario, name=body.validated_data["name"], render=render_preview)
+        return Response(ScenarioSerializer(clone).data, status=201)
+
+
+@requires_idempotency
+class ScenarioRecalculateView(_ScenarioActionMixin, APIView):
+    def post(self, request, scenario_id):
+        scenario = scenario_service.get_scenario(scenario_id)
+        return Response(ScenarioSerializer(scenario_service.recalculate_scenario(scenario=scenario, render=render_preview)).data)
+
+
+@requires_idempotency
+class ScenarioSelectView(_ScenarioActionMixin, APIView):
+    def post(self, request, scenario_id):
+        scenario = scenario_service.get_scenario(scenario_id)
+        return Response(ScenarioSerializer(scenario_service.select_scenario(scenario=scenario)).data)
+
+
+@requires_idempotency
+class ScenarioApplyView(APIView):
+    """POST /scenarios/{id}/apply - makes the scenario the official state of
+    the quote (reason required, authority limits apply, quote is re-priced)."""
+
+    permission_classes = [
+        require_scope(Scope.WRITE),
+        require_permission(Permission.QUOTE_CALCULATE),
+        require_permission(Permission.QUOTE_EDIT),
+    ]
+
+    def post(self, request, scenario_id):
+        scenario = scenario_service.get_scenario(scenario_id)
+        body = ScenarioApplyRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        quote = scenario_service.apply_scenario(scenario=scenario, reason=body.validated_data["reason"])
+        return Response(QuoteSerializer(quote).data)
+
+
+@requires_idempotency
+class QuoteRenewalCreateView(APIView):
+    """POST /quotes/renewals - renewal proposal of an existing policy: the
+    policy population (except people above the plan permanence age), the
+    selection and pre-existing decisions of the source quote, previous
+    premium/period as context."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_CREATE)]
+
+    def post(self, request):
+        body = QuoteRenewalRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        renewal = quote_lifecycle_service.create_renewal(
+            source_policy_id=data["sourcePolicyId"], effective_date=data["effectiveDate"], plan_id=data["planId"]
+        )
+        return Response(QuoteSerializer(renewal).data, status=201)
+
+
+@requires_idempotency
+class QuoteCloneView(APIView):
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_CREATE)]
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = QuoteCloneRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        copy = quote_lifecycle_service.clone_quote(
+            quote=quote, effective_date=body.validated_data["effectiveDate"], reason=body.validated_data["reason"]
+        )
+        return Response(QuoteSerializer(copy).data, status=201)
+
+
+@requires_idempotency
+class QuoteVersionListCreateView(APIView):
+    """GET lists the versions of a quote (newest first); POST saves the
+    current state as a manual version (reason required)."""
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [require_scope(Scope.WRITE)(), require_permission(Permission.QUOTE_EDIT)()]
+        return [require_scope(Scope.READ)()]
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        return Response(QuoteVersionSerializer(quote_version_service.list_versions(quote=quote), many=True).data)
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = QuoteVersionSaveRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        version = quote_version_service.save_version(quote=quote, reason=body.validated_data["reason"])
+        return Response(QuoteVersionSerializer(version).data, status=201)
+
+
+class QuoteVersionDetailView(APIView):
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, quote_id, version_no):
+        quote = get_object_or_404(Quote, id=quote_id)
+        return Response(QuoteVersionDetailSerializer(quote_version_service.get_version(quote=quote, version_no=version_no)).data)
+
+
+class QuoteVersionDiffView(APIView):
+    """GET /quotes/{id}/versions/{n}/diff[?against=m] - what changed between
+    version n and version m (or the current state)."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, quote_id, version_no):
+        quote = get_object_or_404(Quote, id=quote_id)
+        against = request.query_params.get("against")
+        return Response(
+            quote_version_service.compare_versions(
+                quote=quote, version_no=version_no, against=int(against) if against else None
+            )
+        )
+
+
+@requires_idempotency
+class QuoteVersionRestoreView(APIView):
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_EDIT)]
+
+    def post(self, request, quote_id, version_no):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = QuoteVersionSaveRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        restored, report = quote_version_service.restore_version(
+            quote=quote, version_no=version_no, reason=body.validated_data["reason"]
+        )
+        return Response({"quote": QuoteSerializer(restored).data, **report})
+
+
+class QuoteRequirementsView(APIView):
+    """GET /quotes/{id}/requirements - underwriting requirements and alerts
+    (clinical questionnaire, medical exams, age limits, group size, network
+    coverage, prior authorization, evacuation terms, waiting periods,
+    exclusions...) derived from the plan settings and the population."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        return Response(requirements_service.evaluate_requirements(quote))
+
+
+@requires_idempotency
+class QuoteIndexationView(APIView):
+    """POST /quotes/{id}/renewal/indexation[?dryRun=true] - indexes the plan
+    capitals by the medical inflation (PDF: review capitals on every
+    renewal)."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_EDIT), require_permission(Permission.QUOTE_CALCULATE)]
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = QuoteIndexationRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        dry_run = str(request.query_params.get("dryRun", "false")).lower() in ("1", "true", "yes")
+        result = quote_lifecycle_service.apply_indexation(
+            quote=quote,
+            pct=data["medicalInflationPct"],
+            rounding=data["roundTo"],
+            reason=data["reason"],
+            dry_run=dry_run,
+            render=render_preview,
+        )
+        if not dry_run:
+            result["quote"] = QuoteSerializer(result["quote"]).data
+        return Response(result)
+
+
+class ConfigurationImpactSimulationView(APIView):
+    """POST /configuration/{type}/{id}/impact-simulation - reprices the most
+    recent quotes with the published configuration and with this version and
+    summarises the premium impact, before publishing (nothing is saved)."""
+
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRICING_CONFIG_MANAGE)]
+
+    def post(self, request, config_type, config_id):
+        limit = request.data.get("limit", 50) if isinstance(request.data, dict) else 50
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            return Response({"limit": "Must be a positive integer."}, status=400)
+        return Response(config_impact_service.simulate_impact(config_type=config_type, config_id=config_id, limit=limit))
+
+
+def _file_response(data: bytes, content_type: str, name: str | None = None) -> HttpResponse:
+    response = HttpResponse(data, content_type=content_type)
+    if name:
+        response["Content-Disposition"] = f'attachment; filename="{name}"'
+    return response
+
+
+@requires_idempotency
+class QuoteProposalListCreateView(APIView):
+    """R8: POST generates a proposal (PDF/DOCX/HTML) from the selected
+    scenario (or an explicit `scenarioId`, or the current quote) using a
+    configurable template; GET lists the generated documents (history)."""
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [require_scope(Scope.WRITE)(), require_permission(Permission.QUOTE_CALCULATE)()]
+        return [require_scope(Scope.READ)()]
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        return Response(ProposalDocumentSerializer(proposal_service.list_documents(quote=quote), many=True).data)
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = ProposalRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        document = proposal_service.generate(
+            quote=quote, template_code=data["templateCode"], scenario_id=data["scenarioId"],
+            fmt=data["format"].upper(), render=render_preview,
+        )
+        return Response(ProposalDocumentSerializer(document).data, status=201 if document.status == "GENERATED" else 200)
+
+
+class QuoteProposalPreviewView(APIView):
+    """GET /quotes/{id}/proposals/preview?scenarioId=&templateCode= - the
+    proposal as HTML, nothing saved."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        scenario_id = request.query_params.get("scenarioId")
+        data, content_type = proposal_service.preview(
+            quote=quote, scenario_id=uuid.UUID(scenario_id) if scenario_id else None,
+            template_code=request.query_params.get("templateCode"), fmt="HTML", render=render_preview,
+        )
+        return _file_response(data, content_type)
+
+
+class DocumentDownloadView(APIView):
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, document_id):
+        document = proposal_service.get_document(document_id)
+        data = proposal_service.read_file(document)
+        return _file_response(data, document.content_type or "application/octet-stream", document.file_name)
+
+
+@requires_idempotency
+class DocumentRetryView(APIView):
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_CALCULATE)]
+
+    def post(self, request, document_id):
+        document = proposal_service.retry(document=proposal_service.get_document(document_id))
+        return Response(ProposalDocumentSerializer(document).data)
+
+
+class DocumentTemplatePreviewView(APIView):
+    """GET /document-templates/{id}/preview[?fileType=html|pdf|docx] - the
+    template laid out with sample data, before publishing."""
+
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+    def get(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        fmt = request.query_params.get("fileType", "html").upper()
+        data, content_type = proposal_service.preview_template(template=template, fmt=fmt)
+        return _file_response(data, content_type)
+
+
+class DocumentTemplateSchemaView(APIView):
+    """GET /document-templates/schema - what a template body may contain:
+    the default body, the allowed sections and the allowed {{variables}}."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request):
+        return Response(
+            {
+                "defaultBody": json.loads(default_body()),
+                "sections": proposal_template.SECTIONS,
+                "variables": proposal_template.VARIABLES,
+                "formats": list(proposal_service.FORMATS),
+            }
+        )
+
+
+class QuoteClaimsContextView(APIView):
+    """GET /quotes/{id}/claims-context - what the claims history says about
+    this quote's client (loss ratio, frequency, months available — the 3
+    years asked on transfer from another insurer) and the latest projections.
+    Aggregates only; needs quote:review."""
+
+    permission_classes = [require_scope(Scope.READ), require_permission(Permission.QUOTE_REVIEW)]
+
+    def get(self, request, quote_id):
+        from apps.claims.application import summary_service
+        from apps.claims.infrastructure.models import ProjectionRun
+
+        quote = get_object_or_404(Quote, id=quote_id)
+        months = summary_service.history_months(proposer_id=quote.proposer_id)
+        projections = [
+            {"id": str(r.id), "createdAt": r.created_at.isoformat(), "scenarios": {
+                k: {"expectedLossRatioPct": v["expectedLossRatioPct"], "premiumImpactPct": v["premiumImpactPct"]}
+                for k, v in r.result_json["scenarios"].items()}}
+            for r in ProjectionRun.objects.filter(proposer_id=quote.proposer_id).order_by("-created_at")[:5]
+        ]
+        if months == 0:
+            return Response({"available": False, "historyMonths": 0, "threeYearsAvailable": False, "projections": projections})
+        data = summary_service.summary(proposer_id=quote.proposer_id)
+        return Response(
+            {"available": True, "historyMonths": months, "threeYearsAvailable": months >= 36, "summary": data, "projections": projections}
+        )

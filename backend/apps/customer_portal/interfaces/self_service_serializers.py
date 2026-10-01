@@ -26,6 +26,8 @@ class CustomerPortalCoverageRequestSerializer(serializers.Serializer):
     memberId = serializers.UUIDField(required=False, allow_null=True, default=None)
     date = serializers.DateField(required=False, allow_null=True, default=None)
     benefitCategory = serializers.CharField(required=False, allow_null=True, default=None, max_length=60)
+    # Accident: the waiting period does not apply where the plan says so.
+    eventType = serializers.ChoiceField(choices=["ACCIDENT", "ILLNESS"], required=False, default="ILLNESS")
 
 
 class CustomerPortalCoverageResultSerializer(serializers.Serializer):

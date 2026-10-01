@@ -105,6 +105,9 @@ class Plan(TenantScopedModel):
     status = models.CharField(
         max_length=20, choices=[(s.value, s.value) for s in PlanStatus], default=PlanStatus.ACTIVE.value
     )
+    # PDF "Coberturas e Capitais": segmento, escalão, sistema de acesso,
+    # idades, regras de grupo... — ver `apps.product.domain.plan_settings`.
+    settings_json = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     row_version = models.BigIntegerField(default=0)
@@ -129,6 +132,7 @@ class Benefit(TenantScopedModel):
     status = models.CharField(
         max_length=20, choices=[(s.value, s.value) for s in BenefitStatus], default=BenefitStatus.ACTIVE.value
     )
+    definition_json = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     row_version = models.BigIntegerField(default=0)
@@ -139,6 +143,28 @@ class Benefit(TenantScopedModel):
 
     def __str__(self) -> str:  # pragma: no cover - debug helper
         return f"{self.code} ({self.id})"
+
+
+class BenefitRevision(TenantScopedModel):
+    """Immutable history row: one per change to a `Benefit` (create, update,
+    deactivate, reactivate, rollback). `snapshot_json` is the full editable
+    state *after* the change, so any revision can be restored."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    benefit = models.ForeignKey(
+        Benefit, on_delete=models.DO_NOTHING, db_column="benefit_id", related_name="revisions"
+    )
+    revision_no = models.IntegerField()
+    action = models.CharField(max_length=40)
+    snapshot_json = models.JSONField()
+    reason = models.TextField(null=True, blank=True)
+    changed_by = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "benefit_revision"
 
 
 class PlanBenefit(TenantScopedModel):

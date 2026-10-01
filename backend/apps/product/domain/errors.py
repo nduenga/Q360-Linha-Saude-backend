@@ -74,3 +74,25 @@ class MissingCoreBenefitsError(DomainProblem):
 
     http_status = 400
     problem_code = "VALIDATION-400"
+
+
+class InvalidBenefitDefinitionError(DomainProblem):
+    """`Benefit.definition_json` (or a create/import row) does not follow
+    the library's shape — see `benefit_library_service.validate_definition`."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+class ProtectedBenefitError(DomainProblem):
+    """A BASE coverage (Hospitalização, Cirurgia de ambulatório, Urgências)
+    is mandatory in every plan: it can never be deactivated, re-categorised
+    or detached from a plan."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+class BenefitRevisionNotFoundError(DomainProblem):
+    http_status = 404
+    problem_code = "NOT-FOUND"

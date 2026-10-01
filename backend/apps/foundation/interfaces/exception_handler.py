@@ -84,10 +84,29 @@ def q360_exception_handler(exc, context):
     if code is None:
         return response
 
-    return _problem_response(code, response.status_code, str(exc))
+    field_errors = _field_errors(exc.detail) if isinstance(exc, ValidationError) else None
+    return _problem_response(code, response.status_code, str(exc), field_errors=field_errors)
 
 
-def _problem_response(code: str, status_code: int, detail: str) -> Response:
+def _field_errors(detail, prefix: str = "") -> list[dict[str, str]]:
+    """ART-006 `ProblemDetail.fieldErrors`: one `{field, code, message}` per
+    invalid field, nested fields as `parent.child` / `list[0].child`."""
+    out: list[dict[str, str]] = []
+    if isinstance(detail, dict):
+        for key, value in detail.items():
+            out += _field_errors(value, f"{prefix}.{key}" if prefix else str(key))
+    elif isinstance(detail, list):
+        for index, item in enumerate(detail):
+            if isinstance(item, (dict, list)):
+                out += _field_errors(item, f"{prefix}[{index}]")
+            else:
+                out.append({"field": prefix or "non_field_errors", "code": getattr(item, "code", "invalid"), "message": str(item)})
+    else:
+        out.append({"field": prefix or "non_field_errors", "code": getattr(detail, "code", "invalid"), "message": str(detail)})
+    return out
+
+
+def _problem_response(code: str, status_code: int, detail: str, *, field_errors=None) -> Response:
     problem = {
         "title": _TITLES[code],
         "status": status_code,
@@ -95,4 +114,6 @@ def _problem_response(code: str, status_code: int, detail: str) -> Response:
         "detail": detail,
         "correlationId": get_correlation_id() or "",
     }
+    if field_errors:
+        problem["fieldErrors"] = field_errors
     return Response(problem, status=status_code, content_type="application/problem+json")
