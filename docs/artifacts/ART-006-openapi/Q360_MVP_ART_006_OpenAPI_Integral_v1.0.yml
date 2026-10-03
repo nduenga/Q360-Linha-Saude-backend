@@ -2821,6 +2821,35 @@ paths:
       security:
       - oauth2:
         - q360.read
+  /api/v1/customer-portal/me/quotes:
+    get:
+      operationId: getCustomerPortalQuotes
+      description: "`GET /customer-portal/me/quotes` — the caller's own quotes with a\n customer-facing status (read-only).\
+        \ Scoped to the proposers linked to the\n authenticated account, never to anything in the request."
+      summary: Obter customer portal quotes
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalQuotes'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/customer-portal/plan-benefits:
     get:
       operationId: getCustomerPortalPlanBenefits
@@ -4873,6 +4902,719 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/platform/admins:
+    get:
+      operationId: getPlatformAdminListCreate
+      summary: Listar platform admin list create
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlatformAdmin'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    post:
+      operationId: postPlatformAdminListCreate
+      summary: Criar platform admin list create
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlatformAdmin'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatePlatformAdminResponse'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/admins/{admin_id}:
+    patch:
+      operationId: patchPlatformAdminStatus
+      summary: Alterar platform admin status
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: admin_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUpdatePlatformAdminStatus'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformAdmin'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/admins/{admin_id}/reset-password:
+    post:
+      operationId: postPlatformAdminResetPassword
+      summary: Criar platform admin reset password
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: admin_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporaryPasswordResponse'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/audit:
+    get:
+      operationId: getPlatformAudit
+      description: GET /platform/audit?action=&entityType=&entityId=&actorId=&limit= (newest first).
+      summary: Obter platform audit
+      parameters:
+      - in: query
+        name: action
+        schema:
+          type: string
+        description: Ação.
+      - in: query
+        name: actorId
+        schema:
+          type: string
+        description: Quem fez.
+      - in: query
+        name: entityId
+        schema:
+          type: string
+        description: Id da entidade.
+      - in: query
+        name: entityType
+        schema:
+          type: string
+        description: Tipo de entidade.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Máximo 500 (por omissão 100).
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlatformAuditEvent'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/platform/auth/login:
+    post:
+      operationId: postPlatformLogin
+      summary: Criar platform login
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformLogin'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformLoginResponse'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/me:
+    get:
+      operationId: getPlatformMe
+      summary: Obter platform me
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformAdmin'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/platform/me/password:
+    post:
+      operationId: postPlatformChangePassword
+      summary: Criar platform change password
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePassword'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/tenants:
+    get:
+      operationId: getPlatformTenantListCreate
+      summary: Listar platform tenant list create
+      parameters:
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Pesquisa por código ou nome.
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: ACTIVE, SUSPENDED ou INACTIVE.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TenantResponse'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    post:
+      operationId: postPlatformTenantListCreate
+      description: Cria o tenant, os dados da empresa e o primeiro ADMIN; a palavra-passe temporária só aparece
+        nesta resposta.
+      summary: Criar platform tenant list create
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenant'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateTenantResponse'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/tenants/{tenant_id}:
+    get:
+      operationId: getPlatformTenantDetail
+      summary: Obter platform tenant detail
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDetail'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    patch:
+      operationId: patchPlatformTenantDetail
+      description: Suspender (SUSPENDED/INACTIVE) bloqueia de imediato o staff e o portal do tenant.
+      summary: Alterar platform tenant detail
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUpdateTenant'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/tenants/{tenant_id}/accounts/{account_id}/reset-password:
+    post:
+      operationId: postPlatformTenantAccountReset
+      summary: Criar platform tenant account reset
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporaryPasswordResponse'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/tenants/{tenant_id}/admins:
+    post:
+      operationId: postPlatformTenantAdmins
+      description: POST adds another ADMIN to the tenant (temporary password shown once).
+      summary: Criar platform tenant admins
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlatformAdmin'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporaryPasswordResponse'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/policies:
     get:
       operationId: getPolicyList
@@ -15659,7 +16401,7 @@ components:
       type: object
       properties:
         status:
-          $ref: '#/components/schemas/SetStatusRequestStatusEnum'
+          $ref: '#/components/schemas/PlatformAdminStatusEnum'
     PatchedUpdateRolesRequest:
       type: object
       properties:
@@ -16608,13 +17350,16 @@ components:
         * `RETURNED` - RETURNED'
     RolesEnum:
       enum:
+      - PLATFORM_ADMIN
       - ADMIN
       - PRODUCT_CONFIGURATOR
       - SUBSCRIBER
       - APPROVER
       - AUDITOR
       type: string
-      description: '* `ADMIN` - ADMIN
+      description: '* `PLATFORM_ADMIN` - PLATFORM_ADMIN
+
+        * `ADMIN` - ADMIN
 
         * `PRODUCT_CONFIGURATOR` - PRODUCT_CONFIGURATOR
 
@@ -17595,6 +18340,7 @@ components:
       - foreign_coverage.rules
       - security.approval_rules
       - security.role_permissions
+      - rules.custom
       - proposal.branding
       type: string
       description: '* `product.plans` - product.plans
@@ -17644,6 +18390,8 @@ components:
         * `security.approval_rules` - security.approval_rules
 
         * `security.role_permissions` - security.role_permissions
+
+        * `rules.custom` - rules.custom
 
         * `proposal.branding` - proposal.branding'
     ActionEnum:
@@ -17864,6 +18612,468 @@ components:
       - method
       - note
       - scenarios
+    ChangePassword:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+          maxLength: 200
+        newPassword:
+          type: string
+          maxLength: 200
+      required:
+      - currentPassword
+      - newPassword
+    CreatePlatformAdmin:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        email:
+          type: string
+          format: email
+          maxLength: 320
+      required:
+      - email
+      - name
+    CreateTenant:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 50
+          pattern: ^[a-z0-9][a-z0-9_-]{2,49}$
+        name:
+          type: string
+          maxLength: 200
+        profile:
+          $ref: '#/components/schemas/TenantProfile'
+        admin:
+          $ref: '#/components/schemas/TenantAdmin'
+      required:
+      - admin
+      - code
+      - name
+    PatchedUpdatePlatformAdminStatus:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/PlatformAdminStatusEnum'
+    PatchedUpdateTenant:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        profile:
+          $ref: '#/components/schemas/TenantProfile'
+        status:
+          $ref: '#/components/schemas/TenantStatusEnum'
+    PlatformLogin:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        password:
+          type: string
+          writeOnly: true
+          maxLength: 200
+      required:
+      - email
+      - password
+    PortalQuote:
+      type: object
+      properties:
+        quoteNumber:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+          description: 'Estado traduzido para o cliente: IN_REVIEW, AWAITING_SIGNATURE, CONTRACTED, REJECTED, EXPIRED
+            ou CANCELLED. Rascunhos nunca são devolvidos; uma cotação aprovada cuja validade passou aparece como
+            EXPIRED.'
+        effectiveDate:
+          type: string
+          format: date
+        validUntil:
+          type:
+          - string
+          - 'null'
+          format: date
+        product:
+          oneOf:
+          - $ref: '#/components/schemas/PortalQuoteNamed'
+          - type: 'null'
+        plan:
+          $ref: '#/components/schemas/PortalQuoteNamed'
+        totalAmount:
+          type:
+          - string
+          - 'null'
+          description: Só em AWAITING_SIGNATURE, CONTRACTED e EXPIRED.
+        currencyCode:
+          type:
+          - string
+          - 'null'
+        policyNumber:
+          type:
+          - string
+          - 'null'
+          description: Preenchido quando a cotação já gerou apólice.
+        createdAt:
+          type: string
+          format: date-time
+      required:
+      - createdAt
+      - currencyCode
+      - effectiveDate
+      - plan
+      - policyNumber
+      - product
+      - quoteNumber
+      - status
+      - totalAmount
+      - validUntil
+    PortalQuoteNamed:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+      - name
+    PortalQuoteStatusEnum:
+      enum:
+      - IN_REVIEW
+      - AWAITING_SIGNATURE
+      - CONTRACTED
+      - REJECTED
+      - EXPIRED
+      - CANCELLED
+      type: string
+      description: '* `IN_REVIEW` - IN_REVIEW
+
+        * `AWAITING_SIGNATURE` - AWAITING_SIGNATURE
+
+        * `CONTRACTED` - CONTRACTED
+
+        * `REJECTED` - REJECTED
+
+        * `EXPIRED` - EXPIRED
+
+        * `CANCELLED` - CANCELLED'
+    PortalQuotes:
+      type: object
+      properties:
+        quotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalQuote'
+      required:
+      - quotes
+    StatusC0eEnum:
+      enum:
+      - ACTIVE
+      - DISABLED
+      type: string
+      description: '* `ACTIVE` - ACTIVE
+
+        * `DISABLED` - DISABLED'
+    TenantAdmin:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        email:
+          type: string
+          format: email
+          maxLength: 320
+      required:
+      - email
+      - name
+    TenantProfile:
+      type: object
+      properties:
+        legalName:
+          type: string
+          maxLength: 200
+        nif:
+          type: string
+          maxLength: 40
+        email:
+          oneOf:
+          - type: string
+            format: email
+            maxLength: 320
+          - type: string
+            maxLength: 0
+        phone:
+          type: string
+          maxLength: 40
+        address:
+          type: string
+          maxLength: 400
+        country:
+          type: string
+          maxLength: 60
+        notes:
+          type: string
+          maxLength: 1000
+    UpdateTenantStatusEnum:
+      enum:
+      - ACTIVE
+      - SUSPENDED
+      - INACTIVE
+      type: string
+      description: '* `ACTIVE` - ACTIVE
+
+        * `SUSPENDED` - SUSPENDED
+
+        * `INACTIVE` - INACTIVE'
+    CreatePlatformAdminResponse:
+      type: object
+      properties:
+        admin:
+          $ref: '#/components/schemas/PlatformAdmin'
+        temporaryPassword:
+          type: string
+        temporaryPasswordNotice:
+          type: string
+      required:
+      - admin
+      - temporaryPassword
+      - temporaryPasswordNotice
+    CreateTenantResponse:
+      type: object
+      properties:
+        tenant:
+          $ref: '#/components/schemas/TenantResponse'
+        admin:
+          $ref: '#/components/schemas/CreatedAdmin'
+        temporaryPassword:
+          type: string
+        temporaryPasswordNotice:
+          type: string
+      required:
+      - admin
+      - temporaryPassword
+      - temporaryPasswordNotice
+      - tenant
+    CreatedAdmin:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+      required:
+      - email
+      - id
+      - name
+      - role
+    PlatformAdmin:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        status:
+          type: string
+        lastLoginAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+      - createdAt
+      - email
+      - id
+      - lastLoginAt
+      - name
+      - status
+    PlatformAuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        actorId:
+          type: string
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type:
+          - string
+          - 'null'
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type:
+          - string
+          - 'null'
+        metadata: {}
+      required:
+      - action
+      - actorId
+      - correlationId
+      - entityId
+      - entityType
+      - id
+      - metadata
+      - occurredAt
+    PlatformLoginResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        expiresIn:
+          type: integer
+        adminId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+      required:
+      - accessToken
+      - adminId
+      - email
+      - expiresIn
+      - name
+    TemporaryPasswordResponse:
+      type: object
+      properties:
+        accountId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        temporaryPassword:
+          type: string
+        temporaryPasswordNotice:
+          type: string
+      required:
+      - accountId
+      - email
+      - temporaryPassword
+      - temporaryPasswordNotice
+    TenantAccount:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        status:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        lastLoginAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - email
+      - id
+      - lastLoginAt
+      - name
+      - roles
+      - status
+    TenantDetail:
+      type: object
+      properties:
+        tenant:
+          $ref: '#/components/schemas/TenantResponse'
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantAccount'
+        stats:
+          type: object
+          additionalProperties:
+            type: integer
+      required:
+      - accounts
+      - stats
+      - tenant
+    TenantResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        profile:
+          $ref: '#/components/schemas/TenantProfile'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+      - code
+      - createdAt
+      - id
+      - name
+      - profile
+      - status
+      - updatedAt
+    PlatformAdminStatusEnum:
+      enum:
+      - ACTIVE
+      - DISABLED
+      type: string
+      description: '* `ACTIVE` - ACTIVE
+
+        * `DISABLED` - DISABLED'
+    TenantStatusEnum:
+      enum:
+      - ACTIVE
+      - SUSPENDED
+      - INACTIVE
+      type: string
+      description: '* `ACTIVE` - ACTIVE
+
+        * `SUSPENDED` - SUSPENDED
+
+        * `INACTIVE` - INACTIVE'
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

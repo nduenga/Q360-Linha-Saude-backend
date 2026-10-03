@@ -105,7 +105,18 @@ Questões para a área de negócio: `docs/Questionario_Decisoes_Negocio_Simulado
 - [x] Ligações assinadas com expiração (`POST /documents/{id}/signed-url`, `GET /documents/signed/{token}`; prazo no parâmetro `documents.signed_url_ttl_seconds`)
 - [x] Sinistralidade: `GET /claims/methodology` (método rotulado como indicativo, fórmulas, formatos) e `GET /claims/import-template`; limite e quota de resultados por omissão vêm de `group.rules`
 - [ ] 🔴 Template oficial do cliente (OD-006) e fórmulas atuariais reais: aguardam o material do negócio (a identidade e o método já são configuráveis/substituíveis)
-- [ ] Ecrãs de administração no frontend (formulários a partir de `formSchema`)
+- [x] Regras "Quando… então…" (`rules.custom`): o GTE preenche linhas de formulário (condição por idade/plano/nº de pessoas/tipo de seguro/relação/opção A–E, 2.ª condição opcional, ação em linguagem de negócio) em vez de escrever fórmulas. Ações de prémio (aumentar/desconto %, multiplicar, somar/subtrair) aplicam-se por pessoa ou ao total da cotação, por ordem; ações de aceitação (análise médica/técnica, recusar, aviso) geram requisitos. Mesmo ciclo DRAFT→aprovação→PUBLISHED, versão registada no `PricingRun`, recálculo ao publicar. Esquema com `optionLabels`/`help` para o frontend. Testes: `test_custom_rules_domain.py`, `test_business_config_e2e.py`
+- [ ] Ecrãs de administração no frontend (formulários a partir de `formSchema`; usar `optionLabels` como texto das opções e `help` como ajuda)
+
+---
+
+## Fase 10 — Plataforma: super admins e tenants (`apps/platform_admin`)
+- [x] Login próprio dos super admins (token separado, bloqueio após falhas) e gestão de vários super admins pela interface
+- [x] Criar/listar/ver/alterar/suspender tenants com dados da empresa e primeiro ADMIN com palavra-passe temporária única
+- [x] Acrescentar ADMIN a um tenant e repor a palavra-passe de qualquer conta do tenant
+- [x] Tenant suspenso bloqueia staff e portal de imediato; tokens de plataforma não entram nas rotas de tenant
+- [x] Auditoria de plataforma consultável; testes em `tests/platform_admin`
+- [ ] Ecrãs de plataforma no frontend; troca obrigatória da palavra-passe temporária no primeiro login
 
 ---
 
