@@ -50,10 +50,13 @@ from apps.quote.application.quote_service import (
 )
 from apps.quote.domain.enums import QuoteDecisionType, QuoteMemberStatus
 from apps.quote.infrastructure.models import DocumentTemplateVersion, Quote, QuoteMember
+from apps.platform_admin.infrastructure.models import PlatformAdmin
 from apps.staff_accounts.infrastructure.models import StaffAccount, StaffAccountRole
 
 
 _PASSWORD = "Q360Demo!2026"
+# Super administrador da plataforma (equipa interna; nao pertence a nenhum tenant).
+_PLATFORM_ADMIN = ("superadmin.demo@q360.local", "Super Administrador Demo")
 _RATING_CODE = "DEMO-RATING-HEALTH"
 _PARAMETER_CODE = "DEMO-PARAMS-HEALTH"
 _ELIGIBILITY_CODE = "DEMO-ELIGIBILITY-ANGOLA"
@@ -79,6 +82,7 @@ class Command(BaseCommand):
         tenant, _ = Tenant.objects.get_or_create(
             code=options["tenant_code"], defaults={"name": options["tenant_name"]}
         )
+        self._ensure_platform_admin()
         original_actor = CurrentActorProvider.bind(None)
         try:
             staff = self._ensure_staff(tenant)
@@ -99,6 +103,19 @@ class Command(BaseCommand):
             staff=staff,
             policies={"Ana Silva": ana_policy, "Carlos Mendes": carlos_policy, "Empresa Kilamba": company_policy},
         )
+
+    @staticmethod
+    def _ensure_platform_admin() -> None:
+        """Idempotente: cria o super admin demo ou repoe a palavra-passe e o
+        estado documentados, tal como acontece com o staff demo."""
+        email, name = _PLATFORM_ADMIN
+        admin = PlatformAdmin.objects.filter(email__iexact=email).first()
+        if admin is None:
+            PlatformAdmin.objects.create(email=email, name=name, password_hash=make_password(_PASSWORD))
+        else:
+            PlatformAdmin.objects.filter(id=admin.id).update(
+                password_hash=make_password(_PASSWORD), status=PlatformAdmin.ACTIVE, failed_login_attempts=0, locked_until=None
+            )
 
     @staticmethod
     def _bind(tenant: Tenant, account: StaffAccount, role: Role) -> None:
@@ -696,6 +713,7 @@ class Command(BaseCommand):
     def _print_summary(self, *, tenant: Tenant, staff: dict[str, StaffAccount], policies: dict[str, Policy]) -> None:
         self.stdout.write(self.style.SUCCESS("Dados de demonstração Q360 Saúde prontos."))
         self.stdout.write(f"Tenant: {tenant.code} ({tenant.id})")
+        self.stdout.write(f"\nSuper administrador da plataforma (POST /api/v1/platform/auth/login): {_PLATFORM_ADMIN[0]} / {_PASSWORD}")
         self.stdout.write("\nColaboradores (todos usam a palavra-passe Q360Demo!2026):")
         for key, email, _name, roles in _STAFF:
             self.stdout.write(f"  - {email} — {', '.join(role.value for role in roles)}")
