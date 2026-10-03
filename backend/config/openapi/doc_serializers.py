@@ -484,3 +484,28 @@ class TemplateSchema(s.Serializer):
 class PortalPlanBenefits(s.Serializer):
     policyNumber = s.CharField()
     benefits = s.ListField(child=s.DictField(), help_text="PlanBenefit contratados (snapshot da apólice), com a configuração contratada.")
+
+
+class PortalQuoteNamed(s.Serializer):
+    name = s.CharField()
+
+
+class PortalQuote(s.Serializer):
+    quoteNumber = s.CharField(allow_null=True)
+    status = s.CharField(
+        help_text="Estado traduzido para o cliente: IN_REVIEW, AWAITING_SIGNATURE, CONTRACTED, REJECTED, EXPIRED "
+                  "ou CANCELLED. Rascunhos nunca são devolvidos; uma cotação aprovada cuja validade passou "
+                  "aparece como EXPIRED.",
+    )
+    effectiveDate = s.DateField()
+    validUntil = s.DateField(allow_null=True)
+    product = PortalQuoteNamed(allow_null=True)
+    plan = PortalQuoteNamed()
+    totalAmount = s.CharField(allow_null=True, help_text="Só em AWAITING_SIGNATURE, CONTRACTED e EXPIRED.")
+    currencyCode = s.CharField(allow_null=True)
+    policyNumber = s.CharField(allow_null=True, help_text="Preenchido quando a cotação já gerou apólice.")
+    createdAt = s.DateTimeField()
+
+
+class PortalQuotes(s.Serializer):
+    quotes = PortalQuote(many=True)

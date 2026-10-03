@@ -14,6 +14,7 @@ from __future__ import annotations
 from django.contrib.auth.models import AnonymousUser
 from rest_framework import authentication, exceptions
 
+from apps.foundation.application import tenant_status
 from apps.foundation.application.context import CurrentActorProvider
 from apps.foundation.domain.actor import Actor
 from apps.foundation.infrastructure.jwt_actor_adapter import InvalidTokenError, JwtActorAdapter
@@ -48,6 +49,14 @@ class JwtActorAuthentication(authentication.BaseAuthentication):
             actor = _adapter.resolve(token)
         except InvalidTokenError as exc:
             raise exceptions.AuthenticationFailed(str(exc)) from exc
+
+        # Token de plataforma só vale nas rotas de plataforma; nas de tenant
+        # não há tenant e as consultas falhariam de forma opaca.
+        on_platform_route = request.path.startswith("/api/v1/platform/")
+        if actor.actor_type == "PLATFORM_ADMIN" and not on_platform_route:
+            raise exceptions.PermissionDenied("Platform administrator tokens cannot access tenant routes.")
+        if actor.actor_type != "PLATFORM_ADMIN" and actor.tenant_id is not None and tenant_status.is_blocked(actor.tenant_id.value):
+            raise exceptions.AuthenticationFailed("Tenant is suspended or inactive.")
 
         CurrentActorProvider.bind(actor)
         return ActorUser(actor), token

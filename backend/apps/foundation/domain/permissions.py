@@ -16,6 +16,7 @@ from apps.foundation.domain.scopes import Scope
 class Role(str, Enum):
     """DOC-001 s6 — Actores e Personas."""
 
+    PLATFORM_ADMIN = "PLATFORM_ADMIN"  # Administrador global da plataforma
     ADMIN = "ADMIN"  # Administrador de Tenant
     PRODUCT_CONFIGURATOR = "PRODUCT_CONFIGURATOR"  # Configurador de Produto
     SUBSCRIBER = "SUBSCRIBER"  # Subscritor

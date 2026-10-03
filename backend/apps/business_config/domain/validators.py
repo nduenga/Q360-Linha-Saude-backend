@@ -10,6 +10,7 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from apps.business_config.domain.custom_rules import validate_rules
 from apps.business_config.domain.errors import InvalidConfiguration
 from apps.business_config.domain.form_schemas import get_form_schema
 from apps.business_config.domain.shape import flatten
@@ -113,6 +114,8 @@ def _check_rules(key: str, value: dict[str, Any]) -> None:
         if key == "product.age_limits" and row.get("renewal_max_age") is not None and row.get("entry_max_age") is not None:
             if row["renewal_max_age"] < row["entry_max_age"]:
                 raise InvalidConfiguration("age_limits: a idade máxima de renovação não pode ser inferior à de entrada")
+    if key == "rules.custom":
+        validate_rules(value)
     if key == "pricing.factors":
         for row in value.get("factors") or []:
             if _decimal(row.get("factor"), "factors.factor") == 0:

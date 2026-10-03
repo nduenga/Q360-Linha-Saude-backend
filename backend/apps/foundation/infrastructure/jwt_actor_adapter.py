@@ -52,6 +52,21 @@ class JwtActorAdapter:
         if not subject:
             raise InvalidTokenError("Token is missing required claim 'sub'")
 
+        token_type = claims.get("token_type", "staff")
+        roles = _parse_roles(claims.get(settings.OIDC_ROLES_CLAIM, []))
+        scopes = _parse_scopes(claims.get(settings.OIDC_SCOPE_CLAIM, ""))
+
+        if token_type == "platform":
+            if Role.PLATFORM_ADMIN not in roles:
+                raise InvalidTokenError("Platform token must contain PLATFORM_ADMIN role")
+            return Actor(
+                actor_id=str(subject),
+                tenant_id=None,
+                roles=roles,
+                scopes=scopes,
+                actor_type="PLATFORM_ADMIN",
+            )
+
         tenant_claim = settings.OIDC_TENANT_CLAIM
         raw_tenant_id = claims.get(tenant_claim)
         if not raw_tenant_id:
@@ -59,48 +74,43 @@ class JwtActorAdapter:
         try:
             tenant_id = TenantId.parse(raw_tenant_id)
         except (ValueError, AttributeError) as exc:
-            raise InvalidTokenError(
-                f"Claim '{tenant_claim}' is not a valid tenant identifier"
-            ) from exc
+            raise InvalidTokenError(f"Claim '{tenant_claim}' is not a valid tenant identifier") from exc
 
-        roles = _parse_roles(claims.get(settings.OIDC_ROLES_CLAIM, []))
-        scopes = _parse_scopes(claims.get(settings.OIDC_SCOPE_CLAIM, ""))
-
-        return Actor(
-            actor_id=str(subject),
-            tenant_id=tenant_id,
-            roles=roles,
-            scopes=scopes,
-            actor_type="USER",
-        )
+        return Actor(actor_id=str(subject), tenant_id=tenant_id, roles=roles, scopes=scopes, actor_type="USER")
 
     def _decode(self, bearer_token: str) -> dict[str, Any]:
+        try:
+            unverified = jwt.decode(
+                bearer_token,
+                options={"verify_signature": False, "verify_exp": False, "verify_aud": False, "verify_iss": False},
+            )
+        except jwt.PyJWTError as exc:
+            raise InvalidTokenError("Malformed JWT") from exc
+
+        if unverified.get("token_type", "staff") == "platform":
+            if not settings.PLATFORM_ADMIN_JWT_SIGNING_KEY:
+                raise InvalidTokenError("PLATFORM_ADMIN_JWT_SIGNING_KEY is not configured")
+            return jwt.decode(
+                bearer_token,
+                key=settings.PLATFORM_ADMIN_JWT_SIGNING_KEY,
+                algorithms=["HS256"],
+                audience=settings.PLATFORM_ADMIN_JWT_AUDIENCE,
+                issuer=settings.PLATFORM_ADMIN_JWT_ISSUER,
+                options={"require": ["exp", "iat", "sub"]},
+            )
+
         if self._jwks_client is not None:
             signing_key = self._jwks_client.get_signing_key_from_jwt(bearer_token).key
         elif settings.Q360_JWT_SIGNING_KEY:
-            # Self-hosted staff identity (apps.staff_accounts) - a
-            # legitimate PRODUCTION key, unlike OIDC_STATIC_VERIFICATION_KEY
-            # below. Checked before that dev-only key so a developer who
-            # has both set (e.g. leftover from testing the Auth0 path)
-            # always validates against whichever one actually issued the
-            # token in front of them; in practice only one is ever set.
             signing_key = settings.Q360_JWT_SIGNING_KEY
         elif settings.OIDC_STATIC_VERIFICATION_KEY:
-            # Local/dev-only escape hatch for environments without a running
-            # OIDC provider. Never set in production (enforced in
-            # config/settings/production.py).
             signing_key = settings.OIDC_STATIC_VERIFICATION_KEY
         else:
-            raise InvalidTokenError(
-                "No OIDC_JWKS_URL, Q360_JWT_SIGNING_KEY or OIDC_STATIC_VERIFICATION_KEY configured"
-            )
+            raise InvalidTokenError("No OIDC_JWKS_URL, Q360_JWT_SIGNING_KEY or OIDC_STATIC_VERIFICATION_KEY configured")
 
         return jwt.decode(
-            bearer_token,
-            key=signing_key,
-            algorithms=settings.OIDC_ALGORITHMS,
-            audience=settings.OIDC_AUDIENCE or None,
-            issuer=settings.OIDC_ISSUER or None,
+            bearer_token, key=signing_key, algorithms=settings.OIDC_ALGORITHMS,
+            audience=settings.OIDC_AUDIENCE or None, issuer=settings.OIDC_ISSUER or None,
             options={"require": ["exp", "sub"]},
         )
 

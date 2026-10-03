@@ -611,6 +611,13 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
                 }
                 for key, value in snapshot.items()
             }
+            current_rules = BusinessConfigurationResolver.get("rules.custom", effective_date=quote.effective_date)
+            if current_snapshot and current_rules is not None:
+                current_snapshot["rules.custom"] = {
+                    "configurationId": str(current_rules.id),
+                    "versionNo": current_rules.version_no,
+                    "checksum": current_rules.checksum,
+                }
             if current_snapshot and stored_snapshot == current_snapshot:
                 return latest
         elif not current_reference and snapshot:

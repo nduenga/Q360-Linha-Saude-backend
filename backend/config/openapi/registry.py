@@ -139,6 +139,7 @@ REGISTRY: dict[str, dict] = {
     "CustomerPortalPlanBenefitsView.get": {
         "response": d.PortalPlanBenefits, "queries": {"policyNumber": ("string", True, "Número da apólice do cliente.")},
     },
+    "CustomerPortalQuotesView.get": {"response": d.PortalQuotes},
     "CustomerPortalCoverageView.get": {
         "response": d.PolicyCoverage,
         "queries": {"policyNumber": ("string", True, "Número da apólice do cliente."),
@@ -199,6 +200,42 @@ REGISTRY.update(
             "response": _bc.BusinessConfigurationDocumentSerializer, "status": 201,
         },
         "BCDocumentDownloadView.get": {"media": "application/octet-stream"},
+    }
+)
+
+# Platform administration (apps.platform_admin) - super administrators only.
+from apps.platform_admin.interfaces import serializers as _pl  # noqa: E402
+
+REGISTRY.update(
+    {
+        "PlatformLoginView.post": {"request": _pl.PlatformLoginSerializer, "response": _pl.PlatformLoginResponseSerializer, "public": True},
+        "PlatformMeView.get": {"response": _pl.PlatformAdminSerializer},
+        "PlatformChangePasswordView.post": {"request": _pl.ChangePasswordSerializer, "empty": True, "status": 204},
+        "PlatformTenantListCreateView.get": {
+            "response": _pl.TenantResponseSerializer, "many": True,
+            "queries": {"status": ("string", False, "ACTIVE, SUSPENDED ou INACTIVE."), "q": ("string", False, "Pesquisa por código ou nome.")},
+        },
+        "PlatformTenantListCreateView.post": {
+            "request": _pl.CreateTenantSerializer, "response": _pl.CreateTenantResponseSerializer, "status": 201,
+            "notes": "Cria o tenant, os dados da empresa e o primeiro ADMIN; a palavra-passe temporária só aparece nesta resposta.",
+        },
+        "PlatformTenantDetailView.get": {"response": _pl.TenantDetailSerializer},
+        "PlatformTenantDetailView.patch": {
+            "request": _pl.UpdateTenantSerializer, "response": _pl.TenantResponseSerializer,
+            "notes": "Suspender (SUSPENDED/INACTIVE) bloqueia de imediato o staff e o portal do tenant.",
+        },
+        "PlatformTenantAdminsView.post": {"request": _pl.CreatePlatformAdminSerializer, "response": _pl.TemporaryPasswordResponseSerializer, "status": 201},
+        "PlatformTenantAccountResetView.post": {"request": d.EmptyRequest, "response": _pl.TemporaryPasswordResponseSerializer},
+        "PlatformAdminListCreateView.get": {"response": _pl.PlatformAdminSerializer, "many": True},
+        "PlatformAdminListCreateView.post": {"request": _pl.CreatePlatformAdminSerializer, "response": _pl.CreatePlatformAdminResponseSerializer, "status": 201},
+        "PlatformAdminStatusView.patch": {"request": _pl.UpdatePlatformAdminStatusSerializer, "response": _pl.PlatformAdminSerializer},
+        "PlatformAdminResetPasswordView.post": {"request": d.EmptyRequest, "response": _pl.TemporaryPasswordResponseSerializer},
+        "PlatformAuditView.get": {
+            "response": _pl.PlatformAuditEventSerializer, "many": True,
+            "queries": {"action": ("string", False, "Ação."), "entityType": ("string", False, "Tipo de entidade."),
+                        "entityId": ("string", False, "Id da entidade."), "actorId": ("string", False, "Quem fez."),
+                        "limit": ("integer", False, "Máximo 500 (por omissão 100).")},
+        },
     }
 )
 

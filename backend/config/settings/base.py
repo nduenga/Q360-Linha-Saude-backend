@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "apps.claims",
     "apps.customer_portal",
     "apps.staff_accounts",
+    "apps.platform_admin",
     "apps.business_config",
     "drf_spectacular",
 ]
@@ -118,6 +119,7 @@ MIGRATION_MODULES = {
     "business_config": "apps.business_config.infrastructure.migrations",
     "customer_portal": "apps.customer_portal.infrastructure.migrations",
     "staff_accounts": "apps.staff_accounts.infrastructure.migrations",
+    "platform_admin": "apps.platform_admin.infrastructure.migrations",
 }
 
 ROOT_URLCONF = "config.urls"
@@ -230,6 +232,8 @@ SPECTACULAR_SETTINGS = {
         "ProductStatusEnum": "apps.product.domain.enums.ProductStatus",
         "PlanStatusEnum": "apps.product.domain.enums.PlanStatus",
         "VersionedConfigStatusEnum": "apps.product.domain.enums.VersionedConfigStatus",
+        "TenantStatusEnum": ["ACTIVE", "SUSPENDED", "INACTIVE"],
+        "PlatformAdminStatusEnum": ["ACTIVE", "DISABLED"],
     },
     "SCHEMA_PATH_PREFIX": "/api/v1",
     "SECURITY": [{"oauth2": ["q360.read"]}],
@@ -288,6 +292,13 @@ OIDC_STATIC_VERIFICATION_KEY = os.environ.get("OIDC_STATIC_VERIFICATION_KEY", ""
 Q360_JWT_SIGNING_KEY = os.environ.get("Q360_JWT_SIGNING_KEY", "")
 
 Q360_STAFF_ACCESS_TOKEN_TTL_SECONDS = int(os.environ.get("Q360_STAFF_ACCESS_TOKEN_TTL_SECONDS", "1800"))
+
+# --- Platform administrator identity ----------------------------------
+# MUST differ from Q360_JWT_SIGNING_KEY.
+PLATFORM_ADMIN_JWT_SIGNING_KEY = os.environ.get("PLATFORM_ADMIN_JWT_SIGNING_KEY", "")
+PLATFORM_ADMIN_JWT_ISSUER = os.environ.get("PLATFORM_ADMIN_JWT_ISSUER", "q360-platform")
+PLATFORM_ADMIN_JWT_AUDIENCE = os.environ.get("PLATFORM_ADMIN_JWT_AUDIENCE", "q360-platform-api")
+PLATFORM_ADMIN_ACCESS_TOKEN_TTL_SECONDS = int(os.environ.get("PLATFORM_ADMIN_ACCESS_TOKEN_TTL_SECONDS", "1800"))
 Q360_STAFF_REFRESH_TOKEN_TTL_SECONDS = int(os.environ.get("Q360_STAFF_REFRESH_TOKEN_TTL_SECONDS", str(30 * 24 * 3600)))
 # Same lockout policy shape as OD-PORTAL-003 (customer portal), applied to
 # staff logins instead of OTP verification.

@@ -22,6 +22,7 @@ from apps.foundation.domain.actor import Actor
 from apps.foundation.domain.permissions import Role, scopes_for_roles
 from apps.foundation.domain.tenant import TenantId
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
+from apps.foundation.infrastructure.models import Tenant
 from apps.staff_accounts.domain.errors import (
     InvalidRefreshTokenError,
     InvalidStaffCredentialsError,
@@ -78,6 +79,10 @@ class StaffAccountAuthService:
         account = StaffAccount.all_tenants.filter(email__iexact=email).first()
         if account is None or account.status != StaffAccount.ACTIVE:
             raise InvalidStaffCredentialsError("Invalid email or password")
+
+        tenant = Tenant.objects.filter(id=account.tenant_id).first()
+        if tenant is None or tenant.status != "ACTIVE":
+            raise InvalidStaffCredentialsError("Tenant is suspended or inactive")
 
         _bind_actor_for(account.tenant_id, str(account.id))
 
@@ -145,6 +150,10 @@ class StaffAccountAuthService:
             raise InvalidRefreshTokenError("Refresh token is invalid, expired, or already used")
         if not check_password(secret, row.token_hash):
             raise InvalidRefreshTokenError("Refresh token is invalid, expired, or already used")
+
+        tenant = Tenant.objects.filter(id=row.tenant_id).first()
+        if tenant is None or tenant.status != "ACTIVE":
+            raise InvalidRefreshTokenError("Tenant is suspended or inactive")
 
         _bind_actor_for(row.tenant_id, str(row.staff_account_id))
         account = StaffAccount.objects.filter(id=row.staff_account_id).first()

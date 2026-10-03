@@ -61,7 +61,14 @@ from apps.pricing.infrastructure.models import (
     RatingTable,
 )
 from apps.product.infrastructure.models import PricingParameterSet
+from apps.business_config.application.custom_rules import (
+    PublishedRules,
+    load_published_rules,
+    person_facts,
+    quote_facts,
+)
 from apps.business_config.application.resolver import BusinessConfigurationResolver
+from apps.business_config.domain.custom_rules import apply_pricing_action, describe as describe_rule
 from apps.business_config.application.pricing import (
     PublishedBusinessPricing,
     resolve_adjustments as resolve_business_adjustments,
@@ -292,6 +299,11 @@ def _execute(
 
     per_member_context: dict[str, dict[str, Any]] = context.get("members") or {}
 
+    custom_rules = load_published_rules(effective_date)
+    config_snapshot = dict(business_pricing.versions) if business_pricing else {}
+    if custom_rules.version is not None:
+        config_snapshot["rules.custom"] = custom_rules.version
+
     pricing_run = PricingRun.objects.create(
         tenant_id=tenant_id.value,
         plan=plan,
@@ -304,7 +316,7 @@ def _execute(
         rounding_policy_code=ROUNDING_POLICY_CODE,
         rounding_policy_version=ROUNDING_POLICY_VERSION,
         input_snapshot_json=request_snapshot,
-        business_configuration_snapshot_json=(business_pricing.versions if business_pricing else {}),
+        business_configuration_snapshot_json=config_snapshot,
         correlation_id=correlation_id,
     )
 
@@ -327,6 +339,7 @@ def _execute(
                 plan_context=plan_context,
                 commercial_adjustments=commercial_adjustments,
                 pre_existing=pre_existing,
+                custom_rules=custom_rules,
             )
             PricingRun.objects.filter(id=pricing_run.id).update(
                 status=PricingRunStatus.CALCULATED.value,
@@ -398,7 +411,9 @@ def _run_calculation(
     plan_context: PlanPricingContext,
     commercial_adjustments: list[CommercialAdjustment],
     pre_existing: dict[str, dict[str, Any]],
+    custom_rules: PublishedRules | None = None,
 ) -> Decimal:
+    custom_rules = custom_rules or PublishedRules()
     members_by_id = {str(m.id): m for m in members}
     order = 0
     trace_seq = 0
@@ -424,6 +439,7 @@ def _run_calculation(
             "ratingTableCode": rating_table_code,
             "basePremium": str(base_premium) if base_premium is not None else None,
             "businessConfigurationVersions": business_pricing.versions if business_pricing else {},
+            "customRulesVersion": custom_rules.version,
         },
     )
 
@@ -438,6 +454,15 @@ def _run_calculation(
                 rule_code=adjustment.code,
                 message=f"Ajuste {adjustment.code} refere um membro que não faz parte do cálculo: ignorado.",
             )
+
+    person_rules = custom_rules.pricing("PERSON")
+    quote_rules = custom_rules.pricing("QUOTE")
+    rule_version_no = str(custom_rules.version["versionNo"]) if custom_rules.version else None
+    relationship_categories: dict[str, str] = {}
+    if any(c.field == "relationship" for r in person_rules for c in r.conditions):
+        from apps.client.infrastructure.models import RelationshipCode
+
+        relationship_categories = {rc.code: rc.category for rc in RelationshipCode.objects.all()}
 
     # Preserve the caller's requested memberIds order for determinism
     # (same input -> same component order -> same output, S4-02 AC).
@@ -622,6 +647,36 @@ def _run_calculation(
                       output_data={"resultAmount": str(running_amount)})
                 order += 1
 
+        if person_rules:
+            facts = person_facts(
+                age=member_context.get("age", _member_age(member, pricing_run.effective_date)),
+                members_count=len(member_ids),
+                plan_code=str(plan.code),
+                plan_name=str(plan.name),
+                dimensions=plan_context.dimensions,
+                relationship=relationship_categories.get(member.relationship_code),
+            )
+            for custom in person_rules:
+                if not custom.matches(facts):
+                    continue
+                before = running_amount
+                new_amount, factor = apply_pricing_action(custom, running_amount)
+                running_amount = round_amount(new_amount)
+                _guard_amount(running_amount)
+                PricingComponent.objects.create(
+                    tenant_id=tenant_id, pricing_run=pricing_run, member=member,
+                    component_order=order, component_code=custom.code,
+                    component_type=PricingComponentType.ADJUSTMENT.value,
+                    factor_value=factor, adjustment_amount=round_amount(running_amount - before),
+                    result_amount=running_amount,
+                    source_code=f"BUSINESS_CONFIG:rules.custom:{custom.code}", source_version=rule_version_no,
+                    metadata_json={"rule": custom.name, "message": custom.message, "action": custom.action},
+                )
+                trace("CUSTOM_RULE_APPLIED", rule_code=custom.code, message=describe_rule(custom),
+                      input_data={"memberId": str(member_id), "action": custom.action, "value": str(custom.value)},
+                      output_data={"resultAmount": str(running_amount)})
+                order += 1
+
         if rule_config is not None:
             for adjustment in rule_config.adjustments:
                 if not adjustment.matches(member_context):
@@ -716,6 +771,31 @@ def _run_calculation(
         total_amount += running_amount
 
     total_amount = round_amount(total_amount)
+
+    if quote_rules:
+        facts = quote_facts(
+            members_count=len(member_ids), plan_code=str(plan.code), plan_name=str(plan.name),
+            dimensions=plan_context.dimensions,
+        )
+        for custom in quote_rules:
+            if not custom.matches(facts):
+                continue
+            before_total = total_amount
+            new_total, factor = apply_pricing_action(custom, total_amount)
+            total_amount = round_amount(new_total)
+            _guard_amount(total_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id, pricing_run=pricing_run, member=None, component_order=order,
+                component_code=custom.code, component_type=PricingComponentType.ADJUSTMENT.value,
+                factor_value=factor, adjustment_amount=round_amount(total_amount - before_total),
+                result_amount=total_amount,
+                source_code=f"BUSINESS_CONFIG:rules.custom:{custom.code}", source_version=rule_version_no,
+                metadata_json={"rule": custom.name, "message": custom.message, "action": custom.action},
+            )
+            trace("CUSTOM_RULE_APPLIED", rule_code=custom.code, message=describe_rule(custom),
+                  input_data={"action": custom.action, "value": str(custom.value), "scope": "QUOTE"},
+                  output_data={"totalAmount": str(total_amount)})
+            order += 1
 
     if business_pricing is not None:
         for adjustment in resolve_business_adjustments(

@@ -24,7 +24,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.customer_portal.application.self_service import list_my_policies, resolve_my_policy
+from apps.customer_portal.application.self_service import list_my_policies, list_my_quotes, resolve_my_policy
 from apps.customer_portal.domain.errors import PortalResourceNotFoundError
 from apps.customer_portal.interfaces.authentication import CustomerPortalJwtAuthentication
 from apps.customer_portal.interfaces.permissions import IsCustomerPortalActor
@@ -92,6 +92,18 @@ class CustomerPortalMeView(APIView):
                 }
             )
         return Response({"policies": items}, status=200)
+
+
+class CustomerPortalQuotesView(APIView):
+    """`GET /customer-portal/me/quotes` — the caller's own quotes with a
+    customer-facing status (read-only). Scoped to the proposers linked to the
+    authenticated account, never to anything in the request."""
+
+    authentication_classes = [CustomerPortalJwtAuthentication]
+    permission_classes = [IsCustomerPortalActor]
+
+    def get(self, request):
+        return Response({"quotes": list_my_quotes()}, status=200)
 
 
 class CustomerPortalCoverageView(APIView):

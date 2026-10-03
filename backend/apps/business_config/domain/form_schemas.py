@@ -1,7 +1,10 @@
-def f(name,label,type_,required=False,options=None):
+def f(name,label,type_,required=False,options=None,labels=None,help=None):
     x={"name":name,"label":label,"type":type_,"required":required}
     if options:x["options"]=options
+    if labels:x["optionLabels"]=labels
+    if help:x["help"]=help
     return x
+from apps.business_config.domain import custom_rules as cr
 from apps.foundation.domain.permissions import Permission, Role
 PLANS=["Base","Conforto","Premium"]
 ROLES=[r.value for r in Role]
@@ -34,5 +37,29 @@ FORM_SCHEMAS={
 ,"security.role_permissions":{"sections":[{"key":"roles","label":"Permissões por perfil","repeatable":True,"fields":[f("role","Perfil","select",True,ROLES),f("permissions","Permissões","multiselect",True,PERMISSIONS)]}]}
 ,"proposal.branding":{"sections":[{"key":"branding","label":"Identidade visual","fields":[f("company_name","Nome da empresa","text",True),f("primary_color","Cor principal (#RRGGBB)","text"),f("tagline","Lema","text"),f("footer_text","Rodapé","textarea")]}]}
 }
+
+def _condition_fields(suffix,optional):
+    n=" (2.ª condição, opcional)" if suffix else ""
+    return [
+        f("field"+suffix,"Quando"+n,"select",not optional,list(cr.FIELDS),cr.FIELD_LABELS),
+        f("operator"+suffix,"Comparação","select",not optional,list(cr.OPERATORS),cr.OPERATOR_LABELS),
+        f("value"+suffix,"Valor","text",not optional,help="Número (ex.: 60), ou a opção escolhida (ex.: Premium, GROUP, SPOUSE)"),
+        f("value_to"+suffix,"Até (só para 'está entre')","text"),
+    ]
+
+RULES_CUSTOM={"sections":[{"key":"rules","label":"Regras (Quando… então…)","repeatable":True,"fields":[
+    f("name","Nome da regra","text",True,help="Ex.: Agravamento para maiores de 60 anos"),
+    f("active","Ativa","boolean",True),
+    f("scope","Aplica-se a","select",True,list(cr.SCOPES),cr.SCOPE_LABELS),
+    *_condition_fields("",False),
+    *_condition_fields("_2",True),
+    f("action","Então","select",True,list(cr.ACTIONS),cr.ACTION_LABELS),
+    f("amount","Valor da ação","decimal",help="Percentagem, multiplicador ou valor em moeda, conforme a ação; não é preciso para análise/recusa/aviso"),
+    f("message","Mensagem para o utilizador","textarea",help="Aparece nos requisitos da cotação e no histórico do cálculo"),
+    f("order","Ordem de aplicação","integer",help="As regras de prémio aplicam-se por esta ordem (1, 2, 3…)"),
+    f("code","Código (opcional)","text",help="Identificador curto; se vazio é gerado"),
+]}]}
+FORM_SCHEMAS["rules.custom"]=RULES_CUSTOM
+
 def get_form_schema(key):
     return FORM_SCHEMAS.get(key,{"sections":[{"key":"value","label":"Configuração","fields":[f("value","Valor","json",True)]}]})

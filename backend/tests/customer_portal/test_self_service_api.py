@@ -80,6 +80,7 @@ def _setup_active_policy_with_member(admin_client, tenant, *, policy_number: str
     )
 
     return {
+        "quoteId": quote["id"],
         "policyId": str(policy.id),
         "policyNumber": policy_number,
         "registrationNumber": registration_number,
@@ -248,3 +249,55 @@ def test_eligibility_rejects_a_policy_not_belonging_to_the_caller(admin_client, 
         "/api/v1/customer-portal/eligibility", {"policyNumber": "APO-ELIG-005"}, format="json"
     )
     assert response.status_code == 404
+
+
+def _set_quote(scope: dict, **fields) -> None:
+    from apps.quote.infrastructure.models import Quote
+
+    Quote.all_tenants.filter(id=scope["quoteId"]).update(**fields)
+
+
+@pytest.mark.django_db
+def test_my_quotes_lists_only_own_quotes_with_translated_status(admin_client, tenant):
+    mine = _setup_active_policy_with_member(admin_client, tenant, policy_number="APO-Q-001", registration_number="771111111LA011")
+    _setup_active_policy_with_member(admin_client, tenant, policy_number="APO-Q-002", registration_number="772222222LA022")
+    token = _login(tenant, mine)
+    _set_quote(mine, status="BOUND")  # the fixture quote is a DRAFT, which the portal hides
+
+    response = _portal_client(token).get("/api/v1/customer-portal/me/quotes")
+
+    assert response.status_code == 200, response.data
+    quotes = response.data["quotes"]
+    assert len(quotes) == 1
+    assert quotes[0]["policyNumber"] == "APO-Q-001"
+    assert quotes[0]["status"] == "CONTRACTED"
+    assert quotes[0]["plan"]["name"] == "Plan A"
+    assert set(quotes[0]) == {
+        "quoteNumber", "status", "effectiveDate", "validUntil", "product", "plan",
+        "totalAmount", "currencyCode", "policyNumber", "createdAt",
+    }
+
+
+@pytest.mark.django_db
+def test_my_quotes_hides_drafts_and_expires_stale_approved_quotes(admin_client, tenant):
+    scope = _setup_active_policy_with_member(admin_client, tenant, policy_number="APO-Q-003", registration_number="773333333LA033")
+    token = _login(tenant, scope)
+    client = _portal_client(token)
+
+    _set_quote(scope, status="DRAFT")
+    assert client.get("/api/v1/customer-portal/me/quotes").data["quotes"] == []
+
+    _set_quote(scope, status="APPROVED", valid_until=datetime.date.today() + datetime.timedelta(days=5))
+    assert client.get("/api/v1/customer-portal/me/quotes").data["quotes"][0]["status"] == "AWAITING_SIGNATURE"
+
+    _set_quote(scope, valid_until=datetime.date.today() - datetime.timedelta(days=1))
+    assert client.get("/api/v1/customer-portal/me/quotes").data["quotes"][0]["status"] == "EXPIRED"
+
+    _set_quote(scope, status="IN_REVIEW")
+    assert client.get("/api/v1/customer-portal/me/quotes").data["quotes"][0]["status"] == "IN_REVIEW"
+    assert client.get("/api/v1/customer-portal/me/quotes").data["quotes"][0]["totalAmount"] is None
+
+
+@pytest.mark.django_db
+def test_my_quotes_requires_a_portal_token():
+    assert APIClient().get("/api/v1/customer-portal/me/quotes").status_code == 401

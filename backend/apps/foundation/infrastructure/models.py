@@ -45,6 +45,9 @@ class Tenant(models.Model):
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=200)
     status = models.CharField(max_length=20, default="ACTIVE")
+    # Dados da empresa cliente (razão social, NIF, contactos, morada), geridos
+    # pela plataforma (apps.platform_admin).
+    profile_json = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     row_version = models.BigIntegerField(default=0)

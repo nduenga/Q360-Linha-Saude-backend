@@ -131,3 +131,59 @@ def test_tariff_change_reprices_quote_and_records_versions(admin_client, approve
     listed = admin_client.get(BASE, {"configKey": "pricing.reference_premiums"}).data["items"]
     old = next(i for i in listed if i["version"] == 1)
     assert old["effectiveTo"] == "2026-01-31"
+
+
+def _publish(creator, approver, key: str, value: dict, effective_from: str = "2026-01-01") -> None:
+    created = creator.post(BASE, {"configKey": key, "value": value, "effectiveFrom": effective_from}, format="json")
+    assert created.status_code == 201, created.data
+    cid = created.data["id"]
+    assert creator.post(f"{BASE}/{cid}", {"action": "submit"}, format="json").status_code == 200
+    assert approver.post(f"{BASE}/{cid}/approve").status_code == 200
+
+
+@pytest.mark.django_db
+def test_custom_rules_change_price_and_requirements_without_code(admin_client, approver):
+    plan_ref = _plan(admin_client, product_code="BC-RULES")
+    proposer_id = _proposer(admin_client)
+    member_id = _member(admin_client, proposer_id=proposer_id)
+    rule = admin_client.post(
+        "/api/v1/rule-versions",
+        {"code": "ELIG-RULES", "name": "Eligibility", "ruleDomain": "ELIGIBILITY", "effectiveFrom": "2026-01-01",
+         "artifactType": "JSON", "artifactRef": json.dumps({})},
+        format="json",
+    ).data
+    admin_client.post(f"/api/v1/configuration/rule-version/{rule['id']}/publish")
+    _publish_all(admin_client, approver, "100000", "2026-01-01")
+
+    quote = admin_client.post(
+        "/api/v1/quotes",
+        {"proposerId": proposer_id, "planId": plan_ref["planId"], "effectiveDate": "2026-06-01"},
+        format="json",
+    ).data
+    admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")
+    before = admin_client.post(f"/api/v1/quotes/{quote['id']}/price")
+    assert before.status_code == 200 and before.data["totalAmount"].startswith("100000")
+
+    base_rule = {"active": True, "operator": "GTE", "value": "0"}
+    _publish(admin_client, approver, "rules.custom", {"rules": [
+        {**base_rule, "name": "Agravamento por idade", "scope": "PERSON", "field": "age", "action": "INCREASE_PERCENT",
+         "amount": "10", "order": 1, "code": "AGE_LOADING", "message": "Agravamento etário"},
+        {**base_rule, "name": "Desconto de volume", "scope": "QUOTE", "field": "members_count", "action": "DISCOUNT_PERCENT",
+         "amount": "5", "order": 2, "code": "VOLUME"},
+        {**base_rule, "name": "Aviso de revisão", "scope": "PERSON", "field": "age", "action": "REQUIRE_MEDICAL_REVIEW",
+         "message": "Rever historial clínico", "code": "REVIEW"},
+    ]})
+
+    # Publicar regras novas torna o cálculo anterior desatualizado.
+    after = admin_client.post(f"/api/v1/quotes/{quote['id']}/price")
+    assert after.status_code == 200, after.data
+    assert after.data["pricingRunId"] != before.data["pricingRunId"]
+    assert after.data["totalAmount"].startswith("104500")  # 100000 × 1,10 × 0,95
+    assert after.data["versions"]["businessConfigurationVersions"]["rules.custom"]["versionNo"] == 1
+
+    again = admin_client.post(f"/api/v1/quotes/{quote['id']}/price")
+    assert again.data["pricingRunId"] == after.data["pricingRunId"]
+
+    requirements = admin_client.get(f"/api/v1/quotes/{quote['id']}/requirements").data
+    codes = {i["code"]: i for i in requirements["warnings"]}
+    assert codes["CUSTOM_RULE_MEDICAL_REVIEW"]["message"] == "Rever historial clínico"

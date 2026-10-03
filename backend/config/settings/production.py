@@ -36,3 +36,9 @@ if not CUSTOMER_PORTAL_JWT_SECRET:
         "CUSTOMER_PORTAL_JWT_SECRET must be set in production (ROADMAP_PORTAL_CLIENTE.md "
         "Fase 0 — must never fall back to SECRET_KEY or an OIDC key)."
     )
+
+
+if not PLATFORM_ADMIN_JWT_SIGNING_KEY:
+    raise RuntimeError("PLATFORM_ADMIN_JWT_SIGNING_KEY must be configured in production.")
+if len(PLATFORM_ADMIN_JWT_SIGNING_KEY) < 32:
+    raise RuntimeError("PLATFORM_ADMIN_JWT_SIGNING_KEY must be at least 32 characters in production.")

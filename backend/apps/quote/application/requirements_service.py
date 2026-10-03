@@ -30,8 +30,10 @@ import datetime
 from decimal import Decimal
 from typing import Any
 
+from apps.business_config.application.custom_rules import person_facts, quote_facts
 from apps.business_config.application.overlays import effective_exclusions, effective_plan_settings
 from apps.business_config.application.readers import BusinessSnapshot, integer
+from apps.business_config.domain.custom_rules import describe as describe_rule, parse_rules
 from apps.client.infrastructure.models import RelationshipCode
 from apps.foundation.domain.problem import DomainProblem
 from apps.pricing.application.plan_dimensions import main_capital, resolve_plan_pricing_context
@@ -61,6 +63,19 @@ def _age_on(date_of_birth: datetime.date | None, on: datetime.date) -> int | Non
     if (on.month, on.day) < (date_of_birth.month, date_of_birth.day):
         years -= 1
     return years
+
+
+_CUSTOM_RULE_ITEMS = {
+    "DECLINE": ("ERROR", "CUSTOM_RULE_DECLINE"),
+    "REQUIRE_MEDICAL_REVIEW": ("WARNING", "CUSTOM_RULE_MEDICAL_REVIEW"),
+    "REQUIRE_TECHNICAL_REVIEW": ("WARNING", "CUSTOM_RULE_TECHNICAL_REVIEW"),
+    "WARN": ("WARNING", "CUSTOM_RULE_WARNING"),
+}
+
+
+def _custom_rule_item(rule, *, member_id: str | None = None) -> dict[str, Any]:
+    severity, code = _CUSTOM_RULE_ITEMS[rule.action]
+    return _item(severity, code, rule.message or describe_rule(rule), member_id=member_id, ruleCode=rule.code, ruleName=rule.name)
 
 
 def _item(severity: str, code: str, message: str, *, member_id: str | None = None, **extra: Any) -> dict[str, Any]:
@@ -185,6 +200,18 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
         if rule.get("age_from") is None and rule.get("age_to") is None and not rule.get("relationship"):
             items.append(_item("INFO", "ACCEPTANCE_RULE", f"Regra de aceitação ({rule.get('decision')}): {rule.get('condition')}", decision=rule.get("decision")))
 
+    custom_rules = parse_rules(snapshot.rows("rules.custom", "rules"))
+    custom_dimensions = {
+        "segment": segment,
+        "participationOption": (quote.selection_json or {}).get("participationOption") or settings.get("participationOption"),
+    }
+    quote_facts_ = quote_facts(
+        members_count=len(counted), plan_code=str(plan.code), plan_name=str(plan.name), dimensions=custom_dimensions
+    )
+    for rule in custom_rules:
+        if rule.scope == "QUOTE" and not rule.is_pricing and rule.matches(quote_facts_):
+            items.append(_custom_rule_item(rule))
+
     for coverage in coverages:
         config = coverage["configuration"]
         if coverage["code"] == "MEDICAL_EVACUATION":
@@ -290,6 +317,17 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
             member_items.append(
                 _item("ERROR" if decision == "DECLINE" else "WARNING", code, f"Regra de aceitação: {rule.get('condition')}" + (f" — {rule['notes']}" if rule.get("notes") else ""), member_id=member_id)
             )
+        person_facts_ = person_facts(
+            age=age,
+            members_count=len(counted),
+            plan_code=str(plan.code),
+            plan_name=str(plan.name),
+            dimensions=custom_dimensions,
+            relationship=category,
+        )
+        for rule in custom_rules:
+            if rule.scope == "PERSON" and not rule.is_pricing and rule.matches(person_facts_):
+                member_items.append(_custom_rule_item(rule, member_id=member_id))
         items.extend(member_items)
         members_report[member_id] = {
             "ageAtEffectiveDate": age,

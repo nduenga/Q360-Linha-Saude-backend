@@ -18,7 +18,7 @@ from apps.foundation.domain.tenant import TenantId
 @dataclasses.dataclass(frozen=True, slots=True)
 class Actor:
     actor_id: str
-    tenant_id: TenantId
+    tenant_id: TenantId | None
     roles: frozenset[Role]
     scopes: frozenset[Scope] = frozenset()
     actor_type: str = "USER"
@@ -35,8 +35,13 @@ class Actor:
 
     @property
     def permissions(self) -> frozenset[Permission]:
+        if self.actor_type == "PLATFORM_ADMIN":
+            return frozenset()
+
         granted: set[Permission] = set()
-        by_role = effective_role_permissions(self.tenant_id.value if self.actor_type != "CUSTOMER" else None)
+        by_role = effective_role_permissions(
+            self.tenant_id.value if self.actor_type != "CUSTOMER" and self.tenant_id is not None else None
+        )
         for role in self.roles:
             granted |= by_role.get(role, frozenset())
         return frozenset(granted)

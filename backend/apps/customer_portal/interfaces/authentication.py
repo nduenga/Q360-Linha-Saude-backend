@@ -44,6 +44,10 @@ class CustomerPortalJwtAuthentication(authentication.BaseAuthentication):
             actor_type="CUSTOMER",
             customer_proposer_ids=frozenset(claims.get("proposer_ids") or []),
         )
+        from apps.foundation.application import tenant_status
+
+        if tenant_status.is_blocked(actor.tenant_id.value):
+            raise exceptions.AuthenticationFailed("Tenant is suspended or inactive.")
         CurrentActorProvider.bind(actor)
         return ActorUser(actor), token
 
