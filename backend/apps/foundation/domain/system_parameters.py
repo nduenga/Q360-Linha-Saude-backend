@@ -62,6 +62,17 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
             used_by="Cotações: `valid_until` ao criar/alterar a data de início.",
         ),
         ParameterDefinition(
+            code="documents.signed_url_ttl_seconds",
+            value_type="INTEGER",
+            category=OPERATIONAL,
+            default=900,
+            minimum=60,
+            maximum=86400,
+            unit="segundos",
+            description="Validade das ligações assinadas para descarregar propostas e outros documentos.",
+            used_by="Documentos: POST /documents/{id}/signed-url.",
+        ),
+        ParameterDefinition(
             code="renewal.default_medical_inflation_pct",
             value_type="DECIMAL",
             category=OPERATIONAL,

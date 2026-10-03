@@ -21,6 +21,7 @@ from typing import Any, Callable
 
 from django.db import transaction
 
+from apps.business_config.application.overlays import effective_plan_settings
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.change_audit import change_metadata, require_reason
 from apps.foundation.application.context import CurrentActorProvider
@@ -72,7 +73,7 @@ def clone_quote(*, quote: Quote, effective_date: datetime.date | None, reason: s
                 skipped.append(f"{qm.member_id}: {exc}")
         copy.refresh_from_db()
 
-        selection = resolve_plan_pricing_context(plan=copy.plan, selection=quote.selection_json).selection
+        selection = resolve_plan_pricing_context(plan=copy.plan, selection=quote.selection_json, effective_date=copy.effective_date).selection
         Quote.objects.filter(id=copy.id).update(selection_json=selection)
         for adj in QuoteAdjustment.objects.filter(quote=quote, status="ACTIVE").order_by("applied_at", "id"):
             if adj.member_id and not QuoteMember.objects.filter(quote=copy, member_id=adj.member_id).exists():
@@ -130,7 +131,8 @@ def create_renewal(
         renewal = quote_service.create_quote(
             proposer_id=policy.proposer_id, plan_id=target_plan_id, effective_date=renewal_date
         )
-        permanence = ((renewal.plan.settings_json or {}).get("permanenceAge") or {}).get("max")
+        effective_settings = effective_plan_settings(renewal.plan, renewal_date)
+        permanence = (effective_settings.get("permanenceAge") or {}).get("max")
         for policy_member in policy.members.select_related("member").order_by("created_at", "id"):
             if policy_member.status != "ACTIVE" or policy_member.exclusion_date is not None:
                 skipped.append({"memberId": str(policy_member.member_id), "reason": "NOT_ACTIVE_IN_POLICY"})
@@ -148,12 +150,14 @@ def create_renewal(
 
         selection = {}
         if same_plan and source_quote.selection_json:
-            selection = resolve_plan_pricing_context(plan=renewal.plan, selection=source_quote.selection_json).selection
+            selection = resolve_plan_pricing_context(plan=renewal.plan, selection=source_quote.selection_json, effective_date=renewal.effective_date).selection
         for source_member in source_quote.members.exclude(pre_existing_json={}):
             QuoteMember.objects.filter(quote=renewal, member_id=source_member.member_id).update(
                 pre_existing_json=source_member.pre_existing_json
             )
-        indexation = (renewal.plan.settings_json or {}).get("capitalIndexation") or {}
+        indexation = effective_settings.get("capitalIndexation") or {}
+        deadlines = effective_settings.get("renewalDeadlines") or {}
+        rules = effective_settings.get("renewal") or {}
         renewal_json = {
             "sourcePolicyId": str(policy.id),
             "sourcePolicyNumber": policy.policy_number,
@@ -164,10 +168,21 @@ def create_renewal(
             "carriedMembers": carried,
             "skippedMembers": skipped,
             "capitalIndexation": {"medicalInflationPct": indexation.get("medicalInflationPct"), "applied": False},
+            "deadlines": deadlines,
+            "rules": rules,
         }
-        Quote.objects.filter(id=renewal.id).update(
-            quote_type="RENEWAL", source_policy_id=policy.id, renewal_json=renewal_json, selection_json=selection
-        )
+        # `renewal.deadlines.acceptance_days`: prazo para o cliente aceitar a
+        # proposta de renovação. A validade da cotação nunca pode ser anterior
+        # à data de início (ck_quote_dates), por isso o prazo fica registado
+        # em `acceptanceDeadline` e a validade é a mais tardia das duas.
+        acceptance_days = deadlines.get("acceptance_days")
+        if isinstance(acceptance_days, int) and acceptance_days > 0:
+            deadline = datetime.date.today() + datetime.timedelta(days=acceptance_days)
+            renewal_json["acceptanceDeadline"] = deadline.isoformat()
+        updates: dict[str, Any] = {
+            "quote_type": "RENEWAL", "source_policy_id": policy.id, "renewal_json": renewal_json, "selection_json": selection,
+        }
+        Quote.objects.filter(id=renewal.id).update(**updates)
         renewal.refresh_from_db()
         renewal = _try_reprice(renewal)
         quote_version_service.record_version(quote=renewal, source="RENEWAL", reason=f"Renovação da apólice {policy.policy_number}", dedupe=False)
@@ -191,7 +206,7 @@ def propose_indexation(*, quote: Quote, pct: Decimal, rounding: Decimal) -> dict
     coverages by `pct` % (counts, percentages and participation values are
     untouched — only the money limits are indexed)."""
     factor = Decimal("1") + pct / Decimal("100")
-    plan_context = resolve_plan_pricing_context(plan=quote.plan, selection=quote.selection_json)
+    plan_context = resolve_plan_pricing_context(plan=quote.plan, selection=quote.selection_json, effective_date=quote.effective_date)
     overrides: dict[str, dict[str, Any]] = {}
     for coverage in plan_context.coverages:
         config = coverage["configuration"]
@@ -214,7 +229,7 @@ def apply_indexation(
     reason = require_reason(reason)
     from apps.foundation.application import system_parameter_service
 
-    configured = ((quote.plan.settings_json or {}).get("capitalIndexation") or {}).get("medicalInflationPct")
+    configured = (effective_plan_settings(quote.plan, quote.effective_date).get("capitalIndexation") or {}).get("medicalInflationPct")
     if configured is None:
         configured = system_parameter_service.get_stored_value("renewal.default_medical_inflation_pct")
     raw_pct = pct if pct is not None else configured

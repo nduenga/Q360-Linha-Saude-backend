@@ -18,10 +18,13 @@ Nada aqui conhece um valor de tarifa.
 """
 from __future__ import annotations
 
+import datetime
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
+from apps.business_config.application.overlays import apply_coverage_overlay, effective_plan_settings
+from apps.business_config.application.readers import BusinessSnapshot
 from apps.foundation.domain.problem import DomainProblem
 from apps.pricing.domain.errors import ReferencedEntityNotFoundError
 from apps.product.domain.coverage_config import validate_coverage_config
@@ -57,11 +60,24 @@ def main_capital(config: dict[str, Any]) -> str | None:
     return None
 
 
-def resolve_plan_pricing_context(*, plan: Plan, selection: dict[str, Any] | None) -> PlanPricingContext:
+def resolve_plan_pricing_context(
+    *, plan: Plan, selection: dict[str, Any] | None, effective_date: datetime.date | None = None
+) -> PlanPricingContext:
     selection = selection or {}
-    settings = plan.settings_json or {}
+    snapshot = BusinessSnapshot.load(effective_date)
+    settings = effective_plan_settings(plan, effective_date, snapshot)
     plan_benefits = {pb.benefit.code: pb for pb in PlanBenefit.objects.filter(plan=plan).select_related("benefit")}
     coverages = {code: (pb.configuration_json or {}) for code, pb in plan_benefits.items()}
+    # Configuração de negócio publicada (capitais, participação, carências...)
+    # sobrepõe-se à do plano; sem ela nada muda.
+    coverages, overlay_warnings = apply_coverage_overlay(
+        plan=plan,
+        settings=settings,
+        coverages=coverages,
+        benefits={c: (pb.benefit.name, pb.benefit.benefit_type, pb.benefit.definition_json) for c, pb in plan_benefits.items()},
+        on=effective_date,
+        snapshot=snapshot,
+    )
 
     # "E se..." simulation (R4): replace the configuration of some coverages
     # for this calculation only — the Plan itself is never touched. Each
@@ -70,7 +86,7 @@ def resolve_plan_pricing_context(*, plan: Plan, selection: dict[str, Any] | None
     if not isinstance(overrides, dict):
         raise ReferencedEntityNotFoundError("selection.coverageOverrides must be an object keyed by coverage code")
     normalised_overrides: dict[str, Any] = {}
-    override_warnings: list[dict[str, str]] = []
+    override_warnings: list[dict[str, str]] = [{**w, "scope": "businessConfig"} for w in overlay_warnings]
     for code, override in sorted(overrides.items()):
         pb = plan_benefits.get(code)
         if pb is None:

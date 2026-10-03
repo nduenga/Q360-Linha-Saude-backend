@@ -197,6 +197,24 @@ class EmptyRequest(s.Serializer):
     """Corpo vazio (`{}`) ou ausente."""
 
 
+class ClaimsMethodology(s.Serializer):
+    method = s.CharField()
+    indicative = s.BooleanField()
+    note = s.CharField()
+    formulas = s.ListField(child=s.CharField())
+    assumptionsRequired = s.ListField(child=s.CharField())
+    scenarios = s.ListField(child=s.CharField())
+    importFormats = s.JSONField()
+    dateFormats = s.ListField(child=s.CharField())
+    currencies = s.ListField(child=s.CharField())
+
+
+class SignedUrl(s.Serializer):
+    url = s.CharField(help_text="Caminho relativo; abre sem iniciar sessão até expirar.")
+    expiresAt = s.DateTimeField()
+    expiresInSeconds = s.IntegerField()
+
+
 # ------------------------------------------------------------------ pricing
 class PricingPreviewResponse(s.Serializer):
     pricingRunId = s.UUIDField(allow_null=True, help_text="Sempre null numa pré-visualização.")

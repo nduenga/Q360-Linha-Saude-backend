@@ -236,3 +236,22 @@ def get_run(run_id) -> ProjectionRun:
     if run is None:
         raise ProjectionNotFoundError(f"Projection {run_id} does not exist")
     return run
+
+
+def methodology() -> dict[str, Any]:
+    """Descrição transparente do método em uso, para a interface e para o
+    negócio validarem. É **indicativo** até as fórmulas atuariais do cliente
+    serem confirmadas (então muda aqui, sem alterar a API)."""
+    from apps.claims.application.import_service import IMPORT_FORMATS
+
+    return {
+        "method": METHOD,
+        "indicative": True,
+        "note": "Método simples de tendência; as fórmulas atuariais do cliente ainda não foram confirmadas.",
+        "formulas": [line.strip() for line in (__doc__ or "").splitlines() if "=" in line],
+        "assumptionsRequired": ["inflationPct", "frequencyTrendPct", "horizonMonths", "targetLossRatioPct"],
+        "scenarios": list(SCENARIOS),
+        "importFormats": IMPORT_FORMATS,
+        "dateFormats": ["YYYY-MM-DD", "DD/MM/YYYY"],
+        "currencies": ["AOA", "USD"],
+    }

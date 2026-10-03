@@ -48,3 +48,15 @@ class SegregationOfDutiesError(DomainProblem):
 
     http_status = 403
     problem_code = "SEC-403"
+
+
+class QuoteDeletionBlockedError(DomainProblem):
+    """A Quote cannot be deleted because it is in a protected status
+    (APPROVED / IN_REVIEW / BOUND) — decisions by an approver have been
+    registered and the quote may have downstream documents or policies.
+    Users should CANCEL or REJECT the quote instead to keep the audit trail.
+    Alternatively ask a product admin to delete it manually if the quote
+    was created by accident (no approver touches)."""
+
+    http_status = 409
+    problem_code = "QUOTE-DELETE-BLOCKED"

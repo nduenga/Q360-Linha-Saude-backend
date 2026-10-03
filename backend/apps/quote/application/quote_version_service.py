@@ -188,7 +188,7 @@ def restore_version(*, quote: Quote, version_no: int, reason: str | None) -> tup
 
     # Validate before touching anything: the plan/coverage configuration may
     # have changed since the version was saved.
-    resolve_plan_pricing_context(plan=quote.plan, selection=state["selection"])
+    resolve_plan_pricing_context(plan=quote.plan, selection=state["selection"], effective_date=quote.effective_date)
     for spec in state["adjustments"]:
         simulator_service._enforce_authority(quote, {"kind": spec["kind"], "value": Decimal(spec["value"])})
 

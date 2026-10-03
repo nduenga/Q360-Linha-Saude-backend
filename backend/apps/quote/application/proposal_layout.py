@@ -4,10 +4,12 @@ percorrem. A lógica de cada secção vive só aqui, por isso os três formatos
 dizem sempre exactamente o mesmo."""
 from __future__ import annotations
 
+import base64
 import html
 import io
 from typing import Any
 
+from apps.business_config.application.branding import load_logo
 from apps.quote.domain.proposal_template import SECTIONS, render_text
 
 Block = tuple  # ("title"|"heading"|"subheading"|"paragraph"|"note"|"bullets"|"kv"|"table"|"signature", ...)
@@ -35,7 +37,11 @@ def variables_for(content: dict[str, Any], *, document_number: str | None, gener
 
 
 def build_blocks(content: dict[str, Any], spec: dict[str, Any], variables: dict[str, Any]) -> list[Block]:
-    blocks: list[Block] = [("title", render_text(spec["title"], variables)), ("paragraph", render_text(spec["intro"], variables))]
+    blocks: list[Block] = []
+    branding = content.get("branding")
+    if branding and (branding.get("company") or branding.get("color")):
+        blocks.append(("brand", {**branding, "logo": load_logo(branding)}))
+    blocks += [("title", render_text(spec["title"], variables)), ("paragraph", render_text(spec["intro"], variables))]
     builders = {
         "summary": _summary,
         "population": _population,
@@ -49,11 +55,20 @@ def build_blocks(content: dict[str, Any], spec: dict[str, Any], variables: dict[
     }
     for section in spec["sections"]:
         builders[section](content, blocks)
+    for text in content.get("businessTexts") or []:
+        blocks += [("heading", text.get("title") or "Informação"), ("paragraph", text["text"])]
+    if content.get("requiredDocuments"):
+        blocks += [
+            ("heading", "Documentos a apresentar"),
+            ("bullets", [f"{d['documentType']}" + (f" — {d['description']}" if d.get("description") else "") for d in content["requiredDocuments"]]),
+        ]
     disclaimer = content.get("disclaimer") and render_text(spec.get("disclaimer") or content["disclaimer"], variables)
     if disclaimer:
         blocks.append(("note", disclaimer))
     if spec.get("footer"):
         blocks.append(("note", render_text(spec["footer"], variables)))
+    if branding and branding.get("footer"):
+        blocks.append(("note", branding["footer"]))
     return blocks
 
 
@@ -204,6 +219,18 @@ def _signature(content, blocks):
 
 
 # ---------------------------------------------------------------- renderers
+def _brand_html(brand: dict[str, Any]) -> str:
+    e = html.escape
+    color = brand.get("color") or "#1a1a1a"
+    logo = ""
+    if brand.get("logo"):
+        mime = "image/png" if brand["logo"].startswith(bytes([0x89, 0x50, 0x4E, 0x47])) else "image/jpeg"
+        logo = f"<img alt='' style='max-height:64px;margin-right:1rem' src='data:{mime};base64,{base64.b64encode(brand['logo']).decode()}'>"
+    name = f"<strong style='font-size:1.3rem;color:{e(color)}'>{e(brand['company'])}</strong>" if brand.get("company") else ""
+    tagline = f"<div class='note'>{e(brand['tagline'])}</div>" if brand.get("tagline") else ""
+    return f"<header style='display:flex;align-items:center;border-bottom:3px solid {e(color)};padding-bottom:.6rem;margin-bottom:1rem'>{logo}<div>{name}{tagline}</div></header>"
+
+
 def render_html(blocks: list[Block], *, title: str) -> bytes:
     e = html.escape
     out = [
@@ -218,7 +245,9 @@ def render_html(blocks: list[Block], *, title: str) -> bytes:
     ]
     for block in blocks:
         kind = block[0]
-        if kind == "title":
+        if kind == "brand":
+            out.append(_brand_html(block[1]))
+        elif kind == "title":
             out.append(f"<h1>{e(block[1])}</h1>")
         elif kind == "heading":
             out.append(f"<h2>{e(block[1])}</h2>")
@@ -272,7 +301,23 @@ def render_pdf(blocks: list[Block], *, title: str) -> bytes:
 
     for block in blocks:
         kind = block[0]
-        if kind == "title":
+        if kind == "brand":
+            brand = block[1]
+            accent = colors.HexColor(brand["color"]) if brand.get("color") else colors.black
+            head_style = ParagraphStyle("brand", parent=styles["Heading2"], textColor=accent)
+            cells = []
+            if brand.get("logo"):
+                from reportlab.platypus import Image
+
+                cells.append(Image(io.BytesIO(brand["logo"]), width=2.2 * cm, height=2.2 * cm, kind="proportional"))
+            text = f"<b>{esc(brand['company'])}</b>" if brand.get("company") else ""
+            if brand.get("tagline"):
+                text += f"<br/><font size=8>{esc(brand['tagline'])}</font>"
+            cells.append(Paragraph(text, head_style))
+            header = Table([cells], colWidths=[2.6 * cm, width - 2.6 * cm] if len(cells) == 2 else [width])
+            header.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), 2, accent), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+            story += [header, Spacer(1, 10)]
+        elif kind == "title":
             story.append(Paragraph(esc(block[1]), styles["Title"]))
         elif kind == "heading":
             story += [Spacer(1, 8), Paragraph(esc(block[1]), styles["Heading2"])]
@@ -308,7 +353,22 @@ def render_docx(blocks: list[Block], *, title: str) -> bytes:
     document.core_properties.title = title
     for block in blocks:
         kind = block[0]
-        if kind == "title":
+        if kind == "brand":
+            brand = block[1]
+            if brand.get("logo"):
+                from docx.shared import Cm
+
+                document.add_picture(io.BytesIO(brand["logo"]), height=Cm(1.8))
+            if brand.get("company"):
+                run = document.add_paragraph().add_run(brand["company"])
+                run.bold = True
+                if brand.get("color"):
+                    from docx.shared import RGBColor
+
+                    run.font.color.rgb = RGBColor.from_string(brand["color"][1:].upper())
+            if brand.get("tagline"):
+                document.add_paragraph(brand["tagline"])
+        elif kind == "title":
             document.add_heading(block[1], level=0)
         elif kind == "heading":
             document.add_heading(block[1], level=1)

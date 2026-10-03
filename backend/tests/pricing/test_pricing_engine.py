@@ -91,7 +91,7 @@ def test_calculate_pricing_happy_path(admin_client):
         _calc_body(plan_ref=plan_ref, param_code=param_code, table_code=table_code, member_id=member_id, age_band="70+"),
         format="json",
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, response.data
     body = response.data
     assert body["status"] == "CALCULATED"
     assert body["currencyCode"] == "AOA"

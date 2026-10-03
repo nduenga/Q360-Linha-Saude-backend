@@ -19,6 +19,9 @@ from typing import Any
 
 from apps.client.infrastructure.models import RelationshipCode
 from apps.pricing.application.plan_dimensions import resolve_plan_pricing_context
+from apps.business_config.application.branding import branding_from
+from apps.business_config.application.overlays import effective_exclusions, effective_plan_settings
+from apps.business_config.application.readers import BusinessSnapshot
 from apps.product.domain.market_catalog import STANDARD_EXCLUSIONS
 from apps.quote.application import quote_service, requirements_service
 from apps.quote.domain.proposal_template import DEFAULT_DISCLAIMER
@@ -150,7 +153,8 @@ def build_content(
     """`calculation` is a rendered pricing response (`render_preview` /
     `scenario.result_json`): `totalAmount`, `currencyCode`, `components`."""
     plan = quote.plan
-    settings = plan.settings_json or {}
+    snapshot = BusinessSnapshot.load(quote.effective_date)
+    settings = effective_plan_settings(plan, quote.effective_date, snapshot)
     segment = settings.get("segment")
     currency = calculation.get("currencyCode") or quote.currency_code or "AOA"
 
@@ -159,7 +163,7 @@ def build_content(
         {k: v for k, v in item.items() if k != "id"}
         for item in quote_service.active_adjustments_for_context(quote)
     ]
-    plan_context = resolve_plan_pricing_context(plan=plan, selection=selection)
+    plan_context = resolve_plan_pricing_context(plan=plan, selection=selection, effective_date=quote.effective_date)
 
     quote_members = list(quote.members.select_related("member").order_by("created_at", "id"))
     names = {str(qm.member_id): _member_name(qm.member) for qm in quote_members}
@@ -310,7 +314,7 @@ def build_content(
         "Não há regra de rateio: esgotado o capital anual, a seguradora deixa de pagar até à anuidade seguinte."
     )
 
-    exclusions = [e["text"] for e in STANDARD_EXCLUSIONS]
+    exclusions = [e["text"] for e in effective_exclusions(plan, STANDARD_EXCLUSIONS, quote.effective_date, snapshot)]
     for coverage in coverages:
         for item in coverage["excludedItems"]:
             exclusions.append(f"{coverage['name']}: {item}")
@@ -369,5 +373,16 @@ def build_content(
         },
         "exclusions": exclusions,
         "conditions": conditions,
+        "businessTexts": [
+            {"code": t.get("code"), "title": t.get("title"), "text": t.get("text")}
+            for t in snapshot.rows("proposal.texts", "texts")
+            if t.get("active") is not False and t.get("text")
+        ],
+        "requiredDocuments": [
+            {"documentType": d.get("document_type"), "description": d.get("description")}
+            for d in snapshot.rows("proposal.documents", "documents")
+            if d.get("required")
+        ],
+        "branding": branding_from(snapshot),
         "disclaimer": DEFAULT_DISCLAIMER if indicative else None,
     }

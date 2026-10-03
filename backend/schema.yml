@@ -1067,6 +1067,526 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/catalog:
+    get:
+      operationId: getBCCatalog
+      description: 'Requer: scope q360.read.'
+      summary: Obter b c catalog
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfigurationCatalog'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/business-config/configurations:
+    get:
+      operationId: getBCConfigurationListCreate
+      description: 'Requer: scope q360.read.'
+      summary: Listar b c configuration list create
+      parameters:
+      - in: query
+        name: configKey
+        schema:
+          type: string
+        description: Chave do catálogo.
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: DRAFT, PENDING_APPROVAL, PUBLISHED ou RETIRED.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfigurationList'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    post:
+      operationId: postBCConfigurationListCreate
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Criar b c configuration list create
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessConfigurationWrite'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfiguration'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/configurations/{configuration_id}:
+    get:
+      operationId: getBCConfigurationDetail
+      description: 'Requer: scope q360.read.'
+      summary: Obter b c configuration detail
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfiguration'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    post:
+      operationId: postBCConfigurationDetail
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.
+
+
+        action=submit (DRAFT para PENDING_APPROVAL) ou retire (PUBLISHED para RETIRED).'
+      summary: Criar b c configuration detail
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessConfigurationAction'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfiguration'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+    put:
+      operationId: putBCConfigurationDetail
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.
+
+
+        Só versões DRAFT. rowVersion desatualizado devolve VERSION-CONFLICT.'
+      summary: Substituir b c configuration detail
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessConfigurationUpdate'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfiguration'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/configurations/{configuration_id}/approve:
+    post:
+      operationId: postBCConfigurationApprove
+      description: 'Requer: scope q360.approve, permissão pricing-config:manage.
+
+
+        Publica a versão. O criador não pode aprovar (SEC-403).'
+      summary: Criar b c configuration approve
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfiguration'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/configurations/{configuration_id}/documents:
+    get:
+      operationId: getBCDocumentList
+      description: 'Requer: scope q360.read.'
+      summary: Listar b c document list
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfigurationDocumentList'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/business-config/configurations/{configuration_id}/documents/upload:
+    post:
+      operationId: postBCDocumentUpload
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Criar b c document upload
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BusinessConfigurationDocumentUpload'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfigurationDocument'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/documents/{document_id}/download:
+    get:
+      operationId: getBCDocumentDownload
+      description: 'Requer: scope q360.read.'
+      summary: Obter b c document download
+      parameters:
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/claims/assumption-sets:
     get:
       operationId: getAssumptionSetListCreate
@@ -1186,6 +1706,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/claims/import-template:
+    get:
+      operationId: getClaimsImportTemplate
+      description: "GET /claims/import-template?kind=CLAIMS|PREMIUMS - a CSV with the\n accepted header and one\
+        \ example row.\n\nRequer: scope q360.read, permissão quote:review.\n\nCSV com o cabeçalho aceito e uma linha\
+        \ de exemplo fictícia."
+      summary: Obter claims import template
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          type: string
+        description: CLAIMS (por omissão) ou PREMIUMS.
+      tags:
+      - Claims
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/claims/imports:
     get:
       operationId: getClaimsImportListCreate
@@ -1331,6 +1895,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/claims/methodology:
+    get:
+      operationId: getClaimsMethodology
+      description: "GET /claims/methodology - the projection method in use (labelled\n indicative), its formulas\
+        \ and the accepted import formats.\n\nRequer: scope q360.read, permissão quote:review."
+      summary: Obter claims methodology
+      tags:
+      - Claims
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimsMethodology'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/claims/profit-sharing:
     get:
       operationId: getClaimsProfitSharing
@@ -2898,6 +3492,97 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/documents/{document_id}/signed-url:
+    post:
+      operationId: postDocumentSignedUrl
+      description: "POST /documents/{id}/signed-url - a time-limited link anyone can open\n (no sign-in) until it\
+        \ expires.\n\nRequer: scope q360.read."
+      summary: Criar document signed url
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Documents
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedUrl'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/documents/signed/{token}:
+    get:
+      operationId: getDocumentSignedDownload
+      description: 'GET /documents/signed/{token} - public; the signed token is the credential.
+
+
+        O token assinado é a credencial; expira (documents.signed_url_ttl_seconds).'
+      summary: Obter document signed download
+      parameters:
+      - in: path
+        name: token
+        schema:
+          type: string
+        required: true
+      tags:
+      - Documents
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/eligibility/evaluate:
     post:
       operationId: postEligibilityEvaluate
@@ -5829,10 +6514,10 @@ paths:
   /api/v1/quotes/{quote_id}:
     get:
       operationId: getQuoteDetail
-      description: 'ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).
-
-
-        Requer: scope q360.read.'
+      description: "ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).\n Pragmatic DELETE\
+        \ extension (see apps/quote/application/quote_service.delete_quote):\n only non-protected statuses (DRAFT\
+        \ / READY / REJECTED / EXPIRED / CANCELLED)\n can actually be deleted; APPROVED/IN_REVIEW/BOUND raise QUOTE-DELETE-BLOCKED.\n\
+        \nRequer: scope q360.read."
       summary: Obter quote detail
       parameters:
       - in: path
@@ -5873,10 +6558,10 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     put:
       operationId: putQuoteDetail
-      description: 'ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).
-
-
-        Requer: scope q360.write, permissão quote:edit.'
+      description: "ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).\n Pragmatic DELETE\
+        \ extension (see apps/quote/application/quote_service.delete_quote):\n only non-protected statuses (DRAFT\
+        \ / READY / REJECTED / EXPIRED / CANCELLED)\n can actually be deleted; APPROVED/IN_REVIEW/BOUND raise QUOTE-DELETE-BLOCKED.\n\
+        \nRequer: scope q360.write, permissão quote:edit."
       summary: Substituir quote detail
       parameters:
       - in: header
@@ -5915,6 +6600,58 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+    delete:
+      operationId: deleteQuoteDetail
+      description: "ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).\n Pragmatic DELETE\
+        \ extension (see apps/quote/application/quote_service.delete_quote):\n only non-protected statuses (DRAFT\
+        \ / READY / REJECTED / EXPIRED / CANCELLED)\n can actually be deleted; APPROVED/IN_REVIEW/BOUND raise QUOTE-DELETE-BLOCKED.\n\
+        \nRequer: scope q360.write, permissão quote:edit."
+      summary: Remover quote detail
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '204':
+          description: Sem conteúdo.
         '401':
           content:
             application/problem+json:
@@ -9364,6 +10101,14 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
 components:
   schemas:
+    ActionEnum:
+      enum:
+      - submit
+      - retire
+      type: string
+      description: '* `submit` - submit
+
+        * `retire` - retire'
     AddPlanBenefitRequest:
       type: object
       properties:
@@ -9748,6 +10493,227 @@ components:
       - planStatus
       - productCode
       - productId
+    BusinessConfiguration:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        configKey:
+          type: string
+        version:
+          type: integer
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type:
+          - string
+          - 'null'
+          format: date
+        status:
+          $ref: '#/components/schemas/BusinessConfigurationStatusEnum'
+        value: {}
+        metadata: {}
+        checksum:
+          type:
+          - string
+          - 'null'
+          maxLength: 128
+        created_by:
+          type: string
+          maxLength: 200
+        approved_by:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        published_by:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        submitted_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        approved_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        published_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        rowVersion:
+          type: integer
+      required:
+      - configKey
+      - created_by
+      - effectiveFrom
+      - effectiveTo
+      - id
+      - metadata
+      - rowVersion
+      - value
+      - version
+    BusinessConfigurationAction:
+      type: object
+      properties:
+        action:
+          $ref: '#/components/schemas/ActionEnum'
+      required:
+      - action
+    BusinessConfigurationCatalog:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessConfigurationCatalogEntry'
+      required:
+      - items
+    BusinessConfigurationCatalogEntry:
+      type: object
+      properties:
+        key:
+          type: string
+        category:
+          type: string
+        label:
+          type: string
+        priority:
+          type: string
+        value_type:
+          type: string
+        formSchema: {}
+        requiresBusinessConfirmation:
+          type: boolean
+      required:
+      - category
+      - formSchema
+      - key
+      - label
+      - priority
+      - requiresBusinessConfirmation
+      - value_type
+    BusinessConfigurationDocument:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        documentType:
+          type: string
+        originalFilename:
+          type: string
+        content_type:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        checksum:
+          type:
+          - string
+          - 'null'
+          maxLength: 128
+        uploaded_by:
+          type: string
+          maxLength: 200
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - documentType
+      - id
+      - originalFilename
+      - uploaded_by
+    BusinessConfigurationDocumentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessConfigurationDocument'
+      required:
+      - items
+    BusinessConfigurationDocumentUpload:
+      type: object
+      properties:
+        file:
+          type: string
+          format: uri
+        documentType:
+          type: string
+      required:
+      - file
+    BusinessConfigurationList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessConfiguration'
+      required:
+      - items
+    BusinessConfigurationStatusEnum:
+      enum:
+      - DRAFT
+      - PENDING_APPROVAL
+      - PUBLISHED
+      - RETIRED
+      type: string
+      description: '* `DRAFT` - DRAFT
+
+        * `PENDING_APPROVAL` - PENDING_APPROVAL
+
+        * `PUBLISHED` - PUBLISHED
+
+        * `RETIRED` - RETIRED'
+    BusinessConfigurationUpdate:
+      type: object
+      properties:
+        value: {}
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type:
+          - string
+          - 'null'
+          format: date
+        metadata: {}
+        rowVersion:
+          type: integer
+          minimum: 0
+      required:
+      - value
+    BusinessConfigurationWrite:
+      type: object
+      properties:
+        configKey:
+          $ref: '#/components/schemas/ConfigKeyEnum'
+        value: {}
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type:
+          - string
+          - 'null'
+          format: date
+        metadata: {}
+      required:
+      - configKey
+      - effectiveFrom
+      - value
     CancelQuoteRequest:
       type: object
       properties:
@@ -9867,6 +10833,46 @@ components:
       required:
       - message
       - row
+    ClaimsMethodology:
+      type: object
+      properties:
+        method:
+          type: string
+        indicative:
+          type: boolean
+        note:
+          type: string
+        formulas:
+          type: array
+          items:
+            type: string
+        assumptionsRequired:
+          type: array
+          items:
+            type: string
+        scenarios:
+          type: array
+          items:
+            type: string
+        importFormats: {}
+        dateFormats:
+          type: array
+          items:
+            type: string
+        currencies:
+          type: array
+          items:
+            type: string
+      required:
+      - assumptionsRequired
+      - currencies
+      - dateFormats
+      - formulas
+      - importFormats
+      - indicative
+      - method
+      - note
+      - scenarios
     ClaimsSummary:
       type: object
       properties:
@@ -9923,6 +10929,83 @@ components:
       - period
       - premium
       - proposerId
+    ConfigKeyEnum:
+      enum:
+      - product.plans
+      - product.coverages
+      - product.capitals_sublimits
+      - product.member_participation
+      - product.waiting_periods
+      - product.age_limits
+      - product.exclusions
+      - pricing.reference_premiums
+      - pricing.factors
+      - pricing.adjustments
+      - pricing.taxes_fees
+      - pricing.actuarial_model
+      - underwriting.acceptance_rules
+      - underwriting.pre_existing_conditions
+      - underwriting.medical_review
+      - group.rules
+      - renewal.rules
+      - renewal.deadlines
+      - proposal.documents
+      - proposal.texts
+      - network.rules
+      - foreign_coverage.rules
+      - security.approval_rules
+      - security.role_permissions
+      - proposal.branding
+      type: string
+      description: '* `product.plans` - product.plans
+
+        * `product.coverages` - product.coverages
+
+        * `product.capitals_sublimits` - product.capitals_sublimits
+
+        * `product.member_participation` - product.member_participation
+
+        * `product.waiting_periods` - product.waiting_periods
+
+        * `product.age_limits` - product.age_limits
+
+        * `product.exclusions` - product.exclusions
+
+        * `pricing.reference_premiums` - pricing.reference_premiums
+
+        * `pricing.factors` - pricing.factors
+
+        * `pricing.adjustments` - pricing.adjustments
+
+        * `pricing.taxes_fees` - pricing.taxes_fees
+
+        * `pricing.actuarial_model` - pricing.actuarial_model
+
+        * `underwriting.acceptance_rules` - underwriting.acceptance_rules
+
+        * `underwriting.pre_existing_conditions` - underwriting.pre_existing_conditions
+
+        * `underwriting.medical_review` - underwriting.medical_review
+
+        * `group.rules` - group.rules
+
+        * `renewal.rules` - renewal.rules
+
+        * `renewal.deadlines` - renewal.deadlines
+
+        * `proposal.documents` - proposal.documents
+
+        * `proposal.texts` - proposal.texts
+
+        * `network.rules` - network.rules
+
+        * `foreign_coverage.rules` - foreign_coverage.rules
+
+        * `security.approval_rules` - security.approval_rules
+
+        * `security.role_permissions` - security.role_permissions
+
+        * `proposal.branding` - proposal.branding'
     ConfigurationChange:
       type: object
       properties:
@@ -12493,12 +13576,31 @@ components:
         renewal: {}
         rowVersion:
           type: integer
+        premiumAnnualAmount:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        premiumAnnualCurrency:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        latestPricingRun:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          readOnly: true
       required:
       - currencyCode
       - effectiveDate
       - id
+      - latestPricingRun
       - latestPricingRunId
       - planId
+      - premiumAnnualAmount
+      - premiumAnnualCurrency
       - proposerId
       - quoteNumber
       - quoteType
@@ -12584,10 +13686,23 @@ components:
           - 'null'
     QuoteCreateRequest:
       type: object
+      description: "Aceita dois caminhos:\n- Modo \"referência\": `proposerId` (UUID) + `planId` + `effectiveDate`.\n\
+        - Modo \"inline\":    `proposerInput` (e opcionalmente `titularMemberInput`)\n                     + `planId`\
+        \ + `effectiveDate`. Cria tudo no mesmo request."
       properties:
         proposerId:
-          type: string
+          type:
+          - string
+          - 'null'
           format: uuid
+        proposerInput:
+          oneOf:
+          - $ref: '#/components/schemas/_ProposerInput'
+          - type: 'null'
+        titularMemberInput:
+          oneOf:
+          - $ref: '#/components/schemas/_TitularMemberInput'
+          - type: 'null'
         planId:
           type: string
           format: uuid
@@ -12597,7 +13712,6 @@ components:
       required:
       - effectiveDate
       - planId
-      - proposerId
     QuoteMember:
       type: object
       description: 'Pragmatic V1 addition (`GET /quotes/{quoteId}/members`, not in
@@ -12956,6 +14070,22 @@ components:
         renewal: {}
         rowVersion:
           type: integer
+        premiumAnnualAmount:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        premiumAnnualCurrency:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        latestPricingRun:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          readOnly: true
         warnings:
           type: array
           items:
@@ -12964,8 +14094,11 @@ components:
       - currencyCode
       - effectiveDate
       - id
+      - latestPricingRun
       - latestPricingRunId
       - planId
+      - premiumAnnualAmount
+      - premiumAnnualCurrency
       - proposerId
       - quoteNumber
       - quoteType
@@ -13677,6 +14810,21 @@ components:
       - PRESENCIAL
       type: string
       description: '* `PRESENCIAL` - PRESENCIAL'
+    SignedUrl:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Caminho relativo; abre sem iniciar sessão até expirar.
+        expiresAt:
+          type: string
+          format: date-time
+        expiresInSeconds:
+          type: integer
+      required:
+      - expiresAt
+      - expiresInSeconds
+      - url
     SourceEnum:
       enum:
       - INTERNAL
@@ -14110,6 +15258,93 @@ components:
       required:
       - code
       - message
+    _ProposerInput:
+      type: object
+      description: 'Campos necessários para criar um Proposer no mesmo request que a
+
+        criação da cotação. Rejeita caso exista outro proposer com o mesmo NIF.'
+      properties:
+        proposerType:
+          type: string
+          default: INDIVIDUAL
+          maxLength: 30
+        displayName:
+          type: string
+          maxLength: 200
+          minLength: 1
+        externalReference:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        nif:
+          type: string
+          maxLength: 60
+          minLength: 1
+        registrationNumber:
+          type: string
+          maxLength: 60
+          minLength: 1
+        email:
+          type:
+          - string
+          - 'null'
+          default: ''
+          maxLength: 200
+        phone:
+          type:
+          - string
+          - 'null'
+          default: ''
+          maxLength: 60
+        attributes:
+          oneOf:
+          - {}
+          - type: 'null'
+      required:
+      - displayName
+      - nif
+      - registrationNumber
+    _TitularMemberInput:
+      type: object
+      description: 'Campos opcionais usados para criar o membro titular automaticamente
+
+        no mesmo request que a cotação (quando não há ainda membro criado).'
+      properties:
+        relationshipCode:
+          type: string
+          default: TITULAR
+          maxLength: 30
+          minLength: 2
+        firstName:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        lastName:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        dateOfBirth:
+          type:
+          - string
+          - 'null'
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 5
+        externalReference:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        attributes:
+          oneOf:
+          - {}
+          - type: 'null'
   securitySchemes:
     oauth2:
       type: oauth2

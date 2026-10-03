@@ -1,0 +1,28 @@
+CONFIG_CATALOG=[
+{"key":"product.plans","category":"PRODUCT","label":"Planos de Saúde","priority":"HIGH","value_type":"object"},
+{"key":"product.coverages","category":"PRODUCT","label":"Coberturas e extensões","priority":"HIGH","value_type":"object"},
+{"key":"product.capitals_sublimits","category":"PRODUCT","label":"Capitais e sublimites","priority":"HIGH","value_type":"object"},
+{"key":"product.member_participation","category":"PRODUCT","label":"Co-participações","priority":"HIGH","value_type":"object"},
+{"key":"product.waiting_periods","category":"PRODUCT","label":"Períodos de carência","priority":"HIGH","value_type":"object"},
+{"key":"product.age_limits","category":"PRODUCT","label":"Limites de idade","priority":"HIGH","value_type":"object"},
+{"key":"product.exclusions","category":"PRODUCT","label":"Exclusões","priority":"HIGH","value_type":"object"},
+{"key":"pricing.reference_premiums","category":"PRICING","label":"Prémios de referência","priority":"HIGH","value_type":"object"},
+{"key":"pricing.factors","category":"PRICING","label":"Fatores de tarifação","priority":"HIGH","value_type":"object"},
+{"key":"pricing.adjustments","category":"PRICING","label":"Agravamentos e descontos","priority":"HIGH","value_type":"object"},
+{"key":"pricing.taxes_fees","category":"PRICING","label":"Impostos, taxas e encargos","priority":"HIGH","value_type":"object"},
+{"key":"pricing.actuarial_model","category":"PRICING","label":"Modelo actuarial SAU/SAG (rascunho)","priority":"HIGH","value_type":"object"},
+{"key":"underwriting.acceptance_rules","category":"UNDERWRITING","label":"Regras de aceitação","priority":"HIGH","value_type":"object"},
+{"key":"underwriting.pre_existing_conditions","category":"UNDERWRITING","label":"Doenças pré-existentes","priority":"HIGH","value_type":"object"},
+{"key":"underwriting.medical_review","category":"UNDERWRITING","label":"Análise médica reforçada","priority":"HIGH","value_type":"object"},
+{"key":"group.rules","category":"GROUP","label":"Regras de grupo","priority":"MEDIUM","value_type":"object"},
+{"key":"renewal.rules","category":"RENEWAL","label":"Regras de renovação","priority":"MEDIUM","value_type":"object"},
+{"key":"renewal.deadlines","category":"RENEWAL","label":"Prazos de renovação","priority":"LOW","value_type":"object"},
+{"key":"proposal.documents","category":"DOCUMENTS","label":"Documentos e modelos","priority":"HIGH","value_type":"object"},
+{"key":"proposal.texts","category":"DOCUMENTS","label":"Textos e cláusulas","priority":"HIGH","value_type":"object"},
+{"key":"network.rules","category":"NETWORK","label":"Rede convencionada e livre escolha","priority":"MEDIUM","value_type":"object"},
+{"key":"foreign_coverage.rules","category":"NETWORK","label":"Cobertura no estrangeiro","priority":"MEDIUM","value_type":"object"},
+{"key":"security.approval_rules","category":"SECURITY","label":"Aprovação e autonomia","priority":"HIGH","value_type":"object"},
+{"key":"security.role_permissions","category":"SECURITY","label":"Permissões por perfil","priority":"HIGH","value_type":"object"},
+{"key":"proposal.branding","category":"PROPOSAL","label":"Identidade visual dos documentos","priority":"MEDIUM","value_type":"object"}
+]
+CATALOG_BY_KEY={x["key"]:x for x in CONFIG_CATALOG}

@@ -15,9 +15,13 @@ catalogue — purely local/demo tooling, same posture as
 from __future__ import annotations
 
 import datetime
+from types import SimpleNamespace
 
 from django.core.management.base import BaseCommand, CommandError
 
+from apps.business_config.application.service import approve_configuration, create_configuration, submit_configuration
+from apps.business_config.infrastructure.models import BusinessConfiguration
+from apps.business_config.seed.actuarial_model import build_actuarial_model
 from apps.foundation.application.context import CurrentActorProvider
 from apps.foundation.application.rule_service import create_rule_version, publish_rule_version
 from apps.foundation.domain.actor import Actor
@@ -75,6 +79,7 @@ class Command(BaseCommand):
         self._seed_parameter_set()
         self._seed_eligibility_rule()
         self._seed_document_template()
+        self._seed_business_config()
 
     def _seed_rating_table(self) -> None:
         if RatingTable.objects.filter(code=RATING_TABLE_CODE, status="PUBLISHED").exists():
@@ -151,3 +156,89 @@ class Command(BaseCommand):
         )
         publish_document_template(template)
         self.stdout.write(self.style.SUCCESS(f"Created + published document template '{DOCUMENT_TEMPLATE_CODE}'"))
+
+    def _seed_business_config(self) -> None:
+        default_configs = {
+            "pricing.reference_premiums": {
+                "currency_code": "AOA",
+                "premiums": [
+                    {"plan": "FAMILIA-PLUS", "age_from": 0, "age_to": 17, "annual_premium": "150000"},
+                    {"plan": "FAMILIA-PLUS", "age_from": 18, "age_to": 29, "annual_premium": "220000"},
+                    {"plan": "FAMILIA-PLUS", "age_from": 30, "age_to": 39, "annual_premium": "300000"},
+                    {"plan": "FAMILIA-PLUS", "age_from": 40, "age_to": 49, "annual_premium": "420000"},
+                    {"plan": "FAMILIA-PLUS", "age_from": 50, "age_to": 59, "annual_premium": "570000"},
+                    {"plan": "FAMILIA-PLUS", "age_from": 60, "age_to": 69, "annual_premium": "760000"},
+                    {"plan": "FAMILIA-PLUS", "age_from": 70, "age_to": 75, "annual_premium": "980000"},
+                    {"plan": "EMPRESA-ESSENCIAL", "age_from": 0, "age_to": 17, "annual_premium": "120000"},
+                    {"plan": "EMPRESA-ESSENCIAL", "age_from": 18, "age_to": 29, "annual_premium": "180000"},
+                    {"plan": "EMPRESA-ESSENCIAL", "age_from": 30, "age_to": 39, "annual_premium": "240000"},
+                    {"plan": "EMPRESA-ESSENCIAL", "age_from": 40, "age_to": 49, "annual_premium": "340000"},
+                    {"plan": "EMPRESA-ESSENCIAL", "age_from": 50, "age_to": 59, "annual_premium": "470000"},
+                    {"plan": "EMPRESA-ESSENCIAL", "age_from": 60, "age_to": 69, "annual_premium": "620000"},
+                    {"plan": "EMPRESA-ESSENCIAL", "age_from": 70, "age_to": 75, "annual_premium": "820000"},
+                ],
+            },
+            "pricing.factors": {
+                "factors": [
+                    {"code": "AGE_FACTOR", "dimension": "ageBand", "condition": "0-17", "factor": "0.60"},
+                    {"code": "AGE_FACTOR", "dimension": "ageBand", "condition": "18-29", "factor": "0.80"},
+                    {"code": "AGE_FACTOR", "dimension": "ageBand", "condition": "30-39", "factor": "1.00"},
+                    {"code": "AGE_FACTOR", "dimension": "ageBand", "condition": "40-49", "factor": "1.20"},
+                    {"code": "AGE_FACTOR", "dimension": "ageBand", "condition": "50-59", "factor": "1.50"},
+                    {"code": "AGE_FACTOR", "dimension": "ageBand", "condition": "60-69", "factor": "1.90"},
+                    {"code": "AGE_FACTOR", "dimension": "ageBand", "condition": "70+", "factor": "2.40"},
+                    {"code": "AGE_FACTOR", "dimension": "ageBand", "condition": "*", "factor": "1.00"},
+                ]
+            },
+            "pricing.adjustments": {"rules": []},
+            "pricing.taxes_fees": {"charges": []},
+        }
+
+        create_request = SimpleNamespace(actor=SimpleNamespace(subject="system-seed"))
+        approval_request = SimpleNamespace(actor=SimpleNamespace(subject="system-approver"))
+        for config_key, value in default_configs.items():
+            if BusinessConfiguration.objects.filter(
+                tenant_id=CurrentActorProvider.get().tenant_id.value,
+                config_key=config_key,
+                status="PUBLISHED",
+            ).exists():
+                self.stdout.write(f"Business configuration '{config_key}' already published — skipping.")
+                continue
+
+            config = create_configuration(
+                create_request,
+                config_key=config_key,
+                value=value,
+                effective_from=EARLIEST_EFFECTIVE_FROM,
+                effective_to=None,
+                metadata={"source": "seed_default_pricing_config", "scope": "default"},
+            )
+            submit_configuration(create_request, config)
+            approve_configuration(approval_request, config)
+            self.stdout.write(
+                self.style.SUCCESS(f"Created + published BusinessConfiguration '{config_key}'")
+            )
+
+        self._seed_actuarial_model_draft()
+
+    def _seed_actuarial_model_draft(self) -> None:
+        config_key = "pricing.actuarial_model"
+        tenant_id = CurrentActorProvider.get().tenant_id.value
+        if BusinessConfiguration.objects.filter(tenant_id=tenant_id, config_key=config_key).exists():
+            self.stdout.write(f"Business configuration '{config_key}' already exists — skipping.")
+            return
+
+        request = SimpleNamespace(actor=SimpleNamespace(subject="system-seed"))
+        create_configuration(
+            request,
+            config_key=config_key,
+            value=build_actuarial_model(),
+            effective_from=EARLIEST_EFFECTIVE_FROM,
+            effective_to=None,
+            metadata={
+                "source": "Modelo_Actuarial_Saude_SAU_SAG_Angola.xlsx",
+                "scope": "actuarial-model-draft",
+                "requiresActuarialApproval": True,
+            },
+        )
+        self.stdout.write(self.style.SUCCESS("Created DRAFT BusinessConfiguration 'pricing.actuarial_model'"))

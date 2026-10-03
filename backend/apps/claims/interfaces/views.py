@@ -99,6 +99,15 @@ def _optional_uuid(request, name):
         raise summary_service.ClaimsDataError(f"'{name}' must be a UUID") from None
 
 
+def _group_default(field: str, fallback: str) -> str:
+    """Limite/quota acordados em `group.rules` (negócio); sem configuração
+    publicada, o exemplo do PDF (65 % / 100 %)."""
+    from apps.business_config.application.readers import BusinessSnapshot
+
+    value = (BusinessSnapshot.load().get("group.rules") or {}).get(field)
+    return str(value) if value not in (None, "") else fallback
+
+
 def _decimal_param(request, name, default):
     raw = request.query_params.get(name, default)
     try:
@@ -167,6 +176,33 @@ class ClaimsSummaryView(APIView):
         )
 
 
+class ClaimsMethodologyView(APIView):
+    """GET /claims/methodology - the projection method in use (labelled
+    indicative), its formulas and the accepted import formats."""
+
+    permission_classes = READ
+
+    def get(self, request):
+        return Response(projection_service.methodology())
+
+
+class ClaimsImportTemplateView(APIView):
+    """GET /claims/import-template?kind=CLAIMS|PREMIUMS - a CSV with the
+    accepted header and one example row."""
+
+    permission_classes = READ
+
+    def get(self, request):
+        from django.http import HttpResponse
+
+        from apps.claims.application import import_service
+
+        kind = request.query_params.get("kind", "CLAIMS").upper()
+        response = HttpResponse(import_service.import_template_csv(kind), content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="modelo-{kind.lower()}.csv"'
+        return response
+
+
 class ClaimsProfitSharingView(APIView):
     """GET /claims/profit-sharing?proposerId=&thresholdPct=65&sharePct=100 -
     participação nos resultados do grupo (devolução de parte do prémio se a
@@ -178,7 +214,8 @@ class ClaimsProfitSharingView(APIView):
         return Response(
             summary_service.profit_sharing(
                 proposer_id=_required_uuid(request, "proposerId"), policy_id=_optional_uuid(request, "policyId"),
-                threshold_pct=_decimal_param(request, "thresholdPct", "65"), share_pct=_decimal_param(request, "sharePct", "100"),
+                threshold_pct=_decimal_param(request, "thresholdPct", _group_default("experience_loss_ratio_threshold", "65")),
+                share_pct=_decimal_param(request, "sharePct", _group_default("profit_share_percent", "100")),
                 date_from=_date_param(request, "from"), date_to=_date_param(request, "to"),
                 currency=request.query_params.get("currency", "AOA").upper(),
             )

@@ -114,7 +114,52 @@ ROLE_SCOPES: dict[Role, frozenset[Scope]] = {
 }
 
 
-def scopes_for_roles(roles: frozenset[Role]) -> frozenset[Scope]:
+# Fornecedor opcional de permissões por perfil editadas pelo negócio
+# (`security.role_permissions`). Registado pela aplicação business_config no
+# arranque; foundation nunca depende dela (DOC-004 s3.1). Recebe o id do
+# inquilino e devolve {Role: frozenset[Permission]} (só os perfis alterados)
+# ou None.
+_ROLE_PERMISSION_OVERRIDES: list = []
+
+
+def register_role_permission_provider(provider) -> None:
+    _ROLE_PERMISSION_OVERRIDES[:] = [provider]
+
+
+def effective_role_permissions(tenant_id) -> dict[Role, frozenset[Permission]]:
+    """Permissões de cada perfil: as de `ROLE_PERMISSIONS` com as alterações
+    publicadas pelo negócio para o inquilino por cima."""
+    merged = dict(ROLE_PERMISSIONS)
+    if _ROLE_PERMISSION_OVERRIDES and tenant_id is not None:
+        merged.update(_ROLE_PERMISSION_OVERRIDES[0](tenant_id) or {})
+    return merged
+
+
+def scopes_for_permissions(permissions: frozenset[Permission]) -> frozenset[Scope]:
+    """Escopos OAuth2 que as permissões de um perfil justificam (mesma regra
+    que deu origem a `ROLE_SCOPES`)."""
+    scopes = {Scope.READ}
+    if permissions & {
+        Permission.QUOTE_CREATE, Permission.QUOTE_EDIT, Permission.QUOTE_CALCULATE, Permission.QUOTE_SUBMIT,
+        Permission.PRODUCT_MANAGE, Permission.PRICING_CONFIG_MANAGE,
+    }:
+        scopes.add(Scope.WRITE)
+    if permissions & {Permission.QUOTE_APPROVE, Permission.QUOTE_REJECT}:
+        scopes.add(Scope.APPROVE)
+    if permissions & {Permission.PRODUCT_MANAGE, Permission.PRICING_CONFIG_MANAGE}:
+        scopes.add(Scope.ADMIN)
+    if Permission.AUDIT_READ in permissions:
+        scopes.add(Scope.AUDIT)
+    return frozenset(scopes)
+
+
+def scopes_for_roles(roles: frozenset[Role], tenant_id=None) -> frozenset[Scope]:
+    if tenant_id is not None and _ROLE_PERMISSION_OVERRIDES:
+        effective = effective_role_permissions(tenant_id)
+        granted_scopes: set[Scope] = set()
+        for role in roles:
+            granted_scopes |= scopes_for_permissions(effective.get(role, frozenset()))
+        return frozenset(granted_scopes)
     granted: set[Scope] = set()
     for role in roles:
         granted |= ROLE_SCOPES.get(role, frozenset())

@@ -12,6 +12,7 @@ import uuid
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -21,6 +22,7 @@ from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.pricing.interfaces.serializers import PricingResponseSerializer, render_preview
+from apps.quote.application import document_links
 from apps.quote.application import (
     config_impact_service,
     document_service,
@@ -91,7 +93,7 @@ class QuoteListCreateView(APIView):
         return [require_scope(Scope.READ)()]
 
     def get(self, request):
-        queryset = Quote.objects.all().order_by("-created_at")
+        queryset = Quote.objects.select_related("latest_pricing_run").order_by("-created_at")
         status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
@@ -121,7 +123,9 @@ class QuoteListCreateView(APIView):
         body.is_valid(raise_exception=True)
         data = body.validated_data
         quote = quote_service.create_quote(
-            proposer_id=data["proposerId"],
+            proposer_id=data.get("proposerId"),
+            proposer_input=data.get("proposerInput"),
+            titular_member_input=data.get("titularMemberInput"),
             plan_id=data["planId"],
             effective_date=data["effectiveDate"],
         )
@@ -130,15 +134,22 @@ class QuoteListCreateView(APIView):
 
 @requires_idempotency
 class QuoteDetailView(APIView):
-    """ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT)."""
+    """ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).
+    Pragmatic DELETE extension (see apps/quote/application/quote_service.delete_quote):
+    only non-protected statuses (DRAFT / READY / REJECTED / EXPIRED / CANCELLED)
+    can actually be deleted; APPROVED/IN_REVIEW/BOUND raise QUOTE-DELETE-BLOCKED."""
 
     def get_permissions(self):
         if self.request.method == "PUT":
             return [require_scope(Scope.WRITE)(), require_permission(Permission.QUOTE_EDIT)()]
+        if self.request.method == "DELETE":
+            return [require_scope(Scope.WRITE)(), require_permission(Permission.QUOTE_EDIT)()]
         return [require_scope(Scope.READ)()]
 
     def get(self, request, quote_id):
-        quote = get_object_or_404(Quote, id=quote_id)
+        quote = get_object_or_404(
+            Quote.objects.select_related("latest_pricing_run"), id=quote_id
+        )
         return Response(QuoteSerializer(quote).data)
 
     def put(self, request, quote_id):
@@ -148,6 +159,11 @@ class QuoteDetailView(APIView):
         data = body.validated_data
         updated = quote_service.update_quote(quote=quote, effective_date=data["effectiveDate"], row_version=data["rowVersion"])
         return Response(QuoteSerializer(updated).data)
+
+    def delete(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        quote_service.delete_quote(quote=quote)
+        return Response(status=204)
 
 
 @requires_idempotency
@@ -911,6 +927,28 @@ class DocumentDownloadView(APIView):
         document = proposal_service.get_document(document_id)
         data = proposal_service.read_file(document)
         return _file_response(data, document.content_type or "application/octet-stream", document.file_name)
+
+
+@requires_idempotency
+class DocumentSignedUrlView(APIView):
+    """POST /documents/{id}/signed-url - a time-limited link anyone can open
+    (no sign-in) until it expires."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def post(self, request, document_id):
+        return Response(document_links.create_link(document_id=document_id), status=201)
+
+
+class DocumentSignedDownloadView(APIView):
+    """GET /documents/signed/{token} - public; the signed token is the credential."""
+
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, token):
+        data, content_type, name = document_links.open_link(token)
+        return _file_response(data, content_type, name)
 
 
 @requires_idempotency

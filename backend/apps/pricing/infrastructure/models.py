@@ -84,9 +84,9 @@ class PricingRun(TenantScopedModel):
         ProductVersion, on_delete=models.DO_NOTHING, db_column="product_version_id", null=True, blank=True
     )
     plan = models.ForeignKey(Plan, on_delete=models.DO_NOTHING, db_column="plan_id")
-    rating_table = models.ForeignKey(RatingTable, on_delete=models.DO_NOTHING, db_column="rating_table_id")
+    rating_table = models.ForeignKey(RatingTable, on_delete=models.DO_NOTHING, db_column="rating_table_id", null=True, blank=True)
     parameter_set = models.ForeignKey(
-        PricingParameterSet, on_delete=models.DO_NOTHING, db_column="parameter_set_id"
+        PricingParameterSet, on_delete=models.DO_NOTHING, db_column="parameter_set_id", null=True, blank=True
     )
     rule_version = models.ForeignKey(
         RuleVersion, on_delete=models.DO_NOTHING, db_column="rule_version_id", null=True, blank=True
@@ -97,6 +97,7 @@ class PricingRun(TenantScopedModel):
     rounding_policy_code = models.CharField(max_length=80)
     rounding_policy_version = models.IntegerField()
     input_snapshot_json = models.JSONField()
+    business_configuration_snapshot_json = models.JSONField(default=dict)
     total_amount = models.DecimalField(max_digits=30, decimal_places=8, null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)

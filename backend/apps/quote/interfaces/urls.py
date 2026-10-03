@@ -4,6 +4,8 @@ from apps.quote.interfaces.views import (
     QuoteClaimsContextView,
     DocumentDownloadView,
     DocumentRetryView,
+    DocumentSignedDownloadView,
+    DocumentSignedUrlView,
     DocumentTemplatePreviewView,
     DocumentTemplateSchemaView,
     QuoteProposalListCreateView,
@@ -54,6 +56,8 @@ urlpatterns = [
     path("quotes/<uuid:quote_id>/proposals/preview", QuoteProposalPreviewView.as_view(), name="quote-proposal-preview"),
     path("documents/<uuid:document_id>/download", DocumentDownloadView.as_view(), name="document-download"),
     path("documents/<uuid:document_id>/retry", DocumentRetryView.as_view(), name="document-retry"),
+    path("documents/<uuid:document_id>/signed-url", DocumentSignedUrlView.as_view(), name="document-signed-url"),
+    path("documents/signed/<str:token>", DocumentSignedDownloadView.as_view(), name="document-signed-download"),
     path("document-templates/schema", DocumentTemplateSchemaView.as_view(), name="document-template-schema"),
     path("document-templates/<uuid:template_id>/preview", DocumentTemplatePreviewView.as_view(), name="document-template-preview"),
     path(

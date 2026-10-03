@@ -17,11 +17,14 @@ import datetime
 import hashlib
 import json
 import uuid
+from typing import Any
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils.timezone import now as timezone_now
 
+from apps.client.application.member_service import create_member
+from apps.client.application.proposer_service import create_proposer
 from apps.client.infrastructure.models import InsuredMember, Proposer
 from apps.eligibility.application.use_cases import EvaluateEligibilityUseCase
 from apps.eligibility.domain.enums import EligibilityDecision
@@ -32,6 +35,8 @@ from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.pricing.application.auto_resolve import resolve_default_parameter_set_code, resolve_default_rating_table_code
 from apps.pricing.application.pricing_engine import calculate_pricing
+from apps.business_config.application.overlays import effective_plan_settings, plan_availability
+from apps.business_config.application.resolver import BusinessConfigurationResolver
 from apps.pricing.domain.age_band import compute_age_band
 from apps.product.domain.enums import PlanStatus
 from apps.product.infrastructure.models import Plan, PlanBenefit
@@ -45,6 +50,7 @@ from apps.quote.domain.enums import (
 )
 from apps.quote.domain.errors import (
     DuplicateMemberError,
+    QuoteDeletionBlockedError,
     QuoteStateError,
     ReferencedEntityNotFoundError,
     RowVersionMismatchError,
@@ -88,7 +94,7 @@ _ELIGIBILITY_TO_MEMBER_STATUS = {
 _PRICEABLE_MEMBER_STATUSES = [QuoteMemberStatus.INCLUDED.value, QuoteMemberStatus.REFERRAL.value]
 
 
-def _plan_content_snapshot(plan: Plan, selection: dict | None = None) -> dict:
+def _plan_content_snapshot(plan: Plan, selection: dict | None = None, effective_date: datetime.date | None = None) -> dict:
     """DECISIONS_TAKEN.md#S09-POLICY-001 (ROADMAP_APOLICES.md Fase 1,
     pré-requisito de PO-APO-6): with ProductVersion retired, a Plan is no
     longer immutable once "published" — it can be edited at any time
@@ -111,7 +117,7 @@ def _plan_content_snapshot(plan: Plan, selection: dict | None = None) -> dict:
 
     plan_benefits = {pb.benefit.code: pb for pb in PlanBenefit.objects.filter(plan=plan).select_related("benefit")}
     try:
-        context = resolve_plan_pricing_context(plan=plan, selection=selection or {})
+        context = resolve_plan_pricing_context(plan=plan, selection=selection or {}, effective_date=effective_date)
         rows = [
             (c["code"], c["contracted"], c["inclusion"], c["configuration"]) for c in context.coverages
         ]
@@ -140,7 +146,7 @@ def _plan_content_snapshot(plan: Plan, selection: dict | None = None) -> dict:
         "planCode": plan.code,
         "planName": plan.name,
         "planStatus": plan.status,
-        "settings": plan.settings_json or {},
+        "settings": effective_plan_settings(plan, effective_date),
         "selection": normalised_selection,
         "benefits": benefits,
     }
@@ -177,62 +183,166 @@ def _record_transition(
     )
 
 
-def create_quote(*, proposer_id: uuid.UUID, plan_id: uuid.UUID, effective_date: datetime.date) -> Quote:
+def create_quote(
+    *,
+    proposer_id: uuid.UUID | None = None,
+    plan_id: uuid.UUID,
+    effective_date: datetime.date,
+    # Atalho para o formulário "nova cotação" que ainda não tem um Proposer
+    # persistido. Passar `proposerInput` cria o Proposer atomáticamente e,
+    # opcionalmente, passar `titularMemberInput` cria o membro titular (TITULAR)
+    # e junta-o à cotação no mesmo passo — tudo transacional: se a cotação
+    # falhar, nada fica para trás e nenhuma pessoa/proponente órfão é criada.
+    proposer_input: dict[str, Any] | None = None,
+    titular_member_input: dict[str, Any] | None = None,
+) -> Quote:
     tenant_id = CurrentTenantProvider.require()
     actor = CurrentActorProvider.get()
 
-    proposer = Proposer.objects.filter(id=proposer_id).first()
-    plan = Plan.objects.filter(id=plan_id).first()
-    if proposer is None or plan is None:
-        raise ReferencedEntityNotFoundError("Referenced proposerId or planId does not exist for this tenant")
-    if plan.status != PlanStatus.ACTIVE.value:
-        # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): reformulation of the
-        # old OD-ANGOLA-009 ("versão antiga nunca inicia negócio novo") now
-        # that there is no ProductVersion — an INACTIVE Plan can never
-        # start new business, but a Quote already created against it keeps
-        # working after it goes INACTIVE (same OD-ANGOLA-004 guarantee,
-        # just expressed on the Plan instead of the version).
-        raise ReferencedEntityNotFoundError(
-            f"Plan {plan_id} is {plan.status}; only an ACTIVE plan can be used to start a new quote"
-        )
+    created_proposer: Proposer | None = None
+    created_member: InsuredMember | None = None
+    try:
+        with transaction.atomic():
+            if proposer_id is None and proposer_input is None:
+                raise ReferencedEntityNotFoundError(
+                    "Um dos campos 'proposerId' ou 'proposerInput' deve ser fornecido."
+                )
 
-    # Product Owner decision (2026-09-25): every Quote gets its `COT-N`
-    # reference number immediately on creation, not only once APPROVED.
-    # Previously this was assigned in decide_quote() and doubled as the
-    # OD-ANGOLA-005 "apólice" (policy) number - it now means "cotação"
-    # reference number for the whole lifecycle instead; nothing downstream
-    # depends on it being null pre-approval (the customer portal login,
-    # apps.customer_portal.application.auth_service._resolve_proposer,
-    # already filters on `status="APPROVED"` explicitly, not on
-    # quote_number being set, so a DRAFT quote's number is still unusable
-    # there). Same safe, race-free numbering_service as document numbers.
-    quote_number = next_continuous_value(sequence_code="QUOTE_NUMBER", prefix="COT-")
+            if proposer_input is not None:
+                if proposer_id is not None:
+                    raise ReferencedEntityNotFoundError(
+                        "Envie 'proposerId' OU 'proposerInput' (não ambos) para criar uma cotação."
+                    )
+                created_proposer = create_proposer(
+                    proposer_type=(proposer_input.get("proposerType") or "INDIVIDUAL"),
+                    display_name=proposer_input["displayName"],
+                    external_reference=(
+                        proposer_input.get("externalReference")
+                        if "externalReference" in proposer_input
+                        else None
+                    ),
+                    nif=proposer_input["nif"],
+                    registration_number=proposer_input["registrationNumber"],
+                    email=proposer_input.get("email") or "",
+                    phone=proposer_input.get("phone") or "",
+                    attributes=(
+                        proposer_input.get("attributes") if "attributes" in proposer_input else None
+                    ),
+                )
+                proposer_id = created_proposer.id
+                if titular_member_input is not None:
+                    # O titular criado no mesmo passo é sempre relação TITULAR
+                    # com o próprio Proposer (a menos que o formulário indique
+                    # outro, mas por default é TITULAR)
+                    relationship_code = (titular_member_input.get("relationshipCode") or "TITULAR").upper()
+                    first_name = titular_member_input.get("firstName")
+                    last_name = titular_member_input.get("lastName")
+                    if first_name is None and created_proposer.display_name:
+                        # Melhor QoL: se o membro titular não enviar firstName,
+                        # usamos o displayName do proposer partido em dois
+                        parts = created_proposer.display_name.split(None, 1)
+                        first_name = parts[0] or None
+                        last_name = (parts[1] if len(parts) > 1 else None) or last_name
+                    date_of_birth = titular_member_input.get("dateOfBirth")
+                    if isinstance(date_of_birth, str):
+                        date_of_birth = datetime.date.fromisoformat(date_of_birth)
+                    created_member = create_member(
+                        proposer=created_proposer,
+                        relationship_code=relationship_code,
+                        first_name=first_name,
+                        last_name=last_name,
+                        date_of_birth=date_of_birth,
+                        sex_code=titular_member_input.get("sexCode"),
+                        external_reference=(
+                            titular_member_input.get("externalReference")
+                            if "externalReference" in titular_member_input
+                            else None
+                        ),
+                        attributes=(
+                            titular_member_input.get("attributes")
+                            if "attributes" in titular_member_input
+                            else None
+                        ),
+                    )
 
-    quote = Quote.objects.create(
-        tenant_id=tenant_id.value,
-        proposer=proposer,
-        plan=plan,
-        status=QuoteStatus.DRAFT.value,
-        quote_number=quote_number,
-        effective_date=effective_date,
-        valid_until=_default_valid_until(effective_date),
-        created_by=actor.actor_id if actor else "unknown",
-    )
-    _record_transition(quote, from_status=None, to_status=QuoteStatus.DRAFT.value)
-    _audit.record(action="quote.created", entity_type="Quote", entity_id=str(quote.id))
-    _outbox.append(
-        aggregate_type="Quote",
-        aggregate_id=str(quote.id),
-        event_type="QUOTE.CREATED",
-        payload={
-            "quoteId": str(quote.id),
-            "proposerId": str(proposer_id),
-            "productId": str(plan.product_id),
-            "planId": str(plan_id),
-            "effectiveDate": effective_date.isoformat(),
-            "status": QuoteStatus.DRAFT.value,
-        },
-    )
+            proposer = Proposer.objects.filter(id=proposer_id).first()
+            plan = Plan.objects.filter(id=plan_id).first()
+            if proposer is None or plan is None:
+                raise ReferencedEntityNotFoundError("Referenced proposerId or planId does not exist for this tenant")
+            if plan.status != PlanStatus.ACTIVE.value:
+                # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): reformulation of the
+                # old OD-ANGOLA-009 ("versão antiga nunca inicia negócio novo") now
+                # that there is no ProductVersion — an INACTIVE Plan can never
+                # start new business, but a Quote already created against it keeps
+                # working after it goes INACTIVE (same OD-ANGOLA-004 guarantee,
+                # just expressed on the Plan instead of the version).
+                raise ReferencedEntityNotFoundError(
+                    f"Plan {plan_id} is {plan.status}; only an ACTIVE plan can be used to start a new quote"
+                )
+
+            available, why = plan_availability(plan, effective_date)
+            if not available:
+                raise ReferencedEntityNotFoundError(why)
+
+            # Product Owner decision (2026-09-25): every Quote gets its `COT-N`
+            # reference number immediately on creation, not only once APPROVED.
+            # Previously this was assigned in decide_quote() and doubled as the
+            # OD-ANGOLA-005 "apólice" (policy) number - it now means "cotação"
+            # reference number for the whole lifecycle instead; nothing downstream
+            # depends on it being null pre-approval (the customer portal login,
+            # apps.customer_portal.application.auth_service._resolve_proposer,
+            # already filters on `status="APPROVED"` explicitly, not on
+            # quote_number being set, so a DRAFT quote's number is still unusable
+            # there). Same safe, race-free numbering_service as document numbers.
+            quote_number = next_continuous_value(sequence_code="QUOTE_NUMBER", prefix="COT-")
+
+            quote = Quote.objects.create(
+                tenant_id=tenant_id.value,
+                proposer=proposer,
+                plan=plan,
+                status=QuoteStatus.DRAFT.value,
+                quote_number=quote_number,
+                effective_date=effective_date,
+                valid_until=_default_valid_until(effective_date),
+                created_by=actor.actor_id if actor else "unknown",
+            )
+            _record_transition(quote, from_status=None, to_status=QuoteStatus.DRAFT.value)
+            _audit.record(action="quote.created", entity_type="Quote", entity_id=str(quote.id))
+            _outbox.append(
+                aggregate_type="Quote",
+                aggregate_id=str(quote.id),
+                event_type="QUOTE.CREATED",
+                payload={
+                    "quoteId": str(quote.id),
+                    "proposerId": str(proposer_id),
+                    "productId": str(plan.product_id),
+                    "planId": str(plan_id),
+                    "effectiveDate": effective_date.isoformat(),
+                    "status": QuoteStatus.DRAFT.value,
+                },
+            )
+
+            # Se criámos um titular no mesmo request, adicionamo-lo à cotação
+            # imediatamente (a elegibilidade é avaliada em add_quote_member).
+            if created_member is not None:
+                correlation_id = None
+                try:
+                    from apps.foundation.interfaces.middleware import get_correlation_id as _get_cid
+
+                    correlation_id = _get_cid()
+                except Exception:
+                    correlation_id = None
+                quote = add_quote_member(quote=quote, member_id=created_member.id, correlation_id=correlation_id)
+                quote.refresh_from_db()
+
+    except Exception:
+        # create_proposer / create_member gravam audit + outbox fora da
+        # transaction.atomic()? Não: create_proposer já tem o seu próprio
+        # atomic(). Por isso rollback da transaction aqui não reverte os
+        # audit/outbox — mas isso é aceitável: um "orphan audit/outbox" é
+        # irrelevante operacionalmente (não há FK e são históricos).
+        # Não re-lançamos como novo erro.
+        raise
     return quote
 
 
@@ -251,18 +361,32 @@ def _demote_to_draft_if_ready(quote: Quote) -> None:
 
 def add_quote_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str | None) -> Quote:
     if quote.status not in (QuoteStatus.DRAFT.value, QuoteStatus.READY.value):
-        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; members can only be edited while DRAFT or READY")
+        raise QuoteStateError(
+            f"Quote {quote.id} is {quote.status}; members can only be edited while DRAFT or READY."
+            f" Current status {quote.status} means the quote has already been submitted or approved."
+        )
 
     member = InsuredMember.objects.filter(id=member_id).first()
     if member is None:
-        raise ReferencedEntityNotFoundError(f"memberId {member_id} does not exist for this tenant")
-    if member.proposer_id != quote.proposer_id:
         raise ReferencedEntityNotFoundError(
-            f"memberId {member_id} does not belong to the proposer associated with quote {quote.id}"
+            f"memberId {member_id} does not exist for this tenant. Antes de adicionar um membro à "
+            "cotação, crie primeiro o segurado no módulo de Clientes (ou use 'titularMemberInput' "
+            "no 'createQuote' para criar o titular automaticamente junto com o proponente)."
+        )
+    if member.proposer_id != quote.proposer_id:
+        # Caso frequente: o operador criou o proponente, mas esqueceu-se de associar o membro
+        # TITULAR *ao mesmo proponente* (o membro está associado a outro proponente antigo).
+        # Ajudar com uma mensagem clara.
+        raise ReferencedEntityNotFoundError(
+            f"memberId {member_id} pertence a um proponente diferente da cotação "
+            f"(member.proposerId={member.proposer_id} vs quote.proposerId={quote.proposer_id}). "
+            "Crie o membro TITULAR no mesmo proponente que vai contratar (é o tomador da apólice), "
+            "ou use 'titularMemberInput' no createQuote para o backend criar os dois juntos."
         )
     if member.status != MemberStatus.ACTIVE.value:
         raise ReferencedEntityNotFoundError(
-            f"memberId {member_id} is {member.status} and cannot be added to a quote"
+            f"memberId {member_id} is {member.status} and cannot be added to a quote. "
+            "Ative o membro primeiro antes de o adicionar a cotações."
         )
 
     evaluation = EvaluateEligibilityUseCase().execute(
@@ -405,8 +529,6 @@ def build_pricing_context(
     members_by_id = {m.id: m for m in InsuredMember.objects.filter(id__in=priceable_member_ids)}
 
     context: dict = {
-        "ratingTableCode": resolve_default_rating_table_code(effective_date=quote.effective_date),
-        "parameterSetCode": resolve_default_parameter_set_code(effective_date=quote.effective_date),
         "members": {
             str(member_id): (
                 {"ageBand": band}
@@ -416,6 +538,11 @@ def build_pricing_context(
             for member_id in priceable_member_ids
         },
     }
+    # A configuração de negócio publicada (pricing.*) tem prioridade; sem ela,
+    # mantém-se a resolução legada RatingTable/PricingParameterSet.
+    if BusinessConfigurationResolver.get("pricing.reference_premiums", effective_date=quote.effective_date) is None:
+        context["ratingTableCode"] = resolve_default_rating_table_code(effective_date=quote.effective_date)
+        context["parameterSetCode"] = resolve_default_parameter_set_code(effective_date=quote.effective_date)
     rule_version = resolve_pricing_rule_version_optional(effective_date=quote.effective_date)
     if rule_version:
         context["ruleVersionCode"] = rule_version
@@ -433,10 +560,61 @@ def build_pricing_context(
 
 def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
     if quote.status not in (QuoteStatus.DRAFT.value, QuoteStatus.READY.value):
-        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; pricing can only run while DRAFT or READY")
+        extra = ""
+        if quote.status == QuoteStatus.APPROVED.value or quote.status == QuoteStatus.BOUND.value:
+            extra = (
+                f" Esta cotação já foi aprovada; o prémio calculado antes da aprovação"
+                f" já está congelado no snapshot. Para ver o prémio, use GET /quotes/{quote.id}"
+                f" (campos 'premiumAnnualAmount' / 'premiumAnnualCurrency') e não tente recalcular."
+                f" Para corrigir valores, devolva a cotação para READY primeiro (via decision=RETURN)."
+            )
+        elif quote.status == QuoteStatus.IN_REVIEW.value:
+            extra = (
+                " Cotação em análise (IN_REVIEW). Não é permitido recalculá-la enquanto"
+                " um subscritor a estiver a rever. Primeiro devolva-a para READY via decision=RETURN."
+            )
+        raise QuoteStateError(
+            f"Quote {quote.id} is {quote.status}; pricing can only run while DRAFT or READY.{extra}"
+        )
 
     if not recalculate and quote.latest_pricing_run_id and quote.latest_pricing_run.status == "CALCULATED":
-        return quote.latest_pricing_run
+        latest = quote.latest_pricing_run
+        snapshot = latest.business_configuration_snapshot_json or {}
+        current_reference = BusinessConfigurationResolver.get(
+            "pricing.reference_premiums", effective_date=quote.effective_date
+        )
+        if current_reference is None and not snapshot:
+            return latest
+        if current_reference is not None:
+            current_keys = (
+                "pricing.reference_premiums",
+                "pricing.factors",
+                "pricing.adjustments",
+                "pricing.taxes_fees",
+            )
+            current_snapshot = {}
+            for key in current_keys:
+                current = BusinessConfigurationResolver.get(key, effective_date=quote.effective_date)
+                if current is None:
+                    current_snapshot = {}
+                    break
+                current_snapshot[key] = {
+                    "configurationId": str(current.id),
+                    "versionNo": current.version_no,
+                    "checksum": current.checksum,
+                }
+            stored_snapshot = {
+                key: {
+                    "configurationId": value.get("configurationId"),
+                    "versionNo": value.get("versionNo"),
+                    "checksum": value.get("checksum"),
+                }
+                for key, value in snapshot.items()
+            }
+            if current_snapshot and stored_snapshot == current_snapshot:
+                return latest
+        elif not current_reference and snapshot:
+            return latest
 
     context, priceable_member_ids = build_pricing_context(quote)
 
@@ -450,7 +628,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
 
     actor = CurrentActorProvider.get()
     snapshot_json = {
-        "plan": _plan_content_snapshot(quote.plan, quote.selection_json),
+        "plan": _plan_content_snapshot(quote.plan, quote.selection_json, quote.effective_date),
         "effectiveDate": quote.effective_date.isoformat(),
         "memberIds": [str(m) for m in priceable_member_ids],
         "context": context,
@@ -474,13 +652,63 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
         created_by=actor.actor_id if actor else "unknown",
     )
 
-    has_blocking_member = quote.members.filter(status=QuoteMemberStatus.EXCLUDED.value).exists()
+    has_excluded_member = quote.members.filter(status=QuoteMemberStatus.EXCLUDED.value).exists()
+    has_referral_member = quote.members.filter(status=QuoteMemberStatus.REFERRAL.value).exists()
     Quote.objects.filter(id=quote.id).update(latest_pricing_run=pricing_run, currency_code=pricing_run.currency_code)
     quote.refresh_from_db()
-    if quote.status == QuoteStatus.DRAFT.value and not has_blocking_member:
-        Quote.objects.filter(id=quote.id, status=QuoteStatus.DRAFT.value).update(status=QuoteStatus.READY.value)
+
+    from django.utils import timezone as _tz_now
+
+    if quote.status == QuoteStatus.DRAFT.value or quote.status == QuoteStatus.READY.value:
+        from_status = quote.status
+        if has_excluded_member:
+            new_status = QuoteStatus.REJECTED.value
+            reason_code = "ELIGIBILITY_HARD_STOP"
+            reason_text = "Cotação rejeitada automaticamente: pelo menos um membro foi considerado inelegível (HARD_STOP) após verificação de elegibilidade."
+            Quote.objects.filter(id=quote.id).update(
+                status=QuoteStatus.REJECTED.value,
+                rejected_by=actor.actor_id if actor else "system:auto",
+                rejected_at=_tz_now.now(),
+            )
+        elif has_referral_member:
+            new_status = QuoteStatus.IN_REVIEW.value
+            reason_code = "ELIGIBILITY_REFERRAL"
+            reason_text = "Cotação encaminhada para análise manual: existem membros que requerem validação manual (documentação pendente, junta médica ou caso excepcional)."
+            Quote.objects.filter(id=quote.id).update(
+                status=QuoteStatus.IN_REVIEW.value,
+                submitted_by=actor.actor_id if actor else "system:auto",
+                submitted_at=_tz_now.now(),
+            )
+            if not ReviewTask.objects.filter(quote=quote, status__in=[ReviewTaskStatus.OPEN.value, ReviewTaskStatus.IN_PROGRESS.value]).exists():
+                ReviewTask.objects.create(
+                    tenant_id=quote.tenant_id,
+                    quote=quote,
+                    created_by=actor.actor_id if actor else "system:auto",
+                )
+        else:
+            new_status = QuoteStatus.READY.value
+            reason_code = "ELIGIBILITY_OK"
+            reason_text = "Cotação pronta: todos os membros elegíveis, cálculo realizado com sucesso."
+            if from_status != QuoteStatus.READY.value:
+                Quote.objects.filter(id=quote.id).update(status=QuoteStatus.READY.value)
+
         quote.refresh_from_db()
-        _record_transition(quote, from_status=QuoteStatus.DRAFT.value, to_status=QuoteStatus.READY.value, correlation_id=correlation_id)
+        if from_status != new_status:
+            _record_transition(
+                quote,
+                from_status=from_status,
+                to_status=new_status,
+                reason_code=reason_code,
+                reason_text=reason_text,
+                correlation_id=correlation_id,
+            )
+            _audit.record(
+                action=f"quote.auto_status.{new_status.lower()}",
+                entity_type="Quote",
+                entity_id=str(quote.id),
+                correlation_id=correlation_id,
+                metadata={"reasonCode": reason_code, "reasonText": reason_text},
+            )
 
     # R1: a calculation that leaves the editable state different from the
     # last saved version is itself a version (same state = nothing to save).
@@ -530,6 +758,63 @@ def resolve_pricing_rule_version_optional(*, effective_date: datetime.date) -> s
     return distinct[0] if len(distinct) == 1 else None
 
 
+def delete_quote(*, quote: Quote) -> None:
+    """Apaga uma cotação e tudo o que está "dentro" dela (membros, ajustes,
+    snapshots, state_history, cenários, tarefas de revisão). Só permitido
+    para estados não-protegidos (ciclo de vida ainda não saiu do staff).
+
+    Permitido deletar: DRAFT / READY / REJECTED / EXPIRED / CANCELLED.
+    Bloqueado: IN_REVIEW (tem tarefa de review pendente), APPROVED / BOUND
+    (já houve decisão de aprovador e pode existir Policy emitida). Nestes
+    casos levanta QuoteDeletionBlockedError."""
+
+    actor = CurrentActorProvider.get()
+    protected = {
+        QuoteStatus.IN_REVIEW.value,
+        QuoteStatus.APPROVED.value,
+        QuoteStatus.BOUND.value,
+    }
+    if quote.status in protected:
+        raise QuoteDeletionBlockedError(
+            f"Quote {quote.id} cannot be deleted because it is in status {quote.status}. "
+            "Cotações em análise, aprovadas ou emitidas não podem ser apagadas para "
+            "preservar a trilha de auditoria e documentos relacionados. "
+            "Para cotações em análise: decida RETURN (volta a READY) e depois apague, "
+            "ou use CANCEL/REJECT para registar o encerramento formal da cotação."
+        )
+    with transaction.atomic():
+        # Estes rel. têm on_delete=CASCADE/DO_NOTHING misturados. Para segurança
+        # apagamos tudo explicitamente antes da Quote:
+        QuoteMember.objects.filter(quote=quote).delete()
+        QuoteAdjustment.objects.filter(quote=quote).delete()
+        ReviewTask.objects.filter(quote=quote).delete()
+        QuoteDecision.objects.filter(quote=quote).delete()
+        QuoteSnapshot.objects.filter(quote=quote).delete()
+        QuoteStateHistory.objects.filter(quote=quote).delete()
+        # Cenários (QuoteScenario) tem on_delete CASCADE no modelo.
+        # Apagamos pelo ORM para disparar qualquer listener futuro:
+        quote.scenarios.all().delete()  # type: ignore[attr-defined]
+        # Finalmente a própria cotação:
+        Quote.objects.filter(id=quote.id).delete()
+    _audit.record(
+        action="quote.deleted",
+        entity_type="Quote",
+        entity_id=str(quote.id),
+        metadata={"quoteNumber": quote.quote_number, "statusDeleted": quote.status},
+    )
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.DELETED",
+        payload={
+            "quoteId": str(quote.id),
+            "quoteNumber": quote.quote_number,
+            "deletedBy": actor.actor_id if actor else "unknown",
+            "statusDeleted": quote.status,
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Q360-S7-01..03 — submission, review workspace, decision (approve/reject/
 # return). See ART-009 "Quote Machine" (QT-003..006) and "Review Machine"
@@ -546,7 +831,7 @@ def _create_snapshot(*, quote: Quote, snapshot_type: str) -> QuoteSnapshot:
     actor = CurrentActorProvider.get()
     snapshot_json = {
         "status": quote.status,
-        "plan": _plan_content_snapshot(quote.plan, quote.selection_json),
+        "plan": _plan_content_snapshot(quote.plan, quote.selection_json, quote.effective_date),
         "effectiveDate": quote.effective_date.isoformat(),
         "latestPricingRunId": str(quote.latest_pricing_run_id) if quote.latest_pricing_run_id else None,
     }

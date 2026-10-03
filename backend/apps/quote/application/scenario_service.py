@@ -83,7 +83,7 @@ def normalise_parameters(quote: Quote, raw: Any) -> dict[str, Any]:
         raise ReferencedEntityNotFoundError(
             "parameters must be an object with 'selection', 'adjustments' and/or 'projection'"
         )
-    plan_context = resolve_plan_pricing_context(plan=quote.plan, selection=raw.get("selection") or {})
+    plan_context = resolve_plan_pricing_context(plan=quote.plan, selection=raw.get("selection") or {}, effective_date=quote.effective_date)
     adjustments = raw.get("adjustments") or []
     if not isinstance(adjustments, list):
         raise ReferencedEntityNotFoundError("parameters.adjustments must be a list")
@@ -429,7 +429,7 @@ def compare_scenarios(*, quote: Quote, scenario_ids: list[uuid.UUID] | None) -> 
     if len(scenarios) < 2:
         raise ReferencedEntityNotFoundError("At least two scenarios are needed to compare")
 
-    contexts = {s.id: resolve_plan_pricing_context(plan=quote.plan, selection=s.parameters_json.get("selection") or {}) for s in scenarios}
+    contexts = {s.id: resolve_plan_pricing_context(plan=quote.plan, selection=s.parameters_json.get("selection") or {}, effective_date=quote.effective_date) for s in scenarios}
     totals = {s.id: Decimal(s.result_json["totalAmount"]) for s in scenarios}
     first = scenarios[0]
     currency = first.result_json.get("currencyCode")

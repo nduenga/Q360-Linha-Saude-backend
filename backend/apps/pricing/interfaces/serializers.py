@@ -163,6 +163,7 @@ class PricingResponseSerializer(serializers.Serializer):
             "ratingTableId": _id(obj.rating_table_id),
             "parameterSetId": _id(obj.parameter_set_id),
             "ruleVersionId": _id(obj.rule_version_id),
+            "businessConfigurationVersions": obj.business_configuration_snapshot_json or {},
             "roundingPolicyCode": obj.rounding_policy_code,
             "roundingPolicyVersion": obj.rounding_policy_version,
         }

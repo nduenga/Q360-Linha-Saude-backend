@@ -360,3 +360,16 @@ def test_health_data_access_is_restricted_and_reads_are_audited(admin_client, te
     # nenhuma linha individual sai da API
     body = str(auditor.get(f"/api/v1/claims/summary?proposerId={scope['proposerId']}").data)
     assert "P001" not in body and "member_reference" not in body
+
+
+@pytest.mark.django_db
+def test_methodology_is_labelled_indicative_and_template_matches_the_import(admin_client):
+    meta = admin_client.get("/api/v1/claims/methodology")
+    assert meta.status_code == 200, meta.data
+    assert meta.data["method"] == "SIMPLE_TREND_V1" and meta.data["indicative"] is True
+    assert meta.data["importFormats"]["CLAIMS"]["required"] == ["occurrence_date", "benefit_code", "paid_amount"]
+    template = admin_client.get("/api/v1/claims/import-template?kind=PREMIUMS")
+    assert template.status_code == 200 and "text/csv" in template["Content-Type"]
+    header = template.content.decode().splitlines()[0].split(",")
+    assert header[:3] == ["period_start", "period_end", "premium_amount"]
+    assert admin_client.get("/api/v1/claims/import-template?kind=NOPE").status_code == 400

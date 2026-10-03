@@ -29,6 +29,18 @@ _INDIVIDUAL_MODES = (
 )
 
 
+# Tratamentos da configuração de negócio (`underwriting.pre_existing_conditions`)
+# e o modo de decisão que cada um produz.
+BUSINESS_TREATMENT_MODE = {
+    "EXCLUSION_TOTAL": "TOTAL_EXCLUSION",
+    "EXCLUSION_SPECIFIC": "SPECIFIC_EXCLUSION",
+    "WAITING_PERIOD": "ACCEPTED_WITH_WAITING",
+    "SURCHARGE": "ACCEPTED_WITH_LOADING",
+    "SUBLIMIT": "ACCEPTED_WITH_SUBLIMIT",
+    "FULL_ACCEPTANCE": "FULL_ACCEPTANCE",
+}
+
+
 class InvalidPreExistingDecisionError(DomainProblem):
     http_status = 400
     problem_code = "VALIDATION-400"
@@ -48,9 +60,31 @@ def validate_pre_existing_decision(
 
     if not isinstance(raw, dict):
         raise _err("decision must be an object")
+    raw = dict(raw)
     mode = raw.get("mode")
     if mode not in PRE_EXISTING_MODES:
         raise _err(f"mode must be one of {list(PRE_EXISTING_MODES)}")
+
+    # Política de negócio por gravidade: restringe os tratamentos permitidos
+    # e fornece os valores por omissão (carência, sobreprémio, sublimite).
+    severity = raw.get("severity")
+    policy = [r for r in (settings.get("preExistingPolicy") or []) if isinstance(r, dict)]
+    if policy:
+        if severity is None:
+            raise _err("severity (LOW, MODERATE ou HIGH) é obrigatória: o negócio definiu tratamentos por gravidade")
+        rules = [r for r in policy if r.get("severity") == severity]
+        if not rules:
+            raise _err(f"O negócio não definiu tratamento para a gravidade '{severity}'")
+        allowed = {BUSINESS_TREATMENT_MODE.get(r.get("treatment")) for r in rules}
+        if mode not in allowed:
+            raise _err(f"Para gravidade {severity} o negócio só permite: {sorted(m for m in allowed if m)}")
+        rule = next(r for r in rules if BUSINESS_TREATMENT_MODE.get(r.get("treatment")) == mode)
+        if mode == "ACCEPTED_WITH_WAITING" and raw.get("waitingMonths") is None and rule.get("waiting_days"):
+            raw["waitingMonths"] = max(12, min(24, round(float(rule["waiting_days"]) / 30)))
+        if mode == "ACCEPTED_WITH_LOADING" and raw.get("loadingPct") is None and rule.get("surcharge_percent") is not None:
+            raw["loadingPct"] = rule["surcharge_percent"]
+        if mode == "ACCEPTED_WITH_SUBLIMIT" and raw.get("sublimitAmount") is None and rule.get("sublimit"):
+            raw["sublimitAmount"] = rule["sublimit"]
 
     if segment == "INDIVIDUAL_FAMILY" and mode not in _INDIVIDUAL_MODES:
         raise _err(f"{mode} only applies to GROUP plans with mandatory adhesion")
@@ -63,6 +97,8 @@ def validate_pre_existing_decision(
             raise _err("A GROUP plan with mandatory adhesion accepts pre-existing conditions (sublimit or fully)")
 
     decision: dict[str, Any] = {"mode": mode}
+    if severity is not None:
+        decision["severity"] = severity
     if mode == "ACCEPTED_WITH_WAITING":
         months = raw.get("waitingMonths")
         if isinstance(months, bool) or not isinstance(months, int) or not 12 <= months <= 24:

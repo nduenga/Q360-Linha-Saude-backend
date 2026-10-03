@@ -23,6 +23,7 @@ from typing import Any, Callable
 from django.db import transaction
 from django.utils import timezone
 
+from apps.business_config.application.overlays import effective_plan_settings
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.change_audit import change_metadata, require_reason
 from apps.foundation.application.context import CurrentActorProvider
@@ -104,7 +105,7 @@ def set_selection(*, quote: Quote, selection: dict[str, Any], row_version: int) 
     """Coberturas opcionais escolhidas, opção de participação A–E e
     alterações de capitais/participação ("e se...") da cotação."""
     _require_editable(quote)
-    plan_context = resolve_plan_pricing_context(plan=quote.plan, selection=selection)
+    plan_context = resolve_plan_pricing_context(plan=quote.plan, selection=selection, effective_date=quote.effective_date)
     before = quote.selection_json
     with transaction.atomic():
         updated = Quote.objects.filter(id=quote.id, row_version=row_version).update(
@@ -325,7 +326,7 @@ def set_member_pre_existing(
     quote_member = QuoteMember.objects.filter(quote=quote, member_id=member_id).first()
     if quote_member is None:
         raise ReferencedEntityNotFoundError(f"Member {member_id} is not associated with quote {quote.id}")
-    clean, warnings = validate_pre_existing_decision(decision, plan_settings=quote.plan.settings_json)
+    clean, warnings = validate_pre_existing_decision(decision, plan_settings=effective_plan_settings(quote.plan, quote.effective_date))
     actor = CurrentActorProvider.get()
     stored = {
         **clean,

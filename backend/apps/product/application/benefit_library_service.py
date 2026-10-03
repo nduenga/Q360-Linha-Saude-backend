@@ -42,7 +42,33 @@ from apps.product.infrastructure.models import Benefit, BenefitRevision, PlanBen
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 
-CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{1,59}$")
+_CODE_PATTERN_STRICT = re.compile(r"^[A-Z][A-Z0-9_]{1,59}$")
+# Pattern mais permissivo que o utilizador final pode escrever no formulário
+# (minúsculas, hífen, ponto, espaço). Antes de validar/gravar normalizamos para
+# a forma canónica UPPER_SNAKE_CASE: só o padrão estrito é aceite no fim.
+_CODE_PATTERN_LENIENT = re.compile(r"^[A-Za-z][ A-Za-z0-9._-]{1,59}$")
+
+
+def _normalise_code(raw_code: str) -> str:
+    """Converte códigos inseridos manualmente para a forma canónica:
+    maiúsculas, espaços/pontos/hífens → '_', remove duplicados.
+
+    Exemplos:
+      'Consulta Externa' → 'CONSULTA_EXTERNA'
+      'Plano-Gold.01'     → 'PLANO_GOLD_01'
+      'urgencia_24h'      → 'URGENCIA_24H'
+    """
+    import re as _re
+
+    if not raw_code:
+        return raw_code
+    upper = raw_code.strip().upper()
+    # Substitui todos os separadores permitidos pelo formulário por '_'
+    replaced = _re.sub(r"[ .\-]+", "_", upper)
+    # Remove underscores duplicadas (nunca devem existir dois ou mais seguidos)
+    replaced = _re.sub(r"_+", "_", replaced)
+    # Tira underscore leading/trailing (por segurança)
+    return replaced.strip("_")
 _ALLOWED_CURRENCIES = {"AOA", "USD"}
 
 
@@ -119,8 +145,18 @@ def _record_revision(*, benefit: Benefit, action: str, reason: str | None) -> Be
 def create_benefit(
     *, code: str, name: str, description: str | None, definition: dict[str, Any] | None
 ) -> Benefit:
-    if not CODE_PATTERN.match(code):
-        raise InvalidBenefitDefinitionError("code must match ^[A-Z][A-Z0-9_]{1,59}$")
+    # Normalização amigável: o utilizador pode escrever "Plano Doutor Dantas"
+    # e nós gravamos automaticamente como "PLANO_DOUTOR_DANTAS". Só levantamos
+    # erro se o resultado final não obedecer ao padrão estrito do sistema.
+    if not _CODE_PATTERN_LENIENT.match(code):
+        raise InvalidBenefitDefinitionError(
+            "code must start with a letter and contain 2-60 alphanumeric characters, spaces, hyphens, underscores or dots"
+        )
+    code = _normalise_code(code)
+    if not _CODE_PATTERN_STRICT.match(code):
+        raise InvalidBenefitDefinitionError(
+            f"normalised code '{code}' does not match the canonical pattern ^[A-Z][A-Z0-9_]{{1,59}}$ — remove leading numbers or special chars and try again"
+        )
     definition = validate_definition(definition)
     tenant_id = CurrentTenantProvider.require().value
     ensure_market_catalog(tenant_id)
@@ -346,6 +382,13 @@ def import_benefits(*, filename: str, content: bytes, dry_run: bool) -> dict[str
         try:
             if not code or not name:
                 raise InvalidBenefitDefinitionError("code and name are required")
+            if not _CODE_PATTERN_LENIENT.match(code):
+                raise InvalidBenefitDefinitionError(
+                    "code must start with a letter and contain 2-60 alphanumeric chars/spaces/hyphens/underscores/dots"
+                )
+            code = _normalise_code(code)
+            if not _CODE_PATTERN_STRICT.match(code):
+                raise InvalidBenefitDefinitionError(f"normalised code '{code}' must match ^[A-Z][A-Z0-9_]{{1,59}}$")
             definition_raw = row.get("definition_json") or ""
             try:
                 definition = json.loads(definition_raw) if definition_raw else None
@@ -357,8 +400,6 @@ def import_benefits(*, filename: str, content: bytes, dry_run: bool) -> dict[str
             if existing is None:
                 if (row.get("category") or COMPLEMENTARY).upper() == BASE:
                     raise InvalidBenefitDefinitionError("a BASE coverage cannot be created through import")
-                if not CODE_PATTERN.match(code):
-                    raise InvalidBenefitDefinitionError("code must match ^[A-Z][A-Z0-9_]{1,59}$")
                 if not dry_run:
                     create_benefit(code=code, name=name, description=description, definition=definition)
                 created.append(code)

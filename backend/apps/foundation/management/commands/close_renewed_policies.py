@@ -1,0 +1,35 @@
+"""Encerra (RENEWED) as apólices cuja renovação já está em vigor, para a regra
+`renewal.deadlines.previous_policy_close = ON_EFFECTIVE_DATE`. Idempotente;
+pensado para um agendador externo (cron), como `expire_quotes`."""
+from __future__ import annotations
+
+from django.core.management.base import BaseCommand
+
+from apps.foundation.application.context import CurrentActorProvider
+from apps.foundation.domain.actor import Actor
+from apps.foundation.domain.permissions import Role
+from apps.foundation.domain.scopes import Scope
+from apps.foundation.domain.tenant import TenantId
+from apps.foundation.infrastructure.models import Tenant
+from apps.policy.application.issuance_service import close_renewed_policies
+
+
+class Command(BaseCommand):
+    help = "Marca como RENEWED as apólices de origem cuja renovação já iniciou (todos os inquilinos)."
+
+    def handle(self, *args, **options):
+        total = 0
+        for tenant in Tenant.objects.all():
+            actor = Actor(
+                actor_id="system-scheduler",
+                tenant_id=TenantId(tenant.id),
+                roles=frozenset({Role.ADMIN}),
+                scopes=frozenset({Scope.READ, Scope.WRITE}),
+                actor_type="SYSTEM",
+            )
+            token = CurrentActorProvider.bind(actor)
+            try:
+                total += close_renewed_policies()
+            finally:
+                CurrentActorProvider.reset(token)
+        self.stdout.write(self.style.SUCCESS(f"Done. {total} policy(ies) marked RENEWED."))

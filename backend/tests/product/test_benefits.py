@@ -154,8 +154,11 @@ def test_create_complementary_benefit_and_search(admin_client):
 
 @pytest.mark.django_db
 def test_create_benefit_rejects_bad_code_duplicate_and_bad_definition(admin_client):
-    bad_code = admin_client.post("/api/v1/benefits", {"code": "lower case", "name": "X"}, format="json")
+    bad_code = admin_client.post("/api/v1/benefits", {"code": "9 bad!", "name": "X"}, format="json")
     assert bad_code.status_code == 400
+    # Códigos amigáveis são normalizados para UPPER_SNAKE_CASE.
+    friendly = admin_client.post("/api/v1/benefits", {"code": "lower case", "name": "X"}, format="json")
+    assert friendly.status_code == 201 and friendly.data["code"] == "LOWER_CASE"
 
     duplicate = admin_client.post("/api/v1/benefits", {"code": "PHARMACY", "name": "X"}, format="json")
     assert duplicate.status_code == 409
@@ -327,7 +330,7 @@ def test_import_creates_updates_and_reports_row_errors(admin_client):
         "code,name,category,description,status,definition_json\n"
         'NEW_COVER,Nova cobertura,COMPLEMENTARY,Desc,ACTIVE,"{""guaranteeForm"": ""SUBLIMIT""}"\n'
         "PHARMACY,Medicamentos (importado),COMPLEMENTARY,,ACTIVE,\n"
-        "BAD CODE,Erro,COMPLEMENTARY,,ACTIVE,\n"
+        "9BAD CODE,Erro,COMPLEMENTARY,,ACTIVE,\n"
         "NEW_BASE,Base indevida,BASE,,ACTIVE,\n"
         "BAD_JSON,Json mau,COMPLEMENTARY,,ACTIVE,{not json\n"
         ",Sem codigo,COMPLEMENTARY,,ACTIVE,\n"

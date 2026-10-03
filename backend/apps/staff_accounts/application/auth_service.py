@@ -93,7 +93,7 @@ class StaffAccountAuthService:
         roles = list(
             StaffAccountRole.objects.filter(staff_account_id=account.id).values_list("role", flat=True)
         )
-        scopes = scopes_for_roles(frozenset(Role(r) for r in roles))
+        scopes = scopes_for_roles(frozenset(Role(r) for r in roles), tenant_id=account.tenant_id)
 
         access_token, expires_in = issue_access_token(
             actor_id=account.id, tenant_id=account.tenant_id, roles=roles, scopes=[s.value for s in scopes]
@@ -154,7 +154,7 @@ class StaffAccountAuthService:
         roles = list(
             StaffAccountRole.objects.filter(staff_account_id=account.id).values_list("role", flat=True)
         )
-        scopes = scopes_for_roles(frozenset(Role(r) for r in roles))
+        scopes = scopes_for_roles(frozenset(Role(r) for r in roles), tenant_id=account.tenant_id)
         access_token, expires_in = issue_access_token(
             actor_id=account.id, tenant_id=account.tenant_id, roles=roles, scopes=[s.value for s in scopes]
         )

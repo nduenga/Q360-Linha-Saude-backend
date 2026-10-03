@@ -1,0 +1,13 @@
+{
+  "_warning":"Valores entre [ ] são placeholders dos documentos e precisam de validação.",
+  "product.plans":{"source":"SAU Manual","plans":["Base","Conforto","Premium"]},
+  "product.coverages":{"source":"SAU Manual","base":["Internamento Hospitalar","Ambulatório","Maternidade e Parto","Urgência e Emergência Médica"],"optional":["Estomatologia","Óptica","Medicina Preventiva / Check-up Anual","Cobertura no Estrangeiro"]},
+  "pricing.reference_premiums":{"status":"PLACEHOLDER","age_bands":["0-17","18-35","36-50","51-65","66+"],"premium_values":"[PRÉMIO MÍNIMO]"},
+  "product.waiting_periods":{"status":"PLACEHOLDER","urgent_emergency":"0 dias","ambulatory":"[PERÍODO] dias","hospital_surgery":"[PERÍODO] dias","maternity":"[PERÍODO] dias","pre_existing_surcharge":"[PERÍODO] dias adicional"},
+  "pricing.adjustments":{"status":"PLACEHOLDER","pre_existing":"+[X]% a +[X]%","age_above_threshold":"+[X]%","high_capital":"+[X]%","family_3_plus":"-[X]%","other_personal_insurance":"-[X]%","foreign_extension":"+[X]%","no_claims_renewal":"-[X]%"},
+  "network.rules":{"network":true,"free_choice_reimbursement":true,"territory":"Angola","pre_authorization":true},
+  "foreign_coverage.rules":{"countries":["Portugal","África do Sul","Brasil","Namíbia"],"currency_options":["KZ","USD"],"prior_approval":true},
+  "proposal.documents":{"documents":["Proposta de Seguro / Questionário de Saúde — SAU","Guia da Rede / Reembolso","Tabela de Taxas e Regras de Subscrição","Condições Particulares / Apólice / Cartão","Manual do Produto"]},
+  "proposal.texts":{"legal_validation_required":true,"source":"SAU_Termos_Condicoes.docx"},
+  "product.exclusions":{"source":"SAU_Termos_Condicoes.docx","legal_validation_required":true}
+}

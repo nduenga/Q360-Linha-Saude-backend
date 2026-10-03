@@ -61,6 +61,15 @@ from apps.pricing.infrastructure.models import (
     RatingTable,
 )
 from apps.product.infrastructure.models import PricingParameterSet
+from apps.business_config.application.resolver import BusinessConfigurationResolver
+from apps.business_config.application.pricing import (
+    PublishedBusinessPricing,
+    resolve_adjustments as resolve_business_adjustments,
+    resolve_factors as resolve_business_factors,
+    resolve_published_business_pricing,
+    resolve_reference_premium,
+    resolve_taxes_and_fees,
+)
 from apps.pricing.infrastructure.parameter_repository import resolve_decimal_parameter, resolve_pricing_parameter_set
 from apps.pricing.infrastructure.rule_repository import parse_pricing_config, resolve_pricing_rule_version
 from apps.pricing.application.plan_dimensions import PlanPricingContext, resolve_plan_pricing_context
@@ -203,11 +212,6 @@ def _execute(
 
     rating_table_code = context.get("ratingTableCode")
     parameter_set_code = context.get("parameterSetCode")
-    if not rating_table_code or not parameter_set_code:
-        raise ReferencedEntityNotFoundError(
-            "context.ratingTableCode and context.parameterSetCode are required "
-            "(see apps/pricing/application/pricing_engine.py OPEN DECISION)"
-        )
 
     plan = Plan.objects.filter(id=plan_id).first()
     if plan is None:
@@ -217,7 +221,7 @@ def _execute(
     # participation option and the optional coverages the customer chose all
     # feed the calculation (see plan_dimensions.py) — validated up front so a
     # bad selection is a 400, never a half-built PricingRun.
-    plan_context = resolve_plan_pricing_context(plan=plan, selection=context.get("selection"))
+    plan_context = resolve_plan_pricing_context(plan=plan, selection=context.get("selection"), effective_date=effective_date)
     commercial_adjustments = parse_commercial_adjustments(context.get("adjustments"))
     pre_existing: dict[str, dict[str, Any]] = context.get("preExisting") or {}
     if not isinstance(pre_existing, dict):
@@ -231,31 +235,46 @@ def _execute(
     if missing:
         raise ReferencedEntityNotFoundError(f"Unknown memberIds: {', '.join(missing)}")
 
-    # Impact simulation (R7): a DRAFT/other version can be priced "as if it
-    # were the published one" — only ever inside a preview (rolled back),
-    # never in a real calculation.
+    # A configuração de negócio publicada é a fonte de verdade do cálculo.
+    # O caminho legado só é usado para compatibilidade com cotações/integrações
+    # que ainda enviam explicitamente RatingTable/PricingParameterSet.
     config_overrides: dict[str, Any] = (context.get("configOverrides") or {}) if allow_config_overrides else {}
+    business_pricing: PublishedBusinessPricing | None = None
+    business_reference = BusinessConfigurationResolver.get(
+        "pricing.reference_premiums", effective_date=effective_date
+    )
 
-    rating_table = resolve_rating_table(code=rating_table_code, effective_date=effective_date)
-    if config_overrides.get("ratingTableId"):
-        rating_table = RatingTable.objects.filter(id=config_overrides["ratingTableId"]).first()
-    if rating_table is None:
-        raise PricingConfigError(f"No published RatingTable '{rating_table_code}' effective on {effective_date}")
-    if not rating_table.currency_code:
-        raise PricingConfigError(f"RatingTable '{rating_table_code}' has no currencyCode")
+    rating_table = None
+    parameter_set = None
+    base_premium = None
+    if business_reference is not None and not config_overrides:
+        business_pricing = resolve_published_business_pricing(effective_date=effective_date)
+    else:
+        if not rating_table_code or not parameter_set_code:
+            raise ReferencedEntityNotFoundError(
+                "Sem configuração de negócio publicada (pricing.*), context.ratingTableCode e "
+                "context.parameterSetCode são obrigatórios"
+            )
+        rating_table = resolve_rating_table(code=rating_table_code, effective_date=effective_date)
+        if config_overrides.get("ratingTableId"):
+            rating_table = RatingTable.objects.filter(id=config_overrides["ratingTableId"]).first()
+        if rating_table is None:
+            raise PricingConfigError(f"No published RatingTable '{rating_table_code}' effective on {effective_date}")
+        if not rating_table.currency_code:
+            raise PricingConfigError(f"RatingTable '{rating_table_code}' has no currencyCode")
 
-    parameter_set = resolve_pricing_parameter_set(code=parameter_set_code, effective_date=effective_date)
-    if config_overrides.get("parameterSetId"):
-        parameter_set = PricingParameterSet.objects.filter(id=config_overrides["parameterSetId"]).first()
-    if parameter_set is None:
-        raise PricingConfigError(
-            f"No published PricingParameterSet '{parameter_set_code}' effective on {effective_date}"
-        )
-    base_premium = resolve_decimal_parameter(parameter_set, _BASE_PREMIUM_PARAMETER_CODE)
-    if base_premium is None:
-        raise PricingConfigError(
-            f"PricingParameterSet '{parameter_set_code}' has no DECIMAL parameter '{_BASE_PREMIUM_PARAMETER_CODE}'"
-        )
+        parameter_set = resolve_pricing_parameter_set(code=parameter_set_code, effective_date=effective_date)
+        if config_overrides.get("parameterSetId"):
+            parameter_set = PricingParameterSet.objects.filter(id=config_overrides["parameterSetId"]).first()
+        if parameter_set is None:
+            raise PricingConfigError(
+                f"No published PricingParameterSet '{parameter_set_code}' effective on {effective_date}"
+            )
+        base_premium = resolve_decimal_parameter(parameter_set, _BASE_PREMIUM_PARAMETER_CODE)
+        if base_premium is None:
+            raise PricingConfigError(
+                f"PricingParameterSet '{parameter_set_code}' has no DECIMAL parameter '{_BASE_PREMIUM_PARAMETER_CODE}'"
+            )
 
     rule_version = None
     rule_config = None
@@ -281,10 +300,11 @@ def _execute(
         rule_version=rule_version,
         status=PricingRunStatus.REQUESTED.value,
         effective_date=effective_date,
-        currency_code=rating_table.currency_code,
+        currency_code=(business_pricing.currency_code if business_pricing else rating_table.currency_code),
         rounding_policy_code=ROUNDING_POLICY_CODE,
         rounding_policy_version=ROUNDING_POLICY_VERSION,
         input_snapshot_json=request_snapshot,
+        business_configuration_snapshot_json=(business_pricing.versions if business_pricing else {}),
         correlation_id=correlation_id,
     )
 
@@ -301,6 +321,8 @@ def _execute(
                 per_member_context=per_member_context,
                 rating_table_code=rating_table_code,
                 base_premium=base_premium,
+                business_pricing=business_pricing,
+                plan=plan,
                 rule_config=rule_config,
                 plan_context=plan_context,
                 commercial_adjustments=commercial_adjustments,
@@ -368,8 +390,10 @@ def _run_calculation(
     members: list[InsuredMember],
     member_ids: list[uuid.UUID],
     per_member_context: dict[str, dict[str, Any]],
-    rating_table_code: str,
-    base_premium: Decimal,
+    rating_table_code: str | None,
+    base_premium: Decimal | None,
+    business_pricing: PublishedBusinessPricing | None,
+    plan: Plan,
     rule_config,
     plan_context: PlanPricingContext,
     commercial_adjustments: list[CommercialAdjustment],
@@ -396,7 +420,11 @@ def _run_calculation(
 
     trace(
         "CONTEXT_RESOLVED",
-        output_data={"ratingTableCode": rating_table_code, "basePremium": str(base_premium)},
+        output_data={
+            "ratingTableCode": rating_table_code,
+            "basePremium": str(base_premium) if base_premium is not None else None,
+            "businessConfigurationVersions": business_pricing.versions if business_pricing else {},
+        },
     )
 
     for note in plan_context.warnings:
@@ -416,9 +444,27 @@ def _run_calculation(
     for member_id in member_ids:
         member = members_by_id[str(member_id)]
         # Plan/selection dimensions first, the member's own values win.
-        member_context = {**plan_context.dimensions, **per_member_context.get(str(member_id), {})}
+        member_context = {
+            **plan_context.dimensions,
+            "planCode": str(plan.code),
+            "planName": str(plan.name),
+            **per_member_context.get(str(member_id), {}),
+        }
+        if business_pricing is not None:
+            member_context.setdefault("age", _member_age(member, pricing_run.effective_date))
 
-        running_amount = round_amount(base_premium)
+        if business_pricing is not None:
+            running_amount = round_amount(
+                resolve_reference_premium(
+                    pricing=business_pricing,
+                    plan=plan,
+                    age=member_context["age"],
+                )
+            )
+        else:
+            if base_premium is None:
+                raise PricingConfigError("Legacy pricing requires BASE_PREMIUM.")
+            running_amount = round_amount(base_premium)
         _guard_amount(running_amount)
         PricingComponent.objects.create(
             tenant_id=tenant_id,
@@ -432,21 +478,32 @@ def _run_calculation(
         )
         trace(
             "BASE_APPLIED",
-            input_data={"memberId": str(member_id), "basePremium": str(base_premium)},
+            input_data={
+                "memberId": str(member_id),
+                "basePremium": str(running_amount),
+                "source": "BUSINESS_CONFIGURATION" if business_pricing else "PRICING_PARAMETER_SET",
+            },
             output_data={"resultAmount": str(running_amount)},
         )
         order += 1
 
-        factor_codes = sorted(
-            pricing_run.rating_table.factors.values_list("factor_code", flat=True).distinct()
-        )
-        for factor_code in factor_codes:
-            factor = resolve_factor(
-                rating_table=pricing_run.rating_table, factor_code=factor_code, context=member_context
-            )
-            if factor is None:
-                continue
-            running_amount = round_amount(running_amount * factor.factor_value)
+        if business_pricing is not None:
+            resolved_factors = [
+                (item["code"], item["factor"], item["dimension"], item["condition"])
+                for item in resolve_business_factors(pricing=business_pricing, context=member_context)
+            ]
+        else:
+            resolved_factors = []
+            factor_codes = sorted(pricing_run.rating_table.factors.values_list("factor_code", flat=True).distinct())
+            for factor_code in factor_codes:
+                factor = resolve_factor(
+                    rating_table=pricing_run.rating_table, factor_code=factor_code, context=member_context
+                )
+                if factor is not None:
+                    resolved_factors.append((factor_code, factor.factor_value, None, None))
+
+        for factor_code, factor_value, dimension, condition in resolved_factors:
+            running_amount = round_amount(running_amount * factor_value)
             _guard_amount(running_amount)
             PricingComponent.objects.create(
                 tenant_id=tenant_id,
@@ -455,15 +512,24 @@ def _run_calculation(
                 component_order=order,
                 component_code=factor_code,
                 component_type=PricingComponentType.FACTOR.value,
-                factor_value=factor.factor_value,
+                factor_value=factor_value,
                 result_amount=running_amount,
-                source_code=pricing_run.rating_table.code,
-                source_version=str(pricing_run.rating_table.version_no),
+                source_code=(
+                    f"BUSINESS_CONFIG:pricing.factors:{factor_code}"
+                    if business_pricing
+                    else pricing_run.rating_table.code
+                ),
+                source_version=(
+                    str(business_pricing.versions["pricing.factors"]["versionNo"])
+                    if business_pricing
+                    else str(pricing_run.rating_table.version_no)
+                ),
+                metadata_json={"dimension": dimension, "condition": condition} if business_pricing else {},
             )
             trace(
                 "FACTOR_APPLIED",
                 rule_code=factor_code,
-                input_data={"memberId": str(member_id), "factorValue": str(factor.factor_value)},
+                input_data={"memberId": str(member_id), "factorValue": str(factor_value)},
                 output_data={"resultAmount": str(running_amount)},
             )
             order += 1
@@ -495,7 +561,7 @@ def _run_calculation(
             )
             order += 1
 
-        for coverage_code in plan_context.optional_coverage_codes:
+        for coverage_code in (() if business_pricing is not None else plan_context.optional_coverage_codes):
             loading_pct = resolve_decimal_parameter(pricing_run.parameter_set, f"COVERAGE_LOADING_{coverage_code}")
             if loading_pct is None:
                 trace(
@@ -531,6 +597,30 @@ def _run_calculation(
                 output_data={"resultAmount": str(running_amount)},
             )
             order += 1
+
+        if business_pricing is not None:
+            for adjustment in resolve_business_adjustments(
+                pricing=business_pricing, context=member_context, stage="SUBSCRIPTION"
+            ):
+                before = running_amount
+                if adjustment["type"] == "PERCENTAGE":
+                    running_amount = round_amount(running_amount * (Decimal("1") + adjustment["value"] / Decimal("100")))
+                else:
+                    running_amount = round_amount(running_amount + adjustment["value"])
+                _guard_amount(running_amount)
+                PricingComponent.objects.create(
+                    tenant_id=tenant_id, pricing_run=pricing_run, member=member,
+                    component_order=order, component_code=adjustment["code"],
+                    component_type=PricingComponentType.ADJUSTMENT.value,
+                    factor_value=(Decimal("1") + adjustment["value"] / Decimal("100")) if adjustment["type"] == "PERCENTAGE" else None,
+                    adjustment_amount=round_amount(running_amount - before), result_amount=running_amount,
+                    source_code=f"BUSINESS_CONFIG:pricing.adjustments:{adjustment['code']}",
+                    source_version=str(business_pricing.versions["pricing.adjustments"]["versionNo"]),
+                )
+                trace("BUSINESS_ADJUSTMENT_APPLIED", rule_code=adjustment["code"],
+                      input_data={"memberId": str(member_id), "type": adjustment["type"], "value": str(adjustment["value"])},
+                      output_data={"resultAmount": str(running_amount)})
+                order += 1
 
         if rule_config is not None:
             for adjustment in rule_config.adjustments:
@@ -626,6 +716,51 @@ def _run_calculation(
         total_amount += running_amount
 
     total_amount = round_amount(total_amount)
+
+    if business_pricing is not None:
+        for adjustment in resolve_business_adjustments(
+            pricing=business_pricing, context=plan_context.dimensions, stage="QUOTE"
+        ):
+            before_total = total_amount
+            if adjustment["type"] == "PERCENTAGE":
+                total_amount = round_amount(total_amount * (Decimal("1") + adjustment["value"] / Decimal("100")))
+            else:
+                total_amount = round_amount(total_amount + adjustment["value"])
+            _guard_amount(total_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id, pricing_run=pricing_run, member=None, component_order=order,
+                component_code=adjustment["code"], component_type=PricingComponentType.ADJUSTMENT.value,
+                factor_value=(Decimal("1") + adjustment["value"] / Decimal("100")) if adjustment["type"] == "PERCENTAGE" else None,
+                adjustment_amount=round_amount(total_amount - before_total), result_amount=total_amount,
+                source_code=f"BUSINESS_CONFIG:pricing.adjustments:{adjustment['code']}",
+                source_version=str(business_pricing.versions["pricing.adjustments"]["versionNo"]),
+            )
+            trace("BUSINESS_ADJUSTMENT_APPLIED", rule_code=adjustment["code"],
+                  input_data={"type": adjustment["type"], "value": str(adjustment["value"]), "scope": "QUOTE"},
+                  output_data={"totalAmount": str(total_amount)})
+            order += 1
+
+        for charge in resolve_taxes_and_fees(pricing=business_pricing):
+            before_total = total_amount
+            if charge["type"] == "PERCENTAGE":
+                total_amount = round_amount(total_amount * (Decimal("1") + charge["value"] / Decimal("100")))
+            else:
+                total_amount = round_amount(total_amount + charge["value"])
+            _guard_amount(total_amount)
+            component_type = PricingComponentType.TAX.value if charge["category"] == "TAX" else PricingComponentType.FEE.value
+            PricingComponent.objects.create(
+                tenant_id=tenant_id, pricing_run=pricing_run, member=None, component_order=order,
+                component_code=charge["code"], component_type=component_type,
+                factor_value=(Decimal("1") + charge["value"] / Decimal("100")) if charge["type"] == "PERCENTAGE" else None,
+                adjustment_amount=round_amount(total_amount - before_total), result_amount=total_amount,
+                source_code=f"BUSINESS_CONFIG:pricing.taxes_fees:{charge['code']}",
+                source_version=str(business_pricing.versions["pricing.taxes_fees"]["versionNo"]),
+            )
+            trace("BUSINESS_CHARGE_APPLIED", rule_code=charge["code"],
+                  input_data={"type": charge["type"], "value": str(charge["value"])},
+                  output_data={"totalAmount": str(total_amount)})
+            order += 1
+
     for adjustment in commercial_adjustments:
         if adjustment.scope == "QUOTE" and not adjustment.is_percent:
             before_total = total_amount
@@ -666,6 +801,15 @@ def _run_calculation(
     )
     trace("TOTAL_COMPUTED", output_data={"totalAmount": str(total_amount)})
     return total_amount
+
+
+def _member_age(member: InsuredMember, reference_date: datetime.date) -> int:
+    if member.date_of_birth is None:
+        raise PricingConfigError(f"O membro {member.id} não tem data de nascimento para determinar a tarifa.")
+    age = reference_date.year - member.date_of_birth.year
+    if (reference_date.month, reference_date.day) < (member.date_of_birth.month, member.date_of_birth.day):
+        age -= 1
+    return age
 
 
 #: `pricing_run.total_amount`/`pricing_component.*_amount` are

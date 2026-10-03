@@ -196,3 +196,29 @@ def get_import(import_id) -> ClaimsImport:
     if job is None:
         raise ClaimsImportNotFoundError(f"Claims import {import_id} does not exist")
     return job
+
+
+IMPORT_FORMATS: dict[str, dict[str, Any]] = {
+    "CLAIMS": {
+        "required": ["occurrence_date", "benefit_code", "paid_amount"],
+        "optional": ["member_reference", "provision_amount", "currency", "status"],
+        "example": ["2026-03-31", "HOSPITALIZATION", "150000.00", "PESS-001", "0", "AOA", "PAID"],
+    },
+    "PREMIUMS": {
+        "required": ["period_start", "period_end", "premium_amount"],
+        "optional": ["insured_count", "currency"],
+        "example": ["2026-01-01", "2026-12-31", "1200000.00", "25", "AOA"],
+    },
+}
+
+
+def import_template_csv(kind: str) -> str:
+    """CSV com o cabeçalho aceito e uma linha de exemplo (dados fictícios)."""
+    if kind not in IMPORT_FORMATS:
+        raise ClaimsImportError(f"kind must be one of {list(KINDS)}")
+    spec = IMPORT_FORMATS[kind]
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow([*spec["required"], *spec["optional"]])
+    writer.writerow(spec["example"])
+    return out.getvalue()

@@ -37,12 +37,92 @@ class QuoteSerializer(serializers.Serializer):
     sourcePolicyId = serializers.UUIDField(source="source_policy_id", allow_null=True)
     renewal = serializers.JSONField(source="renewal_json")
     rowVersion = serializers.IntegerField(source="row_version")
+    # Prémio calculado (último PricingRun associado) — útil para cotações
+    # APPROVED/IN_REVIEW/BOUND onde o frontend não pode voltar a correr o
+    # priceQuote, mas precisa de mostrar o valor final já calculado.
+    premiumAnnualAmount = serializers.SerializerMethodField(method_name="get_premium_annual_amount")
+    premiumAnnualCurrency = serializers.SerializerMethodField(method_name="get_premium_annual_currency")
+    latestPricingRun = serializers.SerializerMethodField(method_name="get_latest_pricing_run_summary")
+
+    def get_premium_annual_amount(self, obj) -> str | None:
+        pr = getattr(obj, "latest_pricing_run", None)
+        if pr is None:
+            return None
+        return format(pr.total_amount.normalize(), "f")
+
+    def get_premium_annual_currency(self, obj) -> str | None:
+        pr = getattr(obj, "latest_pricing_run", None)
+        if pr is None:
+            return None
+        return pr.currency_code
+
+    def get_latest_pricing_run_summary(self, obj) -> dict | None:
+        pr = getattr(obj, "latest_pricing_run", None)
+        if pr is None:
+            return None
+        return {
+            "id": str(pr.id),
+            "status": pr.status,
+            "currencyCode": pr.currency_code,
+            "totalAmount": format(pr.total_amount.normalize(), "f"),
+            "calculatedAt": pr.completed_at.isoformat() if getattr(pr, "completed_at", None) else None,
+        }
+
+
+class _TitularMemberInputSerializer(serializers.Serializer):
+    """Campos opcionais usados para criar o membro titular automaticamente
+    no mesmo request que a cotação (quando não há ainda membro criado)."""
+
+    relationshipCode = serializers.CharField(min_length=2, max_length=30, required=False, default="TITULAR")
+    firstName = serializers.CharField(max_length=120, allow_null=True, required=False, default=None, allow_blank=True)
+    lastName = serializers.CharField(max_length=120, allow_null=True, required=False, default=None, allow_blank=True)
+    dateOfBirth = serializers.DateField(allow_null=True, required=False, default=None)
+    sexCode = serializers.CharField(max_length=5, allow_null=True, required=False, default=None, allow_blank=True)
+    externalReference = serializers.CharField(max_length=120, allow_null=True, required=False, default=None, allow_blank=True)
+    attributes = serializers.JSONField(required=False, default=None, allow_null=True)
+
+
+class _ProposerInputSerializer(serializers.Serializer):
+    """Campos necessários para criar um Proposer no mesmo request que a
+    criação da cotação. Rejeita caso exista outro proposer com o mesmo NIF."""
+
+    proposerType = serializers.CharField(max_length=30, required=False, default="INDIVIDUAL")
+    displayName = serializers.CharField(min_length=1, max_length=200)
+    externalReference = serializers.CharField(max_length=120, allow_null=True, required=False, default=None, allow_blank=True)
+    nif = serializers.CharField(min_length=1, max_length=60)
+    registrationNumber = serializers.CharField(min_length=1, max_length=60)
+    email = serializers.CharField(max_length=200, required=False, default="", allow_null=True, allow_blank=True)
+    phone = serializers.CharField(max_length=60, required=False, default="", allow_null=True, allow_blank=True)
+    attributes = serializers.JSONField(required=False, default=None, allow_null=True)
 
 
 class QuoteCreateRequestSerializer(serializers.Serializer):
-    proposerId = serializers.UUIDField()
+    """Aceita dois caminhos:
+    - Modo "referência": `proposerId` (UUID) + `planId` + `effectiveDate`.
+    - Modo "inline":    `proposerInput` (e opcionalmente `titularMemberInput`)
+                         + `planId` + `effectiveDate`. Cria tudo no mesmo request.
+    """
+
+    proposerId = serializers.UUIDField(required=False, default=None, allow_null=True)
+    proposerInput = _ProposerInputSerializer(required=False, default=None, allow_null=True)
+    titularMemberInput = _TitularMemberInputSerializer(required=False, default=None, allow_null=True)
     planId = serializers.UUIDField()
     effectiveDate = serializers.DateField()
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs.get("proposerId") is None and attrs.get("proposerInput") is None:
+            raise serializers.ValidationError(
+                "proposerId ou proposerInput deve ser fornecido (não ambos são nulos)."
+            )
+        if attrs.get("proposerId") is not None and attrs.get("proposerInput") is not None:
+            raise serializers.ValidationError(
+                "Forneça apenas um: proposerId OU proposerInput (não ambos)."
+            )
+        if attrs.get("titularMemberInput") is not None and attrs.get("proposerInput") is None:
+            raise serializers.ValidationError(
+                "titularMemberInput só é aceite se também fornecer proposerInput."
+            )
+        return attrs
 
 
 class QuoteUpdateRequestSerializer(serializers.Serializer):

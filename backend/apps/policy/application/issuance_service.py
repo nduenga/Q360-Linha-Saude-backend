@@ -211,6 +211,7 @@ def issue_policy(
     except (PolicyStateError, RowVersionMismatchError, DuplicatePolicyError):
         raise
 
+    close_source_policy_if_due(policy=policy, moment="ISSUANCE")
     _audit.record(
         action="policy.issued",
         entity_type="Policy",
@@ -232,6 +233,78 @@ def issue_policy(
         },
     )
     return policy
+
+
+# Quando a apólice de origem de uma renovação passa a RENEWED. A renovação é
+# negociada numa cotação (RENEWAL); só quando essa cotação se converte em
+# apólice é que a anterior pode ser encerrada. Recomendado (por omissão):
+# na ativação (1.º prémio pago), porque só então a continuidade da cobertura
+# está garantida; configurável em `renewal.deadlines.previous_policy_close`.
+CLOSE_ON_ISSUANCE = "ON_RENEWAL_ISSUANCE"
+CLOSE_ON_ACTIVATION = "ON_RENEWAL_ACTIVATION"
+CLOSE_ON_EFFECTIVE_DATE = "ON_EFFECTIVE_DATE"
+CLOSE_MANUAL = "MANUAL"
+DEFAULT_CLOSE_MODE = CLOSE_ON_ACTIVATION
+_RENEWABLE_SOURCE_STATUSES = (PolicyStatus.ACTIVE.value, PolicyStatus.EXPIRED.value)
+
+
+def _plan_settings(policy: Policy) -> dict:
+    return ((policy.contracted_terms_snapshot.snapshot_json or {}).get("plan") or {}).get("settings") or {}
+
+
+def close_source_policy_if_due(*, policy: Policy, moment: str, today: datetime.date | None = None) -> Policy | None:
+    """Marca a apólice de origem como RENEWED quando `moment` coincide com a
+    regra configurada. `moment` ∈ ISSUANCE, ACTIVATION, EFFECTIVE_DATE."""
+    quote = policy.source_quote
+    if quote.quote_type != "RENEWAL" or not quote.source_policy_id:
+        return None
+    mode = (_plan_settings(policy).get("renewalDeadlines") or {}).get("previous_policy_close") or DEFAULT_CLOSE_MODE
+    today = today or datetime.date.today()
+    due = (
+        (mode == CLOSE_ON_ISSUANCE and moment == "ISSUANCE")
+        or (mode == CLOSE_ON_ACTIVATION and moment == "ACTIVATION")
+        or (
+            mode == CLOSE_ON_EFFECTIVE_DATE
+            and moment in ("ACTIVATION", "EFFECTIVE_DATE")
+            and policy.status == PolicyStatus.ACTIVE.value
+            and policy.start_date is not None
+            and policy.start_date <= today
+        )
+    )
+    if not due:
+        return None
+    source = Policy.objects.filter(id=quote.source_policy_id).first()
+    if source is None or source.status not in _RENEWABLE_SOURCE_STATUSES:
+        return None
+    Policy.objects.filter(id=source.id, status=source.status).update(
+        status=PolicyStatus.RENEWED.value, row_version=source.row_version + 1
+    )
+    source.refresh_from_db()
+    _audit.record(
+        action="policy.renewed",
+        entity_type="Policy",
+        entity_id=str(source.id),
+        metadata={"renewedByPolicyId": str(policy.id), "renewedByPolicyNumber": policy.policy_number, "rule": mode},
+    )
+    _outbox.append(
+        aggregate_type="Policy",
+        aggregate_id=str(source.id),
+        event_type="POLICY.RENEWED",
+        payload={"policyId": str(source.id), "policyNumber": source.policy_number, "renewedByPolicyId": str(policy.id)},
+    )
+    return source
+
+
+def close_renewed_policies(*, today: datetime.date | None = None) -> int:
+    """Para a regra ON_EFFECTIVE_DATE: encerra as apólices de origem cuja
+    renovação já está em vigor (corre diariamente)."""
+    closed = 0
+    for policy in Policy.objects.filter(status=PolicyStatus.ACTIVE.value, source_quote__quote_type="RENEWAL").select_related(
+        "source_quote", "contracted_terms_snapshot"
+    ):
+        if close_source_policy_if_due(policy=policy, moment="EFFECTIVE_DATE", today=today):
+            closed += 1
+    return closed
 
 
 def _plan_benefit_codes(policy: Policy) -> list[str]:
@@ -271,6 +344,16 @@ def _waiting_period_ends(*, policy: Policy, policy_member: PolicyMember, inclusi
         and evidence.previous_policy_continuous
     )
     if waived:
+        return {}
+
+    # Renovação: quem transita da apólice anterior mantém as carências já
+    # cumpridas, se o negócio o definiu (`renewal.rules`).
+    quote = policy.source_quote
+    if (
+        quote.quote_type == "RENEWAL"
+        and (_plan_settings(policy).get("renewal") or {}).get("continuityWithoutNewWaiting") is True
+        and str(policy_member.member_id) in ((quote.renewal_json or {}).get("carriedMembers") or [])
+    ):
         return {}
 
     coverage_days = _coverage_waiting_days(policy)
@@ -352,6 +435,7 @@ def register_first_premium_payment(
             )
 
     policy.refresh_from_db()
+    close_source_policy_if_due(policy=policy, moment="ACTIVATION")
     _audit.record(
         action="policy.activated",
         entity_type="Policy",

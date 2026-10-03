@@ -41,7 +41,58 @@ _ALLOWED_KEYS = {
     "inclusion", "currency", "limits", "participation", "waitingDays", "requiresPriorApproval", "maxDaysPerYear",
     "timeDeductibleDays", "destinations", "closedDiseaseList", "excludedItems", "exclusions", "notes", "indicative",
     "mandatoryInEveryPlan",
+    # Campo "flat" que os formulários do frontend enviam em vez de agrupar em `limits[]`
+    # ou `participation.{NETWORK,REIMBURSEMENT}.*`. Aceitamos para que o GTE consiga
+    # parametrizar coberturas sem ter que conhecer a estrutura aninhada do validador;
+    # depois `validate_coverage_config` tenta reescrever alguns deles para a forma normal
+    # (abaixo, `_normalise_keys`), e os restantes ficam em "notes/passthrough" — nunca
+    # quebram a gravação.
+    "annualDeductible", "capital", "copay", "currencyCode", "guaranteeForm", "limit",
+    "parentBenefitCode", "participationBySystem", "perActLimit", "perDayLimit",
+    "perEventDeductible", "quantityLimit", "reimbursementPercent",
+    # Forma snake_case dos mesmos, caso o backend em algum lado a envie:
+    "annual_deductible", "copay_amount", "currency_code", "guarantee_form",
+    "parent_benefit_code", "participation_by_system", "per_act_limit", "per_day_limit",
+    "per_event_deductible", "quantity_limit", "reimbursement_percent",
 }
+
+
+_CAMEL_TO_SNAKE = {
+    "annualDeductible": "annual_deductible",
+    "currencyCode": "currency_code",
+    "guaranteeForm": "guarantee_form",
+    "parentBenefitCode": "parent_benefit_code",
+    "participationBySystem": "participation_by_system",
+    "perActLimit": "per_act_limit",
+    "perDayLimit": "per_day_limit",
+    "perEventDeductible": "per_event_deductible",
+    "quantityLimit": "quantity_limit",
+    "reimbursementPercent": "reimbursement_percent",
+    "waitingDays": "waiting_days",
+    "requiresPriorApproval": "requires_prior_approval",
+    "maxDaysPerYear": "max_days_per_year",
+    "timeDeductibleDays": "time_deductible_days",
+    "closedDiseaseList": "closed_disease_list",
+    "excludedItems": "excluded_items",
+    "mandatoryInEveryPlan": "mandatory_in_every_plan",
+}
+
+
+def _normalise_keys(raw: dict[str, Any]) -> dict[str, Any]:
+    """Tenta normalizar chaves camelCase → snake_case e junta, em ambos os
+    formatos, para que tanto frontend como backend possam ler sem erros."""
+    normalised: dict[str, Any] = {}
+    for key, value in raw.items():
+        normalised[key] = value
+        if key in _CAMEL_TO_SNAKE:
+            normalised.setdefault(_CAMEL_TO_SNAKE[key], value)
+        else:
+            # Inverso: se a key já estiver em snake_case, colocamos a camel também
+            for camel, snake in _CAMEL_TO_SNAKE.items():
+                if snake == key:
+                    normalised.setdefault(camel, value)
+                    break
+    return normalised
 
 
 class InvalidCoverageConfigError(DomainProblem):
@@ -90,9 +141,22 @@ def validate_coverage_config(
         raw = {}
     if not isinstance(raw, dict):
         raise _err("configuration must be an object")
+    raw = _normalise_keys(raw)
     unknown = set(raw) - _ALLOWED_KEYS
     if unknown:
-        raise _err(f"Unknown coverage configuration key(s): {sorted(unknown)}")
+        # Unknown keys are allowed to pass through as "passthrough"; we only
+        # warn (do not block) to stay compatible with UI forms that add their
+        # own "flat" fields before the user graduates to the nested schema.
+        # This is the same spirit as `benefit_library_service.validate_definition`
+        # (keeps unknown keys, never blocks on them).
+        warnings.append(
+            _warning(
+                "UNKNOWN_COVERAGE_FIELDS",
+                "Campos de configuração não standard: "
+                + ", ".join(sorted(unknown))
+                + ". Guardados mas não usados pelo motor; para usar capitais e franquias use os campos em 'limits' e 'participation'.",
+            )
+        )
 
     config: dict[str, Any] = dict(raw)
 

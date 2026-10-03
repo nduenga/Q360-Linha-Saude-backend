@@ -321,13 +321,14 @@ def test_hospital_daily_allowance_days_and_time_deductible():
         _cfg("HOSPITAL_DAILY_ALLOWANCE", {"maxDaysPerYear": 0})
 
 
-def test_base_coverage_must_be_included_and_unknown_keys_rejected():
+def test_base_coverage_must_be_included_and_unknown_keys_warn():
     with pytest.raises(InvalidCoverageConfigError, match="mandatory"):
         _cfg("HOSPITALIZATION", {"inclusion": "OPTIONAL"}, category="BASE")
     with pytest.raises(InvalidCoverageConfigError):
         _cfg("OUTPATIENT", {"inclusion": "UNAVAILABLE"})
-    with pytest.raises(InvalidCoverageConfigError):
-        _cfg("OUTPATIENT", {"surprise": 1})
+    # Chaves desconhecidas não bloqueiam: geram aviso UNKNOWN_COVERAGE_FIELDS.
+    _, warnings = _cfg("OUTPATIENT", {"surprise": 1})
+    assert any(w["code"] == "UNKNOWN_COVERAGE_FIELDS" for w in warnings)
     config, _ = _cfg("OUTPATIENT", {})
     assert config["inclusion"] == "INCLUDED" and config["currency"] == "AOA"
 

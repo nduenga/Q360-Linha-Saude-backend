@@ -30,6 +30,8 @@ import datetime
 from decimal import Decimal
 from typing import Any
 
+from apps.business_config.application.overlays import effective_exclusions, effective_plan_settings
+from apps.business_config.application.readers import BusinessSnapshot, integer
 from apps.client.infrastructure.models import RelationshipCode
 from apps.foundation.domain.problem import DomainProblem
 from apps.pricing.application.plan_dimensions import main_capital, resolve_plan_pricing_context
@@ -75,7 +77,9 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
     if claims_months_available is None:
         claims_months_available = history_months(proposer_id=quote.proposer_id)
     plan = quote.plan
-    settings = plan.settings_json or {}
+    snapshot = BusinessSnapshot.load(quote.effective_date)
+    raw_settings = plan.settings_json or {}
+    settings = effective_plan_settings(plan, quote.effective_date, snapshot)
     segment = settings.get("segment")
     group = settings.get("group") or {}
     questionnaire = settings.get("clinicalQuestionnaire") or {}
@@ -84,14 +88,14 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
     is_renewal = quote.quote_type == "RENEWAL"
 
     try:
-        _, plan_warnings = validate_plan_settings(settings)
+        _, plan_warnings = validate_plan_settings(raw_settings)
     except DomainProblem:
         plan_warnings = []
 
     quote_members = list(quote.members.select_related("member").order_by("created_at", "id"))
     counted = [qm for qm in quote_members if qm.status in _COUNTED]
     try:
-        plan_context = resolve_plan_pricing_context(plan=plan, selection=quote.selection_json)
+        plan_context = resolve_plan_pricing_context(plan=plan, selection=quote.selection_json, effective_date=effective)
         coverages = [c for c in plan_context.coverages if c["contracted"]]
     except DomainProblem:
         coverages = []
@@ -109,7 +113,11 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
                     "ERROR",
                     "GROUP_MIN_SIZE",
                     f"O grupo tem {len(counted)} pessoa(s) segura(s); a dimensão mínima é {minimum}. "
-                    "Abaixo disso, deve usar-se o produto individual.",
+                    + (
+                        "Abaixo disso, a proposta de grupo deve ser recusada."
+                        if group.get("belowMinimumBehavior") == "DECLINE"
+                        else "Abaixo disso, deve usar-se o produto individual."
+                    ),
                     insured=len(counted),
                     minimum=int(minimum),
                 )
@@ -155,6 +163,28 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
                 appliesTo=[key for key, _ in applies],
             )
         )
+    network_rules = settings.get("networkRules") or {}
+    if network_rules.get("network_enabled") is False and settings.get("accessSystem") in ("NETWORK", "MIXED"):
+        items.append(_item("WARNING", "NETWORK_DISABLED", "A rede convencionada está desativada na configuração de negócio."))
+    if network_rules.get("free_choice_enabled") is False and settings.get("accessSystem") in ("REIMBURSEMENT", "MIXED"):
+        items.append(_item("WARNING", "FREE_CHOICE_DISABLED", "A livre escolha/reembolso está desativada na configuração de negócio."))
+    if network_rules.get("geographical_scope"):
+        items.append(_item("INFO", "NETWORK_SCOPE", f"Âmbito geográfico: {network_rules['geographical_scope']}."))
+    if (settings.get("clinicalQuestionnaire") or {}).get("documentationRequired"):
+        items.append(_item("INFO", "CLINICAL_DOCUMENTATION_REQUIRED", "Documentação clínica obrigatória para a subscrição."))
+    required_documents = [
+        {"documentType": d.get("document_type"), "description": d.get("description")}
+        for d in snapshot.rows("proposal.documents", "documents")
+        if d.get("required")
+    ]
+    if required_documents:
+        items.append(
+            _item("INFO", "REQUIRED_DOCUMENTS", "Documentos obrigatórios: " + ", ".join(str(d["documentType"]) for d in required_documents) + ".", documents=required_documents)
+        )
+    for rule in settings.get("acceptanceRules") or []:
+        if rule.get("age_from") is None and rule.get("age_to") is None and not rule.get("relationship"):
+            items.append(_item("INFO", "ACCEPTANCE_RULE", f"Regra de aceitação ({rule.get('decision')}): {rule.get('condition')}", decision=rule.get("decision")))
+
     for coverage in coverages:
         config = coverage["configuration"]
         if coverage["code"] == "MEDICAL_EVACUATION":
@@ -243,6 +273,23 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
                 _item("INFO", "PRE_EXISTING_DECISION", f"Preexistência: {qm.pre_existing_json.get('mode')}.", member_id=member_id, decision=qm.pre_existing_json)
             )
 
+        for rule in settings.get("acceptanceRules") or []:
+            low, high, relation = integer(rule.get("age_from")), integer(rule.get("age_to")), rule.get("relationship")
+            if low is None and high is None and not relation:
+                continue
+            if (low is not None or high is not None) and age is None:
+                continue
+            if low is not None and age < low or high is not None and age > high:
+                continue
+            if relation and str(relation).casefold() not in {str(category).casefold(), str(member.relationship_code).casefold()}:
+                continue
+            decision = rule.get("decision")
+            if decision == "AUTO_ACCEPT":
+                continue
+            code = {"DECLINE": "ACCEPTANCE_DECLINE", "MEDICAL_REVIEW": "ACCEPTANCE_MEDICAL_REVIEW"}.get(decision, "ACCEPTANCE_TECHNICAL_REVIEW")
+            member_items.append(
+                _item("ERROR" if decision == "DECLINE" else "WARNING", code, f"Regra de aceitação: {rule.get('condition')}" + (f" — {rule['notes']}" if rule.get("notes") else ""), member_id=member_id)
+            )
         items.extend(member_items)
         members_report[member_id] = {
             "ageAtEffectiveDate": age,
@@ -267,7 +314,10 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
                     "accidentWaived": days.get("accidentWaived", settings.get("waitingRules", {}).get("accidentWaived", True)),
                 }
             )
-    exclusions = [{"code": e["code"], "text": e["text"], "productDependent": bool(e.get("productDependent"))} for e in STANDARD_EXCLUSIONS]
+    exclusions = [
+        {"code": e["code"], "text": e["text"], "productDependent": bool(e.get("productDependent"))}
+        for e in effective_exclusions(plan, STANDARD_EXCLUSIONS, quote.effective_date, snapshot)
+    ]
     for coverage in coverages:
         for excluded in coverage["configuration"].get("excludedItems") or []:
             exclusions.append({"code": f"{coverage['code']}_EXCLUDED_ITEM", "text": f"{coverage['name']}: {excluded}", "productDependent": False})

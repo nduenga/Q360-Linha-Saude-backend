@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from apps.foundation.domain.permissions import ROLE_PERMISSIONS, Permission, Role
+from apps.foundation.domain.permissions import Permission, Role, effective_role_permissions
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.domain.tenant import TenantId
 
@@ -36,8 +36,9 @@ class Actor:
     @property
     def permissions(self) -> frozenset[Permission]:
         granted: set[Permission] = set()
+        by_role = effective_role_permissions(self.tenant_id.value if self.actor_type != "CUSTOMER" else None)
         for role in self.roles:
-            granted |= ROLE_PERMISSIONS.get(role, frozenset())
+            granted |= by_role.get(role, frozenset())
         return frozenset(granted)
 
     def has_permission(self, permission: Permission) -> bool:

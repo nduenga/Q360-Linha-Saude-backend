@@ -87,6 +87,8 @@ REGISTRY: dict[str, dict] = {
     },
     "DocumentDownloadView.get": {"media": "application/octet-stream", "notes": "Ficheiro gerado (PDF, DOCX ou HTML); verifica o checksum."},
     "DocumentRetryView.post": {"request": d.EmptyRequest},
+    "DocumentSignedUrlView.post": {"request": d.EmptyRequest, "response": d.SignedUrl, "status": 201},
+    "DocumentSignedDownloadView.get": {"media": "application/octet-stream", "public": True, "notes": "O token assinado é a credencial; expira (documents.signed_url_ttl_seconds)."},
     "DocumentTemplateSchemaView.get": {"response": d.TemplateSchema},
     "DocumentTemplatePreviewView.get": {
         "media": "text/html", "queries": {"fileType": ("string", False, "html (por omissão), pdf ou docx.")},
@@ -114,6 +116,11 @@ REGISTRY: dict[str, dict] = {
     },
     # ------------------------------------------------------------------ claims
     "ClaimsImportListCreateView.post": {"request": d.ClaimsImportRequest, "response": {201: d.ClaimsImportResult, 200: d.ClaimsImportResult}},
+    "ClaimsMethodologyView.get": {"response": d.ClaimsMethodology},
+    "ClaimsImportTemplateView.get": {
+        "media": "text/csv", "queries": {"kind": ("string", False, "CLAIMS (por omissão) ou PREMIUMS.")},
+        "notes": "CSV com o cabeçalho aceito e uma linha de exemplo fictícia.",
+    },
     "ClaimsSummaryView.get": {
         "response": d.ClaimsSummary,
         "queries": {"proposerId": ("string", True, "Cliente."), "policyId": ("string", False, "Apólice."),
@@ -155,6 +162,43 @@ REGISTRY.update(
         "StaffAccountRolesView.patch": {"response": _staff.StaffAccountSerializer},
         "StaffAccountStatusView.patch": {"response": _staff.StaffAccountSerializer},
         "StaffAccountResetPasswordView.post": {"request": d.EmptyRequest, "response": _staff.GeneratedPasswordSerializer},
+    }
+)
+
+# Business configuration (apps.business_config).
+from apps.business_config.interfaces import serializers as _bc  # noqa: E402
+
+REGISTRY.update(
+    {
+        "BCCatalogView.get": {"response": _bc.BusinessConfigurationCatalogSerializer},
+        "BCConfigurationListCreateView.get": {
+            "response": _bc.BusinessConfigurationListSerializer,
+            "queries": {"configKey": ("string", False, "Chave do catálogo."),
+                        "status": ("string", False, "DRAFT, PENDING_APPROVAL, PUBLISHED ou RETIRED.")},
+        },
+        "BCConfigurationListCreateView.post": {
+            "request": _bc.BusinessConfigurationWriteSerializer,
+            "response": _bc.BusinessConfigurationSerializer, "status": 201,
+        },
+        "BCConfigurationDetailView.get": {"response": _bc.BusinessConfigurationSerializer},
+        "BCConfigurationDetailView.put": {
+            "request": _bc.BusinessConfigurationUpdateSerializer, "response": _bc.BusinessConfigurationSerializer,
+            "notes": "Só versões DRAFT. rowVersion desatualizado devolve VERSION-CONFLICT.",
+        },
+        "BCConfigurationDetailView.post": {
+            "request": _bc.BusinessConfigurationActionSerializer, "response": _bc.BusinessConfigurationSerializer,
+            "notes": "action=submit (DRAFT para PENDING_APPROVAL) ou retire (PUBLISHED para RETIRED).",
+        },
+        "BCConfigurationApproveView.post": {
+            "request": d.EmptyRequest, "response": _bc.BusinessConfigurationSerializer,
+            "notes": "Publica a versão. O criador não pode aprovar (SEC-403).",
+        },
+        "BCDocumentListView.get": {"response": _bc.BusinessConfigurationDocumentListSerializer},
+        "BCDocumentUploadView.post": {
+            "request": _bc.BusinessConfigurationDocumentUploadSerializer,
+            "response": _bc.BusinessConfigurationDocumentSerializer, "status": 201,
+        },
+        "BCDocumentDownloadView.get": {"media": "application/octet-stream"},
     }
 )
 

@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "apps.claims",
     "apps.customer_portal",
     "apps.staff_accounts",
+    "apps.business_config",
     "drf_spectacular",
 ]
 
@@ -114,6 +115,7 @@ MIGRATION_MODULES = {
     "quote": "apps.quote.infrastructure.migrations",
     "policy": "apps.policy.infrastructure.migrations",
     "claims": "apps.claims.infrastructure.migrations",
+    "business_config": "apps.business_config.infrastructure.migrations",
     "customer_portal": "apps.customer_portal.infrastructure.migrations",
     "staff_accounts": "apps.staff_accounts.infrastructure.migrations",
 }
