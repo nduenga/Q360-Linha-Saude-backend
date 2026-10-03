@@ -87,6 +87,28 @@ Questões para a área de negócio: `docs/Questionario_Decisoes_Negocio_Simulado
 
 ---
 
+## Fase 9 — Configuração de negócio pela interface (`apps/business_config`)
+- [x] Catálogo de 24 chaves (`product.*`, `pricing.*`, `underwriting.*`, `group.rules`, `renewal.*`, `proposal.*`, `network.rules`, `foreign_coverage.rules`, `security.approval_rules`) com esquema de formulário por chave (`GET /business-config/catalog`)
+- [x] Versões `BusinessConfiguration` (DRAFT → PENDING_APPROVAL → PUBLISHED → RETIRED), checksum, `rowVersion`, auditoria; publicar encerra a versão anterior na véspera da nova vigência
+- [x] Four-eyes: o criador não aprova (`SEC-403`); aprovar exige `q360.approve` + `pricing-config:manage`; escrita exige `q360.write` + `pricing-config:manage`
+- [x] Documentos anexos por versão (upload só em DRAFT, download com checksum)
+- [x] Resolver por inquilino, chave e vigência; motor de tarifação usa `pricing.reference_premiums/factors/adjustments/taxes_fees` e regista as versões no `PricingRun` (`versions.businessConfigurationVersions`)
+- [x] Sem configuração publicada mantém-se o caminho legado (RatingTable/PricingParameterSet); nenhum valor comercial é inventado
+- [x] Cotação com tarifação desatualizada é recalculada quando uma versão nova é publicada (`price_quote`)
+- [x] Teste ponta a ponta `test_business_config_e2e.py` (tarifa → aprovação → cotação → nova versão → reprecificação)
+- [x] Contrato OpenAPI regenerado e copiado para o frontend (`schema.d.ts` regenerado, `tsc -b` sem erros)
+- [x] Todas as chaves são lidas pelos motores (`business_config/application/overlays.py`, `readers.py`): `product.*` (planos ativos, coberturas, capitais/sublimites, participação, carências, idades, exclusões) sobrepõem-se à configuração do plano; `underwriting.*` (aceitação, preexistências por gravidade, análise médica) → requisitos e decisões; `group.rules` → dimensão mínima e quota de resultados; `renewal.*` → inflação, prazos, continuidade de carências; `network.rules`/`foreign_coverage.rules` → rede, evacuação; `proposal.documents/texts/branding` → proposta; `security.*` → quem edita/aprova e permissões por perfil
+- [x] Validação estrutural de cada chave (tipos, obrigatórios, opções) ao gravar; regras reforçadas ao submeter
+- [x] Renovação: a apólice de origem passa a RENEWED quando a cotação de renovação se converte em apólice. Por omissão na ativação (1.º prémio pago, garante a continuidade); configurável em `renewal.deadlines.previous_policy_close` (ON_RENEWAL_ACTIVATION, ON_RENEWAL_ISSUANCE, ON_EFFECTIVE_DATE com `manage.py close_renewed_policies`, MANUAL)
+- [x] Permissões por perfil editáveis (`security.role_permissions`): redistribui as permissões existentes, ADMIN nunca perde `product:manage`/`pricing-config:manage`; os escopos do token seguem as permissões no próximo login
+- [x] Identidade visual dos documentos (`proposal.branding`: empresa, cor, lema, rodapé, logótipo anexado) em HTML, PDF e DOCX
+- [x] Ligações assinadas com expiração (`POST /documents/{id}/signed-url`, `GET /documents/signed/{token}`; prazo no parâmetro `documents.signed_url_ttl_seconds`)
+- [x] Sinistralidade: `GET /claims/methodology` (método rotulado como indicativo, fórmulas, formatos) e `GET /claims/import-template`; limite e quota de resultados por omissão vêm de `group.rules`
+- [ ] 🔴 Template oficial do cliente (OD-006) e fórmulas atuariais reais: aguardam o material do negócio (a identidade e o método já são configuráveis/substituíveis)
+- [ ] Ecrãs de administração no frontend (formulários a partir de `formSchema`)
+
+---
+
 ## Rastreabilidade — regras do PDF → onde estão e que teste as cobre
 
 | Regra do PDF | Implementação | Teste |
