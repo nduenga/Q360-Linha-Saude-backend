@@ -17760,6 +17760,16 @@ components:
           type: array
           items:
             type: string
+        accountType:
+          allOf:
+          - $ref: '#/components/schemas/AccountTypeEnum'
+          default: STAFF
+          description: 'PLATFORM: super administrador; o token só vale em /api/v1/platform/* e não há refreshToken.
+
+
+            * `STAFF` - STAFF
+
+            * `PLATFORM` - PLATFORM'
       required:
       - accessToken
       - accountId
@@ -19074,6 +19084,14 @@ components:
         * `SUSPENDED` - SUSPENDED
 
         * `INACTIVE` - INACTIVE'
+    AccountTypeEnum:
+      enum:
+      - STAFF
+      - PLATFORM
+      type: string
+      description: '* `STAFF` - STAFF
+
+        * `PLATFORM` - PLATFORM'
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:
