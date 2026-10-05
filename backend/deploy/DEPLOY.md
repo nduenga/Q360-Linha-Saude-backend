@@ -198,6 +198,6 @@ Neste caso o `DATABASE_URL` não pode usar `localhost`, porque dentro do content
 - Não envie o `db.sqlite3` (é só a base local de desenvolvimento).
 - Não execute os ficheiros `.sql` de `docs/artifacts/` em produção. As tabelas vêm das migrações do Django.
 - Não use `seed_demo_data` em produção (cria dados de demonstração com palavra-passe fixa).
-- Não use `seed_portal_otp_test_data` em produção (é só para testes).
+- Não use `seed_portal_demo` em produção (corre com `seed_demo_data` e cria clientes com palavra-passe fixa).
 - Não mude `DJANGO_SETTINGS_MODULE` para `development`.
 - Não faça commit do `/etc/q360.env` nem do `backend/.env`.

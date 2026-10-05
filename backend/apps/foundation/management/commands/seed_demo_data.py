@@ -13,6 +13,7 @@ import uuid
 from decimal import Decimal
 
 from django.contrib.auth.hashers import make_password
+from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
@@ -48,7 +49,7 @@ from apps.quote.application.quote_service import (
     price_quote,
     submit_quote,
 )
-from apps.quote.domain.enums import QuoteDecisionType, QuoteMemberStatus
+from apps.quote.domain.enums import QuoteDecisionType, QuoteMemberStatus, QuoteStatus
 from apps.quote.infrastructure.models import DocumentTemplateVersion, Quote, QuoteMember
 from apps.platform_admin.infrastructure.models import PlatformAdmin
 from apps.staff_accounts.infrastructure.models import StaffAccount, StaffAccountRole
@@ -77,6 +78,10 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--tenant-code", default="demo-saude")
         parser.add_argument("--tenant-name", default="Q360 Saúde — Demonstração")
+        parser.add_argument(
+            "--no-portal", action="store_true",
+            help="Não criar os dados do Portal Cliente (seed_portal_demo), só a plataforma.",
+        )
 
     def handle(self, *args, **options):
         tenant, _ = Tenant.objects.get_or_create(
@@ -103,6 +108,9 @@ class Command(BaseCommand):
             staff=staff,
             policies={"Ana Silva": ana_policy, "Carlos Mendes": carlos_policy, "Empresa Kilamba": company_policy},
         )
+        if not options["no_portal"]:
+            self.stdout.write("")
+            call_command("seed_portal_demo", tenant_code=tenant.code, stdout=self.stdout)
 
     @staticmethod
     def _ensure_platform_admin() -> None:
@@ -544,9 +552,7 @@ class Command(BaseCommand):
                 effective_date=effective_date + datetime.timedelta(days=1),
                 members=[(member, {"angola": {}})],
             )
-            price_quote(quote=quote, recalculate=True, correlation_id="demo-review-price")
-            quote.refresh_from_db()
-            submit_quote(quote=quote, row_version=quote.row_version, correlation_id="demo-review-submit")
+            quote = self._price_and_submit(quote, "review")
 
         if not Quote.objects.filter(proposer=proposer, status="REJECTED").exists():
             self._bind(tenant, staff["subscriber"], Role.SUBSCRIBER)
@@ -556,10 +562,7 @@ class Command(BaseCommand):
                 effective_date=effective_date + datetime.timedelta(days=2),
                 members=[(member, {"angola": {}})],
             )
-            price_quote(quote=quote, recalculate=True, correlation_id="demo-reject-price")
-            quote.refresh_from_db()
-            submit_quote(quote=quote, row_version=quote.row_version, correlation_id="demo-reject-submit")
-            quote.refresh_from_db()
+            quote = self._price_and_submit(quote, "reject")
             self._bind(tenant, staff["approver"], Role.APPROVER)
             decide_quote(
                 quote=quote,
@@ -569,6 +572,18 @@ class Command(BaseCommand):
                 row_version=quote.row_version,
                 correlation_id="demo-reject-decision",
             )
+
+    @staticmethod
+    def _price_and_submit(quote: Quote, tag: str) -> Quote:
+        """Price the quote and leave it in review. Pricing already sends it to
+        review by itself when a member needs manual validation, so only a quote
+        that came out READY still has to be submitted."""
+        price_quote(quote=quote, recalculate=True, correlation_id=f"demo-{tag}-price")
+        quote.refresh_from_db()
+        if quote.status == QuoteStatus.READY.value:
+            submit_quote(quote=quote, row_version=quote.row_version, correlation_id=f"demo-{tag}-submit")
+            quote.refresh_from_db()
+        return quote
 
     def _ensure_proposer(self, tenant: Tenant, **data) -> Proposer:
         proposer = Proposer.objects.filter(external_reference=data["external_reference"]).first()
@@ -649,10 +664,7 @@ class Command(BaseCommand):
         payment_frequency: str = "ANUAL",
     ) -> Policy:
         self._bind(tenant, staff["subscriber"], Role.SUBSCRIBER)
-        price_quote(quote=quote, recalculate=True, correlation_id="demo-price")
-        quote.refresh_from_db()
-        submit_quote(quote=quote, row_version=quote.row_version, correlation_id="demo-submit")
-        quote.refresh_from_db()
+        quote = self._price_and_submit(quote, "approve")
 
         self._bind(tenant, staff["approver"], Role.APPROVER)
         decide_quote(
@@ -717,15 +729,7 @@ class Command(BaseCommand):
         self.stdout.write("\nColaboradores (todos usam a palavra-passe Q360Demo!2026):")
         for key, email, _name, roles in _STAFF:
             self.stdout.write(f"  - {email} — {', '.join(role.value for role in roles)}")
-        self.stdout.write("\nPortal do Cliente (acesso por OTP, sem palavra-passe fixa):")
+        self.stdout.write("\nClientes e apólices demo (o Portal Cliente é preparado por seed_portal_demo):")
         for name, policy in policies.items():
-            proposer = policy.proposer
-            self.stdout.write(
-                f"  - {name}: apólice {policy.policy_number} ({policy.status}); "
-                f"NIF/Registo {proposer.registration_number}; e-mail {proposer.email}"
-            )
+            self.stdout.write(f"  - {name}: apólice {policy.policy_number} ({policy.status})")
         self.stdout.write("\nBack-office: existem ainda cotações demo nos estados DRAFT, IN_REVIEW e REJECTED.")
-        self.stdout.write(
-            "\nPara entrar no portal: informe apólice, NIF/Registo e e-mail, peça o OTP e use o código enviado "
-            "pelo backend configurado (em desenvolvimento, consulte o backend de e-mail/console)."
-        )

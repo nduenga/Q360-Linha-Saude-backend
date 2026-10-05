@@ -317,6 +317,10 @@ CUSTOMER_PORTAL_TOKEN_TTL_SECONDS = int(os.environ.get("CUSTOMER_PORTAL_TOKEN_TT
 CUSTOMER_PORTAL_OTP_TTL_SECONDS = int(os.environ.get("CUSTOMER_PORTAL_OTP_TTL_SECONDS", "600"))
 CUSTOMER_PORTAL_EMAIL_FROM = os.environ.get("CUSTOMER_PORTAL_EMAIL_FROM", "no-reply@q360.example")
 # OD-PORTAL-003 (Product Owner decision 2026-09-22): 5 tentativas / 30 min.
+# Login antigo (apólice + documento + email, OTP por email). Desligar assim
+# que o login por email + palavra-passe estiver em produção: aceita qualquer
+# email que o cliente escreva, o novo usa só o email guardado no registo.
+CUSTOMER_PORTAL_LEGACY_LOGIN_ENABLED = os.environ.get("CUSTOMER_PORTAL_LEGACY_LOGIN_ENABLED", "true").lower() == "true"
 CUSTOMER_PORTAL_MAX_FAILED_ATTEMPTS = int(os.environ.get("CUSTOMER_PORTAL_MAX_FAILED_ATTEMPTS", "5"))
 CUSTOMER_PORTAL_LOCKOUT_MINUTES = int(os.environ.get("CUSTOMER_PORTAL_LOCKOUT_MINUTES", "30"))
 # Stricter than RATE_LIMIT_REQUESTS above: these 2 endpoints are the only

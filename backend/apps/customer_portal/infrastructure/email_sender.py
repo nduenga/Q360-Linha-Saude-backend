@@ -28,3 +28,17 @@ def send_otp_email(*, to_email: str, otp: str) -> None:
         recipient_list=[to_email],
         fail_silently=False,
     )
+
+
+def send_set_password_email(*, to_email: str, otp: str) -> None:
+    send_mail(
+        subject="Código para definir a sua palavra-passe",
+        message=(
+            f"O código para definir a palavra-passe do Portal do Cliente é: {otp}\n\n"
+            f"Este código expira em {settings.CUSTOMER_PORTAL_OTP_TTL_SECONDS // 60} minutos. "
+            "Se não pediu este código, ignore este email: a sua conta continua segura."
+        ),
+        from_email=settings.CUSTOMER_PORTAL_EMAIL_FROM,
+        recipient_list=[to_email],
+        fail_silently=False,
+    )

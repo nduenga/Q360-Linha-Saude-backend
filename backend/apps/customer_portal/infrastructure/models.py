@@ -31,6 +31,8 @@ class CustomerAccount(TenantScopedModel):
     tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
     email = models.EmailField(max_length=320)
     email_verified = models.BooleanField(default=False)
+    password_hash = models.CharField(max_length=256, null=True, blank=True)
+    password_set_at = models.DateTimeField(null=True, blank=True)
     failed_otp_attempts = models.IntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -77,6 +79,7 @@ class CustomerLoginChallenge(TenantScopedModel):
         CustomerAccount, on_delete=models.DO_NOTHING, db_column="customer_account_id", related_name="login_challenges"
     )
     otp_hash = models.CharField(max_length=200)
+    purpose = models.CharField(max_length=20, default="LOGIN")
     expires_at = models.DateTimeField()
     consumed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -84,3 +87,87 @@ class CustomerLoginChallenge(TenantScopedModel):
     class Meta:
         managed = False
         db_table = "customer_login_challenge"
+
+
+class PortalRequest(TenantScopedModel):
+    """Pedido do cliente ao seguro (PDF s.8). O cliente pede, o backoffice
+    analisa e decide — o estado só muda por `requests_service`."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    request_number = models.CharField(max_length=40)
+    customer_account = models.ForeignKey(CustomerAccount, on_delete=models.DO_NOTHING, db_column="customer_account_id")
+    proposer = models.ForeignKey(Proposer, on_delete=models.DO_NOTHING, db_column="proposer_id")
+    policy = models.ForeignKey(
+        "policy.Policy", on_delete=models.DO_NOTHING, db_column="policy_id", null=True, blank=True, related_name="+"
+    )
+    quote = models.ForeignKey(
+        "quote.Quote", on_delete=models.DO_NOTHING, db_column="quote_id", null=True, blank=True, related_name="+"
+    )
+    request_type = models.CharField(max_length=30)
+    subject = models.CharField(max_length=200)
+    description = models.TextField(default="")
+    payload_json = models.JSONField(default=dict)
+    status = models.CharField(max_length=30, default="OPEN")
+    resolution_note = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    row_version = models.BigIntegerField(default=0)
+
+    class Meta:
+        managed = False
+        db_table = "portal_request"
+
+
+class PortalRequestEvent(TenantScopedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    request = models.ForeignKey(PortalRequest, on_delete=models.DO_NOTHING, db_column="request_id", related_name="events")
+    from_status = models.CharField(max_length=30, null=True, blank=True)
+    to_status = models.CharField(max_length=30)
+    note = models.TextField(null=True, blank=True)
+    actor_type = models.CharField(max_length=10)
+    actor_ref = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "portal_request_event"
+
+
+class PortalMessage(TenantScopedModel):
+    """Mensagem associada a uma cotação, apólice ou pedido (PDF s.15) — nunca
+    um chat genérico. `proposer` é a fronteira de acesso do cliente."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    proposer = models.ForeignKey(Proposer, on_delete=models.DO_NOTHING, db_column="proposer_id")
+    context_type = models.CharField(max_length=10)
+    context_ref = models.CharField(max_length=100)
+    sender_type = models.CharField(max_length=10)
+    sender_ref = models.CharField(max_length=200)
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_by_customer_at = models.DateTimeField(null=True, blank=True)
+    read_by_staff_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "portal_message"
+
+
+class PortalNotification(TenantScopedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    customer_account = models.ForeignKey(CustomerAccount, on_delete=models.DO_NOTHING, db_column="customer_account_id")
+    dedupe_key = models.CharField(max_length=200)
+    code = models.CharField(max_length=60)
+    title = models.CharField(max_length=200)
+    body = models.TextField(default="")
+    link = models.CharField(max_length=300, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "portal_notification"

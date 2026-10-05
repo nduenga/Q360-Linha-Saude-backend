@@ -117,7 +117,8 @@ class CustomerPortalAuthService:
 
         challenge = (
             CustomerLoginChallenge.objects.filter(
-                tenant_id=tenant_id, customer_account=account, consumed_at__isnull=True, expires_at__gte=now
+                tenant_id=tenant_id, customer_account=account, purpose="LOGIN",
+                consumed_at__isnull=True, expires_at__gte=now,
             )
             .order_by("-created_at")
             .first()

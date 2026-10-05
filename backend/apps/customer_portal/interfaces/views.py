@@ -14,9 +14,19 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from django.conf import settings
+
 from apps.customer_portal.application.auth_service import CustomerPortalAuthService
+from apps.customer_portal.application.password_auth_service import CustomerPortalPasswordAuthService
+from apps.customer_portal.domain.errors import PortalLegacyLoginDisabledError
 from apps.customer_portal.interfaces.rate_limit import is_ip_rate_limited, is_rate_limited
 from apps.customer_portal.interfaces.serializers import (
+    FirstAccessConfirmSerializer,
+    FirstAccessMaskedEmailSerializer,
+    FirstAccessRequestSerializer,
+    PasswordLoginSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordResetRequestSerializer,
     PortalTokenResponseSerializer,
     RequestAccessSerializer,
     VerifyOtpSerializer,
@@ -27,6 +37,12 @@ from apps.foundation.domain.tenant import TenantId
 from apps.foundation.interfaces.middleware import get_correlation_id
 
 _auth_service = CustomerPortalAuthService()
+_password_service = CustomerPortalPasswordAuthService()
+
+
+def _require_legacy_login() -> None:
+    if not settings.CUSTOMER_PORTAL_LEGACY_LOGIN_ENABLED:
+        raise PortalLegacyLoginDisabledError("This login method is no longer available")
 
 
 def _bind_anonymous_customer_actor(tenant_id) -> None:
@@ -65,6 +81,7 @@ class RequestAccessView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, tenant_id):
+        _require_legacy_login()
         body = RequestAccessSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         data = body.validated_data
@@ -97,6 +114,7 @@ class VerifyOtpView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, tenant_id):
+        _require_legacy_login()
         body = VerifyOtpSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         data = body.validated_data
@@ -122,3 +140,95 @@ class VerifyOtpView(APIView):
 
         response = PortalTokenResponseSerializer({"accessToken": token, "expiresIn": ttl_seconds})
         return Response(response.data, status=200)
+
+
+def _token_response(token: str, ttl_seconds: int) -> Response:
+    return Response(PortalTokenResponseSerializer({"accessToken": token, "expiresIn": ttl_seconds}).data, status=200)
+
+
+def _remote_addr(request) -> str:
+    return request.META.get("REMOTE_ADDR") or "unknown"
+
+
+class _PublicAuthView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+
+class FirstAccessRequestView(_PublicAuthView):
+    """Passo 1 do primeiro acesso: o código vai para o email guardado no registo
+    do cliente, nunca para um email escrito no pedido."""
+
+    def post(self, request, tenant_id):
+        body = FirstAccessRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        # Diz qual dos dois dados está errado (decisão do PO, 2026-09-26), logo
+        # o limite por IP é obrigatório, como no pedido de acesso antigo.
+        if is_rate_limited(tenant_id=str(tenant_id), remote_addr=_remote_addr(request), email=data["reference"]) or (
+            is_ip_rate_limited(tenant_id=str(tenant_id), remote_addr=_remote_addr(request))
+        ):
+            return _too_many_requests()
+        _bind_anonymous_customer_actor(tenant_id)
+        masked = _password_service.first_access_request(
+            reference=data["reference"], registration_number=data["registrationNumber"],
+            correlation_id=get_correlation_id(),
+        )
+        return Response(FirstAccessMaskedEmailSerializer({"maskedEmail": masked}).data, status=202)
+
+
+class FirstAccessConfirmView(_PublicAuthView):
+    def post(self, request, tenant_id):
+        body = FirstAccessConfirmSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        if is_rate_limited(tenant_id=str(tenant_id), remote_addr=_remote_addr(request), email=data["reference"]):
+            return _too_many_requests()
+        _bind_anonymous_customer_actor(tenant_id)
+        token, ttl = _password_service.first_access_confirm(
+            reference=data["reference"], registration_number=data["registrationNumber"], otp=data["otp"],
+            password=data["password"], correlation_id=get_correlation_id(),
+        )
+        return _token_response(token, ttl)
+
+
+class PasswordLoginView(_PublicAuthView):
+    def post(self, request, tenant_id):
+        body = PasswordLoginSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        if is_rate_limited(tenant_id=str(tenant_id), remote_addr=_remote_addr(request), email=data["email"].lower()):
+            return _too_many_requests()
+        _bind_anonymous_customer_actor(tenant_id)
+        token, ttl = _password_service.login(
+            email=data["email"], password=data["password"], correlation_id=get_correlation_id()
+        )
+        return _token_response(token, ttl)
+
+
+class PasswordResetRequestView(_PublicAuthView):
+    """Responde sempre 202, exista ou não conta para o email."""
+
+    def post(self, request, tenant_id):
+        body = PasswordResetRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        if is_rate_limited(tenant_id=str(tenant_id), remote_addr=_remote_addr(request), email=data["email"].lower()):
+            return _too_many_requests()
+        _bind_anonymous_customer_actor(tenant_id)
+        _password_service.password_reset_request(email=data["email"], correlation_id=get_correlation_id())
+        return Response(status=202)
+
+
+class PasswordResetConfirmView(_PublicAuthView):
+    def post(self, request, tenant_id):
+        body = PasswordResetConfirmSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        if is_rate_limited(tenant_id=str(tenant_id), remote_addr=_remote_addr(request), email=data["email"].lower()):
+            return _too_many_requests()
+        _bind_anonymous_customer_actor(tenant_id)
+        token, ttl = _password_service.password_reset_confirm(
+            email=data["email"], otp=data["otp"], password=data["password"], correlation_id=get_correlation_id()
+        )
+        return _token_response(token, ttl)

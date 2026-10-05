@@ -64,6 +64,31 @@ _PORTAL_QUOTE_STATUS = {
 _PORTAL_QUOTE_SHOWS_PRICE = {"AWAITING_SIGNATURE", "CONTRACTED", "EXPIRED"}
 
 
+def portal_quote_status(quote: Quote, today: datetime.date) -> str:
+    status = _PORTAL_QUOTE_STATUS.get(quote.status, "IN_REVIEW")
+    if status == "AWAITING_SIGNATURE" and quote.valid_until is not None and quote.valid_until < today:
+        return "EXPIRED"
+    return status
+
+
+def portal_quote_item(quote: Quote, *, policy_number: str | None, today: datetime.date) -> dict:
+    status = portal_quote_status(quote, today)
+    run = quote.latest_pricing_run
+    shows_price = status in _PORTAL_QUOTE_SHOWS_PRICE and run is not None and run.total_amount is not None
+    return {
+        "quoteNumber": quote.quote_number,
+        "status": status,
+        "effectiveDate": quote.effective_date,
+        "validUntil": quote.valid_until,
+        "product": {"name": quote.plan.product.name} if quote.plan.product else None,
+        "plan": {"name": quote.plan.name},
+        "totalAmount": str(round_amount(run.total_amount)) if shows_price else None,
+        "currencyCode": quote.currency_code if shows_price else None,
+        "policyNumber": policy_number,
+        "createdAt": quote.created_at,
+    }
+
+
 def list_my_quotes(*, today: datetime.date | None = None) -> list[dict]:
     """Read-only, customer-facing view of the caller's quotes: translated
     status, validity, plan/product and price — nothing internal (rejection or
@@ -83,25 +108,4 @@ def list_my_quotes(*, today: datetime.date | None = None) -> list[dict]:
             "source_quote_id", "policy_number"
         )
     )
-    items = []
-    for quote in quotes:
-        status = _PORTAL_QUOTE_STATUS.get(quote.status, "IN_REVIEW")
-        if status == "AWAITING_SIGNATURE" and quote.valid_until is not None and quote.valid_until < today:
-            status = "EXPIRED"
-        run = quote.latest_pricing_run
-        shows_price = status in _PORTAL_QUOTE_SHOWS_PRICE and run is not None and run.total_amount is not None
-        items.append(
-            {
-                "quoteNumber": quote.quote_number,
-                "status": status,
-                "effectiveDate": quote.effective_date,
-                "validUntil": quote.valid_until,
-                "product": {"name": quote.plan.product.name} if quote.plan.product else None,
-                "plan": {"name": quote.plan.name},
-                "totalAmount": str(round_amount(run.total_amount)) if shows_price else None,
-                "currencyCode": quote.currency_code if shows_price else None,
-                "policyNumber": policy_numbers.get(quote.id),
-                "createdAt": quote.created_at,
-            }
-        )
-    return items
+    return [portal_quote_item(q, policy_number=policy_numbers.get(q.id), today=today) for q in quotes]

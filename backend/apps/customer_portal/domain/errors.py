@@ -69,3 +69,20 @@ class PortalResourceNotFoundError(DomainProblem):
 
     http_status = 404
     problem_code = "NOT-FOUND"
+
+
+class PortalNoEmailOnFileError(DomainProblem):
+    """The proposer exists and the document matches, but the platform has no
+    email for them — a first-access code has nowhere to go. The mediator has
+    to register the email (or invite the customer)."""
+
+    http_status = 409
+    problem_code = "PORTAL-NO-EMAIL"
+
+
+class PortalLegacyLoginDisabledError(DomainProblem):
+    """The old policyNumber+document+email OTP login is switched off
+    (`CUSTOMER_PORTAL_LEGACY_LOGIN_ENABLED=false`)."""
+
+    http_status = 404
+    problem_code = "NOT-FOUND"

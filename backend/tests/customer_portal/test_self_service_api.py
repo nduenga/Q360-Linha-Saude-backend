@@ -301,3 +301,96 @@ def test_my_quotes_hides_drafts_and_expires_stale_approved_quotes(admin_client, 
 @pytest.mark.django_db
 def test_my_quotes_requires_a_portal_token():
     assert APIClient().get("/api/v1/customer-portal/me/quotes").status_code == 401
+
+
+
+# ---- PDF MVP read endpoints (portal_views.py) ------------------------------
+def _contracted(admin_client, tenant, number: str, reg: str) -> tuple[dict, APIClient]:
+    scope = _setup_active_policy_with_member(admin_client, tenant, policy_number=number, registration_number=reg)
+    _set_quote(scope, status="BOUND")
+    return scope, _portal_client(_login(tenant, scope))
+
+
+@pytest.mark.django_db
+def test_policy_detail_lists_members_and_is_404_for_someone_elses(admin_client, tenant):
+    mine, client = _contracted(admin_client, tenant, "APO-R-001", "881111111LA011")
+    other, _ = _contracted(admin_client, tenant, "APO-R-002", "882222222LA022")
+
+    response = client.get(f"/api/v1/customer-portal/policies/{mine['policyNumber']}")
+    assert response.status_code == 200, response.data
+    assert response.data["policyNumber"] == "APO-R-001"
+    assert len(response.data["members"]) == 1
+    assert response.data["members"][0]["relationship"] == "TITULAR"
+    assert client.get(f"/api/v1/customer-portal/policies/{other['policyNumber']}").status_code == 404
+
+
+@pytest.mark.django_db
+def test_policies_list_filters_by_phase(admin_client, tenant):
+    _, client = _contracted(admin_client, tenant, "APO-R-003", "883333333LA033")
+    everything = client.get("/api/v1/customer-portal/policies").data["policies"]
+    assert [p["policyNumber"] for p in everything] == ["APO-R-003"]
+    assert client.get("/api/v1/customer-portal/policies?phase=CANCELLED").data["policies"] == []
+    assert client.get("/api/v1/customer-portal/policies?phase=NOPE").status_code == 400
+
+
+@pytest.mark.django_db
+def test_quote_detail_has_timeline_and_hides_other_quotes(admin_client, tenant):
+    mine, client = _contracted(admin_client, tenant, "APO-R-004", "884444444LA044")
+    _set_quote(mine, quote_number="Q-R-004")
+
+    response = client.get("/api/v1/customer-portal/me/quotes/Q-R-004")
+    assert response.status_code == 200, response.data
+    codes = [e["code"] for e in response.data["timeline"]]
+    assert codes[0] == "QUOTE_CREATED"
+    assert "POLICY_ISSUED" in codes
+    assert client.get("/api/v1/customer-portal/me/quotes/NOPE").status_code == 404
+
+
+@pytest.mark.django_db
+def test_payments_and_dashboard_report_overdue(admin_client, tenant):
+    mine, client = _contracted(admin_client, tenant, "APO-R-005", "885555555LA055")
+    from apps.policy.infrastructure.models import PremiumInstallment
+
+    PremiumInstallment.all_tenants.create(
+        tenant_id=tenant.id, policy_id=mine["policyId"], installment_no=1, period_from=_START_DATE,
+        period_to=_END_DATE, due_date=_START_DATE, amount="500.00", currency_code="AOA", status="OVERDUE",
+    )
+    payments = client.get("/api/v1/customer-portal/payments").data
+    assert payments["totals"] == [{"currencyCode": "AOA", "paid": "0.00", "pending": "0.00", "overdue": "500.00"}]
+    assert client.get("/api/v1/customer-portal/payments?status=PAID").data["installments"] == []
+
+    dashboard = client.get("/api/v1/customer-portal/dashboard").data
+    assert dashboard["quotes"]["byStatus"] == {"CONTRACTED": 1}
+    assert any(a["code"] == "PAYMENT_OVERDUE" for a in dashboard["alerts"])
+    assert dashboard["financial"][0]["overdue"] == "500.00"
+
+
+@pytest.mark.django_db
+def test_beneficiaries_card_profile_and_documents(admin_client, tenant):
+    mine, client = _contracted(admin_client, tenant, "APO-R-006", "886666666LA066")
+
+    people = client.get("/api/v1/customer-portal/beneficiaries").data["beneficiaries"]
+    assert [p["policyNumber"] for p in people] == ["APO-R-006"]
+
+    card = client.get(f"/api/v1/customer-portal/policies/{mine['policyNumber']}/members/{mine['memberId']}/card")
+    assert card.status_code == 200, card.data
+    assert card.data["policyNumber"] == "APO-R-006"
+    assert card.data["memberNumber"] == mine["memberId"].split("-")[0].upper()
+    nobody = "00000000-0000-0000-0000-000000000000"
+    assert client.get(
+        f"/api/v1/customer-portal/policies/{mine['policyNumber']}/members/{nobody}/card"
+    ).status_code == 404
+
+    profile = client.get("/api/v1/customer-portal/profile").data
+    assert profile["accountEmail"] == _EMAIL
+    assert profile["proposers"][0]["registrationNumber"] == "886666666LA066"
+
+    assert client.get("/api/v1/customer-portal/documents").data == {"documents": []}
+    assert client.get(f"/api/v1/customer-portal/documents/{nobody}/download").status_code == 404
+
+
+@pytest.mark.django_db
+def test_new_portal_endpoints_require_a_portal_token():
+    client = APIClient()
+    for path in ("dashboard", "policies", "beneficiaries", "payments", "documents", "profile", "me/quotes/X"):
+        assert client.get(f"/api/v1/customer-portal/{path}").status_code == 401, path
