@@ -35,6 +35,10 @@ class TokenResponseSerializer(serializers.Serializer):
     name = serializers.CharField()
     email = serializers.EmailField()
     roles = serializers.ListField(child=serializers.CharField())
+    accountType = serializers.ChoiceField(
+        choices=["STAFF", "PLATFORM"], default="STAFF",
+        help_text="PLATFORM: super administrador; o token só vale em /api/v1/platform/* e não há refreshToken.",
+    )
 
 
 class StaffAccountSerializer(serializers.Serializer):

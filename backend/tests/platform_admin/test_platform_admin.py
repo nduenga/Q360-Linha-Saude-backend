@@ -187,3 +187,28 @@ def test_every_platform_action_is_audited_without_secrets():
     assert len(events) == 1 and events[0]["metadata"]["tenantCode"] == "acme-seguros"
     assert made["temporaryPassword"] not in str(client.get("/api/v1/platform/audit").data)
     assert "platform.login_succeeded" in {e["action"] for e in client.get("/api/v1/platform/audit").data}
+
+
+@pytest.mark.django_db
+def test_super_admin_signs_in_through_the_normal_login_form():
+    _admin()
+    normal = _staff_login("root@q360.test", PASSWORD)
+    assert normal.status_code == 200, normal.content
+    assert normal.data["accountType"] == "PLATFORM" and normal.data["roles"] == ["PLATFORM_ADMIN"] and normal.data["refreshToken"] == ""
+    api = APIClient()
+    api.credentials(HTTP_AUTHORIZATION=f"Bearer {normal.data['accessToken']}")
+    assert api.get("/api/v1/platform/tenants").status_code == 200
+    assert api.get("/api/v1/quotes").status_code == 403  # continua fora das rotas de tenant
+
+    assert _staff_login("root@q360.test", "errada").status_code == 401
+    assert _staff_login("ninguem@q360.test", PASSWORD).status_code == 401
+
+
+@pytest.mark.django_db
+def test_a_staff_account_is_never_treated_as_a_super_admin():
+    _admin()
+    client = _client()
+    made = client.post("/api/v1/platform/tenants", NEW_TENANT, format="json").data
+    staff = _staff_login("ana@acme.ao", made["temporaryPassword"])
+    assert staff.status_code == 200 and staff.data["accountType"] == "STAFF" and staff.data["refreshToken"]
+    assert _staff_login("ana@acme.ao", "errada").status_code == 401
