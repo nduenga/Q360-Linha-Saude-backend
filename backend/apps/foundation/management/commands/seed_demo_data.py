@@ -65,10 +65,8 @@ _DOCUMENT_TEMPLATE_CODE = "DEMO-QUOTE-PROPOSAL"
 
 _STAFF = (
     ("admin", "admin.demo@q360.local", "Administrador Demo", (Role.ADMIN,)),
-    ("configurator", "configurador.demo@q360.local", "Configurador Demo", (Role.PRODUCT_CONFIGURATOR,)),
+    ("manager", "gestor.demo@q360.local", "Gestor de Subscrição Demo", (Role.SUBSCRIPTION_MANAGER,)),
     ("subscriber", "subscritor.demo@q360.local", "Subscritor Demo", (Role.SUBSCRIBER,)),
-    ("approver", "aprovador.demo@q360.local", "Aprovador Demo", (Role.APPROVER,)),
-    ("auditor", "auditor.demo@q360.local", "Auditor Demo", (Role.AUDITOR,)),
 )
 
 
@@ -563,7 +561,7 @@ class Command(BaseCommand):
                 members=[(member, {"angola": {}})],
             )
             quote = self._price_and_submit(quote, "reject")
-            self._bind(tenant, staff["approver"], Role.APPROVER)
+            self._bind(tenant, staff["manager"], Role.SUBSCRIPTION_MANAGER)
             decide_quote(
                 quote=quote,
                 decision=QuoteDecisionType.REJECT.value,
@@ -666,7 +664,7 @@ class Command(BaseCommand):
         self._bind(tenant, staff["subscriber"], Role.SUBSCRIBER)
         quote = self._price_and_submit(quote, "approve")
 
-        self._bind(tenant, staff["approver"], Role.APPROVER)
+        self._bind(tenant, staff["manager"], Role.SUBSCRIPTION_MANAGER)
         decide_quote(
             quote=quote,
             decision=QuoteDecisionType.APPROVE.value,

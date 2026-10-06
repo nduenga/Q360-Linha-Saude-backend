@@ -206,7 +206,8 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
         "participationOption": (quote.selection_json or {}).get("participationOption") or settings.get("participationOption"),
     }
     quote_facts_ = quote_facts(
-        members_count=len(counted), plan_code=str(plan.code), plan_name=str(plan.name), dimensions=custom_dimensions
+        members_count=len(counted), plan_code=str(plan.code), plan_name=str(plan.name), dimensions=custom_dimensions,
+        product=(plan.product.code, plan.product.name),
     )
     for rule in custom_rules:
         if rule.scope == "QUOTE" and not rule.is_pricing and rule.matches(quote_facts_):
@@ -324,6 +325,7 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
             plan_name=str(plan.name),
             dimensions=custom_dimensions,
             relationship=category,
+            product=(plan.product.code, plan.product.name),
         )
         for rule in custom_rules:
             if rule.scope == "PERSON" and not rule.is_pricing and rule.matches(person_facts_):

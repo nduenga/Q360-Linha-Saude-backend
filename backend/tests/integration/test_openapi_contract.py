@@ -16,13 +16,8 @@ PUBLIC = {
     "/api/v1/health/live", "/api/v1/health/ready", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout",
     "/api/v1/auth/dev-login", "/api/v1/schema",
     "/api/v1/customer-portal/{tenant_id}/auth/request-access", "/api/v1/customer-portal/{tenant_id}/auth/verify-otp",
-    "/api/v1/customer-portal/{tenant_id}/auth/login",
-    "/api/v1/customer-portal/{tenant_id}/auth/first-access/request",
-    "/api/v1/customer-portal/{tenant_id}/auth/first-access/confirm",
-    "/api/v1/customer-portal/{tenant_id}/auth/password-reset/request",
-    "/api/v1/customer-portal/{tenant_id}/auth/password-reset/confirm",
 }
-BODYLESS_POST = re.compile(r"/(approve|publish|retire|select|recalculate|retry|signed-url|proposal|reset-password|logout|market)$")
+BODYLESS_POST = re.compile(r"/(approve|publish|retire|select|recalculate|retry|proposal|reset-password|logout|market|signed-url)$")
 
 
 def _routes():

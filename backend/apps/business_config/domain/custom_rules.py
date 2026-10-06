@@ -64,6 +64,7 @@ ACTION_LABELS = {
     "DECLINE": "Recusar (bloqueia o envio)",
     "WARN": "Mostrar apenas um aviso",
 }
+ACTION_UNITS = {"INCREASE_PERCENT": "%", "DISCOUNT_PERCENT": "%", "MULTIPLY": "×", "ADD_AMOUNT": "valor", "SUBTRACT_AMOUNT": "valor"}
 # ações que precisam de um valor numérico
 VALUE_ACTIONS = frozenset(PRICING_ACTIONS)
 # ações de aceitação só fazem sentido por pessoa quando a condição é sobre a pessoa
@@ -136,9 +137,18 @@ class CustomRule:
     value: Decimal | None
     message: str
     order: int
+    products: tuple[str, ...] = ()
+
+    def applies_to_product(self, facts: Mapping[str, Any]) -> bool:
+        """Sem produtos escolhidos, a regra vale para todos."""
+        if not self.products:
+            return True
+        wanted = {p.casefold() for p in self.products}
+        actual = facts.get("product") or ()
+        return any(str(x).strip().casefold() in wanted for x in actual if x)
 
     def matches(self, facts: Mapping[str, Any]) -> bool:
-        return all(c.matches(facts) for c in self.conditions)
+        return self.applies_to_product(facts) and all(c.matches(facts) for c in self.conditions)
 
     @property
     def is_pricing(self) -> bool:
@@ -215,7 +225,11 @@ def parse_rule(row: Mapping[str, Any], index: int = 0) -> CustomRule:
         order_value = int(order) if _present(order) else index + 1
     except (TypeError, ValueError):
         raise InvalidConfiguration(f"{path} ({name}): a ordem deve ser um número inteiro") from None
+    products = row.get("products") or []
+    if not isinstance(products, list) or not all(isinstance(p, str) for p in products):
+        raise InvalidConfiguration(f"{path} ({name}): os produtos devem ser uma lista de códigos")
     return CustomRule(
+        products=tuple(p.strip() for p in products if p.strip()),
         code=str(row.get("code") or f"RULE_{index + 1}").strip() or f"RULE_{index + 1}",
         name=name,
         scope=scope,
@@ -270,6 +284,25 @@ def apply_pricing_action(rule: CustomRule, amount: Decimal) -> tuple[Decimal, De
     if rule.action == "SUBTRACT_AMOUNT":
         return max(amount - rule.value, Decimal("0")), None
     raise ValueError(rule.action)
+
+
+def field_catalog() -> dict[str, Any]:
+    """Catálogo para a interface desenhar o construtor de regras sem o duplicar:
+    se amanhã o backend ganhar um campo ou uma ação, o ecrã passa a mostrá-lo."""
+    return {
+        "fields": [
+            {"key": key, "label": FIELD_LABELS[key], "kind": kind, "options": list(options) if options else None,
+             "personOnly": key in PERSON_ONLY_FIELDS}
+            for key, (_, kind, options) in FIELDS.items()
+        ],
+        "operators": [{"key": k, "label": OPERATOR_LABELS[k]} for k in OPERATORS],
+        "scopes": [{"key": k, "label": SCOPE_LABELS[k]} for k in SCOPES],
+        "actions": [
+            {"key": k, "label": ACTION_LABELS[k], "group": "PRICING" if k in PRICING_ACTIONS else "UNDERWRITING",
+             "needsValue": k in VALUE_ACTIONS, "unit": ACTION_UNITS.get(k)}
+            for k in ACTIONS
+        ],
+    }
 
 
 def describe(rule: CustomRule) -> str:

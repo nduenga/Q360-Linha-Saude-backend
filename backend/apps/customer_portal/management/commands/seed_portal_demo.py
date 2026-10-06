@@ -157,7 +157,7 @@ class Command(BaseCommand):
             members=[(holder, {"angola": {}})],
         )
         quote = demo._price_and_submit(quote, "portal-approved")  # noqa: SLF001
-        demo._bind(tenant, staff["approver"], Role.APPROVER)  # noqa: SLF001
+        demo._bind(tenant, staff["manager"], Role.SUBSCRIPTION_MANAGER)  # noqa: SLF001
         decide_quote(
             quote=quote, decision=QuoteDecisionType.APPROVE.value, reason_code="DEMO_APPROVED",
             reason_text="Cotação aprovada para testar a aceitação no portal.", row_version=quote.row_version,

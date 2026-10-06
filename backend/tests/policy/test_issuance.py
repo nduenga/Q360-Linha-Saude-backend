@@ -47,7 +47,7 @@ def _eligibility_rule(client, *, code: str, config: dict | None = None) -> None:
 
 def _approver(tenant, *, actor_id: str = "approver-1"):
     return make_client(
-        tenant_id=tenant.id, roles=["APPROVER"], scope="q360.read q360.write q360.approve", actor_id=actor_id
+        tenant_id=tenant.id, roles=["SUBSCRIPTION_MANAGER"], scope="q360.read q360.write q360.approve", actor_id=actor_id
     )
 
 

@@ -266,7 +266,7 @@ def test_configuration_changes_are_audited(admin_client, tenant):
         {"configuration": {"limits": [{"kind": "ANNUAL_PER_PERSON", "amount": "9000000"}]}},
         format="json",
     )
-    auditor = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit")
+    auditor = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")
     events = auditor.get("/api/v1/audit-events?action=plan_benefit.configured").data["items"]
     assert events and events[0]["metadata"]["after"]["limits"][0]["amount"] == "9000000"
     assert events[0]["metadata"]["benefitCode"] == "HOSPITALIZATION"

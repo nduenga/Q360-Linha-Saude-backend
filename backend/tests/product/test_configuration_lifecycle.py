@@ -142,7 +142,7 @@ def test_rollback_is_audited_with_reason_before_and_after(admin_client, tenant):
     v1 = _table(admin_client)
     v2 = _table(admin_client, age_factor="2.00")
     admin_client.post(f"/api/v1/configuration/rating-table/{v1['id']}/rollback", {"reason": REASON}, format="json")
-    auditor = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit")
+    auditor = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")
     events = auditor.get("/api/v1/audit-events?action=configuration.rolled_back").data["items"]
     metadata = events[0]["metadata"]
     assert metadata["reason"] == REASON and metadata["configType"] == "rating-table" and metadata["restoredFromVersionNo"] == 1

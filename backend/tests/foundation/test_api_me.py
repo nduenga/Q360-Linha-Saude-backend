@@ -23,7 +23,7 @@ def _sign(**extra_claims) -> str:
     claims = {
         "sub": "user-1",
         "tenant_id": _TENANT_ID,
-        "roles": ["APPROVER", "AUDITOR"],
+        "roles": ["SUBSCRIPTION_MANAGER"],
         "scope": "q360.read",
         "exp": int(time.time()) + 300,
     }
@@ -82,6 +82,6 @@ def test_me_returns_actor_context_schema():
     assert set(response.data.keys()) == {"actorId", "tenantId", "roles", "permissions"}
     assert response.data["actorId"] == "user-1"
     assert response.data["tenantId"] == _TENANT_ID
-    assert response.data["roles"] == ["APPROVER", "AUDITOR"]
+    assert response.data["roles"] == ["SUBSCRIPTION_MANAGER"]
     assert "audit:read" in response.data["permissions"]
     assert "quote:approve" in response.data["permissions"]

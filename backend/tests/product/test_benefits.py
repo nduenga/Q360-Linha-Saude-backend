@@ -373,6 +373,6 @@ def test_import_rejects_unknown_file_type_and_missing_file(admin_client):
 def test_read_only_role_cannot_manage_the_library(tenant):
     from tests.product.conftest import make_client
 
-    reader = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit")
+    reader = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")
     assert reader.get("/api/v1/benefits").status_code == 200
     assert reader.post("/api/v1/benefits", {"code": "NOPE_X", "name": "x"}, format="json").status_code == 403

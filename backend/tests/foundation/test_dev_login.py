@@ -79,9 +79,9 @@ def test_valid_approver_credentials_get_real_doc001_permissions(settings):
     authed.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
     me = authed.get("/api/v1/me")
     assert me.status_code == 200
-    assert me.data["roles"] == ["APPROVER"]
+    assert me.data["roles"] == ["SUBSCRIPTION_MANAGER"]
     assert "quote:approve" in me.data["permissions"]
-    assert "quote:create" not in me.data["permissions"]
+    assert "quote:create" in me.data["permissions"]  # o gestor reúne o que faziam configurador, aprovador e auditor
 
 
 @pytest.mark.django_db

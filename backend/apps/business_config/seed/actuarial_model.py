@@ -9,6 +9,29 @@ from openpyxl import load_workbook
 
 WORKBOOK_PATH = Path(__file__).with_name("Modelo_Actuarial_Saude_SAU_SAG_Angola.xlsx")
 AGE_GENDER_KEYS = ("M|0-17", "F|0-17", "M|18-35", "F|18-35", "M|36-50", "F|36-50", "M|51-65", "F|51-65", "M|>65", "F|>65")
+PLAN_CODES = {
+    "IND-BASE": ("SAU", "Base"),
+    "IND-MEDIO": ("SAU", "Conforto"),
+    "IND-SUPERIOR": ("SAU", "Premium"),
+    "GRP-COLABORADORES": ("SAG", "Colaboradores"),
+    "GRP-QUADROS": ("SAG", "Quadros Médios"),
+    "GRP-ADMINISTRACAO": ("SAG", "Administração"),
+}
+COVERAGE_CODE_MAPPING = {
+    "HOSPITALIZATION": ["HOSP_INT", "HOSP_UCI"],
+    "AMBULATORY_SURGERY": ["HOSP_CIR"],
+    "EMERGENCY": ["URG", "AMBUL"],
+    "OUTPATIENT": ["AMB_CONS", "AMB_MCDT"],
+    "ENDEMIC_DISEASES": ["MAL"],
+    "MATERNITY": ["MAT"],
+    "PHARMACY": ["MED"],
+    "DENTAL": ["DENT"],
+    "PROSTHESIS": ["PROT"],
+    "OPTICAL": ["OPT"],
+    "CHECKUP_PREVENTIVE": ["PREV"],
+    "MEDICAL_EVACUATION": ["EVAC"],
+    "DIALYSIS_ONCOLOGY": ["ONCO", "HEMO"],
+}
 
 
 def _value(cell: Any) -> Any:
@@ -31,6 +54,7 @@ def _table(sheet, rows: range, columns: dict[str, int]) -> list[dict[str, Any]]:
 
 def build_actuarial_model() -> dict[str, Any]:
     workbook = load_workbook(WORKBOOK_PATH, data_only=False, read_only=True)
+    cached_workbook = load_workbook(WORKBOOK_PATH, data_only=True, read_only=True)
     dashboard = workbook["Dashboard_Premissas"]
     sau = workbook["Matriz_SAU"]
     sag = workbook["Matriz_SAG"]
@@ -56,11 +80,58 @@ def build_actuarial_model() -> dict[str, Any]:
                 "factors": {key: _value(dashboard.cell(row_number, index)) for index, key in enumerate(AGE_GENDER_KEYS, start=4)},
             })
 
-    plan_coverage_columns = {"plan": 2, "coverage_code": 3, "status": 6, "capital_sublimit_aoa": 7}
-    plan_coverages = {
-        "SAU": _table(sau, range(6, 57), plan_coverage_columns),
-        "SAG": _table(sag, range(6, 57), plan_coverage_columns),
-    }
+    plan_coverages = {}
+    for segment, formula_sheet_name in (("SAU", "Matriz_SAU"), ("SAG", "Matriz_SAG")):
+        formula_sheet = workbook[formula_sheet_name]
+        cached_sheet = cached_workbook[formula_sheet_name]
+        plan_coverages[segment] = [
+            {
+                "plan": _value(formula_sheet.cell(row_number, 2)),
+                "coverage_code": _value(formula_sheet.cell(row_number, 3)),
+                "status": _value(formula_sheet.cell(row_number, 6)),
+                "capital_sublimit_aoa": cached_sheet.cell(row_number, 7).value,
+            }
+            for row_number in range(6, 57)
+            if _value(formula_sheet.cell(row_number, 2)) is not None
+        ]
+    reference_pure_premiums = []
+    for segment, formula_sheet_name in (("SAU", "Matriz_SAU"), ("SAG", "Matriz_SAG")):
+        formula_sheet = workbook[formula_sheet_name]
+        cached_sheet = cached_workbook[formula_sheet_name]
+        for row_number in range(6, 57):
+            plan = _value(formula_sheet.cell(row_number, 2))
+            coverage_code = _value(formula_sheet.cell(row_number, 3))
+            status = _value(formula_sheet.cell(row_number, 6))
+            pure_premium = cached_sheet.cell(row_number, 19).value
+            if not plan or not coverage_code or status == "—" or pure_premium is None:
+                continue
+            lambda_per_life = cached_sheet.cell(row_number, 8).value
+            adjusted_mean_cost = cached_sheet.cell(row_number, 12).value
+            trend_factor = cached_sheet.cell(row_number, 13).value
+            severity_cv = cached_sheet.cell(row_number, 15).value
+            mean_claim = cached_sheet.cell(row_number, 14).value
+            sigma_ln = cached_sheet.cell(row_number, 16).value
+            mu_ln = cached_sheet.cell(row_number, 17).value
+            lev_factor = cached_sheet.cell(row_number, 18).value
+            reference_pure_premiums.append({
+                "segment": segment,
+                "plan": plan,
+                "coverage_code": coverage_code,
+                "status": status,
+                "capital_sublimit_aoa": _value(formula_sheet.cell(row_number, 7)),
+                "reference_age_band": "18-35",
+                "reference_sex": "M",
+                "annual_pure_premium": str(pure_premium),
+                "frequency_per_life": str(lambda_per_life),
+                "adjusted_mean_cost_aoa": str(adjusted_mean_cost),
+                "trend_factor": str(trend_factor),
+                "severity_cv": str(severity_cv),
+                "mean_claim_aoa": str(mean_claim),
+                "sigma_ln": str(sigma_ln),
+                "mu_ln": str(mu_ln),
+                "lev_factor": str(lev_factor),
+                "source_cell": f"{formula_sheet_name}!S{row_number}",
+            })
 
     package_rows = _table(
         adjustments,
@@ -76,6 +147,8 @@ def build_actuarial_model() -> dict[str, Any]:
         "model_status": "DRAFT_REQUIRES_ACTUARIAL_APPROVAL",
         "source_file": WORKBOOK_PATH.name,
         "source_sheets": ["Dashboard_Premissas", "Matriz_SAU", "Matriz_SAG", "Regras_Ajustes"],
+        "plan_code_mapping": {code: {"segment": segment, "actuarial_plan": actuarial_plan} for code, (segment, actuarial_plan) in PLAN_CODES.items()},
+        "coverage_code_mapping": COVERAGE_CODE_MAPPING,
         "currency_code": "AOA",
         "currency_label": "Kwanza (Kz)",
         "reference_date": _value(dashboard["D38"]),
@@ -108,6 +181,7 @@ def build_actuarial_model() -> dict[str, Any]:
         "coverage_assumptions": coverage_assumptions,
         "age_gender_relativities": age_relativities,
         "plan_coverages": plan_coverages,
+        "reference_pure_premiums": reference_pure_premiums,
         "plan_factors": _table(
             dashboard, range(154, 160),
             {"description": 2, "product_plan": 3, "network_factor": 4, "room_limit_per_day_aoa": 5, "icu_annual_limit_aoa": 6},

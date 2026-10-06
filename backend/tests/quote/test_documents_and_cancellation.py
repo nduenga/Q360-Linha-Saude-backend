@@ -61,7 +61,7 @@ def _approved_quote(client, *, code_suffix: str, tenant) -> dict:
     ready = client.get(f"/api/v1/quotes/{quote['id']}").data
     submitted = client.post(f"/api/v1/quotes/{quote['id']}/submit", {"rowVersion": ready["rowVersion"]}, format="json").data
 
-    approver = make_client(tenant_id=tenant.id, roles=["APPROVER"], scope="q360.read q360.write q360.approve", actor_id=f"approver-{code_suffix}")
+    approver = make_client(tenant_id=tenant.id, roles=["SUBSCRIPTION_MANAGER"], scope="q360.read q360.write q360.approve", actor_id=f"approver-{code_suffix}")
     approver.post(
         f"/api/v1/quotes/{quote['id']}/decision",
         {"decision": "APPROVE", "reasonCode": "OK", "rowVersion": submitted["rowVersion"]},

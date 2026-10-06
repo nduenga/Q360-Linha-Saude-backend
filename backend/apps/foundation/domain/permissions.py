@@ -17,11 +17,19 @@ class Role(str, Enum):
     """DOC-001 s6 — Actores e Personas."""
 
     PLATFORM_ADMIN = "PLATFORM_ADMIN"  # Administrador global da plataforma
-    ADMIN = "ADMIN"  # Administrador de Tenant
-    PRODUCT_CONFIGURATOR = "PRODUCT_CONFIGURATOR"  # Configurador de Produto
-    SUBSCRIBER = "SUBSCRIBER"  # Subscritor
-    APPROVER = "APPROVER"  # Aprovador
-    AUDITOR = "AUDITOR"  # Leitor/Auditor
+    ADMIN = "ADMIN"  # Administrador do tenant: tudo, incluindo contas de utilizadores
+    SUBSCRIPTION_MANAGER = "SUBSCRIPTION_MANAGER"  # Gestor de subscrição: configuração + aprovação + auditoria
+    SUBSCRIBER = "SUBSCRIBER"  # Subscritor: cotações, elegibilidade e decisão (aprovar/reprovar)
+
+
+# Perfis antigos que deixaram de existir: o Aprovador, o Auditor e o
+# Configurador de Produto passaram a Gestor de subscrição. Aceitam-se nos
+# tokens ainda em circulação durante a transição.
+LEGACY_ROLE_ALIASES: dict[str, "Role"] = {
+    "PRODUCT_CONFIGURATOR": Role.SUBSCRIPTION_MANAGER,
+    "APPROVER": Role.SUBSCRIPTION_MANAGER,
+    "AUDITOR": Role.SUBSCRIPTION_MANAGER,
+}
 
 
 class Permission(str, Enum):
@@ -62,38 +70,35 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.AUDIT_READ,
         }
     ),
-    Role.PRODUCT_CONFIGURATOR: frozenset(
+    # Gestor de subscrição = tudo o que o Configurador de Produto fazia, mais o
+    # que faziam o Aprovador e o Auditor (que deixam de existir).
+    Role.SUBSCRIPTION_MANAGER: frozenset(
         {
             Permission.QUOTE_CREATE,
             Permission.QUOTE_EDIT,
             Permission.QUOTE_CALCULATE,
             Permission.QUOTE_SUBMIT,
             Permission.QUOTE_REVIEW,
+            Permission.QUOTE_APPROVE,
+            Permission.QUOTE_REJECT,
             Permission.PRODUCT_MANAGE,
             Permission.PRICING_CONFIG_MANAGE,
+            Permission.AUDIT_READ,
         }
     ),
+    # Subscritor: o que já fazia (criar, editar, calcular, submeter), mais
+    # decidir uma cotação (aprovar/reprovar, com a fila de revisão que isso
+    # exige). A elegibilidade já só depende do escopo de escrita. A regra dos
+    # quatro olhos mantém-se: ninguém decide a cotação que submeteu.
     Role.SUBSCRIBER: frozenset(
         {
             Permission.QUOTE_CREATE,
             Permission.QUOTE_EDIT,
             Permission.QUOTE_CALCULATE,
             Permission.QUOTE_SUBMIT,
-        }
-    ),
-    Role.APPROVER: frozenset(
-        {
-            Permission.QUOTE_CALCULATE,
             Permission.QUOTE_REVIEW,
             Permission.QUOTE_APPROVE,
             Permission.QUOTE_REJECT,
-            Permission.AUDIT_READ,
-        }
-    ),
-    Role.AUDITOR: frozenset(
-        {
-            Permission.QUOTE_REVIEW,
-            Permission.AUDIT_READ,
         }
     ),
 }
@@ -108,10 +113,8 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
 # role with any permission at all can at minimum read).
 ROLE_SCOPES: dict[Role, frozenset[Scope]] = {
     Role.ADMIN: frozenset({Scope.READ, Scope.WRITE, Scope.ADMIN, Scope.APPROVE, Scope.AUDIT}),
-    Role.PRODUCT_CONFIGURATOR: frozenset({Scope.READ, Scope.WRITE, Scope.ADMIN}),
-    Role.SUBSCRIBER: frozenset({Scope.READ, Scope.WRITE}),
-    Role.APPROVER: frozenset({Scope.READ, Scope.WRITE, Scope.APPROVE, Scope.AUDIT}),
-    Role.AUDITOR: frozenset({Scope.READ, Scope.AUDIT}),
+    Role.SUBSCRIPTION_MANAGER: frozenset({Scope.READ, Scope.WRITE, Scope.ADMIN, Scope.APPROVE, Scope.AUDIT}),
+    Role.SUBSCRIBER: frozenset({Scope.READ, Scope.WRITE, Scope.APPROVE}),
 }
 
 

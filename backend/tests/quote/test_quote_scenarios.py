@@ -282,7 +282,7 @@ def test_scenario_changes_are_audited(admin_client, tenant):
     scope = _scope(admin_client)
     scenario = _create(admin_client, scope, "Auditado", {"selection": {"participationOption": "D"}}).data
     admin_client.post(f"/api/v1/scenarios/{scenario['id']}/select", {}, format="json")
-    auditor = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit")
+    auditor = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")
     events = auditor.get(f"/api/v1/audit-events?entityId={scenario['id']}&size=100").data["items"]
     actions = {e["action"] for e in events}
     assert {"quote.scenario_created", "quote.scenario_selected"} <= actions
@@ -294,7 +294,7 @@ def test_scenario_changes_are_audited(admin_client, tenant):
 def test_readers_can_see_but_not_change_scenarios(admin_client, tenant):
     scope = _scope(admin_client)
     scenario = _create(admin_client, scope, "Visível").data
-    reader = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit")
+    reader = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")
     assert reader.get(f"/api/v1/quotes/{scope['quoteId']}/scenarios").status_code == 200
     assert reader.post(f"/api/v1/quotes/{scope['quoteId']}/scenarios", {"name": "X"}, format="json").status_code == 403
     assert reader.post(f"/api/v1/scenarios/{scenario['id']}/select", {}, format="json").status_code == 403

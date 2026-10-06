@@ -89,6 +89,26 @@ def test_order_inactive_and_duplicate_codes():
         validate_rules({"rules": [_row(code="X"), _row(code="X")]})
 
 
+def test_rule_attached_to_products_only_applies_to_them():
+    rule = parse_rule(_row(products=["SAU"]))
+    inside = person_facts(age=61, members_count=1, plan_code="BASE", plan_name="Base", dimensions={},
+                          relationship=None, product=("sau", "Saúde Individual"))
+    outside = person_facts(age=61, members_count=1, plan_code="BASE", plan_name="Base", dimensions={},
+                           relationship=None, product=("SAG", "Saúde Grupo"))
+    assert rule.matches(inside) and not rule.matches(outside)
+    assert parse_rule(_row()).matches(outside)  # sem produtos = todos
+    with pytest.raises(InvalidConfiguration, match="produtos"):
+        parse_rule(_row(products="SAU"))
+
+
+def test_field_catalog_drives_the_interface():
+    from apps.business_config.domain.form_schemas import get_form_schema
+
+    meta = get_form_schema("rules.custom")["meta"]
+    assert {f["key"] for f in meta["fields"]} >= {"age", "plan", "members_count"}
+    assert {a["group"] for a in meta["actions"]} == {"PRICING", "UNDERWRITING"}
+
+
 def test_structure_accepts_the_form_shape_and_rejects_unknown_fields():
     validate_structure("rules.custom", {"rules": [_row(order=1)]})
     with pytest.raises(InvalidConfiguration):

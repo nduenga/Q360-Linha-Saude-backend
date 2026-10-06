@@ -193,17 +193,19 @@ def _authority_limits(quote: Quote) -> dict[str, Any]:
 
 def _enforce_authority(quote: Quote, spec: dict[str, Any]) -> bool:
     """Returns True when the adjustment is above the configured limit (the
-    caller then needs `quote:approve`). Raises when it is and they lack it."""
+    caller then needs manager authority: `pricing-config:manage`, held by the
+    Administrador and the Gestor de subscrição, not by the Subscritor).
+    Raises when it is and they lack it."""
     limits = _authority_limits(quote)
     key = "maxAdjustmentPct" if spec["kind"] in PERCENT_KINDS else "maxAdjustmentAmount"
     limit = limits.get(key)
     if limit is None or spec["value"] <= Decimal(str(limit)):
         return False
     actor = CurrentActorProvider.get()
-    if actor is None or not actor.has_permission(Permission.QUOTE_APPROVE):
+    if actor is None or not actor.has_permission(Permission.PRICING_CONFIG_MANAGE):
         raise AdjustmentAuthorityError(
             f"A {spec['kind']} of {spec['value']} exceeds the authority limit ({key}={limit}); "
-            "an approver (quote:approve) must apply it"
+            "a subscription manager must apply it"
         )
     return True
 

@@ -538,6 +538,14 @@ def build_pricing_context(
             for member_id in priceable_member_ids
         },
     }
+    plan_settings = quote.plan.settings_json or {}
+    if plan_settings.get("segment") == "GROUP":
+        proposer_attributes = quote.proposer.attributes_json or {}
+        actuarial_profile = proposer_attributes.get("actuarialProfile")
+        if actuarial_profile is not None:
+            if not isinstance(actuarial_profile, dict):
+                raise ReferencedEntityNotFoundError("proposer.attributes.actuarialProfile must be an object")
+            context["actuarialProfile"] = actuarial_profile
     # A configuração de negócio publicada (pricing.*) tem prioridade; sem ela,
     # mantém-se a resolução legada RatingTable/PricingParameterSet.
     if BusinessConfigurationResolver.get("pricing.reference_premiums", effective_date=quote.effective_date) is None:

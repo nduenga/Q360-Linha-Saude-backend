@@ -184,5 +184,5 @@ def test_renewal_requires_quote_create_permission(admin_client, tenant):
     from tests.policy.conftest import make_client
 
     policy = _activate(admin_client, tenant, suffix="R9")
-    reader = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit")
+    reader = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")
     assert reader.post("/api/v1/quotes/renewals", {"sourcePolicyId": policy["id"]}, format="json").status_code == 403

@@ -89,7 +89,7 @@ def _portal_login(tenant, policy_number):
 @pytest.mark.django_db
 def test_full_lifecycle_from_market_templates_to_portal_and_renewal(admin_client, tenant, settings):
     approver = _approver(tenant)
-    auditor = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit", actor_id="auditor-1")
+    auditor = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit", actor_id="auditor-1")
 
     # ------------------------------------------------ 1. modelos do PDF + tarifas
     market = admin_client.post("/api/v1/product-templates/market", {}, format="json")

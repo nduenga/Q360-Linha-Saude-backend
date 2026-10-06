@@ -77,7 +77,7 @@ def test_only_draft_is_editable_and_row_version_is_checked(admin_client):
 
 @pytest.mark.django_db
 def test_read_only_actor_cannot_write(tenant):
-    reader = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit")
+    reader = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")
     assert reader.get(BASE).status_code == 200
     denied = reader.post(BASE, {"configKey": "pricing.factors", "value": {}, "effectiveFrom": "2026-01-01"}, format="json")
     assert denied.status_code == 403

@@ -344,11 +344,11 @@ def test_health_data_access_is_restricted_and_reads_are_audited(admin_client, te
     scope = _scope(admin_client)
     _load(admin_client, scope)
     subscriber = make_client(tenant_id=tenant.id, roles=["SUBSCRIBER"], scope="q360.read q360.write", actor_id="sub-1")
-    assert subscriber.get(f"/api/v1/claims/summary?proposerId={scope['proposerId']}").status_code == 403  # sem quote:review
+    assert subscriber.get(f"/api/v1/claims/summary?proposerId={scope['proposerId']}").status_code == 403  # sem audit:read
     assert subscriber.get("/api/v1/claims/imports").status_code == 403
     assert subscriber.get(f"/api/v1/quotes/{scope['quoteId']}/claims-context").status_code == 403
 
-    auditor = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit", actor_id="aud-1")
+    auditor = make_client(tenant_id=tenant.id, roles=["SUBSCRIPTION_MANAGER"], scope="q360.read q360.audit", actor_id="aud-1")
     assert auditor.get(f"/api/v1/claims/summary?proposerId={scope['proposerId']}").status_code == 200
     assert _upload(auditor, scope, CLAIMS_CSV, kind="CLAIMS").status_code == 403  # só gere quem tem pricing-config:manage
     assert auditor.post("/api/v1/claims/assumption-sets", {"name": "x", "assumptions": ASSUMPTIONS}, format="json").status_code == 403

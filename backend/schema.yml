@@ -1069,11 +1069,10 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/business-config/catalog:
     get:
-      operationId: getBCCatalog
-      description: 'Requer: scope q360.read.'
-      summary: Obter b c catalog
+      operationId: getBusinessConfigurationCatalog
+      summary: Consultar catálogo de configurações
       tags:
-      - Other
+      - Configuration
       security:
       - oauth2:
         - q360.read
@@ -1083,37 +1082,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BusinessConfigurationCatalog'
-          description: Sucesso.
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
+          description: ''
   /api/v1/business-config/configurations:
     get:
-      operationId: getBCConfigurationListCreate
-      description: 'Requer: scope q360.read.'
-      summary: Listar b c configuration list create
+      operationId: listBusinessConfigurations
+      summary: Listar configurações de negócio
       parameters:
       - in: query
         name: configKey
         schema:
           type: string
-        description: Chave do catálogo.
+        description: Filtro.
       - in: query
         name: status
         schema:
           type: string
-        description: DRAFT, PENDING_APPROVAL, PUBLISHED ou RETIRED.
+        description: Filtro.
       tags:
-      - Other
+      - Configuration
       security:
       - oauth2:
         - q360.read
@@ -1123,38 +1109,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BusinessConfigurationList'
-          description: Sucesso.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
+          description: ''
     post:
-      operationId: postBCConfigurationListCreate
-      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
-      summary: Criar b c configuration list create
-      parameters:
-      - in: header
-        name: Idempotency-Key
-        schema:
-          type: string
-        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
-          devolve IDEMP-REPLAY.'
+      operationId: createBusinessConfiguration
+      summary: Criar configuração de negócio
       tags:
-      - Other
+      - Configuration
       requestBody:
         content:
           application/json:
@@ -1163,43 +1123,18 @@ paths:
         required: true
       security:
       - oauth2:
-        - q360.write
+        - q360.read
       responses:
         '201':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BusinessConfiguration'
-          description: Criado.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '409':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+          description: ''
   /api/v1/business-config/configurations/{configuration_id}:
     get:
-      operationId: getBCConfigurationDetail
-      description: 'Requer: scope q360.read.'
-      summary: Obter b c configuration detail
+      operationId: getBusinessConfiguration
+      summary: Consultar configuração de negócio
       parameters:
       - in: path
         name: configuration_id
@@ -1208,7 +1143,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - Other
+      - Configuration
       security:
       - oauth2:
         - q360.read
@@ -1218,39 +1153,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BusinessConfiguration'
-          description: Sucesso.
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
+          description: ''
     post:
-      operationId: postBCConfigurationDetail
-      description: 'Requer: scope q360.write, permissão pricing-config:manage.
-
-
-        action=submit (DRAFT para PENDING_APPROVAL) ou retire (PUBLISHED para RETIRED).'
-      summary: Criar b c configuration detail
+      operationId: changeBusinessConfigurationStatus
+      summary: Submeter ou retirar configuração de negócio
       parameters:
-      - in: header
-        name: Idempotency-Key
-        schema:
-          type: string
-        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
-          devolve IDEMP-REPLAY.'
       - in: path
         name: configuration_id
         schema:
@@ -1258,7 +1165,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - Other
+      - Configuration
       requestBody:
         content:
           application/json:
@@ -1267,58 +1174,18 @@ paths:
         required: true
       security:
       - oauth2:
-        - q360.write
+        - q360.read
       responses:
         '200':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BusinessConfiguration'
-          description: Sucesso.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
-        '409':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+          description: ''
     put:
-      operationId: putBCConfigurationDetail
-      description: 'Requer: scope q360.write, permissão pricing-config:manage.
-
-
-        Só versões DRAFT. rowVersion desatualizado devolve VERSION-CONFLICT.'
-      summary: Substituir b c configuration detail
+      operationId: updateBusinessConfiguration
+      summary: Actualizar configuração de negócio em rascunho
       parameters:
-      - in: header
-        name: Idempotency-Key
-        schema:
-          type: string
-        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
-          devolve IDEMP-REPLAY.'
       - in: path
         name: configuration_id
         schema:
@@ -1326,7 +1193,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - Other
+      - Configuration
       requestBody:
         content:
           application/json:
@@ -1335,59 +1202,19 @@ paths:
         required: true
       security:
       - oauth2:
-        - q360.write
+        - q360.read
       responses:
         '200':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BusinessConfiguration'
-          description: Sucesso.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
-        '409':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+          description: ''
   /api/v1/business-config/configurations/{configuration_id}/approve:
     post:
-      operationId: postBCConfigurationApprove
-      description: 'Requer: scope q360.approve, permissão pricing-config:manage.
-
-
-        Publica a versão. O criador não pode aprovar (SEC-403).'
-      summary: Criar b c configuration approve
+      operationId: approveBusinessConfiguration
+      summary: Aprovar configuração de negócio
       parameters:
-      - in: header
-        name: Idempotency-Key
-        schema:
-          type: string
-        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
-          devolve IDEMP-REPLAY.'
       - in: path
         name: configuration_id
         schema:
@@ -1395,52 +1222,21 @@ paths:
           format: uuid
         required: true
       tags:
-      - Other
+      - Configuration
       security:
       - oauth2:
-        - q360.approve
+        - q360.read
       responses:
         '200':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BusinessConfiguration'
-          description: Sucesso.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
-        '409':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+          description: ''
   /api/v1/business-config/configurations/{configuration_id}/documents:
     get:
-      operationId: getBCDocumentList
-      description: 'Requer: scope q360.read.'
-      summary: Listar b c document list
+      operationId: listBusinessConfigurationDocuments
+      summary: Listar documentos da configuração
       parameters:
       - in: path
         name: configuration_id
@@ -1449,7 +1245,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - Other
+      - Configuration
       security:
       - oauth2:
         - q360.read
@@ -1459,37 +1255,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BusinessConfigurationDocumentList'
-          description: Sucesso.
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
+          description: ''
   /api/v1/business-config/configurations/{configuration_id}/documents/upload:
     post:
-      operationId: postBCDocumentUpload
-      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
-      summary: Criar b c document upload
+      operationId: uploadBusinessConfigurationDocument
+      summary: Anexar documento à configuração
       parameters:
-      - in: header
-        name: Idempotency-Key
-        schema:
-          type: string
-        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
-          devolve IDEMP-REPLAY.'
       - in: path
         name: configuration_id
         schema:
@@ -1497,7 +1268,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - Other
+      - Configuration
       requestBody:
         content:
           multipart/form-data:
@@ -1506,49 +1277,19 @@ paths:
         required: true
       security:
       - oauth2:
-        - q360.write
+        - q360.read
       responses:
         '201':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BusinessConfigurationDocument'
-          description: Criado.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
-        '409':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+          description: ''
   /api/v1/business-config/documents/{document_id}/download:
     get:
-      operationId: getBCDocumentDownload
-      description: 'Requer: scope q360.read.'
-      summary: Obter b c document download
+      operationId: downloadBusinessConfigurationDocument
+      description: Ficheiro gerado (PDF, DOCX ou HTML); verifica o checksum.
+      summary: Descarregar documento da configuração
       parameters:
       - in: path
         name: document_id
@@ -1557,40 +1298,22 @@ paths:
           format: uuid
         required: true
       tags:
-      - Other
+      - Configuration
       security:
       - oauth2:
         - q360.read
       responses:
         '200':
           content:
-            application/json:
+            application/octet-stream:
               schema:
                 type: string
                 format: binary
-          description: Ficheiro.
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
+          description: ''
   /api/v1/claims/assumption-sets:
     get:
       operationId: getAssumptionSetListCreate
-      description: 'Requer: scope q360.read, permissão quote:review.'
+      description: 'Requer: scope q360.read, permissão audit:read.'
       summary: Listar assumption set list create
       tags:
       - Claims
@@ -1667,7 +1390,7 @@ paths:
   /api/v1/claims/assumption-sets/{set_id}:
     get:
       operationId: getAssumptionSetDetail
-      description: 'Requer: scope q360.read, permissão quote:review.'
+      description: 'Requer: scope q360.read, permissão audit:read.'
       summary: Obter assumption set detail
       parameters:
       - in: path
@@ -1710,7 +1433,7 @@ paths:
     get:
       operationId: getClaimsImportTemplate
       description: "GET /claims/import-template?kind=CLAIMS|PREMIUMS - a CSV with the\n accepted header and one\
-        \ example row.\n\nRequer: scope q360.read, permissão quote:review.\n\nCSV com o cabeçalho aceito e uma linha\
+        \ example row.\n\nRequer: scope q360.read, permissão audit:read.\n\nCSV com o cabeçalho aceito e uma linha\
         \ de exemplo fictícia."
       summary: Obter claims import template
       parameters:
@@ -1755,7 +1478,7 @@ paths:
       operationId: getClaimsImportListCreate
       description: "POST (multipart: `file`, `kind`=CLAIMS|PREMIUMS, `proposerId`, optional\n `policyId`, `source`=INTERNAL|OTHER_INSURER,\
         \ `dryRun`) imports CSV/XLSX;\n invalid rows are reported and skipped. GET lists the imports.\n\nRequer:\
-        \ scope q360.read, permissão quote:review."
+        \ scope q360.read, permissão audit:read."
       summary: Listar claims import list create
       parameters:
       - in: query
@@ -1856,7 +1579,7 @@ paths:
   /api/v1/claims/imports/{import_id}:
     get:
       operationId: getClaimsImportDetail
-      description: 'Requer: scope q360.read, permissão quote:review.'
+      description: 'Requer: scope q360.read, permissão audit:read.'
       summary: Obter claims import detail
       parameters:
       - in: path
@@ -1899,7 +1622,7 @@ paths:
     get:
       operationId: getClaimsMethodology
       description: "GET /claims/methodology - the projection method in use (labelled\n indicative), its formulas\
-        \ and the accepted import formats.\n\nRequer: scope q360.read, permissão quote:review."
+        \ and the accepted import formats.\n\nRequer: scope q360.read, permissão audit:read."
       summary: Obter claims methodology
       tags:
       - Claims
@@ -1930,7 +1653,7 @@ paths:
       operationId: getClaimsProfitSharing
       description: "GET /claims/profit-sharing?proposerId=&thresholdPct=65&sharePct=100 -\n participação nos resultados\
         \ do grupo (devolução de parte do prémio se a\n sinistralidade ficar abaixo do limite acordado).\n\nRequer:\
-        \ scope q360.read, permissão quote:review."
+        \ scope q360.read, permissão audit:read."
       summary: Obter claims profit sharing
       parameters:
       - in: query
@@ -2003,7 +1726,7 @@ paths:
     get:
       operationId: getProjectionListCreate
       description: "POST /claims/projections - OPTIMISTIC/BASE/PESSIMISTIC projection from\n a saved assumption\
-        \ set or inline `assumptions`.\n\nRequer: scope q360.read, permissão quote:review."
+        \ set or inline `assumptions`.\n\nRequer: scope q360.read, permissão audit:read."
       summary: Listar projection list create
       parameters:
       - in: query
@@ -2090,7 +1813,7 @@ paths:
   /api/v1/claims/projections/{run_id}:
     get:
       operationId: getProjectionDetail
-      description: 'Requer: scope q360.read, permissão quote:review.'
+      description: 'Requer: scope q360.read, permissão audit:read.'
       summary: Obter projection detail
       parameters:
       - in: path
@@ -2134,7 +1857,7 @@ paths:
       operationId: getClaimsSummary
       description: "GET /claims/summary?proposerId=&policyId=&from=&to=&currency= -\n loss ratio, frequency, average\
         \ cost, by coverage and month, history\n months. Aggregates only.\n\nRequer: scope q360.read, permissão\
-        \ quote:review."
+        \ audit:read."
       summary: Obter claims summary
       parameters:
       - in: query
@@ -9048,7 +8771,8 @@ paths:
       operationId: getQuoteClaimsContext
       description: "GET /quotes/{id}/claims-context - what the claims history says about\n this quote's client (loss\
         \ ratio, frequency, months available — the 3\n years asked on transfer from another insurer) and the latest\
-        \ projections.\n Aggregates only; needs quote:review.\n\nRequer: scope q360.read, permissão quote:review."
+        \ projections.\n Aggregates only; needs audit:read (health data).\n\nRequer: scope q360.read, permissão\
+        \ audit:read."
       summary: Obter quote claims context
       parameters:
       - in: path
@@ -13060,9 +12784,6 @@ components:
       - network.rules
       - foreign_coverage.rules
       - security.approval_rules
-      - security.role_permissions
-      - rules.custom
-      - proposal.branding
       type: string
       description: '* `product.plans` - product.plans
 
@@ -13108,13 +12829,7 @@ components:
 
         * `foreign_coverage.rules` - foreign_coverage.rules
 
-        * `security.approval_rules` - security.approval_rules
-
-        * `security.role_permissions` - security.role_permissions
-
-        * `rules.custom` - rules.custom
-
-        * `proposal.branding` - proposal.branding'
+        * `security.approval_rules` - security.approval_rules'
     ConfigurationChange:
       type: object
       properties:
@@ -17633,22 +17348,16 @@ components:
       enum:
       - PLATFORM_ADMIN
       - ADMIN
-      - PRODUCT_CONFIGURATOR
+      - SUBSCRIPTION_MANAGER
       - SUBSCRIBER
-      - APPROVER
-      - AUDITOR
       type: string
       description: '* `PLATFORM_ADMIN` - PLATFORM_ADMIN
 
         * `ADMIN` - ADMIN
 
-        * `PRODUCT_CONFIGURATOR` - PRODUCT_CONFIGURATOR
+        * `SUBSCRIPTION_MANAGER` - SUBSCRIPTION_MANAGER
 
-        * `SUBSCRIBER` - SUBSCRIBER
-
-        * `APPROVER` - APPROVER
-
-        * `AUDITOR` - AUDITOR'
+        * `SUBSCRIBER` - SUBSCRIBER'
     RuleDomainEnum:
       enum:
       - ELIGIBILITY

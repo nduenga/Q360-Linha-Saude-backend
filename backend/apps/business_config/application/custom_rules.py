@@ -46,10 +46,11 @@ def person_facts(
     plan_name: str | None,
     dimensions: Mapping[str, Any],
     relationship: str | None,
+    product: tuple[str | None, str | None] = (),
 ) -> dict[str, Any]:
     """Valores com que as condições de uma pessoa são avaliadas."""
     facts = quote_facts(
-        members_count=members_count, plan_code=plan_code, plan_name=plan_name, dimensions=dimensions
+        members_count=members_count, plan_code=plan_code, plan_name=plan_name, dimensions=dimensions, product=product
     )
     facts["age"] = age
     facts["relationship"] = relationship
@@ -57,10 +58,16 @@ def person_facts(
 
 
 def quote_facts(
-    *, members_count: int, plan_code: str | None, plan_name: str | None, dimensions: Mapping[str, Any]
+    *,
+    members_count: int,
+    plan_code: str | None,
+    plan_name: str | None,
+    dimensions: Mapping[str, Any],
+    product: tuple[str | None, str | None] = (),
 ) -> dict[str, Any]:
     return {
         "members_count": members_count,
+        "product": product,  # (código, nome) do produto a que o plano pertence
         "plan": (plan_code, plan_name),  # o GTE pode escrever o código ou o nome
         "segment": dimensions.get("segment"),
         "participation_option": dimensions.get("participationOption"),

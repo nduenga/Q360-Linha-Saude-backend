@@ -26,14 +26,14 @@ def test_resolve_maps_valid_token_to_actor():
         {
             "sub": "user-1",
             "tenant_id": _TENANT_ID,
-            "roles": ["SUBSCRIBER", "APPROVER"],
+            "roles": ["SUBSCRIBER", "SUBSCRIPTION_MANAGER"],
             "exp": int(time.time()) + 300,
         }
     )
     actor = JwtActorAdapter().resolve(token)
     assert actor.actor_id == "user-1"
     assert str(actor.tenant_id) == _TENANT_ID
-    assert {r.value for r in actor.roles} == {"SUBSCRIBER", "APPROVER"}
+    assert {r.value for r in actor.roles} == {"SUBSCRIBER", "SUBSCRIPTION_MANAGER"}
 
 
 @override_settings(OIDC_STATIC_VERIFICATION_KEY=_SECRET, OIDC_ALGORITHMS=["HS256"])

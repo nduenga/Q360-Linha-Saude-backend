@@ -151,3 +151,19 @@ Questões para a área de negócio: `docs/Questionario_Decisoes_Negocio_Simulado
 | Valores indicativos a confirmar nas Condições Gerais | `indicative: true` + aviso na proposta | `test_proposal_content_follows_the_pdf_rules` |
 
 **Discrepâncias do próprio PDF (seguiu-se a matriz comparativa):** Medicamentos no plano Base (150.000 Kz na tabela p.3 vs "—" na matriz p.6/p.9); Parto (capital por evento p.3 vs normal/cesariana p.9).
+
+---
+
+## Fase 11 — Integração do modelo actuarial SAU/SAG recebido do negócio
+
+**Fonte de negócio:** `backend/apps/business_config/seed/Modelo_Actuarial_Saude_SAU_SAG_Angola.xlsx`, recebido da equipa de negócio. Tratar o ficheiro como fonte oficial de trabalho do projecto; a validação abaixo é técnica e funcional (fórmulas, unidades, mapeamento e reconciliação), não uma substituição dos valores por tarifas de demonstração. Qualquer ambiguidade deve ser registada e devolvida à equipa de negócio para decisão, sem inventar valores.
+
+- [ ] Inventariar e validar os inputs e fórmulas das folhas `Dashboard_Premissas`, `Matriz_SAU`, `Matriz_SAG` e `Regras_Ajustes`; documentar origem, unidade, moeda, vigência e dependências de cada valor.
+- [ ] Reconciliar exemplos do Excel com resultados reproduzíveis no motor: prémio puro, risco/volatilidade, carregamentos, impostos/encargos, descontos e prémio final; registar tolerâncias de arredondamento.
+- [ ] Resolver os limites de representação do pricing actual para suportar, sem perda ou dupla contagem, SAU/SAG, plano/categoria, escalão etário, género, cobertura, capitais/sublimites, rede/região, dimensão e adesão do grupo, factores de risco, medical trend, encargos e descontos.
+- [ ] Mapear os resultados e inputs aprovados às configurações activas (`pricing.reference_premiums`, `pricing.factors`, `pricing.adjustments`, `pricing.taxes_fees` e configurações de produto/grupo); não activar `pricing.actuarial_model` enquanto o motor não consumir explicitamente os dados necessários.
+- [ ] Criar no backoffice uma interface adequada a utilizadores do GTE, com formulários/tabelas por domínio e segmento SAU/SAG; não exigir edição manual de JSON para os parâmetros deste modelo.
+- [ ] Na interface, permitir carregar/rever os dados do workbook, editar valores e vigências, validar campos e combinações, pré-visualizar o impacto em cotações de teste e apresentar erros/avisos antes de submeter.
+- [ ] Manter o fluxo DRAFT → PENDING_APPROVAL → PUBLISHED/RETIRED, separação entre criador e aprovador, permissões, auditoria de antes/depois, versões, histórico e rollback.
+- [ ] Adicionar testes automatizados de paridade com casos de referência do Excel, incluindo extremos de idade, opções, coberturas, segmentos, taxas e arredondamento; manter testes de regressão do pricing e isolamento por tenant.
+- [ ] Só considerar os valores activos depois de a configuração aprovada produzir resultados reconciliados com os casos de referência e as alterações aparecerem no `PricingRun` com as versões utilizadas.

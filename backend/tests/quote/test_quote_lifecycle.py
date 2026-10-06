@@ -358,7 +358,7 @@ def test_plans_without_settings_have_no_blocking_rules(admin_client):
 @pytest.mark.django_db
 def test_requirements_readable_by_auditors(admin_client, tenant):
     scope = _scope(admin_client, settings=INDIVIDUAL)
-    reader = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit")
+    reader = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")
     assert reader.get(f"/api/v1/quotes/{scope['quoteId']}/requirements").status_code == 200
     assert reader.post(f"/api/v1/quotes/{scope['quoteId']}/versions", {"reason": REASON}, format="json").status_code == 403
     assert reader.post(f"/api/v1/quotes/{scope['quoteId']}/clone", {"reason": REASON}, format="json").status_code == 403

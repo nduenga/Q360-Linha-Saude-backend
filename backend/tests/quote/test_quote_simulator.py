@@ -354,7 +354,7 @@ def test_adjustment_changes_are_audited_with_before_after_reason_and_impact(admi
     url = f"/api/v1/quotes/{scope['quoteId']}/adjustments"
     applied = admin_client.post(url, {"kind": "SURCHARGE_PERCENT", "value": "10", "reason": "Motivo auditável do ajuste"}, format="json").data
     admin_client.delete(f"{url}/{applied['adjustment']['id']}", {"reason": "Motivo auditável da remoção"}, format="json")
-    auditor = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit")
+    auditor = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")
     events = auditor.get(f"/api/v1/audit-events?entityId={scope['quoteId']}&size=200").data["items"]
     by_action = {e["action"]: e["metadata"] for e in events}
     assert by_action["quote.adjustment_applied"]["reason"] == "Motivo auditável do ajuste"

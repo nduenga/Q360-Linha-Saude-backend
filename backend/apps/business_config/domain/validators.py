@@ -17,7 +17,7 @@ from apps.business_config.domain.shape import flatten
 
 # Campos cujas opções vêm de dados do sistema (planos, coberturas, países):
 # o esquema sugere valores mas não os impõe.
-_OPEN_OPTIONS = {"plan", "coverage", "included_in_plans", "applies_to", "countries"}
+_OPEN_OPTIONS = {"plan", "coverage", "included_in_plans", "applies_to", "countries", "products"}
 _COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 

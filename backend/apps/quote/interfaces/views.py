@@ -994,9 +994,9 @@ class QuoteClaimsContextView(APIView):
     """GET /quotes/{id}/claims-context - what the claims history says about
     this quote's client (loss ratio, frequency, months available — the 3
     years asked on transfer from another insurer) and the latest projections.
-    Aggregates only; needs quote:review."""
+    Aggregates only; needs audit:read (health data)."""
 
-    permission_classes = [require_scope(Scope.READ), require_permission(Permission.QUOTE_REVIEW)]
+    permission_classes = [require_scope(Scope.READ), require_permission(Permission.AUDIT_READ)]
 
     def get(self, request, quote_id):
         from apps.claims.application import summary_service

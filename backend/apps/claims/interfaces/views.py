@@ -20,7 +20,8 @@ from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from shared.pagination import Q360PageNumberPagination
 
-READ = [require_scope(Scope.READ), require_permission(Permission.QUOTE_REVIEW)]
+# Dados de saúde: só quem tem audit:read (Administrador e Gestor de subscrição).
+READ = [require_scope(Scope.READ), require_permission(Permission.AUDIT_READ)]
 MANAGE = [require_scope(Scope.ADMIN), require_permission(Permission.PRICING_CONFIG_MANAGE)]
 
 

@@ -145,15 +145,15 @@ def test_role_permissions_are_editable_by_the_business(admin_client, approver, t
     publish(admin_client, approver, "security.role_permissions",
             {"roles": [{"role": "SUBSCRIBER", "permissions": ["quote:create", "quote:edit", "product:manage"]}]})
     assert subscriber.post("/api/v1/products", {"code": "P-ROLE", "name": "P"}, format="json").status_code == 201
-    other = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read", actor_id="aud-1")
+    other = make_client(tenant_id=tenant.id, roles=[], scope="q360.read", actor_id="aud-1")
     assert other.post("/api/v1/products", {"code": "P-ROLE2", "name": "P"}, format="json").status_code == 403
 
 
 @pytest.mark.django_db
 def test_approval_rules_restrict_editors_and_can_relax_four_eyes(admin_client, approver, tenant):
     publish(admin_client, approver, "security.approval_rules",
-            {"approval": {"four_eyes_required": False, "editable_roles": ["PRODUCT_CONFIGURATOR"], "approval_roles": ["APPROVER"]}})
-    configurator = make_client(tenant_id=tenant.id, roles=["PRODUCT_CONFIGURATOR"], scope=SCOPES, actor_id="cfg-1")
+            {"approval": {"four_eyes_required": False, "editable_roles": ["SUBSCRIPTION_MANAGER"], "approval_roles": ["SUBSCRIBER"]}})
+    configurator = make_client(tenant_id=tenant.id, roles=["SUBSCRIPTION_MANAGER"], scope=SCOPES, actor_id="cfg-1")
     subscriber = make_client(tenant_id=tenant.id, roles=["SUBSCRIBER"], scope="q360.read q360.write", actor_id="sub-1")
     value = {"factors": [{"code": "X", "dimension": "tier", "condition": "*", "factor": "1.1"}]}
     assert subscriber.post(BASE, {"configKey": "pricing.factors", "value": value, "effectiveFrom": "2026-01-01"}, format="json").status_code == 403

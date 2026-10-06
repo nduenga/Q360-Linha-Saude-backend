@@ -35,7 +35,8 @@ from typing import Any
 from django.db import transaction
 from django.utils import timezone
 
-from apps.client.infrastructure.models import InsuredMember
+from apps.client.domain.enums import RelationshipCategory
+from apps.client.infrastructure.models import InsuredMember, RelationshipCode
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
@@ -75,6 +76,8 @@ from apps.business_config.application.pricing import (
     resolve_factors as resolve_business_factors,
     resolve_published_business_pricing,
     resolve_reference_premium,
+    resolve_actuarial_coverage_premiums,
+    resolve_actuarial_group_adjustment,
     resolve_taxes_and_fees,
 )
 from apps.pricing.infrastructure.parameter_repository import resolve_decimal_parameter, resolve_pricing_parameter_set
@@ -442,6 +445,37 @@ def _run_calculation(
             "customRulesVersion": custom_rules.version,
         },
     )
+    actuarial_model = business_pricing.actuarial_model if business_pricing is not None else None
+    actuarial_group_adjustment = None
+    if actuarial_model is not None:
+        profile = context.get("actuarialProfile") or {}
+        if not isinstance(profile, dict):
+            raise PricingConfigError("context.actuarialProfile deve ser um objecto.")
+        plan_mapping = actuarial_model.get("plan_code_mapping", {}).get(str(plan.code), {})
+        segment = plan_mapping.get("segment")
+        if segment == "SAG":
+            supplied_headcount = profile.get("groupHeadcount")
+            if supplied_headcount is not None:
+                group_headcount = supplied_headcount
+            else:
+                relationships = {
+                    row.code: row.category
+                    for row in RelationshipCode.objects.filter(
+                        code__in={member.relationship_code for member in members}
+                    )
+                }
+                group_headcount = sum(
+                    relationships.get(member.relationship_code) == RelationshipCategory.TITULAR.value
+                    for member in members
+                )
+        else:
+            group_headcount = 0
+        actuarial_group_adjustment = resolve_actuarial_group_adjustment(
+            model=actuarial_model,
+            plan_code=str(plan.code),
+            headcount=group_headcount,
+            profile=profile,
+        )
 
     for note in plan_context.warnings:
         trace("WARNING", rule_code=note.get("code"), message=f"{note.get('scope')}: {note.get('message')}")
@@ -458,6 +492,7 @@ def _run_calculation(
     person_rules = custom_rules.pricing("PERSON")
     quote_rules = custom_rules.pricing("QUOTE")
     rule_version_no = str(custom_rules.version["versionNo"]) if custom_rules.version else None
+    product_fact = (plan.product.code, plan.product.name) if (person_rules or quote_rules) else ()
     relationship_categories: dict[str, str] = {}
     if any(c.field == "relationship" for r in person_rules for c in r.conditions):
         from apps.client.infrastructure.models import RelationshipCode
@@ -478,7 +513,77 @@ def _run_calculation(
         if business_pricing is not None:
             member_context.setdefault("age", _member_age(member, pricing_run.effective_date))
 
-        if business_pricing is not None:
+        if actuarial_model is not None:
+            actuarial_rates = resolve_actuarial_coverage_premiums(
+                model=actuarial_model,
+                plan_code=str(plan.code),
+                coverages=list(plan_context.coverages),
+                age=member_context["age"],
+                sex_code=member.sex_code,
+            )
+            running_amount = Decimal("0")
+            for rate in actuarial_rates:
+                coverage_premium = round_amount(rate["pure_premium"])
+                running_amount = round_amount(running_amount + coverage_premium)
+                _guard_amount(running_amount)
+                PricingComponent.objects.create(
+                    tenant_id=tenant_id,
+                    pricing_run=pricing_run,
+                    member=member,
+                    component_order=order,
+                    component_code=f"ACTUARIAL_{rate['code']}",
+                    component_type=PricingComponentType.BASE.value,
+                    base_amount=coverage_premium,
+                    result_amount=running_amount,
+                    source_code=f"BUSINESS_CONFIG:pricing.actuarial_model:{rate['source_cell']}",
+                    source_version=str(business_pricing.versions["pricing.actuarial_model"]["versionNo"]),
+                    metadata_json={
+                        "benefitCode": rate["benefit_code"],
+                        "ageBand": rate["age_band"],
+                        "sex": rate["sex"],
+                        "capital": str(rate["capital"]),
+                        "limitedExpectedValue": str(rate["lev"]),
+                    },
+                )
+                trace(
+                    "ACTUARIAL_COVERAGE_PREMIUM_APPLIED",
+                    rule_code=rate["code"],
+                    input_data={
+                        "memberId": str(member_id),
+                        "benefitCode": rate["benefit_code"],
+                        "sourceCell": rate["source_cell"],
+                        "ageBand": rate["age_band"],
+                        "sex": rate["sex"],
+                        "capital": str(rate["capital"]),
+                        "relativity": str(rate["relativity"]),
+                        "limitedExpectedValue": str(rate["lev"]),
+                    },
+                    output_data={"purePremium": str(coverage_premium), "runningAmount": str(running_amount)},
+                )
+                order += 1
+            group_factor = actuarial_group_adjustment["factor"]
+            if group_factor != Decimal("1"):
+                before_group_factor = running_amount
+                running_amount = round_amount(running_amount * group_factor)
+                _guard_amount(running_amount)
+                PricingComponent.objects.create(
+                    tenant_id=tenant_id, pricing_run=pricing_run, member=member,
+                    component_order=order, component_code="ACTUARIAL_GROUP_ADJUSTMENT",
+                    component_type=PricingComponentType.FACTOR.value,
+                    factor_value=group_factor, adjustment_amount=round_amount(running_amount - before_group_factor),
+                    result_amount=running_amount,
+                    source_code=f"BUSINESS_CONFIG:pricing.actuarial_model:{plan.code}",
+                    source_version=str(business_pricing.versions["pricing.actuarial_model"]["versionNo"]),
+                    metadata_json=actuarial_group_adjustment["details"],
+                )
+                trace(
+                    "ACTUARIAL_GROUP_ADJUSTMENT_APPLIED",
+                    rule_code="ACTUARIAL_GROUP_ADJUSTMENT",
+                    input_data={"memberId": str(member_id), **actuarial_group_adjustment["details"]},
+                    output_data={"factor": str(group_factor), "resultAmount": str(running_amount)},
+                )
+                order += 1
+        elif business_pricing is not None:
             running_amount = round_amount(
                 resolve_reference_premium(
                     pricing=business_pricing,
@@ -490,30 +595,31 @@ def _run_calculation(
             if base_premium is None:
                 raise PricingConfigError("Legacy pricing requires BASE_PREMIUM.")
             running_amount = round_amount(base_premium)
-        _guard_amount(running_amount)
-        PricingComponent.objects.create(
-            tenant_id=tenant_id,
-            pricing_run=pricing_run,
-            member=member,
-            component_order=order,
-            component_code=_BASE_PREMIUM_PARAMETER_CODE,
-            component_type=PricingComponentType.BASE.value,
-            base_amount=running_amount,
-            result_amount=running_amount,
-        )
-        trace(
-            "BASE_APPLIED",
-            input_data={
-                "memberId": str(member_id),
-                "basePremium": str(running_amount),
-                "source": "BUSINESS_CONFIGURATION" if business_pricing else "PRICING_PARAMETER_SET",
-            },
-            output_data={"resultAmount": str(running_amount)},
-        )
-        order += 1
+        if actuarial_model is None:
+            _guard_amount(running_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id,
+                pricing_run=pricing_run,
+                member=member,
+                component_order=order,
+                component_code=_BASE_PREMIUM_PARAMETER_CODE,
+                component_type=PricingComponentType.BASE.value,
+                base_amount=running_amount,
+                result_amount=running_amount,
+            )
+            trace(
+                "BASE_APPLIED",
+                input_data={
+                    "memberId": str(member_id),
+                    "basePremium": str(running_amount),
+                    "source": "BUSINESS_CONFIGURATION" if business_pricing else "PRICING_PARAMETER_SET",
+                },
+                output_data={"resultAmount": str(running_amount)},
+            )
+            order += 1
 
         if business_pricing is not None:
-            resolved_factors = [
+            resolved_factors = [] if actuarial_model is not None else [
                 (item["code"], item["factor"], item["dimension"], item["condition"])
                 for item in resolve_business_factors(pricing=business_pricing, context=member_context)
             ]
@@ -655,6 +761,7 @@ def _run_calculation(
                 plan_name=str(plan.name),
                 dimensions=plan_context.dimensions,
                 relationship=relationship_categories.get(member.relationship_code),
+                product=product_fact,
             )
             for custom in person_rules:
                 if not custom.matches(facts):
@@ -768,6 +875,61 @@ def _run_calculation(
             )
             order += 1
 
+        if actuarial_model is not None:
+            segment = actuarial_group_adjustment["segment"]
+            loadings = actuarial_model.get("assumptions", {}).get("loadings", {}).get(segment, {})
+            try:
+                volatility = Decimal(str(actuarial_group_adjustment["volatility"]))
+                administration = Decimal(str(loadings["administration_expense"]))
+                commission = Decimal(str(loadings["acquisition_commission"]))
+                margin = Decimal(str(loadings["insurer_margin"]))
+            except (KeyError, TypeError, InvalidOperation) as exc:
+                raise PricingConfigError(f"Carregamentos actuariais incompletos para o segmento '{segment}'.") from exc
+            total_loading = administration + commission + margin
+            if volatility < 0 or total_loading < 0 or total_loading >= 1:
+                raise PricingConfigError(f"Carregamentos actuariais inválidos para o segmento '{segment}'.")
+
+            before_risk = running_amount
+            running_amount = round_amount(running_amount * (Decimal("1") + volatility))
+            _guard_amount(running_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id, pricing_run=pricing_run, member=member,
+                component_order=order, component_code="ACTUARIAL_VOLATILITY_LOADING",
+                component_type=PricingComponentType.FACTOR.value,
+                factor_value=Decimal("1") + volatility,
+                adjustment_amount=round_amount(running_amount - before_risk), result_amount=running_amount,
+                source_code=f"BUSINESS_CONFIG:pricing.actuarial_model:{segment}",
+                source_version=str(business_pricing.versions["pricing.actuarial_model"]["versionNo"]),
+                metadata_json={"volatilityPct": str(volatility * Decimal("100"))},
+            )
+            trace("ACTUARIAL_VOLATILITY_APPLIED", rule_code="ACTUARIAL_VOLATILITY_LOADING",
+                  input_data={"memberId": str(member_id), "volatility": str(volatility)},
+                  output_data={"resultAmount": str(running_amount)})
+            order += 1
+
+            technical_premium = running_amount
+            commercial_premium = round_amount(technical_premium / (Decimal("1") - total_loading))
+            loading_amount = round_amount(commercial_premium - technical_premium)
+            _guard_amount(commercial_premium)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id, pricing_run=pricing_run, member=member,
+                component_order=order, component_code="ACTUARIAL_COMMERCIAL_LOADINGS",
+                component_type=PricingComponentType.ADJUSTMENT.value,
+                adjustment_amount=loading_amount, result_amount=commercial_premium,
+                source_code=f"BUSINESS_CONFIG:pricing.actuarial_model:{segment}",
+                source_version=str(business_pricing.versions["pricing.actuarial_model"]["versionNo"]),
+                metadata_json={
+                    "administrationExpensePct": str(administration * Decimal("100")),
+                    "acquisitionCommissionPct": str(commission * Decimal("100")),
+                    "insurerMarginPct": str(margin * Decimal("100")),
+                },
+            )
+            trace("ACTUARIAL_COMMERCIAL_LOADINGS_APPLIED", rule_code="ACTUARIAL_COMMERCIAL_LOADINGS",
+                  input_data={"memberId": str(member_id), "loadingPct": str(total_loading * Decimal("100"))},
+                  output_data={"loadingAmount": str(loading_amount), "resultAmount": str(commercial_premium)})
+            running_amount = commercial_premium
+            order += 1
+
         total_amount += running_amount
 
     total_amount = round_amount(total_amount)
@@ -775,7 +937,7 @@ def _run_calculation(
     if quote_rules:
         facts = quote_facts(
             members_count=len(member_ids), plan_code=str(plan.code), plan_name=str(plan.name),
-            dimensions=plan_context.dimensions,
+            dimensions=plan_context.dimensions, product=product_fact,
         )
         for custom in quote_rules:
             if not custom.matches(facts):
@@ -820,7 +982,7 @@ def _run_calculation(
                   output_data={"totalAmount": str(total_amount)})
             order += 1
 
-        for charge in resolve_taxes_and_fees(pricing=business_pricing):
+        for charge in ([] if actuarial_model is not None else resolve_taxes_and_fees(pricing=business_pricing)):
             before_total = total_amount
             if charge["type"] == "PERCENTAGE":
                 total_amount = round_amount(total_amount * (Decimal("1") + charge["value"] / Decimal("100")))
@@ -869,6 +1031,59 @@ def _run_calculation(
                 input_data={"kind": adjustment.kind, "value": str(adjustment.value), "scope": "QUOTE"},
                 output_data={"totalAmount": str(total_amount)},
             )
+            order += 1
+    if actuarial_model is not None:
+        segment = actuarial_group_adjustment["segment"]
+        loading_data = actuarial_model.get("assumptions", {}).get("loadings", {}).get(segment, {})
+        model_tax_codes = {"STAMP_DUTY", "IMPOSTO_SELO", "ARSEG", "ARSEG_LEVY"}
+        for code, field in (("STAMP_DUTY", "stamp_duty"), ("ARSEG_LEVY", "arseg_levy")):
+            try:
+                rate = Decimal(str(loading_data[field]))
+            except (KeyError, TypeError, InvalidOperation) as exc:
+                raise PricingConfigError(f"Taxa actuarial '{field}' ausente para '{segment}'.") from exc
+            if rate < 0:
+                raise PricingConfigError(f"Taxa actuarial '{field}' não pode ser negativa.")
+            if rate == 0:
+                continue
+            before_tax = total_amount
+            tax_amount = round_amount(total_amount * rate)
+            total_amount = round_amount(total_amount + tax_amount)
+            _guard_amount(total_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id, pricing_run=pricing_run, member=None, component_order=order,
+                component_code=code, component_type=PricingComponentType.TAX.value,
+                factor_value=Decimal("1") + rate, adjustment_amount=tax_amount, result_amount=total_amount,
+                source_code="BUSINESS_CONFIG:pricing.actuarial_model",
+                source_version=str(business_pricing.versions["pricing.actuarial_model"]["versionNo"]),
+                metadata_json={"taxRatePct": str(rate * Decimal("100")), "segment": segment},
+            )
+            trace("ACTUARIAL_TAX_APPLIED", rule_code=code,
+                  input_data={"rate": str(rate), "baseAmount": str(before_tax)},
+                  output_data={"taxAmount": str(tax_amount), "totalAmount": str(total_amount)})
+            order += 1
+
+        model_tax_codes = {"STAMP_DUTY", "IMPOSTO_SELO", "ARSEG", "ARSEG_LEVY"}
+        for charge in resolve_taxes_and_fees(pricing=business_pricing):
+            if charge["code"].strip().upper() in model_tax_codes:
+                continue
+            before_total = total_amount
+            if charge["type"] == "PERCENTAGE":
+                total_amount = round_amount(total_amount * (Decimal("1") + charge["value"] / Decimal("100")))
+            else:
+                total_amount = round_amount(total_amount + charge["value"])
+            _guard_amount(total_amount)
+            component_type = PricingComponentType.TAX.value if charge["category"] == "TAX" else PricingComponentType.FEE.value
+            PricingComponent.objects.create(
+                tenant_id=tenant_id, pricing_run=pricing_run, member=None, component_order=order,
+                component_code=charge["code"], component_type=component_type,
+                factor_value=(Decimal("1") + charge["value"] / Decimal("100")) if charge["type"] == "PERCENTAGE" else None,
+                adjustment_amount=round_amount(total_amount - before_total), result_amount=total_amount,
+                source_code=f"BUSINESS_CONFIG:pricing.taxes_fees:{charge['code']}",
+                source_version=str(business_pricing.versions["pricing.taxes_fees"]["versionNo"]),
+            )
+            trace("BUSINESS_CHARGE_APPLIED", rule_code=charge["code"],
+                  input_data={"type": charge["type"], "value": str(charge["value"])},
+                  output_data={"totalAmount": str(total_amount)})
             order += 1
     PricingComponent.objects.create(
         tenant_id=tenant_id,

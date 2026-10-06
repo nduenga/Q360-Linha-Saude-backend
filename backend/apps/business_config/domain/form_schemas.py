@@ -56,9 +56,11 @@ RULES_CUSTOM={"sections":[{"key":"rules","label":"Regras (Quando… então…)",
     f("action","Então","select",True,list(cr.ACTIONS),cr.ACTION_LABELS),
     f("amount","Valor da ação","decimal",help="Percentagem, multiplicador ou valor em moeda, conforme a ação; não é preciso para análise/recusa/aviso"),
     f("message","Mensagem para o utilizador","textarea",help="Aparece nos requisitos da cotação e no histórico do cálculo"),
+    f("products","Aplica-se aos produtos (vazio = todos)","multiselect",help="Códigos dos produtos a que a regra se aplica"),
     f("order","Ordem de aplicação","integer",help="As regras de prémio aplicam-se por esta ordem (1, 2, 3…)"),
     f("code","Código (opcional)","text",help="Identificador curto; se vazio é gerado"),
 ]}]}
+RULES_CUSTOM["meta"]=cr.field_catalog()
 FORM_SCHEMAS["rules.custom"]=RULES_CUSTOM
 
 def get_form_schema(key):

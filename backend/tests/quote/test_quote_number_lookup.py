@@ -19,7 +19,7 @@ from tests.quote.test_review_workflow import _ready_quote
 
 def _approver(tenant, *, actor_id: str = "approver-1"):
     return make_client(
-        tenant_id=tenant.id, roles=["APPROVER"], scope="q360.read q360.write q360.approve", actor_id=actor_id
+        tenant_id=tenant.id, roles=["SUBSCRIPTION_MANAGER"], scope="q360.read q360.write q360.approve", actor_id=actor_id
     )
 
 

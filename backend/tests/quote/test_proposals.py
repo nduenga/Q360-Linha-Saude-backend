@@ -282,7 +282,7 @@ def test_download_detects_a_tampered_file(admin_client):
 def test_readers_can_download_but_not_generate(admin_client, tenant):
     scope = _scope(admin_client)
     doc = _generate(admin_client, scope, format="HTML").data
-    reader = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit")
+    reader = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")
     assert reader.get(f"/api/v1/quotes/{scope['quoteId']}/proposals").status_code == 200
     assert reader.get(doc["downloadUrl"]).status_code == 200
     assert reader.post(f"/api/v1/quotes/{scope['quoteId']}/proposals", {"format": "PDF"}, format="json").status_code == 403
@@ -293,7 +293,7 @@ def test_readers_can_download_but_not_generate(admin_client, tenant):
 def test_proposal_generation_is_audited(admin_client, tenant):
     scope = _scope(admin_client)
     doc = _generate(admin_client, scope).data
-    auditor = make_client(tenant_id=tenant.id, roles=["AUDITOR"], scope="q360.read q360.audit")
+    auditor = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")
     events = auditor.get(f"/api/v1/audit-events?entityId={doc['id']}").data["items"]
     generated = next(e for e in events if e["action"] == "document.generated")
     assert generated["metadata"]["after"]["format"] == "PDF" and generated["metadata"]["checksum"] == doc["checksum"]

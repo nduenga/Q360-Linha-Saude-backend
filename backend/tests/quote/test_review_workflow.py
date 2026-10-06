@@ -130,7 +130,7 @@ def test_different_actor_can_approve(admin_client, tenant):
     quote = _ready_quote(admin_client, code_suffix="4")
     submitted = admin_client.post(f"/api/v1/quotes/{quote['id']}/submit", {"rowVersion": quote["rowVersion"]}, format="json").data
 
-    approver_client = make_client(tenant_id=tenant.id, roles=["APPROVER"], scope="q360.read q360.write q360.approve", actor_id="approver-1")
+    approver_client = make_client(tenant_id=tenant.id, roles=["SUBSCRIPTION_MANAGER"], scope="q360.read q360.write q360.approve", actor_id="approver-1")
     response = approver_client.post(
         f"/api/v1/quotes/{quote['id']}/decision",
         {"decision": "APPROVE", "reasonCode": "MEETS_CRITERIA", "rowVersion": submitted["rowVersion"]},
@@ -148,7 +148,7 @@ def test_reject_requires_reason_code(admin_client, tenant):
     quote = _ready_quote(admin_client, code_suffix="5")
     admin_client.post(f"/api/v1/quotes/{quote['id']}/submit", {"rowVersion": quote["rowVersion"]}, format="json")
 
-    approver_client = make_client(tenant_id=tenant.id, roles=["APPROVER"], scope="q360.read q360.write q360.approve", actor_id="approver-2")
+    approver_client = make_client(tenant_id=tenant.id, roles=["SUBSCRIPTION_MANAGER"], scope="q360.read q360.write q360.approve", actor_id="approver-2")
     missing_reason = approver_client.post(
         f"/api/v1/quotes/{quote['id']}/decision", {"decision": "REJECT", "rowVersion": 1}, format="json"
     )
@@ -169,7 +169,7 @@ def test_return_sends_quote_back_to_ready_and_task_returned(admin_client, tenant
     quote = _ready_quote(admin_client, code_suffix="6")
     admin_client.post(f"/api/v1/quotes/{quote['id']}/submit", {"rowVersion": quote["rowVersion"]}, format="json")
 
-    reviewer_client = make_client(tenant_id=tenant.id, roles=["APPROVER"], scope="q360.read q360.write q360.approve", actor_id="reviewer-1")
+    reviewer_client = make_client(tenant_id=tenant.id, roles=["SUBSCRIPTION_MANAGER"], scope="q360.read q360.write q360.approve", actor_id="reviewer-1")
     response = reviewer_client.post(
         f"/api/v1/quotes/{quote['id']}/decision",
         {"decision": "RETURN", "reasonCode": "NEEDS_MORE_INFO", "rowVersion": 1},
@@ -187,8 +187,8 @@ def test_decision_without_permission_is_forbidden(admin_client, tenant):
     quote = _ready_quote(admin_client, code_suffix="7")
     submitted = admin_client.post(f"/api/v1/quotes/{quote['id']}/submit", {"rowVersion": quote["rowVersion"]}, format="json").data
 
-    # Has the q360.approve scope but SUBSCRIBER role has no quote:approve permission.
-    weak_client = make_client(tenant_id=tenant.id, roles=["SUBSCRIBER"], scope="q360.read q360.write q360.approve", actor_id="weak-1")
+    # Has the q360.approve scope but an actor without a role has no quote:approve permission.
+    weak_client = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.write q360.approve", actor_id="weak-1")
     response = weak_client.post(
         f"/api/v1/quotes/{quote['id']}/decision",
         {"decision": "APPROVE", "reasonCode": "OK", "rowVersion": submitted["rowVersion"]},

@@ -25,7 +25,7 @@ import jwt
 from django.conf import settings
 
 from apps.foundation.domain.actor import Actor
-from apps.foundation.domain.permissions import Role
+from apps.foundation.domain.permissions import LEGACY_ROLE_ALIASES, Role
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.domain.tenant import TenantId
 
@@ -120,10 +120,15 @@ def _parse_roles(raw_roles: Any) -> frozenset[Role]:
         raw_roles = [raw_roles]
     roles: set[Role] = set()
     for raw in raw_roles or []:
+        name = str(raw).upper()
         try:
-            roles.add(Role(str(raw).upper()))
+            roles.add(Role(name))
         except ValueError:
-            logger.warning("Ignoring unknown role claim value: %r", raw)
+            legacy = LEGACY_ROLE_ALIASES.get(name)
+            if legacy is not None:
+                roles.add(legacy)
+            else:
+                logger.warning("Ignoring unknown role claim value: %r", raw)
     return frozenset(roles)
 
 

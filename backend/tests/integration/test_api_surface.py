@@ -18,7 +18,11 @@ PUBLIC = {
     "api/v1/health/live", "api/v1/health/ready", "api/v1/auth/login", "api/v1/platform/auth/login", "api/v1/auth/refresh", "api/v1/auth/logout",
     "api/v1/auth/dev-login", "api/v1/schema",
 }
-PORTAL_PUBLIC_SUFFIXES = ("/auth/request-access", "/auth/verify-otp")
+PORTAL_PUBLIC_SUFFIXES = (
+    "/auth/request-access", "/auth/verify-otp", "/auth/login",
+    "/auth/first-access/request", "/auth/first-access/confirm",
+    "/auth/password-reset/request", "/auth/password-reset/confirm",
+)
 
 
 def _routes():

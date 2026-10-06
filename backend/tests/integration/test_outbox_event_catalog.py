@@ -33,7 +33,7 @@ def test_outbox_event_catalog_end_to_end():
     tenant = _make_tenant(suffix="OUTBOX")
     owner = make_client(tenant_id=tenant.id, roles=["ADMIN"], scope="q360.read q360.write q360.admin")
     approver = make_client(
-        tenant_id=tenant.id, roles=["APPROVER"], scope="q360.read q360.write q360.approve", actor_id="approver-1"
+        tenant_id=tenant.id, roles=["SUBSCRIPTION_MANAGER"], scope="q360.read q360.write q360.approve", actor_id="approver-1"
     )
 
     product = owner.post("/api/v1/products", {"code": "OUTBOX-P", "name": "P"}).data

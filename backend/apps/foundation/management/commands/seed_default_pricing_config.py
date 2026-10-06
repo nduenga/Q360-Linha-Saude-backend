@@ -45,11 +45,14 @@ DOCUMENT_TEMPLATE_CODE = "QUOTE_PROPOSAL_DEFAULT"  # fixed convention, document_
 # All 4 resolvers (resolve_rating_table / resolve_pricing_parameter_set /
 # resolve_eligibility_rule_version / _resolve_published_template) require
 # `effective_from <= <the quote's own effective_date>` - using today's date
-# here would make a "default" break for any quote whose effective_date is
+# here would break a "default" config for any quote whose effective_date is
 # earlier than the day this command happens to be run (a very likely case
 # for pre-existing test quotes). A safely-past anchor date instead covers
 # any realistic past/current/near-future quote.
 EARLIEST_EFFECTIVE_FROM = datetime.date(2020, 1, 1)
+
+CREATOR_SUBJECT = "system-seed"
+APPROVER_SUBJECT = "system-seed-approver"
 
 
 class Command(BaseCommand):
@@ -71,15 +74,37 @@ class Command(BaseCommand):
         # binds one directly - same pattern as apps.customer_portal's
         # pre-auth views binding an anonymous actor before a tenant is
         # otherwise resolvable (see interfaces/views.py in that app).
-        CurrentActorProvider.bind(
-            Actor(actor_id="system-seed", tenant_id=TenantId.parse(tenant.id), roles=frozenset(), scopes=frozenset())
+        self._creator_token = CurrentActorProvider.bind(
+            Actor(
+                actor_id=CREATOR_SUBJECT,
+                tenant_id=TenantId.parse(tenant.id),
+                roles=frozenset(),
+                scopes=frozenset(),
+            )
         )
+        self._tenant = tenant
+        try:
+            self._seed_rating_table()
+            self._seed_parameter_set()
+            self._seed_eligibility_rule()
+            self._seed_document_template()
+            self._seed_business_config()
+        finally:
+            CurrentActorProvider.reset(self._creator_token)
 
-        self._seed_rating_table()
-        self._seed_parameter_set()
-        self._seed_eligibility_rule()
-        self._seed_document_template()
-        self._seed_business_config()
+    def _as_approver(self):
+        """Context manager helper: swap CurrentActorProvider to approver
+        (four-eyes requirement) for the duration of approve_configuration().
+        Uses generator pattern for clean restore of creator token afterwards."""
+        tenant_id = TenantId.parse(self._tenant.id)
+        approver = Actor(
+            actor_id=APPROVER_SUBJECT,
+            tenant_id=tenant_id,
+            roles=frozenset(),
+            scopes=frozenset(),
+        )
+        token = CurrentActorProvider.bind(approver)
+        return token
 
     def _seed_rating_table(self) -> None:
         if RatingTable.objects.filter(code=RATING_TABLE_CODE, status="PUBLISHED").exists():
@@ -194,8 +219,6 @@ class Command(BaseCommand):
             "pricing.taxes_fees": {"charges": []},
         }
 
-        create_request = SimpleNamespace(actor=SimpleNamespace(subject="system-seed"))
-        approval_request = SimpleNamespace(actor=SimpleNamespace(subject="system-approver"))
         for config_key, value in default_configs.items():
             if BusinessConfiguration.objects.filter(
                 tenant_id=CurrentActorProvider.get().tenant_id.value,
@@ -205,16 +228,22 @@ class Command(BaseCommand):
                 self.stdout.write(f"Business configuration '{config_key}' already published — skipping.")
                 continue
 
+            creator_request = SimpleNamespace()
             config = create_configuration(
-                create_request,
+                creator_request,
                 config_key=config_key,
                 value=value,
                 effective_from=EARLIEST_EFFECTIVE_FROM,
                 effective_to=None,
                 metadata={"source": "seed_default_pricing_config", "scope": "default"},
             )
-            submit_configuration(create_request, config)
-            approve_configuration(approval_request, config)
+            submit_configuration(creator_request, config)
+            # Four-eyes: swap CurrentActorProvider to approver for approve step
+            approver_token = self._as_approver()
+            try:
+                approve_configuration(SimpleNamespace(), config)
+            finally:
+                CurrentActorProvider.reset(approver_token)
             self.stdout.write(
                 self.style.SUCCESS(f"Created + published BusinessConfiguration '{config_key}'")
             )
@@ -228,9 +257,9 @@ class Command(BaseCommand):
             self.stdout.write(f"Business configuration '{config_key}' already exists — skipping.")
             return
 
-        request = SimpleNamespace(actor=SimpleNamespace(subject="system-seed"))
+        create_req = SimpleNamespace()
         create_configuration(
-            request,
+            create_req,
             config_key=config_key,
             value=build_actuarial_model(),
             effective_from=EARLIEST_EFFECTIVE_FROM,
