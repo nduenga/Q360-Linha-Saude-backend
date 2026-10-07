@@ -1,28 +1,13 @@
-"""Coverage verification (ROADMAP_APOLICES.md Fase 4) — the "day-to-day"
-eligibility, distinct from subscription eligibility (`apps.eligibility`).
-Pure function, no DB — same discipline as `apps.eligibility.domain.
-evaluation.evaluate()` (DOC-004 s9/DOC-000 P-02 determinism): same inputs
-always produce the same result.
+"""Coverage verification for the customer portal.
 
-Checked in this exact order (the first that fails decides — see
-ROADMAP_APOLICES.md Fase 4):
-  1. POLICY_AWAITING_FIRST_PREMIUM — Policy is PENDING_FIRST_PREMIUM.
-  2. POLICY_SUSPENDED_NO_PAYMENT — Policy is SUSPENDED on `on_date`
-     (Fase 7 is what ever sets this status; the check itself is built now
-     so activating suspension later needs no change here).
-  3. POLICY_NOT_IN_FORCE — Policy is TERMINATED/CANCELLED/EXPIRED/RENEWED,
-     or `on_date` falls outside [start_date, end_date].
-  4. MEMBER_PENDING — the member's own PolicyMember row is PENDING/
-     REJECTED (PO-APO-2: never the rest of the policy's problem).
-  5. MEMBER_NOT_IN_FORCE — `on_date` falls outside
-     [inclusion_date, exclusion_date).
-  6. BENEFIT_NOT_IN_PLAN — the requested `benefit_category` was not
-     contracted (checked only when a category is actually asked for).
-  7. IN_WAITING_PERIOD — `on_date` is still before the benefit's
-     `waiting_period_ends_json` entry (not for an accident on a coverage
-     configured with `accidentWaived`).
-  8. COVERED.
+This module contains the business rules used to determine whether a
+beneficiary is covered on a specific date.
+
+The result must explain not only whether the beneficiary is covered,
+but also why the beneficiary is not covered and, when applicable,
+what document/action/decision is still pending.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -35,17 +20,29 @@ class PolicyFacts:
     start_date: datetime.date | None
     end_date: datetime.date | None
     benefit_codes: frozenset[str]
-    # Coverages whose waiting period does not apply to an accident (PDF:
-    # "em acidente, as carências não se aplicam na generalidade dos produtos").
     accident_waived_codes: frozenset[str] = frozenset()
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class PolicyMemberFacts:
+    # Estado do vínculo do beneficiário à apólice.
+    # Ex.: ACTIVE, PENDING, REJECTED, EXCLUDED
     status: str
+
+    # Estado global do beneficiário.
+    # Ex.: ACTIVE, INACTIVE
+    member_status: str | None
+
+    # Motivo da pendência, quando existir.
     pending_reason_code: str | None
+
+    # Data em que o beneficiário foi incluído na apólice.
     inclusion_date: datetime.date | None
+
+    # Data em que o beneficiário deixou de estar incluído.
     exclusion_date: datetime.date | None
+
+    # Fim dos períodos de carência por cobertura.
     waiting_period_ends: dict[str, datetime.date]
 
 
@@ -55,28 +52,111 @@ class CoverageResult:
     reason_code: str
     message: str
     waiting_period_ends: datetime.date | None = None
+    pending_reason_code: str | None = None
+    required_action: str | None = None
 
 
 _MESSAGES: dict[str, str] = {
-    "POLICY_AWAITING_FIRST_PREMIUM": "A apólice ainda não está activa — falta confirmar o pagamento da 1.ª fracção.",
-    "POLICY_SUSPENDED_NO_PAYMENT": "A apólice está suspensa por falta de pagamento.",
-    "POLICY_NOT_IN_FORCE": "A apólice não está em vigor nesta data.",
-    "MEMBER_PENDING": "Este beneficiário ainda não está activo — falta um documento ou uma decisão pendente.",
-    "MEMBER_NOT_IN_FORCE": "Este beneficiário não está coberto nesta data.",
-    "BENEFIT_NOT_IN_PLAN": "Esta cobertura não faz parte do plano contratado.",
-    "IN_WAITING_PERIOD": "Ainda em período de carência para esta cobertura.",
-    "COVERED": "Coberto.",
+    "POLICY_AWAITING_FIRST_PREMIUM":
+        "A apólice ainda não está activa — falta confirmar o pagamento da 1.ª fracção.",
+
+    "POLICY_SUSPENDED_NO_PAYMENT":
+        "A apólice está suspensa por falta de pagamento.",
+
+    "POLICY_NOT_IN_FORCE":
+        "A apólice não está em vigor nesta data.",
+
+    "MEMBER_DEACTIVATED":
+        "Este beneficiário está desactivado.",
+
+    "MEMBER_PENDING":
+        "Este beneficiário ainda não está activo — existe uma validação pendente.",
+
+    "MEMBER_NOT_IN_FORCE":
+        "Este beneficiário não está coberto nesta data.",
+
+    "BENEFIT_NOT_IN_PLAN":
+        "Esta cobertura não faz parte do plano contratado.",
+
+    "IN_WAITING_PERIOD":
+        "Ainda está em período de carência para esta cobertura.",
+
+    "COVERED":
+        "Coberto.",
 }
 
 
-def _not_covered(reason_code: str, *, waiting_period_ends: datetime.date | None = None) -> CoverageResult:
+# Código interno -> mensagem que explica exactamente o que falta.
+_PENDING_ACTIONS: dict[str, str] = {
+    "FALTA_CERTIFICADO_MATRICULA":
+        "Falta enviar o certificado de matrícula válido do beneficiário.",
+
+    "FALTA_HOMOLOGACAO_UNIAO_FACTO":
+        "Falta enviar o documento de homologação da união de facto.",
+
+    "FALTA_PROVA_DEPENDENCIA_ASCENDENTE":
+        "Falta enviar o comprovativo de coabitação ou dependência financeira.",
+
+    "PENDENTE_JUNTA_MEDICA":
+        "Está pendente a decisão da Junta Médica da seguradora.",
+
+    "ELIG-REFERRAL":
+        "Está pendente a validação manual da seguradora.",
+}
+
+
+def _not_covered(
+    reason_code: str,
+    *,
+    waiting_period_ends: datetime.date | None = None,
+    pending_reason_code: str | None = None,
+) -> CoverageResult:
+    """Creates a non-covered result with an explicit explanation."""
+
+    required_action = _PENDING_ACTIONS.get(pending_reason_code)
+
+    message = _MESSAGES[reason_code]
+
+    if reason_code == "MEMBER_PENDING":
+        if required_action:
+            message = (
+                "Este beneficiário ainda não está activo. "
+                f"{required_action}"
+            )
+        else:
+            message = (
+                "Este beneficiário ainda não está activo — "
+                "a validação do beneficiário está pendente."
+            )
+
     return CoverageResult(
-        covered=False, reason_code=reason_code, message=_MESSAGES[reason_code], waiting_period_ends=waiting_period_ends
+        covered=False,
+        reason_code=reason_code,
+        message=message,
+        waiting_period_ends=waiting_period_ends,
+        pending_reason_code=pending_reason_code,
+        required_action=required_action,
     )
 
 
-_POLICY_TERMINAL_STATUSES = frozenset({"TERMINATED", "CANCELLED", "EXPIRED", "RENEWED"})
-_MEMBER_NOT_ACTIVE_STATUSES = frozenset({"PENDING", "REJECTED", "EXCLUDED"})
+_POLICY_TERMINAL_STATUSES = frozenset(
+    {
+        "TERMINATED",
+        "CANCELLED",
+        "EXPIRED",
+        "RENEWED",
+    }
+)
+
+
+# Estados do vínculo do beneficiário que não permitem cobertura.
+_MEMBER_NOT_ACTIVE_STATUSES = frozenset(
+    {
+        "PENDING",
+        "REJECTED",
+        "EXCLUDED",
+    }
+)
 
 
 def check_coverage(
@@ -87,41 +167,135 @@ def check_coverage(
     benefit_category: str | None,
     accident: bool = False,
 ) -> CoverageResult:
-    # 1 — awaiting first premium.
+
+    # ---------------------------------------------------------
+    # 1. Apólice aguarda primeiro pagamento
+    # ---------------------------------------------------------
     if policy.status == "PENDING_FIRST_PREMIUM":
-        return _not_covered("POLICY_AWAITING_FIRST_PREMIUM")
+        return _not_covered(
+            "POLICY_AWAITING_FIRST_PREMIUM"
+        )
 
-    # 2 — suspended (Fase 7 sets this; the check is ready regardless).
+    # ---------------------------------------------------------
+    # 2. Apólice suspensa
+    # ---------------------------------------------------------
     if policy.status == "SUSPENDED":
-        return _not_covered("POLICY_SUSPENDED_NO_PAYMENT")
+        return _not_covered(
+            "POLICY_SUSPENDED_NO_PAYMENT"
+        )
 
-    # 3 — not in force (terminal status, or outside the vigência window).
+    # ---------------------------------------------------------
+    # 3. Apólice fora de vigor
+    # ---------------------------------------------------------
     if policy.status in _POLICY_TERMINAL_STATUSES:
-        return _not_covered("POLICY_NOT_IN_FORCE")
+        return _not_covered(
+            "POLICY_NOT_IN_FORCE"
+        )
+
     if policy.status != "ACTIVE":
-        # Any status this domain does not yet know about fails closed,
-        # the same posture apps.eligibility takes for CONFIG_ERROR.
-        return _not_covered("POLICY_NOT_IN_FORCE")
-    if policy.start_date is None or policy.end_date is None or not (policy.start_date <= on_date <= policy.end_date):
-        return _not_covered("POLICY_NOT_IN_FORCE")
+        return _not_covered(
+            "POLICY_NOT_IN_FORCE"
+        )
 
-    # 4/5 — the member's own row.
-    if member is None or member.status in _MEMBER_NOT_ACTIVE_STATUSES:
-        return _not_covered("MEMBER_PENDING")
-    if member.inclusion_date is None or on_date < member.inclusion_date:
-        return _not_covered("MEMBER_NOT_IN_FORCE")
-    if member.exclusion_date is not None and on_date >= member.exclusion_date:
-        return _not_covered("MEMBER_NOT_IN_FORCE")
+    if (
+        policy.start_date is None
+        or policy.end_date is None
+        or not (
+            policy.start_date <= on_date <= policy.end_date
+        )
+    ):
+        return _not_covered(
+            "POLICY_NOT_IN_FORCE"
+        )
 
-    # 6 — the requested benefit was actually contracted.
-    if benefit_category is not None and benefit_category not in policy.benefit_codes:
-        return _not_covered("BENEFIT_NOT_IN_PLAN")
+    # ---------------------------------------------------------
+    # 4. Beneficiário inexistente
+    # ---------------------------------------------------------
+    if member is None:
+        return _not_covered(
+            "MEMBER_NOT_IN_FORCE"
+        )
 
-    # 7 — waiting period, only for the benefit actually being checked.
-    if benefit_category is not None and not (accident and benefit_category in policy.accident_waived_codes):
-        ends = member.waiting_period_ends.get(benefit_category)
+    # ---------------------------------------------------------
+    # 5. Beneficiário DESACTIVADO
+    #
+    # Esta é a correcção principal.
+    #
+    # InsuredMember.status = INACTIVE
+    # significa que o beneficiário foi desactivado.
+    # ---------------------------------------------------------
+    if member.member_status == "INACTIVE":
+        return _not_covered(
+            "MEMBER_DEACTIVATED"
+        )
+
+    # ---------------------------------------------------------
+    # 6. Beneficiário pendente/rejeitado/excluído
+    # ---------------------------------------------------------
+    if member.status in _MEMBER_NOT_ACTIVE_STATUSES:
+        return _not_covered(
+            "MEMBER_PENDING",
+            pending_reason_code=member.pending_reason_code,
+        )
+
+    # ---------------------------------------------------------
+    # 7. Data de inclusão
+    # ---------------------------------------------------------
+    if (
+        member.inclusion_date is None
+        or on_date < member.inclusion_date
+    ):
+        return _not_covered(
+            "MEMBER_NOT_IN_FORCE"
+        )
+
+    # ---------------------------------------------------------
+    # 8. Data de exclusão
+    # ---------------------------------------------------------
+    if (
+        member.exclusion_date is not None
+        and on_date >= member.exclusion_date
+    ):
+        return _not_covered(
+            "MEMBER_NOT_IN_FORCE"
+        )
+
+    # ---------------------------------------------------------
+    # 9. Cobertura pertence ao plano?
+    # ---------------------------------------------------------
+    if (
+        benefit_category is not None
+        and benefit_category not in policy.benefit_codes
+    ):
+        return _not_covered(
+            "BENEFIT_NOT_IN_PLAN"
+        )
+
+    # ---------------------------------------------------------
+    # 10. Período de carência
+    # ---------------------------------------------------------
+    if (
+        benefit_category is not None
+        and not (
+            accident
+            and benefit_category in policy.accident_waived_codes
+        )
+    ):
+        ends = member.waiting_period_ends.get(
+            benefit_category
+        )
+
         if ends is not None and on_date < ends:
-            return _not_covered("IN_WAITING_PERIOD", waiting_period_ends=ends)
+            return _not_covered(
+                "IN_WAITING_PERIOD",
+                waiting_period_ends=ends,
+            )
 
-    # 8 — covered.
-    return CoverageResult(covered=True, reason_code="COVERED", message=_MESSAGES["COVERED"])
+    # ---------------------------------------------------------
+    # 11. Está coberto
+    # ---------------------------------------------------------
+    return CoverageResult(
+        covered=True,
+        reason_code="COVERED",
+        message=_MESSAGES["COVERED"],
+    )

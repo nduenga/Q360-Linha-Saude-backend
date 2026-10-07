@@ -62,13 +62,132 @@ def _outstanding_installments_by_policy(policies: list) -> dict:
 
 
 def _coverage_payload(result: CoverageResult) -> dict:
+    """Converts CoverageResult to the customer-facing API response."""
+
     return {
+        # true / false
         "covered": result.covered,
+
+        # Código que permite ao frontend saber exactamente o motivo.
         "reasonCode": result.reason_code,
+
+        # Mensagem pronta para apresentar ao cliente.
         "message": result.message,
-        "waitingPeriodEnds": result.waiting_period_ends.isoformat() if result.waiting_period_ends else None,
+
+        # Se estiver em carência.
+        "waitingPeriodEnds": (
+            result.waiting_period_ends.isoformat()
+            if result.waiting_period_ends
+            else None
+        ),
+
+        # Código da pendência.
+        #
+        # Exemplos:
+        # FALTA_CERTIFICADO_MATRICULA
+        # FALTA_HOMOLOGACAO_UNIAO_FACTO
+        # PENDENTE_JUNTA_MEDICA
+        "pendingReasonCode": result.pending_reason_code,
+
+        # Explicação concreta do que fazer.
+        #
+        # Exemplo:
+        # "Falta enviar o certificado..."
+        # "Está pendente a decisão..."
+        "requiredAction": result.required_action,
     }
 
+
+def _coverage_member_payload(*, policy, member_id) -> dict:
+    """Returns beneficiary identity and status for coverage responses."""
+
+    row = (
+        PolicyMember.objects
+        .select_related("member")
+        .filter(
+            policy=policy,
+            member_id=member_id,
+        )
+        .first()
+    )
+
+    member = row.member if row else None
+
+    # Nome completo do beneficiário.
+    name = " ".join(
+        part
+        for part in (
+            member.first_name if member else None,
+            member.last_name if member else None,
+        )
+        if part
+    )
+
+    return {
+        # ID do beneficiário.
+        "memberId": str(member_id),
+
+        # NOME DO BENEFICIÁRIO.
+        "memberName": name or "Beneficiário",
+
+        # Estado do vínculo do beneficiário à apólice.
+        #
+        # Ex.:
+        # ACTIVE
+        # PENDING
+        # REJECTED
+        # EXCLUDED
+        "memberStatus": (
+            row.status
+            if row
+            else None
+        ),
+
+        # Estado global do beneficiário.
+        #
+        # Ex.:
+        # ACTIVE
+        # INACTIVE
+        #
+        # IMPORTANTE:
+        # INACTIVE significa que foi desactivado.
+        "beneficiaryStatus": (
+            member.status
+            if member
+            else None
+        ),
+
+        # DATA EM QUE FOI INCLUÍDO.
+        "inclusionDate": (
+            row.inclusion_date.isoformat()
+            if row and row.inclusion_date
+            else None
+        ),
+
+        # Data de exclusão, caso exista.
+        "exclusionDate": (
+            row.exclusion_date.isoformat()
+            if row and row.exclusion_date
+            else None
+        ),
+    }
+
+
+def _coverage_response_item(
+    *,
+    policy,
+    member_id,
+    result: CoverageResult,
+) -> dict:
+    """Combines beneficiary data with the coverage result."""
+
+    return {
+        **_coverage_member_payload(
+            policy=policy,
+            member_id=member_id,
+        ),
+        **_coverage_payload(result),
+    }
 
 
 class CustomerPortalMeView(APIView):
@@ -124,13 +243,13 @@ class CustomerPortalCoverageView(APIView):
         if member_id:
             _assert_member_belongs_to_policy(policy=policy, member_id=member_id)
             result = get_member_coverage(policy=policy, member_id=member_id, on_date=on_date, benefit_category=benefit_category, accident=request.query_params.get("eventType", "").upper() == "ACCIDENT")
-            return Response({"policyNumber": policy.policy_number, "memberId": member_id, **_coverage_payload(result)})
+            return Response({"policyNumber": policy.policy_number, **_coverage_response_item(policy=policy, member_id=member_id, result=result)})
 
         results = get_policy_coverage(policy=policy, on_date=on_date, benefit_category=benefit_category, accident=request.query_params.get("eventType", "").upper() == "ACCIDENT")
         return Response(
             {
                 "policyNumber": policy.policy_number,
-                "results": [{"memberId": r["memberId"], **_coverage_payload(r["result"])} for r in results],
+                "results": [_coverage_response_item(policy=policy, member_id=r["memberId"], result=r["result"]) for r in results],
             }
         )
 
@@ -171,42 +290,75 @@ class CustomerPortalPlanBenefitsView(APIView):
 
 @requires_idempotency
 class CustomerPortalEligibilityView(APIView):
-    """`POST /customer-portal/eligibility` — same coverage check as `GET
-    /coverage`, as a POST with a body (kept for URL/method
-    backward-compatibility with Fase 1; see module docstring)."""
-
     authentication_classes = [CustomerPortalJwtAuthentication]
     permission_classes = [IsCustomerPortalActor]
 
     def post(self, request):
-        body = CustomerPortalCoverageRequestSerializer(data=request.data)
+        body = CustomerPortalCoverageRequestSerializer(
+            data=request.data
+        )
+
         body.is_valid(raise_exception=True)
+
         data = body.validated_data
 
-        policy = resolve_my_policy(data["policyNumber"])
-        on_date = data["date"] or datetime.date.today()
+        policy = resolve_my_policy(
+            data["policyNumber"]
+        )
+
+        on_date = (
+            data["date"]
+            or datetime.date.today()
+        )
+
         member_id = data.get("memberId")
 
         if member_id is not None:
-            _assert_member_belongs_to_policy(policy=policy, member_id=member_id)
+
+            _assert_member_belongs_to_policy(
+                policy=policy,
+                member_id=member_id,
+            )
+
             result = get_member_coverage(
-                policy=policy, member_id=member_id, on_date=on_date, benefit_category=data["benefitCategory"],
+                policy=policy,
+                member_id=member_id,
+                on_date=on_date,
+                benefit_category=data["benefitCategory"],
                 accident=data["eventType"] == "ACCIDENT",
             )
-            results = [{"memberId": str(member_id), "result": result}]
+
+            results = [
+                {
+                    "memberId": str(member_id),
+                    "result": result,
+                }
+            ]
+
         else:
+
             results = get_policy_coverage(
-                policy=policy, on_date=on_date, benefit_category=data["benefitCategory"], accident=data["eventType"] == "ACCIDENT"
+                policy=policy,
+                on_date=on_date,
+                benefit_category=data["benefitCategory"],
+                accident=data["eventType"] == "ACCIDENT",
             )
 
         return Response(
             {
                 "policyNumber": policy.policy_number,
-                "results": [{"memberId": r["memberId"], **_coverage_payload(r["result"])} for r in results],
+
+                "results": [
+                    _coverage_response_item(
+                        policy=policy,
+                        member_id=r["memberId"],
+                        result=r["result"],
+                    )
+                    for r in results
+                ],
             },
             status=200,
         )
-
 
 def _parse_date(raw: str | None) -> datetime.date:
     if not raw:

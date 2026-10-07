@@ -17,6 +17,10 @@ class ProposerSerializer(serializers.Serializer):
     registrationNumber = serializers.CharField(source="registration_number", allow_null=True)
     email = serializers.CharField(allow_null=True)
     phone = serializers.CharField(allow_null=True)
+    address = serializers.CharField(
+        allow_null=True,
+        allow_blank=True,
+    )
     attributes = serializers.JSONField(source="attributes_json")
     status = serializers.ChoiceField(choices=[s.value for s in ProposerStatus])
     rowVersion = serializers.IntegerField(source="row_version")
@@ -66,6 +70,13 @@ class ProposerCreateRequestSerializer(_ProposerNifRequestSerializer):
     displayName = serializers.CharField(min_length=1, max_length=250)
     email = serializers.EmailField(max_length=254)
     phone = serializers.CharField(min_length=1, max_length=30)
+    address = serializers.CharField(
+        max_length=500,
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        default=None,
+    )
     attributes = serializers.JSONField(required=False, default=dict)
 
     def validate(self, attrs: dict) -> dict:
@@ -86,6 +97,13 @@ class ProposerUpdateRequestSerializer(_ProposerNifRequestSerializer):
     displayName = serializers.CharField(min_length=1, max_length=250)
     email = serializers.EmailField(max_length=254)
     phone = serializers.CharField(min_length=1, max_length=30)
+    address = serializers.CharField(
+        max_length=500,
+        required=False,
+        allow_null=True,
+        allow_blank=True,
+        default=None,
+    )
     attributes = serializers.JSONField(required=False, default=dict)
     rowVersion = serializers.IntegerField(min_value=0)
 

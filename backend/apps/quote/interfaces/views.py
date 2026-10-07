@@ -283,15 +283,49 @@ class QuoteDecisionView(APIView):
 
 
 class QuoteHistoryView(APIView):
-    """ART-006 `/api/v1/quotes/{quoteId}/history`: `getQuoteHistory` (GET)."""
-
     permission_classes = [require_scope(Scope.READ)]
 
     def get(self, request, quote_id):
         quote = get_object_or_404(Quote, id=quote_id)
-        history = quote_service.get_quote_history(quote=quote)
-        return Response(StateHistoryItemSerializer(history, many=True).data)
 
+        history = list(
+            quote_service.get_quote_history(quote=quote)
+        )
+
+        from uuid import UUID
+        from apps.staff_accounts.infrastructure.models import StaffAccount
+
+        actor_ids = []
+
+        for item in history:
+            try:
+                actor_ids.append(UUID(str(item.changed_by)))
+            except (TypeError, ValueError, AttributeError):
+                # Pode ser um actor técnico:
+                # system:auto, system-scheduler, etc.
+                continue
+
+        responsible_names = {
+            str(row["id"]): row["name"]
+            for row in (
+                StaffAccount.objects
+                .filter(
+                    id__in=actor_ids,
+                    tenant_id=quote.tenant_id,
+                )
+                .values("id", "name")
+            )
+        }
+
+        return Response(
+            StateHistoryItemSerializer(
+                history,
+                many=True,
+                context={
+                    "responsible_names": responsible_names,
+                },
+            ).data
+        )
 
 @requires_idempotency
 class QuoteCancelView(APIView):

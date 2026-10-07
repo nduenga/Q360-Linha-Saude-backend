@@ -176,24 +176,45 @@ def get_my_policy(policy_number: str, *, today: datetime.date | None = None) -> 
 
 
 def _policy_members(policy: Policy) -> list[dict]:
-    rows = list(PolicyMember.objects.filter(policy=policy).order_by("created_at"))
-    members = {m.id: m for m in InsuredMember.objects.filter(id__in=[r.member_id for r in rows])}
+    rows = list(
+        PolicyMember.objects
+        .filter(policy=policy)
+        .select_related("member")
+        .order_by("created_at")
+    )
+
     result = []
+
     for row in rows:
-        member = members.get(row.member_id)
+        member = row.member
+
         if member is None:
             continue
+
         result.append(
             {
                 "memberId": str(member.id),
+
                 "name": _member_name(member),
+
                 "relationship": member.relationship_code,
+
                 "dateOfBirth": member.date_of_birth,
+
+                # Estado do vínculo na apólice.
                 "status": row.status,
+
+                # Estado global do beneficiário.
+                "beneficiaryStatus": member.status,
+
+                # Data em que foi incluído.
                 "inclusionDate": row.inclusion_date,
+
+                # Data em que foi excluído.
                 "exclusionDate": row.exclusion_date,
             }
         )
+
     return result
 
 

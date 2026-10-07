@@ -238,9 +238,16 @@ class StateHistoryItemSerializer(serializers.Serializer):
     toStatus = serializers.CharField(source="to_status")
     reasonCode = serializers.CharField(source="reason_code", allow_null=True)
     reasonText = serializers.CharField(source="reason_text", allow_null=True)
+
     changedBy = serializers.CharField(source="changed_by")
+    changedByName = serializers.SerializerMethodField()
+
     changedAt = serializers.DateTimeField(source="changed_at")
 
+    def get_changedByName(self, obj) -> str | None:
+        return self.context.get("responsible_names", {}).get(
+            str(obj.changed_by)
+        )
 
 class CancelQuoteRequestSerializer(serializers.Serializer):
     reasonCode = serializers.CharField(min_length=1, max_length=100, source="reason_code")

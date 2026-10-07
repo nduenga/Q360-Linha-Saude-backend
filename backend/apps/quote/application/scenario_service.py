@@ -37,8 +37,16 @@ from apps.quote.domain.errors import QuoteStateError, ReferencedEntityNotFoundEr
 from apps.quote.infrastructure.models import Quote, QuoteAdjustment, QuoteScenario
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
-_EDITABLE = (QuoteStatus.DRAFT.value, QuoteStatus.READY.value)
+_SCENARIO_EDITABLE = (
+    QuoteStatus.DRAFT.value,
+    QuoteStatus.READY.value,
+    QuoteStatus.IN_REVIEW.value,
+)
 
+_QUOTE_EDITABLE = (
+    QuoteStatus.DRAFT.value,
+    QuoteStatus.READY.value,
+)
 
 class ScenarioNotFoundError(DomainProblem):
     http_status = 404
@@ -55,10 +63,20 @@ class ScenarioStateError(DomainProblem):
     problem_code = "CONFLICT"
 
 
-def _require_editable(quote: Quote) -> None:
-    if quote.status not in _EDITABLE:
-        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; scenarios can only be changed while DRAFT or READY")
+def _require_scenario_editable(quote: Quote) -> None:
+    if quote.status not in _SCENARIO_EDITABLE:
+        raise QuoteStateError(
+            f"Quote {quote.id} is {quote.status}; "
+            "scenarios can only be changed while DRAFT, READY or IN_REVIEW"
+        )
 
+
+def _require_quote_editable(quote: Quote) -> None:
+    if quote.status not in _QUOTE_EDITABLE:
+        raise QuoteStateError(
+            f"Quote {quote.id} is {quote.status}; "
+            "the official quote can only be changed while DRAFT or READY"
+        )
 
 def _fmt(value: Decimal) -> str:
     return format(Decimal(str(value)).normalize(), "f")
@@ -210,7 +228,7 @@ def create_scenario(
     render: Callable,
     base: QuoteScenario | None = None,
 ) -> QuoteScenario:
-    _require_editable(quote)
+    _require_scenario_editable(quote)
     clean = normalise_parameters(quote, parameters if parameters is not None else default_parameters(quote))
     result, inputs_hash = _calculate(quote, clean, render)
     actor = CurrentActorProvider.get()
@@ -252,7 +270,7 @@ def update_scenario(
     render: Callable,
 ) -> QuoteScenario:
     quote = scenario.quote
-    _require_editable(quote)
+    _require_scenario_editable(quote)
     before = {"name": scenario.name, "parameters": scenario.parameters_json, "totalAmount": scenario.result_json.get("totalAmount")}
     clean = normalise_parameters(quote, parameters) if parameters is not None else scenario.parameters_json
     result, inputs_hash = _calculate(quote, clean, render)
@@ -288,7 +306,7 @@ def update_scenario(
 
 def recalculate_scenario(*, scenario: QuoteScenario, render: Callable) -> QuoteScenario:
     quote = scenario.quote
-    _require_editable(quote)
+    _require_scenario_editable(quote)
     previous = scenario.result_json.get("totalAmount")
     result, inputs_hash = _calculate(quote, scenario.parameters_json, render)
     QuoteScenario.objects.filter(id=scenario.id).update(
@@ -318,7 +336,7 @@ def clone_scenario(*, scenario: QuoteScenario, name: str | None, render: Callabl
 
 
 def delete_scenario(*, scenario: QuoteScenario) -> None:
-    _require_editable(scenario.quote)
+    _require_scenario_editable(scenario.quote)
     if scenario.is_selected:
         raise ScenarioStateError("The selected scenario cannot be deleted: select another one first")
     QuoteScenario.objects.filter(id=scenario.id).delete()
@@ -332,7 +350,7 @@ def delete_scenario(*, scenario: QuoteScenario) -> None:
 
 def select_scenario(*, scenario: QuoteScenario) -> QuoteScenario:
     """The scenario a proposal is generated from. Exactly one per quote."""
-    _require_editable(scenario.quote)
+    _require_scenario_editable(scenario.quote)
     with transaction.atomic():
         QuoteScenario.objects.filter(quote=scenario.quote, is_selected=True).exclude(id=scenario.id).update(is_selected=False)
         QuoteScenario.objects.filter(id=scenario.id).update(is_selected=True)
@@ -351,7 +369,7 @@ def apply_scenario(*, scenario: QuoteScenario, reason: str | None) -> Quote:
     scenario's (the old ones stay as REMOVED, nothing is deleted) and the
     quote is re-priced. Authority limits apply to every adjustment."""
     quote = scenario.quote
-    _require_editable(quote)
+    _require_quote_editable(quote)
     reason = require_reason(reason)
     actor = CurrentActorProvider.get()
     specs = scenario.parameters_json.get("adjustments", [])

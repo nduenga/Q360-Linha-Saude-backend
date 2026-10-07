@@ -14,6 +14,8 @@ from apps.business_config.infrastructure.models import BusinessConfiguration,Bus
 from apps.business_config.application.service import *
 from apps.business_config.interfaces.serializers import *
 from apps.foundation.application.context import CurrentTenantProvider
+from apps.business_config.domain.custom_rules import field_catalog
+
 class CatalogView(APIView):
     @extend_schema(operation_id="getBusinessConfigurationCatalog", summary="Consultar catálogo de configurações", tags=["Configuration"], responses=BusinessConfigurationCatalogSerializer)
     def get(self,request): return Response({"items":[{**x,"formSchema":get_form_schema(x["key"]),"requiresBusinessConfirmation":True} for x in CONFIG_CATALOG]})
@@ -71,3 +73,150 @@ class DocumentDownloadView(APIView):
         d=get_object_or_404(BusinessConfigurationDocument,id=document_id);p=Path(settings.MEDIA_ROOT)/d.storage_key
         if not p.exists():return Response({"detail":"Documento não encontrado."},status=404)
         return FileResponse(p.open("rb"),as_attachment=True,filename=d.original_filename,content_type=d.content_type or "application/octet-stream")
+
+class CustomRulesCatalogView(APIView):
+    @extend_schema(
+        operation_id="getCustomRulesCatalog",
+        summary="Consultar catálogo do construtor de regras personalizadas",
+        tags=["Configuration"],
+    )
+    def get(self, request):
+        return Response(field_catalog())
+    
+class CustomRulesListCreateView(APIView):
+    @extend_schema(
+        operation_id="listCustomRules",
+        summary="Consultar regras personalizadas",
+        tags=["Configuration"],
+        responses=BusinessConfigurationSerializer,
+    )
+    def get(self, request):
+        qs = (
+            BusinessConfiguration.objects
+            .filter(config_key="rules.custom")
+            .order_by("-version_no")
+        )
+
+        status = request.query_params.get("status")
+        if status:
+            qs = qs.filter(status=status)
+
+        return Response({
+            "items": BusinessConfigurationSerializer(qs, many=True).data
+        })
+
+    @extend_schema(
+        operation_id="createCustomRules",
+        summary="Criar nova versão de regras personalizadas",
+        tags=["Configuration"],
+        request=BusinessConfigurationWriteSerializer,
+        responses={201: BusinessConfigurationSerializer},
+    )
+    def post(self, request):
+        serializer = BusinessConfigurationWriteSerializer(
+            data={
+                **request.data,
+                "configKey": "rules.custom",
+            }
+        )
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+
+        configuration = create_configuration(
+            request,
+            "rules.custom",
+            data["value"],
+            data["effectiveFrom"],
+            data.get("effectiveTo"),
+            data.get("metadata"),
+        )
+
+        return Response(
+            BusinessConfigurationSerializer(configuration).data,
+            status=201,
+        )
+
+class CustomRulesDetailView(APIView):
+    @extend_schema(
+        operation_id="updateCustomRules",
+        summary="Actualizar regras personalizadas em DRAFT",
+        tags=["Configuration"],
+        request=BusinessConfigurationUpdateSerializer,
+        responses=BusinessConfigurationSerializer,
+    )
+    def put(self, request, configuration_id):
+        configuration = get_object_or_404(
+            BusinessConfiguration,
+            id=configuration_id,
+            config_key="rules.custom",
+        )
+
+        serializer = BusinessConfigurationUpdateSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+
+        configuration = update_configuration(
+            request,
+            configuration,
+            data["value"],
+            data.get("effectiveFrom"),
+            data.get("effectiveTo"),
+            data.get("metadata"),
+            data.get("rowVersion"),
+        )
+
+        return Response(
+            BusinessConfigurationSerializer(configuration).data
+        )
+        
+class CustomRulesSubmitView(APIView):
+    @extend_schema(
+        operation_id="submitCustomRules",
+        summary="Submeter regras personalizadas para aprovação",
+        tags=["Configuration"],
+        request=BusinessConfigurationActionSerializer,
+        responses=BusinessConfigurationSerializer,
+    )
+    def post(self, request, configuration_id):
+        configuration = get_object_or_404(
+            BusinessConfiguration,
+            id=configuration_id,
+            config_key="rules.custom",
+        )
+
+        configuration = submit_configuration(
+            request,
+            configuration,
+        )
+
+        return Response(
+            BusinessConfigurationSerializer(configuration).data
+        )
+
+
+class CustomRulesApproveView(APIView):
+    @extend_schema(
+        operation_id="approveCustomRules",
+        summary="Publicar nova versão das regras personalizadas",
+        tags=["Configuration"],
+        responses=BusinessConfigurationSerializer,
+    )
+    def post(self, request, configuration_id):
+        configuration = get_object_or_404(
+            BusinessConfiguration,
+            id=configuration_id,
+            config_key="rules.custom",
+        )
+
+        configuration = approve_configuration(
+            request,
+            configuration,
+        )
+
+        return Response(
+            BusinessConfigurationSerializer(configuration).data
+        )

@@ -197,6 +197,8 @@ def test_coverage_checks_own_member_and_is_covered_today(admin_client, tenant):
     assert response.status_code == 200, response.data
     assert len(response.data["results"]) == 1
     assert response.data["results"][0]["memberId"] == scope["memberId"]
+    assert response.data["results"][0]["memberName"] == "Beneficiário"
+    assert response.data["results"][0]["inclusionDate"] == "2026-06-02"
     assert response.data["results"][0]["covered"] is True
 
 
@@ -222,7 +224,29 @@ def test_eligibility_endpoint_also_checks_coverage_for_own_members_only(admin_cl
     assert response.status_code == 200, response.data
     assert len(response.data["results"]) == 1
     assert response.data["results"][0]["memberId"] == scope["memberId"]
+    assert response.data["results"][0]["memberName"] == "Beneficiário"
+    assert response.data["results"][0]["inclusionDate"] == "2026-06-02"
     assert response.data["results"][0]["covered"] is True
+
+
+@pytest.mark.django_db
+def test_eligibility_names_pending_reason_and_required_action(admin_client, tenant):
+    scope = _setup_active_policy_with_member(admin_client, tenant, policy_number="APO-ELIG-REASON", registration_number="919191919LA091")
+    from apps.policy.infrastructure.models import PolicyMember
+
+    PolicyMember.all_tenants.filter(policy_id=scope["policyId"], member_id=scope["memberId"]).update(
+        status="PENDING", pending_reason_code="FALTA_CERTIFICADO_MATRICULA"
+    )
+    token = _login(tenant, scope)
+    response = _portal_client(token).post(
+        "/api/v1/customer-portal/eligibility", {"policyNumber": scope["policyNumber"], "date": "2026-06-15"}, format="json"
+    )
+
+    assert response.status_code == 200, response.data
+    result = response.data["results"][0]
+    assert result["covered"] is False
+    assert result["pendingReasonCode"] == "FALTA_CERTIFICADO_MATRICULA"
+    assert result["requiredAction"] == "Envie o certificado de matrícula válido do beneficiário."
 
 
 @pytest.mark.django_db

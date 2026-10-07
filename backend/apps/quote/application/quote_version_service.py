@@ -48,10 +48,28 @@ class QuoteVersionNotFoundError(DomainProblem):
 
 
 def capture_state(quote: Quote) -> dict[str, Any]:
-    members = [
-        {"memberId": str(qm.member_id), "status": qm.status, "preExisting": qm.pre_existing_json or {}}
-        for qm in quote.members.order_by("created_at", "id")
-    ]
+    members = []
+
+    for qm in quote.members.select_related("member").order_by("created_at", "id"):
+        member = qm.member
+
+        member_name = " ".join(
+            filter(
+                None,
+                [
+                    member.first_name,
+                    member.last_name,
+                ],
+            )
+        ).strip()
+
+        members.append(
+            {
+                "memberName": member_name,
+                "status": qm.status,
+                "preExisting": qm.pre_existing_json or {},
+            }
+        )
     adjustments = [
         {k: v for k, v in item.items() if k != "id"} for item in quote_service.active_adjustments_for_context(quote)
     ]
@@ -149,18 +167,44 @@ def diff_states(before: dict[str, Any], after: dict[str, Any]) -> list[dict[str,
         changes.append({"field": "adjustments", "before": None, "after": after_adj[key]})
     for key in sorted(set(before_adj) - set(after_adj)):
         changes.append({"field": "adjustments", "before": before_adj[key], "after": None})
-    before_members = {m["memberId"]: m for m in before["members"]}
-    after_members = {m["memberId"]: m for m in after["members"]}
-    for member_id in sorted(set(after_members) - set(before_members)):
-        changes.append({"field": "members", "before": None, "after": after_members[member_id]["memberId"]})
-    for member_id in sorted(set(before_members) - set(after_members)):
-        changes.append({"field": "members", "before": before_members[member_id]["memberId"], "after": None})
-    for member_id in sorted(set(before_members) & set(after_members)):
-        add(f"members.{member_id}.preExisting", before_members[member_id]["preExisting"], after_members[member_id]["preExisting"])
-    before_total = (before.get("pricing") or {}).get("totalAmount")
-    after_total = (after.get("pricing") or {}).get("totalAmount")
-    add("pricing.totalAmount", before_total, after_total)
-    return changes
+    before_members = {
+        m["memberName"]: m
+        for m in before.get("members", [])
+    }
+
+    after_members = {
+        m["memberName"]: m
+        for m in after.get("members", [])
+    }
+
+    for member_name in sorted(set(after_members) - set(before_members)):
+        changes.append(
+            {
+                "field": "members",
+                "before": None,
+                "after": member_name,
+            }
+        )
+
+    for member_name in sorted(set(before_members) - set(after_members)):
+        changes.append(
+            {
+                "field": "members",
+                "before": member_name,
+                "after": None,
+            }
+        )
+
+    for member_name in sorted(set(before_members) & set(after_members)):
+        add(
+            f"members.{member_name}.preExisting",
+            before_members[member_name]["preExisting"],
+            after_members[member_name]["preExisting"],
+        )
+        before_total = (before.get("pricing") or {}).get("totalAmount")
+        after_total = (after.get("pricing") or {}).get("totalAmount")
+        add("pricing.totalAmount", before_total, after_total)
+        return changes
 
 
 def compare_versions(*, quote: Quote, version_no: int, against: int | None) -> dict[str, Any]:

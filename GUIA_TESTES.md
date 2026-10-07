@@ -20,9 +20,17 @@ Tudo o que precisa para pôr o sistema a funcionar com dados de demonstração e
  (cotação, apólice)   backend Django :8000   (consulta, pedidos, mensagens)
 ```
 
-Há **um só backend** (`:8000`), duas aplicações de ecrã: a plataforma (React, `:5173`) e o portal (Next.js, `:3000`).
+Há **um só backend** (`:8000`) e **um só frontend**: `Q360-Linha-Sa-de-frontend` (React/Vite, `:5173`). A Plataforma e o Portal Cliente são áreas desse mesmo frontend.
 
 ## 2. Preparar
+
+### Estado actual da interface
+
+O Portal Cliente está integrado no projecto `Q360-Linha-Sa-de-frontend`.
+Arranque apenas este frontend na porta `5173`; o projecto autónomo
+`Q360-Saude-Portal-Cliente` e a porta `3000` são referências legadas deste
+guia e não fazem parte do fluxo actual. Plataforma e portal usam o mesmo
+backend e os mesmos dados.
 
 ### 2.1 Base de dados e dados de demonstração
 Na pasta `backend`, com o ambiente virtual activo:
@@ -47,8 +55,8 @@ EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
 Os códigos passam a aparecer **no terminal do backend** («O código ... é: 123456»).
 Se preferir receber emails reais, mantenha o SMTP: os clientes demo têm os emails `fabioaderio@gmail.com`, `devbackend86@gmail.com` e `fabiongila@gmail.com`.
 
-### 2.3 Apontar o portal para o tenant demo
-Em `Q360-Saude-Portal-Cliente/.env.local`:
+### 2.3 Apontar o Portal Cliente para o tenant demo
+Em `Q360-Linha-Sa-de-frontend/.env.local`:
 
 ```
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
@@ -60,21 +68,22 @@ NEXT_PUBLIC_CUSTOMER_PORTAL_TENANT_ID=<id do tenant demo-saude impresso pelo see
 | O quê | Pasta | Comando | Endereço |
 |---|---|---|---|
 | Backend | `Quote - Saúde/backend` | `python manage.py runserver` | http://127.0.0.1:8000 (docs da API: `/api/docs`) |
-| Plataforma | `Q360-Linha-Sa-de-frontend` | `npm run dev` | http://localhost:5173 |
-| Portal | `Q360-Saude-Portal-Cliente` | `npm run dev` | http://localhost:3000 |
+| Plataforma e Portal Cliente | `Q360-Linha-Sa-de-frontend` | `npm run dev` | http://localhost:5173 |
 
 ## 3. Credenciais
 
 ### Plataforma — colaboradores (palavra-passe `Q360Demo!2026`)
 
+Os únicos perfis demo actuais são Administrador, Gestor de Subscrição e
+Subscritor. Não use as credenciais antigas de Configurador, Aprovador,
+Auditor ou Super administrador: esses perfis não são criados pelo seeder
+actual.
+
 | Perfil | Email | Para quê |
 |---|---|---|
 | Administrador | `admin.demo@q360.local` | tudo, incluindo administração |
-| Configurador | `configurador.demo@q360.local` | produtos, planos, tarifas |
-| Subscritor | `subscritor.demo@q360.local` | criar e submeter cotações |
-| Aprovador | `aprovador.demo@q360.local` | aprovar e recusar |
-| Auditor | `auditor.demo@q360.local` | só leitura e auditoria |
-| Super administrador | `superadmin.demo@q360.local` | gestão de tenants (`/platform`) |
+| Gestor de Subscrição | `gestor.demo@q360.local` | analisar, aprovar ou recusar cotações |
+| Subscritor | `subscritor.demo@q360.local` | criar, calcular e submeter cotações |
 
 Entrada: http://localhost:5173/login (utilizador ou email + palavra-passe).
 
@@ -95,7 +104,7 @@ Entrada: http://localhost:5173/login (utilizador ou email + palavra-passe).
 | Empresa Kilamba | a apólice dela | `541000003LA003` | apólice a terminar em 45 dias (renovação) |
 | Mariana Costa | a cotação dela | `000000005LA005` | **sem email no registo** → erro esperado |
 
-Portal: http://localhost:3000/acesso
+Portal: abra-o a partir do mesmo frontend em http://localhost:5173. O Portal Cliente já está integrado no frontend; não arranque o projecto legado separado na porta `3000`.
 
 ## 4. Testes do Portal Cliente
 
@@ -180,14 +189,14 @@ Entrar em http://localhost:5173/login.
 ### 6.1 Fluxo completo de uma cotação
 1. **Subscritor** → **Cotações → Nova** → cliente *Diana Lopes* → plano *Família Plus* → data de início → adicionar pessoas → calcular o prémio.
 2. Submeter para revisão.
-3. **Aprovador** → **Subscrição** → abrir a cotação → **Aprovar** (ou recusar com motivo).
+3. **Gestor de Subscrição** → **Subscrição** → abrir a cotação → **Aprovar** (ou recusar com motivo).
 4. A cotação aprovada **aparece de imediato no portal da Diana** como «Aprovada — aguarda assinatura».
 5. **Emitir a apólice e registar o 1.º pagamento.** O ecrã da plataforma **ainda não tem** estes dois passos; fazem-se pela API (com o Aprovador ou o Administrador):
 
 ```powershell
-# Entrar como aprovador
+# Entrar como gestor de subscrição
 $login = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/auth/login -ContentType 'application/json' `
-  -Body '{"email":"aprovador.demo@q360.local","password":"Q360Demo!2026"}'
+  -Body '{"email":"gestor.demo@q360.local","password":"Q360Demo!2026"}'
 $h = @{ Authorization = "Bearer $($login.accessToken)"; 'Idempotency-Key' = [guid]::NewGuid().ToString() }
 
 # Id da cotação aprovada: copie-o do endereço no ecrã (…/cotacoes/<id>/…) e veja a versão
@@ -219,9 +228,8 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/policies/$($po
 | **Produtos / Planos / Coberturas** | Família Plus e Empresa Essencial; abrir a configuração de um plano |
 | **Elegibilidade** | avaliações das pessoas (há uma «sem elegibilidade» por idade e uma com agravamento) |
 | **Sinistralidade** | importar sinistros por ficheiro |
-| **Auditoria** | eventos das acções que fez (perfil Auditor ou Administrador) |
+| **Auditoria** | eventos das acções que fez (Administrador) |
 | **Administração** (Administrador) | contas de colaboradores, parâmetros do sistema |
-| **Super administrador** | http://localhost:5173/platform → tenants |
 
 ## 7. Se algo não funcionar
 
@@ -235,6 +243,10 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/policies/$($po
 | Cotação do portal não aparece | rascunhos (`DRAFT`) nunca aparecem; só depois de submetida |
 
 ## 8. Antes de produção
+
+O deploy do frontend publica a Plataforma e o Portal Cliente juntos. Não há
+um segundo deploy nem uma segunda aplicação web para o portal.
+
 - Desligar o login antigo: `CUSTOMER_PORTAL_LEGACY_LOGIN_ENABLED=false`.
 - Não correr `seed_demo_data` nem `seed_portal_demo` (criam palavras-passe fixas).
 - Aplicar as migrações do `customer_portal` (0002 e 0003).
