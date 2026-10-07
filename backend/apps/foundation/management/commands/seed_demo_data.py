@@ -12,6 +12,7 @@ import json
 import uuid
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
@@ -82,6 +83,11 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if not settings.DEBUG:
+            raise CommandError(
+                "seed_demo_data is restricted to DEBUG environments. "
+                "For production, use prepare_portal_test_accounts with an explicit tenant ID."
+            )
         tenant, _ = Tenant.objects.get_or_create(
             code=options["tenant_code"], defaults={"name": options["tenant_name"]}
         )
@@ -323,7 +329,7 @@ class Command(BaseCommand):
             proposer_type="INDIVIDUAL",
             display_name="Ana Paula Silva",
             registration_number="000000001LA001",
-            email="fabioaderio@gmail.com",
+            email="helibrando@gmail.com",
             phone="+244 900 000 001",
         )
         members = {
@@ -455,7 +461,7 @@ class Command(BaseCommand):
             proposer_type="INDIVIDUAL",
             display_name="Carlos Mendes",
             registration_number="000000002LA002",
-            email="devbackend86@gmail.com",
+            email="sethlussueki@gmail.com",
             phone="+244 900 000 002",
         )
         holder = self._ensure_member(proposer, "DEMO-CARLOS-TITULAR", "TITULAR", "Carlos", "Mendes", "1985-10-18")

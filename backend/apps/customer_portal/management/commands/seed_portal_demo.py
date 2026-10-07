@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import datetime
 
+from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
@@ -52,6 +53,11 @@ class Command(BaseCommand):
         parser.add_argument("--password", default=PORTAL_PASSWORD, help="Palavra-passe dos clientes demo com conta.")
 
     def handle(self, *args, **options):
+        if not settings.DEBUG:
+            raise CommandError(
+                "seed_portal_demo is restricted to DEBUG environments. "
+                "For production, use prepare_portal_test_accounts with an explicit tenant ID."
+            )
         try:
             tenant = Tenant.objects.get(code=options["tenant_code"])
         except Tenant.DoesNotExist as exc:

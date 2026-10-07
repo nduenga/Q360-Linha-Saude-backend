@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import pytest
 from django.core import mail
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from rest_framework.test import APIClient
 
+from apps.customer_portal.management.commands.prepare_portal_test_accounts import TEST_EMAILS
 from apps.customer_portal.management.commands.seed_portal_demo import PORTAL_PASSWORD
+from apps.customer_portal.infrastructure.models import CustomerAccount, CustomerAccountProposer
 from apps.foundation.infrastructure.models import Tenant
 
 BASE = "/api/v1/customer-portal"
@@ -16,6 +18,7 @@ BASE = "/api/v1/customer-portal"
 @pytest.fixture(autouse=True)
 def _no_ip_limit(settings):
     settings.CUSTOMER_PORTAL_LOGIN_RATE_LIMIT_PER_IP = 0
+    settings.DEBUG = True
 
 
 def _login(tenant, email: str) -> APIClient:
@@ -39,20 +42,20 @@ def test_demo_seeders_create_every_portal_scenario():
     tenant = Tenant.objects.get(code="demo-saude")
 
     # --- Ana: conta com palavra-passe, apólice, atraso, cotação aprovada, pedidos, mensagens
-    ana = _login(tenant, "fabioaderio@gmail.com")
-    policies = ana.get(f"{BASE}/policies").data["policies"]
+    ana_client = _login(tenant, "helibrando@gmail.com")
+    policies = ana_client.get(f"{BASE}/policies").data["policies"]
     assert [p["status"] for p in policies] == ["ACTIVE"]
 
-    alerts = [a["code"] for a in ana.get(f"{BASE}/dashboard").data["alerts"]]
+    alerts = [a["code"] for a in ana_client.get(f"{BASE}/dashboard").data["alerts"]]
     assert "PAYMENT_OVERDUE" in alerts
 
-    statuses = {q["status"] for q in ana.get(f"{BASE}/me/quotes").data["quotes"]}
+    statuses = {q["status"] for q in ana_client.get(f"{BASE}/me/quotes").data["quotes"]}
     assert "AWAITING_SIGNATURE" in statuses and "CONTRACTED" in statuses
 
-    requests = ana.get(f"{BASE}/requests").data["requests"]
+    requests = ana_client.get(f"{BASE}/requests").data["requests"]
     assert sorted(r["status"] for r in requests) == ["AWAITING_CUSTOMER", "OPEN"]
-    assert ana.get(f"{BASE}/conversations").data["conversations"][0]["unread"] == 1
-    codes = {n["code"] for n in ana.get(f"{BASE}/notifications").data["notifications"]}
+    assert ana_client.get(f"{BASE}/conversations").data["conversations"][0]["unread"] == 1
+    codes = {n["code"] for n in ana_client.get(f"{BASE}/notifications").data["notifications"]}
     assert {"REQUEST_UPDATED", "NEW_MESSAGE", "PAYMENT_OVERDUE", "QUOTE_APPROVED"} <= codes
 
     # --- Diana: só cotações; o rascunho não aparece
@@ -69,11 +72,21 @@ def test_demo_seeders_create_every_portal_scenario():
     sent = _first_access(tenant, carlos_policy.policy_number, carlos.registration_number)
     assert sent.status_code == 202, sent.data
     assert mail.outbox[-1].to == [carlos.email]
+    assert carlos.email == "sethlussueki@gmail.com"
     assert APIClient().post(f"{BASE}/{tenant.id}/auth/login", {"email": carlos.email, "password": PORTAL_PASSWORD}, format="json").status_code == 401
+
+    ana_proposer = Proposer.all_tenants.get(external_reference="DEMO-ANA-SILVA")
+    ana_policy = Policy.all_tenants.get(proposer=ana_proposer, status="ACTIVE")
+    ana_first_access = _first_access(tenant, ana_policy.policy_number, ana_proposer.registration_number)
+    assert ana_first_access.status_code == 202, ana_first_access.data
+    assert mail.outbox[-1].to == ["helibrando@gmail.com"]
 
     empresa = Proposer.all_tenants.get(external_reference="DEMO-EMPRESA-KILAMBA")
     empresa_policy = Policy.all_tenants.get(proposer=empresa, status="ACTIVE")
-    assert _first_access(tenant, empresa_policy.policy_number, empresa.registration_number).status_code == 202
+    company_first_access = _first_access(tenant, empresa_policy.policy_number, empresa.registration_number)
+    assert company_first_access.status_code == 202, company_first_access.data
+    assert mail.outbox[-1].to == ["fabiongila@gmail.com"]
+    assert {carlos.email, ana_proposer.email, empresa.email} == set(TEST_EMAILS)
 
     # --- Mariana: sem email no registo
     mariana = Proposer.all_tenants.get(external_reference="DEMO-MARIANA-SEM-EMAIL")
@@ -98,7 +111,67 @@ def test_demo_seeders_create_every_portal_scenario():
 
     # --- idempotência: voltar a correr repõe o estado sem duplicar nada
     call_command("seed_portal_demo")
-    assert len(ana.get(f"{BASE}/requests").data["requests"]) == 2
-    assert _login(tenant, "fabioaderio@gmail.com")  # a palavra-passe continua válida
+    assert len(ana_client.get(f"{BASE}/requests").data["requests"]) == 2
+    assert _login(tenant, "helibrando@gmail.com")  # a palavra-passe continua válida
     # o seeder repõe a Empresa sem conta, para repetir o primeiro acesso
     assert _first_access(tenant, empresa_policy.policy_number, empresa.registration_number).status_code == 202
+
+
+@pytest.mark.django_db(transaction=True)
+def test_production_preparation_is_explicit_idempotent_and_preserves_passwords(settings):
+    settings.DEBUG = False
+    with pytest.raises(CommandError, match="DEBUG environments"):
+        call_command("seed_demo_data")
+    with pytest.raises(CommandError, match="DEBUG environments"):
+        call_command("seed_portal_demo")
+    settings.DEBUG = True
+
+    call_command("seed_demo_data")
+    tenant = Tenant.objects.get(code="demo-saude")
+    existing_passwords = dict(
+        CustomerAccount.all_tenants.filter(tenant_id=tenant.id).values_list("email", "password_hash")
+    )
+
+    with pytest.raises(CommandError, match="--confirm-production"):
+        call_command("prepare_portal_test_accounts", tenant_id=str(tenant.id))
+
+    call_command(
+        "prepare_portal_test_accounts",
+        tenant_id=str(tenant.id),
+        confirm_production=True,
+    )
+    accounts = {
+        account.email: account
+        for account in CustomerAccount.all_tenants.filter(tenant_id=tenant.id, email__in=TEST_EMAILS)
+    }
+    assert set(accounts) == set(TEST_EMAILS)
+    assert all(
+        CustomerAccountProposer.all_tenants.filter(
+            tenant_id=tenant.id,
+            customer_account=account,
+        ).exists()
+        for account in accounts.values()
+    )
+    assert {
+        email: account.password_hash
+        for email, account in accounts.items()
+        if email in existing_passwords
+    } == {
+        email: password_hash
+        for email, password_hash in existing_passwords.items()
+        if email in TEST_EMAILS
+    }
+
+    links_before = CustomerAccountProposer.all_tenants.filter(
+        tenant_id=tenant.id,
+        customer_account__email__in=TEST_EMAILS,
+    ).count()
+    call_command(
+        "prepare_portal_test_accounts",
+        tenant_id=str(tenant.id),
+        confirm_production=True,
+    )
+    assert CustomerAccountProposer.all_tenants.filter(
+        tenant_id=tenant.id,
+        customer_account__email__in=TEST_EMAILS,
+    ).count() == links_before
