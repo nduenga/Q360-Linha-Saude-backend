@@ -349,6 +349,13 @@ class DocumentTemplateListCreateView(APIView):
 
     permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
 
+    def get_permissions(self):
+        # Reading published template choices is needed by proposal generation
+        # for any user with normal read access; mutations remain admin-only.
+        if self.request.method == "GET":
+            return [require_scope(Scope.READ)()]
+        return [permission() for permission in self.permission_classes]
+
     def get(self, request):
         queryset = DocumentTemplateVersion.objects.order_by("template_code", "-version_no")
         template_code = request.query_params.get("templateCode")
