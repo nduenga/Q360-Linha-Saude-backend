@@ -186,9 +186,13 @@ def import_file(
     return {**result, "importId": str(job.id)}
 
 
-def list_imports(*, proposer_id=None):
+def list_imports(*, proposer_id=None, policy_id=None):
     queryset = ClaimsImport.objects.all().order_by("-created_at")
-    return queryset.filter(proposer_id=proposer_id) if proposer_id else queryset
+    if proposer_id:
+        queryset = queryset.filter(proposer_id=proposer_id)
+    if policy_id:
+        queryset = queryset.filter(policy_id=policy_id)
+    return queryset
 
 
 def get_import(import_id) -> ClaimsImport:

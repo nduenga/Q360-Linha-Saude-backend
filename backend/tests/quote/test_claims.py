@@ -69,11 +69,15 @@ def test_import_claims_and_premiums_with_row_errors(admin_client):
     assert {e["row"] for e in dry.data["errors"]} == {4, 5, 6, 7, 8}
     assert admin_client.get("/api/v1/claims/imports").data["items"] == []  # dry-run não grava
 
-    real = _upload(admin_client, scope, bad, kind="CLAIMS", source="OTHER_INSURER")
+    policy_id = str(uuid.uuid4())
+    real = _upload(admin_client, scope, bad, kind="CLAIMS", source="OTHER_INSURER", policyId=policy_id)
     assert real.status_code == 201 and real.data["importedRows"] == 2
     detail = admin_client.get(f"/api/v1/claims/imports/{real.data['importId']}").data
     assert detail["source"] == "OTHER_INSURER" and detail["errorRows"] == 5 and detail["fileName"] == "dados.csv"
+    assert detail["policyId"] == policy_id
     assert len(admin_client.get(f"/api/v1/claims/imports?proposerId={scope['proposerId']}").data["items"]) == 1
+    assert len(admin_client.get(f"/api/v1/claims/imports?proposerId={scope['proposerId']}&policyId={policy_id}").data["items"]) == 1
+    assert admin_client.get(f"/api/v1/claims/imports?policyId={uuid.uuid4()}").data["items"] == []
 
 
 @pytest.mark.django_db
@@ -171,6 +175,18 @@ def test_claims_are_isolated_per_client(admin_client):
     assert _summary(admin_client, scope).data["claims"]["count"] == 12
 
 
+@pytest.mark.django_db
+def test_proposer_directory_search_matches_name_email_and_nif(admin_client):
+    _scope(admin_client)
+    by_name = admin_client.get("/api/v1/proposers?q=Holder")
+    by_email = admin_client.get("/api/v1/proposers?q=holder%40example.com")
+    by_nif = admin_client.get("/api/v1/proposers?q=123456789LA042")
+    assert [item["displayName"] for item in by_name.data["items"]] == ["Holder"]
+    assert [item["displayName"] for item in by_email.data["items"]] == ["Holder"]
+    assert [item["displayName"] for item in by_nif.data["items"]] == ["Holder"]
+    assert admin_client.get("/api/v1/proposers?q=missing").data["items"] == []
+
+
 # ------------------------------------------------------- profit sharing (PDF)
 @pytest.mark.django_db
 def test_profit_sharing_when_loss_ratio_is_below_the_agreed_limit(admin_client):
@@ -184,7 +200,15 @@ def test_profit_sharing_when_loss_ratio_is_below_the_agreed_limit(admin_client):
     assert half_share["refundAmount"] == "27480.00"
     above = admin_client.get(f"/api/v1/claims/profit-sharing?proposerId={scope['proposerId']}&thresholdPct=65").data  # exemplo do PDF
     assert above["eligible"] is False and above["refundAmount"] == "0.00"
+    configured = admin_client.get(f"/api/v1/claims/profit-sharing?proposerId={scope['proposerId']}").data
+    assert configured["thresholdPct"] == "65.00" and configured["sharePct"] == "100.00"
+    parameters = admin_client.get("/api/v1/claims/profit-sharing/parameters")
+    assert parameters.status_code == 200
+    assert parameters.data == {"thresholdPct": "65.00", "sharePct": "100.00"}
     assert admin_client.get(f"/api/v1/claims/profit-sharing?proposerId={scope['proposerId']}&thresholdPct=abc").status_code == 400
+    for query in ("thresholdPct=-1", "thresholdPct=101", "sharePct=-1", "sharePct=101", "sharePct=NaN"):
+        response = admin_client.get(f"/api/v1/claims/profit-sharing?proposerId={scope['proposerId']}&{query}")
+        assert response.status_code == 400, query
 
 
 # ---------------------------------------------------------------- projection
@@ -285,6 +309,8 @@ def test_assumption_sets_are_saved_and_reused(admin_client):
         "/api/v1/claims/projections", {"proposerId": scope["proposerId"], "assumptionSetId": created.data["id"]}, format="json"
     )
     assert run.status_code == 201 and run.data["assumptionSetId"] == created.data["id"]
+    filtered = admin_client.get(f"/api/v1/claims/projections?proposerId={scope['proposerId']}&policyId={uuid.uuid4()}")
+    assert filtered.status_code == 200 and filtered.data["items"] == []
     assert admin_client.post("/api/v1/claims/projections", {"proposerId": scope["proposerId"], "assumptionSetId": str(uuid.uuid4())}, format="json").status_code == 404
 
 

@@ -115,6 +115,8 @@ def _decimal_param(request, name, default):
         value = Decimal(str(raw))
     except InvalidOperation:
         raise summary_service.ClaimsDataError(f"'{name}' must be a decimal") from None
+    if not value.is_finite() or not Decimal("0") <= value <= Decimal("100"):
+        raise summary_service.ClaimsDataError(f"'{name}' must be between 0 and 100")
     return value
 
 
@@ -122,7 +124,8 @@ def _decimal_param(request, name, default):
 class ClaimsImportListCreateView(APIView):
     """POST (multipart: `file`, `kind`=CLAIMS|PREMIUMS, `proposerId`, optional
     `policyId`, `source`=INTERNAL|OTHER_INSURER, `dryRun`) imports CSV/XLSX;
-    invalid rows are reported and skipped. GET lists the imports."""
+    invalid rows are reported and skipped. GET lists imports and accepts
+    optional `proposerId` and `policyId` filters."""
 
     parser_classes = [MultiPartParser]
 
@@ -130,7 +133,10 @@ class ClaimsImportListCreateView(APIView):
         return [p() for p in (MANAGE if self.request.method == "POST" else READ)]
 
     def get(self, request):
-        queryset = import_service.list_imports(proposer_id=_optional_uuid(request, "proposerId"))
+        queryset = import_service.list_imports(
+            proposer_id=_optional_uuid(request, "proposerId"),
+            policy_id=_optional_uuid(request, "policyId"),
+        )
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(ImportSerializer(page, many=True).data)
@@ -207,7 +213,8 @@ class ClaimsImportTemplateView(APIView):
 class ClaimsProfitSharingView(APIView):
     """GET /claims/profit-sharing?proposerId=&thresholdPct=65&sharePct=100 -
     participação nos resultados do grupo (devolução de parte do prémio se a
-    sinistralidade ficar abaixo do limite acordado)."""
+    sinistralidade ficar abaixo do limite acordado). Override percentages
+    must be between 0 and 100, inclusive."""
 
     permission_classes = READ
 
@@ -221,6 +228,25 @@ class ClaimsProfitSharingView(APIView):
                 currency=request.query_params.get("currency", "AOA").upper(),
             )
         )
+
+
+class ClaimsProfitSharingParametersView(APIView):
+    """GET /claims/profit-sharing/parameters - thresholds from current
+    published group.rules, with the documented 65% / 100% fallbacks."""
+
+    permission_classes = READ
+
+    def get(self, request):
+        values = []
+        for name, field, fallback in (
+            ("thresholdPct", "experience_loss_ratio_threshold", "65"),
+            ("sharePct", "profit_share_percent", "100"),
+        ):
+            value = Decimal(_group_default(field, fallback))
+            if not value.is_finite() or not Decimal("0") <= value <= Decimal("100"):
+                raise summary_service.ClaimsDataError(f"Configured {name} must be between 0 and 100")
+            values.append(value.quantize(Decimal("0.01")))
+        return Response({"thresholdPct": str(values[0]), "sharePct": str(values[1])})
 
 
 class AssumptionSetListCreateView(APIView):
@@ -248,7 +274,8 @@ class AssumptionSetDetailView(APIView):
 
 class ProjectionListCreateView(APIView):
     """POST /claims/projections - OPTIMISTIC/BASE/PESSIMISTIC projection from
-    a saved assumption set or inline `assumptions`."""
+    a saved assumption set or inline `assumptions`. GET accepts optional
+    `proposerId` and `policyId` filters."""
 
     def get_permissions(self):
         if self.request.method == "POST":
@@ -262,6 +289,9 @@ class ProjectionListCreateView(APIView):
         proposer_id = _optional_uuid(request, "proposerId")
         if proposer_id:
             queryset = queryset.filter(proposer_id=proposer_id)
+        policy_id = _optional_uuid(request, "policyId")
+        if policy_id:
+            queryset = queryset.filter(policy_id=policy_id)
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(ProjectionSerializer(page, many=True).data)
