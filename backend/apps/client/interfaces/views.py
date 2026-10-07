@@ -7,6 +7,7 @@ docs/08-integration-contract/BACKEND_FRONTEND_ALIGNMENT.md.
 """
 from __future__ import annotations
 
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
@@ -54,13 +55,23 @@ class RelationshipCodeListView(APIView):
 
 @requires_idempotency
 class ProposerListCreateView(APIView):
+    """Proposer search accepts optional `q`, matching display name, NIF or email."""
+
     def get_permissions(self):
         scope = Scope.WRITE if self.request.method == "POST" else Scope.READ
         return [require_scope(scope)()]
 
     def get(self, request):
+        queryset = Proposer.objects.all().order_by("display_name")
+        search = request.query_params.get("q", "").strip()
+        if search:
+            queryset = queryset.filter(
+                Q(display_name__icontains=search)
+                | Q(nif__icontains=search)
+                | Q(email__icontains=search)
+            )
         paginator = Q360PageNumberPagination()
-        page = paginator.paginate_queryset(Proposer.objects.all().order_by("display_name"), request)
+        page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(ProposerSerializer(page, many=True).data)
 
     def post(self, request):
