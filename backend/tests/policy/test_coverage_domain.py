@@ -23,6 +23,7 @@ _ACTIVE_POLICY = PolicyFacts(
 )
 _ACTIVE_MEMBER = PolicyMemberFacts(
     status="ACTIVE",
+    member_status="ACTIVE",
     pending_reason_code=None,
     inclusion_date=datetime.date(2026, 1, 1),
     exclusion_date=None,
@@ -60,9 +61,9 @@ def test_member_pending():
     assert result.reason_code == "MEMBER_PENDING"
 
 
-def test_member_missing_entirely_is_pending():
+def test_member_missing_entirely_is_not_in_force():
     result = check_coverage(policy=_ACTIVE_POLICY, member=None, on_date=_TODAY, benefit_category=None)
-    assert result.reason_code == "MEMBER_PENDING"
+    assert result.reason_code == "MEMBER_NOT_IN_FORCE"
 
 
 def test_member_not_yet_included():
@@ -114,3 +115,9 @@ def test_covered_with_no_benefit_category_requested():
 def test_determinism_same_input_same_output():
     args = dict(policy=_ACTIVE_POLICY, member=_ACTIVE_MEMBER, on_date=_TODAY, benefit_category="HOSPITALIZATION")
     assert check_coverage(**args) == check_coverage(**args)
+
+
+def test_inactive_member_is_not_covered():
+    member = dataclasses_replace(_ACTIVE_MEMBER, member_status="INACTIVE")
+    result = check_coverage(policy=_ACTIVE_POLICY, member=member, on_date=_TODAY, benefit_category=None)
+    assert result.covered is False

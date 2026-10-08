@@ -65,6 +65,7 @@ def capture_state(quote: Quote) -> dict[str, Any]:
 
         members.append(
             {
+                "memberId": str(qm.member_id),
                 "memberName": member_name,
                 "status": qm.status,
                 "preExisting": qm.pre_existing_json or {},
@@ -167,44 +168,30 @@ def diff_states(before: dict[str, Any], after: dict[str, Any]) -> list[dict[str,
         changes.append({"field": "adjustments", "before": None, "after": after_adj[key]})
     for key in sorted(set(before_adj) - set(after_adj)):
         changes.append({"field": "adjustments", "before": before_adj[key], "after": None})
-    before_members = {
-        m["memberName"]: m
-        for m in before.get("members", [])
-    }
+    def _key(member: dict[str, Any]) -> str:
+        # Versions saved between 2026-10-07 and this fix have no memberId.
+        return member.get("memberId") or member.get("memberName") or ""
 
-    after_members = {
-        m["memberName"]: m
-        for m in after.get("members", [])
-    }
+    def _label(member: dict[str, Any]) -> str:
+        return member.get("memberName") or member.get("memberId") or ""
 
-    for member_name in sorted(set(after_members) - set(before_members)):
-        changes.append(
-            {
-                "field": "members",
-                "before": None,
-                "after": member_name,
-            }
-        )
+    before_members = {_key(m): m for m in before.get("members", [])}
+    after_members = {_key(m): m for m in after.get("members", [])}
 
-    for member_name in sorted(set(before_members) - set(after_members)):
-        changes.append(
-            {
-                "field": "members",
-                "before": member_name,
-                "after": None,
-            }
-        )
-
-    for member_name in sorted(set(before_members) & set(after_members)):
+    for key in sorted(set(after_members) - set(before_members)):
+        changes.append({"field": "members", "before": None, "after": _label(after_members[key])})
+    for key in sorted(set(before_members) - set(after_members)):
+        changes.append({"field": "members", "before": _label(before_members[key]), "after": None})
+    for key in sorted(set(before_members) & set(after_members)):
         add(
-            f"members.{member_name}.preExisting",
-            before_members[member_name]["preExisting"],
-            after_members[member_name]["preExisting"],
+            f"members.{_label(after_members[key]) or key}.preExisting",
+            before_members[key].get("preExisting"),
+            after_members[key].get("preExisting"),
         )
-        before_total = (before.get("pricing") or {}).get("totalAmount")
-        after_total = (after.get("pricing") or {}).get("totalAmount")
-        add("pricing.totalAmount", before_total, after_total)
-        return changes
+    before_total = (before.get("pricing") or {}).get("totalAmount")
+    after_total = (after.get("pricing") or {}).get("totalAmount")
+    add("pricing.totalAmount", before_total, after_total)
+    return changes
 
 
 def compare_versions(*, quote: Quote, version_no: int, against: int | None) -> dict[str, Any]:
@@ -242,8 +229,12 @@ def restore_version(*, quote: Quote, version_no: int, reason: str | None) -> tup
     import datetime
 
     with transaction.atomic():
-        wanted = {m["memberId"]: m for m in state["members"]}
+        wanted = {m["memberId"]: m for m in state["members"] if m.get("memberId")}
         current = {str(qm.member_id): qm for qm in quote.members.all()}
+        if len(wanted) != len(state["members"]):
+            # Version saved without member ids: the population cannot be restored, keep it as is.
+            wanted = {member_id: {"preExisting": qm.pre_existing_json or {}} for member_id, qm in current.items()}
+            report["skippedMembers"].append("A versão não guarda os ids das pessoas seguras: a população não foi alterada.")
         for member_id in sorted(set(current) - set(wanted)):
             quote_service.remove_quote_member(quote=quote, member_id=uuid.UUID(member_id))
             report["removedMembers"].append(member_id)

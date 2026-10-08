@@ -39,6 +39,18 @@ class RegisterFirstPremiumPaymentRequestSerializer(serializers.Serializer):
     rowVersion = serializers.IntegerField(min_value=0)
 
 
+class EmitPaymentSerializer(serializers.Serializer):
+    paidAt = serializers.DateTimeField()
+    paymentMethod = serializers.ChoiceField(choices=["NUMERARIO", "TRANSFERENCIA", "MULTICAIXA", "TPA"])
+    paymentReference = serializers.CharField(required=False, default=None, allow_null=True, allow_blank=True, max_length=200)
+
+
+class EmitPolicyRequestSerializer(IssuePolicyRequestSerializer):
+    """Emissão em um só passo: assinatura + (opcional) pagamento da 1.ª prestação."""
+
+    payment = EmitPaymentSerializer(required=False, default=None, allow_null=True)
+
+
 class PolicySerializer(serializers.Serializer):
     id = serializers.UUIDField()
     policyNumber = serializers.CharField(source="policy_number", allow_null=True)

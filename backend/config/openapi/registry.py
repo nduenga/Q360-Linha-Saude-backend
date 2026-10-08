@@ -114,6 +114,12 @@ REGISTRY: dict[str, dict] = {
                     "benefitCategory": ("string", False, "Código da cobertura a verificar."),
                     "eventType": ("string", False, "ACCIDENT: a carência não se aplica onde o plano o indica; ILLNESS (por omissão).")},
     },
+    "PolicyDraftView.get": {"response": d.PolicyDraft},
+    "EmitPolicyView.post": {"response": {201: d.EmittedPolicy}, "status": 201},
+    "PolicyDocumentView.get": {
+        "media": "application/pdf", "queries": {"fileType": ("string", False, "pdf (por omissão), html ou docx.")},
+        "notes": "Apólice digital. O PDF gravado na emissão é servido tal e qual.",
+    },
     # ------------------------------------------------------------------ claims
     "ClaimsImportListCreateView.post": {"request": d.ClaimsImportRequest, "response": {201: d.ClaimsImportResult, 200: d.ClaimsImportResult}},
     "ClaimsMethodologyView.get": {"response": d.ClaimsMethodology},
@@ -161,6 +167,16 @@ REGISTRY: dict[str, dict] = {
     },
     "CustomerPortalDocumentsView.get": {"response": d.PortalDocuments},
     "CustomerPortalDocumentDownloadView.get": {"media": "application/octet-stream"},
+    "CustomerPortalPolicyDocumentView.get": {
+        "media": "application/pdf", "queries": {"fileType": ("string", False, "pdf (por omissão), html ou docx.")},
+        "notes": "A apólice digital.",
+    },
+    "CustomerPortalPolicyStatementView.get": {
+        "media": "application/pdf",
+        "queries": {"kind": ("string", False, "COVERAGE (declaração de cobertura, por omissão) ou PAYMENT (comprovativo)."),
+                    "installmentNo": ("string", False, "Só em PAYMENT: n.º da prestação paga (por omissão a última).")},
+        "notes": "Gerado na hora; sem pedido ao GTE.",
+    },
     "CustomerPortalProfileView.get": {"response": d.PortalProfile},
     "CustomerPortalRequestsView.get": {
         "response": d.PortalRequestList,

@@ -58,7 +58,12 @@ class CustomerPortalRequestTypesView(_PortalView):
         return Response(
             {
                 "types": [
-                    {"code": code, "label": spec["label"], "needsPolicy": spec["policy"], "needsQuote": spec["quote"]}
+                    {
+                        "code": code, "label": spec["label"], "needsPolicy": spec["policy"], "needsQuote": spec["quote"],
+                        # Pedidos que o cliente resolve sozinho (descarrega o documento): ver `selfServiceHelp`.
+                        "selfService": code in rules.SELF_SERVICE,
+                        "selfServiceHelp": rules.SELF_SERVICE.get(code),
+                    }
                     for code, spec in rules.REQUEST_TYPES.items()
                 ],
                 "statuses": [{"code": code, "label": label} for code, label in rules.STATUS_LABELS.items()],

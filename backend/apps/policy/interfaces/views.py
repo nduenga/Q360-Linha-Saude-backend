@@ -10,6 +10,7 @@ day-to-day payment registration (distinct from underwriting approval) is
 future work, not invented here without an approved DOC-001 entry."""
 from __future__ import annotations
 
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,9 +19,11 @@ from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
+from apps.policy.application import emission_service, policy_document
 from apps.policy.application.issuance_service import issue_policy, register_first_premium_payment
 from apps.policy.infrastructure.models import Policy, PolicyMember, PolicySignature, PremiumInstallment
 from apps.policy.interfaces.serializers import (
+    EmitPolicyRequestSerializer,
     IssuePolicyRequestSerializer,
     PolicyMemberSerializer,
     PolicySerializer,
@@ -159,3 +162,64 @@ class RegisterFirstPremiumPaymentView(APIView):
             correlation_id=get_correlation_id(),
         )
         return Response(PolicySerializer(updated).data)
+
+
+class PolicyDraftView(APIView):
+    """`GET /api/v1/quotes/{quoteId}/policy-draft` — o ecrã de emissão do GTE:
+    todos os termos da apólice já preenchidos a partir da cotação aprovada
+    (titular, plano, prémio, prestações, pessoas seguras, coberturas, franquia,
+    carências, exclusões) e os valores por omissão de assinatura e pagamento."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        return Response(emission_service.build_draft(quote))
+
+
+@requires_idempotency
+class EmitPolicyView(APIView):
+    """`POST /api/v1/quotes/{quoteId}/policy/emit` — emite a apólice num só
+    passo: regista a assinatura presencial, (opcionalmente) o pagamento da
+    1.ª prestação e gera a apólice digital. Sem `payment`, a apólice fica a
+    aguardar o pagamento."""
+
+    permission_classes = [require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_APPROVE)]
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = EmitPolicyRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        policy = emission_service.emit_policy(
+            quote=quote,
+            signatory_name=data["signatoryName"],
+            signatory_document_type=data["signatoryDocumentType"],
+            signatory_document_number=data["signatoryDocumentNumber"],
+            signatory_capacity=data["signatoryCapacity"],
+            signature_method=data["signatureMethod"],
+            signed_at=data["signedAt"],
+            term_months=data["termMonths"],
+            payment_frequency=data["paymentFrequency"],
+            requested_start_date=data["requestedStartDate"],
+            row_version=data["rowVersion"],
+            payment=data["payment"],
+            correlation_id=get_correlation_id(),
+        )
+        payload = dict(PolicySerializer(policy).data)
+        payload["documentPath"] = f"/api/v1/policies/{policy.id}/document"
+        return Response(payload, status=201)
+
+
+class PolicyDocumentView(APIView):
+    """`GET /api/v1/policies/{policyId}/document?fileType=pdf|html|docx` — a
+    apólice digital."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, policy_id):
+        policy = get_object_or_404(Policy, id=policy_id)
+        data, content_type, name = policy_document.policy_document(policy, request.query_params.get("fileType", "pdf"))
+        response = HttpResponse(data, content_type=content_type)
+        response["Content-Disposition"] = f'inline; filename="{name}"'
+        return response

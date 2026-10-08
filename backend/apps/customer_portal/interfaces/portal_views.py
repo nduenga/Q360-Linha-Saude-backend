@@ -48,6 +48,35 @@ class CustomerPortalPolicyDetailView(_PortalView):
         return Response(portal_read.get_my_policy(policy_number))
 
 
+def _file(data: bytes, content_type: str, name: str) -> HttpResponse:
+    response = HttpResponse(data, content_type=content_type)
+    response["Content-Disposition"] = f'attachment; filename="{name}"'
+    return response
+
+
+class CustomerPortalPolicyDocumentView(_PortalView):
+    """A apólice digital."""
+
+    def get(self, request, policy_number: str):
+        return _file(*portal_read.my_policy_document(policy_number, request.query_params.get("fileType", "pdf")))
+
+
+class CustomerPortalPolicyStatementView(_PortalView):
+    """Declaração de cobertura (`kind=COVERAGE`) ou comprovativo de pagamento
+    (`kind=PAYMENT`, opcional `installmentNo`), gerados na hora — sem pedido."""
+
+    def get(self, request, policy_number: str):
+        kind = request.query_params.get("kind", "COVERAGE").upper()
+        if kind not in ("COVERAGE", "PAYMENT"):
+            raise ValidationError({"kind": "Must be COVERAGE or PAYMENT."})
+        raw = request.query_params.get("installmentNo")
+        try:
+            installment_no = int(raw) if raw else None
+        except ValueError as exc:
+            raise ValidationError({"installmentNo": "Must be an integer."}) from exc
+        return _file(*portal_read.my_policy_statement(policy_number, kind=kind, installment_no=installment_no))
+
+
 class CustomerPortalPolicyHistoryView(_PortalView):
     def get(self, request, policy_number: str):
         return Response({"policyNumber": policy_number, "events": portal_read.list_my_state_history(policy_number)})

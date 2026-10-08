@@ -32,6 +32,7 @@ from apps.policy.infrastructure.models import (
     PremiumInstallment,
 )
 from apps.pricing.domain.money import round_amount
+from apps.policy.application import policy_document
 from apps.quote.application import proposal_service
 from apps.quote.domain.enums import QuoteStatus
 from apps.quote.infrastructure.models import Document, Quote
@@ -282,9 +283,9 @@ def list_my_payments(*, status: str | None = None) -> dict:
 
 # ------------------------------------------------------------- documents
 def list_my_documents() -> list[dict]:
-    """Document centre (PDF section 9). Today the platform generates quote
-    proposals only; policies, receipts and certificates have no generated file
-    to list yet, so none are invented."""
+    """Document centre (PDF section 9): quote proposals and the digital policy
+    of each issued policy. Statements and receipts are generated on request
+    (`/policies/{number}/statement`)."""
     proposer_ids = _scoped_proposer_ids()
     if not proposer_ids:
         return []
@@ -308,6 +309,27 @@ def list_my_documents() -> list[dict]:
             "generatedAt": d.generated_at,
         }
         for d in documents
+    ] + _policy_document_items()
+
+
+def _policy_document_items() -> list[dict]:
+    """A apólice digital de cada apólice emitida (o `id` é o da apólice)."""
+    proposer_ids = _scoped_proposer_ids()
+    if not proposer_ids:
+        return []
+    policies = Policy.objects.filter(proposer_id__in=proposer_ids).order_by("-issued_at")
+    return [
+        {
+            "id": str(p.id),
+            "type": "APOLICE",
+            "title": f"Apólice {p.policy_number}",
+            "quoteNumber": None,
+            "policyNumber": p.policy_number,
+            "format": "PDF",
+            "fileName": f"apolice-{p.policy_number}.pdf",
+            "generatedAt": p.issued_at,
+        }
+        for p in policies
     ]
 
 
@@ -321,7 +343,10 @@ def open_my_document(document_id: uuid.UUID) -> tuple[bytes, str, str | None]:
         else None
     )
     if document is None:
-        raise PortalResourceNotFoundError("No such document")
+        policy = Policy.objects.filter(id=document_id, proposer_id__in=proposer_ids).first() if proposer_ids else None
+        if policy is None:
+            raise PortalResourceNotFoundError("No such document")
+        return policy_document.policy_document(policy, "PDF")
     return proposal_service.read_file(document), document.content_type or "application/octet-stream", document.file_name
 
 
@@ -433,3 +458,11 @@ def list_my_state_history(policy_number: str) -> list[dict]:
         {"fromStatus": h.from_status, "toStatus": h.to_status, "at": h.changed_at}
         for h in PolicyStateHistory.objects.filter(policy=policy).order_by("changed_at")
     ]
+
+
+def my_policy_document(policy_number: str, fmt: str = "PDF") -> tuple[bytes, str, str]:
+    return policy_document.policy_document(resolve_my_policy(policy_number), fmt)
+
+
+def my_policy_statement(policy_number: str, *, kind: str, installment_no: int | None) -> tuple[bytes, str, str]:
+    return policy_document.statement_document(resolve_my_policy(policy_number), kind=kind, installment_no=installment_no)

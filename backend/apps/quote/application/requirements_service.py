@@ -76,6 +76,7 @@ _CUSTOM_RULE_ITEMS = {
 def _custom_rule_item(
     rule,
     *,
+    member_id: str | None = None,
     member_name: str | None = None,
 ) -> dict[str, Any]:
     severity, code = _CUSTOM_RULE_ITEMS[rule.action]
@@ -84,7 +85,7 @@ def _custom_rule_item(
         severity,
         code,
         rule.message or describe_rule(rule),
-        member_name=member_name,
+        member_id=member_id, member_name=member_name,
         ruleCode=rule.code,
         ruleName=rule.name,
     )
@@ -94,6 +95,7 @@ def _item(
     code: str,
     message: str,
     *,
+    member_id: str | None = None,
     member_name: str | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
@@ -101,9 +103,11 @@ def _item(
         "severity": severity,
         "code": code,
         "message": message,
-        "scope": "MEMBER" if member_name else "QUOTE",
+        "scope": "MEMBER" if (member_id or member_name) else "QUOTE",
     }
 
+    if member_id:
+        item["memberId"] = member_id
     if member_name:
         item["memberName"] = member_name
 
@@ -304,24 +308,24 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
             low, high = entry.get("min", 0), entry.get("max")
             if (high is not None and age > high) or age < low:
                 member_items.append(
-                    _item("ERROR", "AGE_OUT_OF_ENTRY_RANGE", f"Idade {age} fora do intervalo de entrada do plano ({low}–{high}).", member_name=member_name, age=age)
+                    _item("ERROR", "AGE_OUT_OF_ENTRY_RANGE", f"Idade {age} fora do intervalo de entrada do plano ({low}–{high}).", member_id=member_id, member_name=member_name, age=age)
                 )
         if age is not None and is_renewal and permanence is not None and age > permanence:
             member_items.append(
-                _item("ERROR", "AGE_ABOVE_PERMANENCE_LIMIT", f"Idade {age} acima do limite de permanência/renovação do plano ({permanence}).", member_name=member_name, age=age)
+                _item("ERROR", "AGE_ABOVE_PERMANENCE_LIMIT", f"Idade {age} acima do limite de permanência/renovação do plano ({permanence}).", member_id=member_id, member_name=member_name, age=age)
             )
         if household:
             if category == "SPOUSE" and household.get("spouse") is False:
-                member_items.append(_item("ERROR", "SPOUSE_NOT_ALLOWED", "O plano não inclui cônjuge/unido de facto.", member_name=member_name))
+                member_items.append(_item("ERROR", "SPOUSE_NOT_ALLOWED", "O plano não inclui cônjuge/unido de facto.", member_id=member_id, member_name=member_name))
             max_child = household.get("dependentChildMaxAge")
             if category == "CHILD" and age is not None and max_child is not None and age > max_child:
                 member_items.append(
-                    _item("ERROR", "CHILD_AGE_LIMIT", f"Filho(a) com {age} anos: o limite para filhos a cargo é {max_child}.", member_name=member_name, age=age)
+                    _item("ERROR", "CHILD_AGE_LIMIT", f"Filho(a) com {age} anos: o limite para filhos a cargo é {max_child}.", member_id=member_id, member_name=member_name, age=age)
                 )
             student_age = household.get("studentsOnlyAboveAge")
             if category == "CHILD" and age is not None and student_age is not None and age > student_age:
                 member_items.append(
-                    _item("WARNING", "CHILD_STUDENT_PROOF", "Filho(a) acima da idade limite sem estudos: exige comprovativo de estudante.", member_name=member_name, age=age)
+                    _item("WARNING", "CHILD_STUDENT_PROOF", "Filho(a) acima da idade limite sem estudos: exige comprovativo de estudante.", member_id=member_id, member_name=member_name, age=age)
                 )
 
         exam_reasons = []
@@ -330,12 +334,12 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
         if hospital_capital is not None and exam_capital is not None and hospital_capital >= Decimal(str(exam_capital)):
             exam_reasons.append(f"capital {hospital_capital} ≥ {exam_capital}")
         if exam_reasons:
-            member_items.append(_item("WARNING", "MEDICAL_EXAM_REQUIRED", "Exames médicos exigidos: " + "; ".join(exam_reasons) + ".", member_name=member_name))
+            member_items.append(_item("WARNING", "MEDICAL_EXAM_REQUIRED", "Exames médicos exigidos: " + "; ".join(exam_reasons) + ".", member_id=member_id, member_name=member_name))
         if questionnaire_required:
-            member_items.append(_item("WARNING", "CLINICAL_QUESTIONNAIRE_REQUIRED", "Questionário clínico obrigatório.", member_name=member_name))
+            member_items.append(_item("WARNING", "CLINICAL_QUESTIONNAIRE_REQUIRED", "Questionário clínico obrigatório.", member_id=member_id, member_name=member_name))
         if qm.pre_existing_json:
             member_items.append(
-                _item("INFO", "PRE_EXISTING_DECISION", f"Preexistência: {qm.pre_existing_json.get('mode')}.", member_name=member_name, decision=qm.pre_existing_json)
+                _item("INFO", "PRE_EXISTING_DECISION", f"Preexistência: {qm.pre_existing_json.get('mode')}.", member_id=member_id, member_name=member_name, decision=qm.pre_existing_json)
             )
 
         for rule in settings.get("acceptanceRules") or []:
@@ -353,7 +357,7 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
                 continue
             code = {"DECLINE": "ACCEPTANCE_DECLINE", "MEDICAL_REVIEW": "ACCEPTANCE_MEDICAL_REVIEW"}.get(decision, "ACCEPTANCE_TECHNICAL_REVIEW")
             member_items.append(
-                _item("ERROR" if decision == "DECLINE" else "WARNING", code, f"Regra de aceitação: {rule.get('condition')}" + (f" — {rule['notes']}" if rule.get("notes") else ""), member_name=member_name)
+                _item("ERROR" if decision == "DECLINE" else "WARNING", code, f"Regra de aceitação: {rule.get('condition')}" + (f" — {rule['notes']}" if rule.get("notes") else ""), member_id=member_id, member_name=member_name)
             )
         person_facts_ = person_facts(
             age=age,
@@ -366,9 +370,10 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
         )
         for rule in custom_rules:
             if rule.scope == "PERSON" and not rule.is_pricing and rule.matches(person_facts_):
-                member_items.append(_custom_rule_item(rule, member_name=member_name))
+                member_items.append(_custom_rule_item(rule, member_id=member_id, member_name=member_name))
         items.extend(member_items)
-        members_report[member_name] = {
+        members_report[member_id] = {
+        "memberId": member_id,
         "memberName": member_name,
         "ageAtEffectiveDate": age,
         "relationshipCategory": category,

@@ -246,7 +246,7 @@ def test_eligibility_names_pending_reason_and_required_action(admin_client, tena
     result = response.data["results"][0]
     assert result["covered"] is False
     assert result["pendingReasonCode"] == "FALTA_CERTIFICADO_MATRICULA"
-    assert result["requiredAction"] == "Envie o certificado de matrícula válido do beneficiário."
+    assert result["requiredAction"] == "Falta enviar o certificado de matrícula válido do beneficiário."
 
 
 @pytest.mark.django_db
@@ -409,7 +409,8 @@ def test_beneficiaries_card_profile_and_documents(admin_client, tenant):
     assert profile["accountEmail"] == _EMAIL
     assert profile["proposers"][0]["registrationNumber"] == "886666666LA066"
 
-    assert client.get("/api/v1/customer-portal/documents").data == {"documents": []}
+    documents = client.get("/api/v1/customer-portal/documents").data["documents"]
+    assert [(d["type"], d["policyNumber"]) for d in documents] == [("APOLICE", "APO-R-006")]  # só a apólice digital
     assert client.get(f"/api/v1/customer-portal/documents/{nobody}/download").status_code == 404
 
 

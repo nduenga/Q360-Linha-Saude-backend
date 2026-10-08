@@ -2,6 +2,9 @@ from django.urls import path
 
 from apps.policy.interfaces.coverage_views import CoverageLookupView, PolicyCoverageView
 from apps.policy.interfaces.views import (
+    EmitPolicyView,
+    PolicyDocumentView,
+    PolicyDraftView,
     IssuePolicyView,
     PolicyDetailView,
     PolicyInstallmentListView,
@@ -13,6 +16,9 @@ from apps.policy.interfaces.views import (
 
 urlpatterns = [
     path("quotes/<uuid:quote_id>/policy", IssuePolicyView.as_view(), name="policy-issue"),
+    path("quotes/<uuid:quote_id>/policy-draft", PolicyDraftView.as_view(), name="policy-draft"),
+    path("quotes/<uuid:quote_id>/policy/emit", EmitPolicyView.as_view(), name="policy-emit"),
+    path("policies/<uuid:policy_id>/document", PolicyDocumentView.as_view(), name="policy-document"),
     path("coverage", CoverageLookupView.as_view(), name="coverage-lookup"),
     path("policies", PolicyListView.as_view(), name="policy-list"),
     path("policies/<uuid:policy_id>", PolicyDetailView.as_view(), name="policy-detail"),

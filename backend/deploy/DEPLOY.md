@@ -168,6 +168,33 @@ Abra `https://api.seudominio.com/api/v1/health/ready`. Deve responder OK.
 
 ---
 
+## Tarefas agendadas (cron)
+
+A API não tem fila de tarefas: dois comandos têm de ser agendados no servidor. Ambos são repetíveis sem efeitos secundários.
+
+| Comando | Para quê | Frequência |
+|---|---|---|
+| `python manage.py expire_quotes` | Marca como expiradas as cotações fora de validade. | 1 vez por dia |
+| `python manage.py close_renewed_policies` | Passa a `RENEWED` a apólice antiga quando a renovação já está em vigor. | 1 vez por dia |
+
+Exemplo (`sudo crontab -u www-data -e`; ajuste os caminhos):
+
+```
+15 2 * * * cd /opt/q360/backend && set -a && . /etc/q360.env && set +a && .venv/bin/python manage.py expire_quotes
+30 2 * * * cd /opt/q360/backend && set -a && . /etc/q360.env && set +a && .venv/bin/python manage.py close_renewed_policies
+```
+
+O `dispatch_outbox` só é preciso se ligar um broker de mensagens real; por omissão não envia nada para fora.
+
+## Ficheiros gerados (apólices e propostas)
+
+A API grava os PDFs das apólices e das propostas em `backend/media/` (`policies/` e `documents/`). **Esta pasta tem de ser persistente e entrar no backup**, ao lado da base de dados:
+
+- Num servidor normal, basta não a apagar ao atualizar o código (o `git pull` não toca nela).
+- Em Docker, monte um volume: `-v /var/lib/q360/media:/app/media`.
+
+Se um PDF de apólice se perder, a API volta a gerá-lo na hora a partir dos dados da apólice.
+
 ## Atualizar uma nova versão
 
 ```bash

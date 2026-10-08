@@ -14,12 +14,31 @@ from apps.business_config.infrastructure.models import BusinessConfiguration,Bus
 from apps.business_config.application.service import *
 from apps.business_config.interfaces.serializers import *
 from apps.foundation.application.context import CurrentTenantProvider
+from apps.foundation.domain.permissions import Permission
+from apps.foundation.domain.scopes import Scope
+from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.business_config.domain.custom_rules import field_catalog
 
-class CatalogView(APIView):
+
+class _ConfigPermissions:
+    """Ler exige o scope de leitura; escrever exige o scope de escrita e a
+    permissão de gerir configuração de preços; aprovar exige o scope de
+    aprovação (`approve = True`). Sem isto qualquer utilizador autenticado
+    alteraria tarifas."""
+
+    approve = False
+
+    def get_permissions(self):
+        if self.request.method in ("GET", "HEAD", "OPTIONS"):
+            return [require_scope(Scope.READ)()]
+        scope = Scope.APPROVE if self.approve else Scope.WRITE
+        return [require_scope(scope)(), require_permission(Permission.PRICING_CONFIG_MANAGE)()]
+
+
+class CatalogView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="getBusinessConfigurationCatalog", summary="Consultar catálogo de configurações", tags=["Configuration"], responses=BusinessConfigurationCatalogSerializer)
     def get(self,request): return Response({"items":[{**x,"formSchema":get_form_schema(x["key"]),"requiresBusinessConfirmation":True} for x in CONFIG_CATALOG]})
-class ConfigurationListCreateView(APIView):
+class ConfigurationListCreateView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="listBusinessConfigurations", summary="Listar configurações de negócio", tags=["Configuration"], responses=BusinessConfigurationListSerializer)
     def get(self,request):
         qs=BusinessConfiguration.objects.all().order_by("config_key","-version_no")
@@ -31,7 +50,7 @@ class ConfigurationListCreateView(APIView):
         s=BusinessConfigurationWriteSerializer(data=request.data);s.is_valid(raise_exception=True)
         c=create_configuration(request, s.validated_data["configKey"],s.validated_data["value"],s.validated_data["effectiveFrom"],s.validated_data.get("effectiveTo"),s.validated_data.get("metadata"))
         return Response(BusinessConfigurationSerializer(c).data,status=201)
-class ConfigurationDetailView(APIView):
+class ConfigurationDetailView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="getBusinessConfiguration", summary="Consultar configuração de negócio", tags=["Configuration"], responses=BusinessConfigurationSerializer)
     def get(self,request,configuration_id):return Response(BusinessConfigurationSerializer(get_object_or_404(BusinessConfiguration,id=configuration_id)).data)
     @extend_schema(operation_id="updateBusinessConfiguration", summary="Actualizar configuração de negócio em rascunho", tags=["Configuration"], request=BusinessConfigurationUpdateSerializer, responses=BusinessConfigurationSerializer)
@@ -46,15 +65,16 @@ class ConfigurationDetailView(APIView):
         elif a=="retire":c=retire_configuration(request,c)
         else:return Response({"detail":"Ação inválida."},status=400)
         return Response(BusinessConfigurationSerializer(c).data)
-class ConfigurationApproveView(APIView):
+class ConfigurationApproveView(_ConfigPermissions, APIView):
+    approve = True
     @extend_schema(operation_id="approveBusinessConfiguration", summary="Aprovar configuração de negócio", tags=["Configuration"], request=None, responses=BusinessConfigurationSerializer)
     def post(self,request,configuration_id):return Response(BusinessConfigurationSerializer(approve_configuration(request,get_object_or_404(BusinessConfiguration,id=configuration_id))).data)
-class DocumentListView(APIView):
+class DocumentListView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="listBusinessConfigurationDocuments", summary="Listar documentos da configuração", tags=["Configuration"], responses=BusinessConfigurationDocumentListSerializer)
     def get(self,request,configuration_id):
         docs=BusinessConfigurationDocument.objects.filter(configuration_id=configuration_id).order_by("-created_at")
         return Response({"items":BusinessConfigurationDocumentSerializer(docs,many=True).data})
-class DocumentUploadView(APIView):
+class DocumentUploadView(_ConfigPermissions, APIView):
     parser_classes=[MultiPartParser]
     @extend_schema(operation_id="uploadBusinessConfigurationDocument", summary="Anexar documento à configuração", tags=["Configuration"], request=BusinessConfigurationDocumentUploadSerializer, responses={201:BusinessConfigurationDocumentSerializer})
     def post(self,request,configuration_id):
@@ -67,14 +87,14 @@ class DocumentUploadView(APIView):
             for chunk in f.chunks():sha.update(chunk);out.write(chunk)
         d=BusinessConfigurationDocument.all_tenants.create(id=did,tenant_id=tid,configuration_id=c.id,document_type=request.data.get("documentType","BUSINESS_DOCUMENT"),original_filename=f.name[:255],content_type=f.content_type,storage_key=str(rel),checksum=sha.hexdigest(),metadata_json={},uploaded_by=str(getattr(request.user,"username","system")))
         return Response(BusinessConfigurationDocumentSerializer(d).data,status=201)
-class DocumentDownloadView(APIView):
+class DocumentDownloadView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="downloadBusinessConfigurationDocument", summary="Descarregar documento da configuração", tags=["Configuration"], responses={(200, "application/octet-stream"): OpenApiTypes.BINARY})
     def get(self,request,document_id):
         d=get_object_or_404(BusinessConfigurationDocument,id=document_id);p=Path(settings.MEDIA_ROOT)/d.storage_key
         if not p.exists():return Response({"detail":"Documento não encontrado."},status=404)
         return FileResponse(p.open("rb"),as_attachment=True,filename=d.original_filename,content_type=d.content_type or "application/octet-stream")
 
-class CustomRulesCatalogView(APIView):
+class CustomRulesCatalogView(_ConfigPermissions, APIView):
     @extend_schema(
         operation_id="getCustomRulesCatalog",
         summary="Consultar catálogo do construtor de regras personalizadas",
@@ -83,7 +103,7 @@ class CustomRulesCatalogView(APIView):
     def get(self, request):
         return Response(field_catalog())
     
-class CustomRulesListCreateView(APIView):
+class CustomRulesListCreateView(_ConfigPermissions, APIView):
     @extend_schema(
         operation_id="listCustomRules",
         summary="Consultar regras personalizadas",
@@ -137,7 +157,7 @@ class CustomRulesListCreateView(APIView):
             status=201,
         )
 
-class CustomRulesDetailView(APIView):
+class CustomRulesDetailView(_ConfigPermissions, APIView):
     @extend_schema(
         operation_id="updateCustomRules",
         summary="Actualizar regras personalizadas em DRAFT",
@@ -173,7 +193,7 @@ class CustomRulesDetailView(APIView):
             BusinessConfigurationSerializer(configuration).data
         )
         
-class CustomRulesSubmitView(APIView):
+class CustomRulesSubmitView(_ConfigPermissions, APIView):
     @extend_schema(
         operation_id="submitCustomRules",
         summary="Submeter regras personalizadas para aprovação",
@@ -198,7 +218,8 @@ class CustomRulesSubmitView(APIView):
         )
 
 
-class CustomRulesApproveView(APIView):
+class CustomRulesApproveView(_ConfigPermissions, APIView):
+    approve = True
     @extend_schema(
         operation_id="approveCustomRules",
         summary="Publicar nova versão das regras personalizadas",

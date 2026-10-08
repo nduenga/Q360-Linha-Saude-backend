@@ -736,3 +736,62 @@ class PortalToken(s.Serializer):
 
 class PortalMaskedEmail(s.Serializer):
     maskedEmail = s.CharField(help_text="Email para onde foi enviado o código, mascarado (jo***@gmail.com).")
+
+
+# ------------------------------------------------------- policy emission
+class PolicyDraftHolder(s.Serializer):
+    id = s.UUIDField()
+    name = s.CharField()
+    type = s.CharField()
+    document = s.CharField(allow_null=True)
+    email = s.CharField(allow_null=True)
+    phone = s.CharField(allow_null=True)
+
+
+class PolicyDraftMember(s.Serializer):
+    memberId = s.UUIDField()
+    name = s.CharField()
+    eligibilityDecision = s.CharField(allow_null=True)
+    policyStatus = s.CharField(help_text="ACTIVE, PENDING ou EXCLUDED (não entra na apólice).")
+
+
+class PolicyDraft(s.Serializer):
+    """Rascunho de emissão: a apólice pré-preenchida a partir da cotação."""
+
+    quoteId = s.UUIDField()
+    quoteNumber = s.CharField(allow_null=True)
+    quoteStatus = s.CharField()
+    rowVersion = s.IntegerField(help_text="Enviar em `rowVersion` ao emitir.")
+    canEmit = s.BooleanField()
+    blockingReason = s.CharField(allow_null=True)
+    warnings = s.ListField(child=s.CharField(), help_text="Avisos que não impedem a emissão (ex.: cotação já fora de validade).")
+    policyId = s.UUIDField(allow_null=True, help_text="Preenchido se a cotação já originou uma apólice.")
+    policyNumber = s.CharField(allow_null=True)
+    holder = PolicyDraftHolder()
+    plan = s.DictField(child=s.CharField(allow_null=True))
+    currencyCode = s.CharField()
+    effectiveDate = s.DateField()
+    validUntil = s.DateField(allow_null=True)
+    premium = s.DictField(child=s.CharField(allow_null=True))
+    defaults = s.DictField(help_text="termMonths, paymentFrequency, requestedStartDate, signedAt, signatureMethod, signatory{name,documentType,documentNumber,capacity}.")
+    installmentsPreview = s.DictField(help_text="Por fracionamento (ANUAL, SEMESTRAL, TRIMESTRAL, MENSAL): as prestações {installmentNo, amount, currencyCode}.")
+    paymentMethods = s.ListField(child=s.DictField())
+    members = PolicyDraftMember(many=True)
+    terms = s.DictField(allow_null=True, help_text="segment, accessSystem, coverages[], franchise, waiting[], exclusions[], conditions[].")
+
+
+class EmittedPolicy(s.Serializer):
+    id = s.UUIDField()
+    policyNumber = s.CharField(allow_null=True)
+    sourceQuoteId = s.UUIDField()
+    proposerId = s.UUIDField()
+    planId = s.UUIDField()
+    policyType = s.CharField()
+    termMonths = s.IntegerField()
+    startDate = s.DateField(allow_null=True)
+    endDate = s.DateField(allow_null=True)
+    status = s.CharField(help_text="ACTIVE se o pagamento foi registado; senão PENDING_FIRST_PREMIUM.")
+    paymentFrequency = s.CharField()
+    currencyCode = s.CharField(allow_null=True)
+    rowVersion = s.IntegerField()
+    documentPath = s.CharField(help_text="GET desta rota devolve a apólice digital.")

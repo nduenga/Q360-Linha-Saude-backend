@@ -53,6 +53,20 @@ REQUEST_TYPES: dict[str, dict] = {
 }
 
 
+# Pedidos que o cliente resolve sozinho no portal, sem esperar pelo GTE: o
+# documento é gerado na hora a partir dos dados da apólice.
+SELF_SERVICE: dict[str, str] = {
+    "DOCUMENT_COPY": (
+        "Descarregue a apólice em «Documentos» (GET /customer-portal/documents) e o cartão de cada pessoa segura "
+        "em «Cartão»: não precisa de fazer um pedido."
+    ),
+    "STATEMENT": (
+        "Descarregue a declaração de cobertura ou o comprovativo de pagamento em "
+        "GET /customer-portal/policies/{policyNumber}/statement?kind=COVERAGE|PAYMENT: não precisa de fazer um pedido."
+    ),
+}
+
+
 class PortalRequestInvalidError(DomainProblem):
     http_status = 400
     problem_code = "VALIDATION-400"

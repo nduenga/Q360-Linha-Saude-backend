@@ -313,3 +313,34 @@ def linked_account_ids(proposer_id: uuid.UUID) -> list[uuid.UUID]:
         CustomerAccountProposer.objects.filter(proposer_id=proposer_id).values_list("customer_account_id", flat=True)
     )
 
+
+
+def complete_accept_requests_for_quote(*, quote_id: uuid.UUID, policy_number: str | None) -> int:
+    """A apólice foi emitida a partir desta cotação: os pedidos de aceitação
+    (`ACCEPT_QUOTE`) ainda em aberto ficam concluídos e o cliente é avisado.
+    É o fecho do circuito — o GTE não tem de os tratar à mão."""
+    note = f"Apólice {policy_number} emitida." if policy_number else "Apólice emitida."
+    done = 0
+    for request in PortalRequest.objects.filter(
+        quote_id=quote_id, request_type="ACCEPT_QUOTE", status__in=list(rules.OPEN_STATUSES)
+    ):
+        previous = request.status
+        updated = PortalRequest.objects.filter(id=request.id, status=previous).update(
+            status=rules.COMPLETED, resolution_note=note, row_version=request.row_version + 1
+        )
+        if updated == 0:
+            continue
+        PortalRequestEvent.objects.create(
+            tenant_id=_tenant_id(), request=request, from_status=previous, to_status=rules.COMPLETED,
+            note=note, actor_type="STAFF", actor_ref="system:policy-issued",
+        )
+        notifications_service.notify_account(
+            account_id=request.customer_account_id,
+            dedupe_key=f"request:{request.id}:{rules.COMPLETED}",
+            code="REQUEST_UPDATED",
+            title=f"Pedido {request.request_number}: {rules.STATUS_LABELS[rules.COMPLETED]}",
+            body=note,
+            link=f"/portal/pedidos/{request.request_number}",
+        )
+        done += 1
+    return done

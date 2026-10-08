@@ -29,7 +29,7 @@ def test_create_and_get_proposer(admin_client):
     body = response.data
     assert set(body.keys()) == {
         "id", "proposerType", "externalReference", "displayName",
-        "nif", "registrationNumber", "email", "phone", "attributes", "status", "rowVersion",
+        "nif", "registrationNumber", "email", "phone", "address", "attributes", "status", "rowVersion",
     }
     assert body["status"] == "ACTIVE"
     assert body["rowVersion"] == 0
