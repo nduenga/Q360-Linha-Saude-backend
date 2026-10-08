@@ -68,3 +68,19 @@ desbloqueia). Ligar o backend não troca isso automaticamente em nenhuma
 página; testa os endpoints já implementados directamente (curl/Postman, ou
 a consola do browser com `fetch`) até que cada domínio seja religado do
 lado do frontend.
+
+## Base de dados completa (produção + testes)
+
+`manage.py seed_full_database` (idempotente) cria duas camadas:
+
+- **Referência** (`--profile reference`, segura em produção): tenant `q360-saude` com catálogo de
+  coberturas, produtos/planos de mercado (IND-* e GRP-*), tarifas por idade, regra de elegibilidade
+  Angola, modelo de documento, configuração de negócio publicada, parâmetros do sistema e política de
+  autoridade. Primeiro admin: `--admin-email ... --admin-password ...` (≥12 caracteres; omitir a
+  palavra-passe gera uma). Termina com um teste de fumo do pricing que é revertido.
+- **Teste** (`--profile demo`, só `DEBUG=True` ou `--allow-demo`): `seed_demo_data` + portal + `--customers N`
+  clientes (famílias/empresas) com cotações em todos os estados, apólices, prestações em atraso,
+  24 meses de sinistros/prémios, contas e pedidos do portal, equipa extra (inclui uma conta bloqueada) e o
+  tenant `demo-isolamento` para testar isolamento. `--random-seed` torna os dados reproduzíveis.
+
+Palavras-passe de teste: colaboradores `Q360Demo!2026`, clientes `Cliente!Demo2026`.

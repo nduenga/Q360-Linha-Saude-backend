@@ -343,6 +343,7 @@ def _execute(
                 commercial_adjustments=commercial_adjustments,
                 pre_existing=pre_existing,
                 custom_rules=custom_rules,
+                context=context,
             )
             PricingRun.objects.filter(id=pricing_run.id).update(
                 status=PricingRunStatus.CALCULATED.value,
@@ -415,7 +416,9 @@ def _run_calculation(
     commercial_adjustments: list[CommercialAdjustment],
     pre_existing: dict[str, dict[str, Any]],
     custom_rules: PublishedRules | None = None,
+    context: dict[str, Any] | None = None,
 ) -> Decimal:
+    context = context or {}
     custom_rules = custom_rules or PublishedRules()
     members_by_id = {str(m.id): m for m in members}
     order = 0
@@ -495,8 +498,6 @@ def _run_calculation(
     product_fact = (plan.product.code, plan.product.name) if (person_rules or quote_rules) else ()
     relationship_categories: dict[str, str] = {}
     if any(c.field == "relationship" for r in person_rules for c in r.conditions):
-        from apps.client.infrastructure.models import RelationshipCode
-
         relationship_categories = {rc.code: rc.category for rc in RelationshipCode.objects.all()}
 
     # Preserve the caller's requested memberIds order for determinism

@@ -31,3 +31,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# credenciais e dumps locais
+backend/deploy/db/CREDENCIAIS_PRODUCAO.json
