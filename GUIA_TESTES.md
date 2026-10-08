@@ -5,10 +5,11 @@ Tudo o que precisa para pôr o sistema a funcionar com dados de demonstração e
 ## 1. Como o sistema funciona (em 1 minuto)
 
 **Plataforma (backoffice)** — usada pelos colaboradores da seguradora.
-- O mediador/subscritor cria uma **cotação** para um cliente, escolhe o plano, adiciona as pessoas a segurar e calcula o prémio.
-- O aprovador **aprova ou recusa**.
-- Quando o cliente aceita, o mediador regista a **assinatura** e emite a **apólice**. A cobertura começa depois do **primeiro pagamento**.
-- A plataforma também gere produtos, planos, coberturas, tarifas, sinistralidade e auditoria.
+- O subscritor cria uma **cotação**, escolhe o produto/plano, associa o cliente e os membros e calcula o prémio.
+- A cotação segue para **subscrição**. O aprovador analisa-a e aprova ou recusa; só uma cotação aprovada pode ser contratada.
+- Depois de o cliente assinar presencialmente, um utilizador autorizado regista quem assinou, o documento, a qualidade em que assinou e a data/hora. Esse registo transforma a cotação aprovada numa **apólice**.
+- A apólice começa **a aguardar o primeiro pagamento**. Só depois de o pagamento ser registado fica activa; a data de início respeita a assinatura e o pagamento.
+- A equipa passa então a consultar os dados da apólice, pessoas seguradas, prestações e renovação no mesmo backend que alimenta o Portal.
 
 **Portal Cliente** — usado pelo cliente final, só para consultar e pedir.
 - Mostra as cotações (com estado), as apólices, coberturas, pessoas seguradas, pagamentos e documentos.
@@ -40,12 +41,12 @@ python manage.py migrate
 python manage.py seed_demo_data      # plataforma + portal (cria o tenant "demo-saude")
 ```
 
-Pode repetir à vontade: repõe as palavras-passe e o estado dos clientes demo.
+Pode repetir à vontade **apenas em desenvolvimento**: repõe as palavras-passe e o estado dos clientes demo.
 Para recriar só a parte do portal: `python manage.py seed_portal_demo`.
 
 No fim, o comando imprime o **id do tenant** — anote-o.
 
-### 2.2 Email: ver os códigos sem usar caixas de correio reais
+### 2.2 Email local: ver os códigos sem usar caixas de correio reais
 O `backend/.env` usa SMTP real (Gmail). Para testar sem enviar emails, mude **temporariamente** para:
 
 ```
@@ -53,17 +54,19 @@ EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
 ```
 
 Os códigos passam a aparecer **no terminal do backend** («O código ... é: 123456»).
-Se preferir receber emails reais, mantenha o SMTP: os clientes demo têm os emails `fabioaderio@gmail.com`, `devbackend86@gmail.com` e `fabiongila@gmail.com`.
+Se preferir receber os códigos nas caixas de correio, mantenha o SMTP configurado. Os três registos de demonstração para primeiro acesso estão associados a:
 
 ### 2.3 Apontar o Portal Cliente para o tenant demo
 Em `Q360-Linha-Sa-de-frontend/.env.local`:
 
 ```
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
-NEXT_PUBLIC_CUSTOMER_PORTAL_TENANT_ID=<id do tenant demo-saude impresso pelo seeder>
+VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_CUSTOMER_PORTAL_TENANT_ID=<id do tenant demo-saude impresso pelo seeder>
 ```
 
-### 2.4 Arrancar (3 terminais)
+Reinicie o Vite depois de alterar estas variáveis.
+
+### 2.4 Arrancar (2 terminais)
 
 | O quê | Pasta | Comando | Endereço |
 |---|---|---|---|
@@ -89,20 +92,21 @@ Entrada: http://localhost:5173/login (utilizador ou email + palavra-passe).
 
 ### Portal Cliente — clientes
 
-**Com conta** (palavra-passe `Cliente!Demo2026`):
+**Dados de demonstração** (palavra-passe inicial `Cliente!Demo2026` para as contas pré-configuradas):
 
 | Cliente | Email | O que tem |
 |---|---|---|
-| Ana Silva | `fabioaderio@gmail.com` | apólice activa, prestação em atraso e outra a vencer, cotação aprovada por aceitar, 2 pedidos, 1 mensagem |
+| Ana Silva | `helibrando@gmail.com` | apólice activa, prestação em atraso e outra a vencer, cotação aprovada por aceitar, 2 pedidos, 1 mensagem |
 | Diana Lopes | `diana.lopes@demo.q360.local` | só cotações (em análise e recusada; o rascunho não aparece) |
 
-**Sem conta** (para testar «Criar a minha palavra-passe») — o seeder imprime as referências exactas; o número da apólice (`APO-n`) e da cotação (`COT-n`) dependem da base:
+**Teste de primeiro acesso por email** — use o número exato da apólice (`APO-n`) impresso pelo seeder e o documento correspondente:
 
 | Cliente | Referência | Documento | Cenário |
 |---|---|---|---|
-| Carlos Mendes | a apólice dele | `000000002LA002` | apólice a aguardar o 1.º pagamento |
-| Empresa Kilamba | a apólice dela | `541000003LA003` | apólice a terminar em 45 dias (renovação) |
-| Mariana Costa | a cotação dela | `000000005LA005` | **sem email no registo** → erro esperado |
+| Ana Silva | apólice impressa pelo seeder | `000000001LA001` | apólice activa e cenário completo do Portal; código para `helibrando@gmail.com` |
+| Empresa Kilamba | apólice impressa pelo seeder | `541000003LA003` | apólice a terminar em 45 dias; código para `fabiongila@gmail.com` |
+| Carlos Mendes | apólice impressa pelo seeder | `000000002LA002` | apólice a aguardar o 1.º pagamento; código para `sethlussueki@gmail.com` |
+| Mariana Costa | cotação impressa pelo seeder | `000000005LA005` | sem email no registo → erro esperado |
 
 Portal: abra-o a partir do mesmo frontend em http://localhost:5173. O Portal Cliente já está integrado no frontend; não arranque o projecto legado separado na porta `3000`.
 
@@ -111,16 +115,16 @@ Portal: abra-o a partir do mesmo frontend em http://localhost:5173. O Portal Cli
 Cada teste diz o que fazer e o que deve acontecer.
 
 ### 4.1 Entrar e primeiro acesso
-1. **Entrar com conta.** `/acesso` → `fabioaderio@gmail.com` + `Cliente!Demo2026` → entra no **Resumo**.
+1. **Entrar com conta.** `/portal-cliente/acesso` → `helibrando@gmail.com` + `Cliente!Demo2026` → entra no **Resumo**.
 2. **Palavra-passe errada.** Escreva uma errada → «Email ou palavra-passe incorretos». À 5.ª tentativa → conta bloqueada 30 minutos.
-3. **Primeiro acesso.** `/acesso` → «Criar a minha palavra-passe» → referência da apólice do **Carlos** + documento `000000002LA002` → aparece o email mascarado → copie o código do terminal (ou da caixa de correio) → escolha uma palavra-passe de 10+ caracteres → entra. Saia e volte a entrar com email + palavra-passe.
+3. **Primeiro acesso.** No login, clique em «Criar palavra-passe» (ou abra `/portal-cliente/primeiro`). Use a referência impressa pelo seeder e o documento da Ana, Carlos ou Empresa Kilamba conforme a tabela acima. Confirme o email mascarado, copie o código do terminal do backend (email de consola) ou da caixa de correio (SMTP), introduza o código e escolha uma palavra-passe com 10+ caracteres. «Guardar e entrar» deve abrir o Resumo. Saia e volte a entrar com o email e a nova palavra-passe.
 4. **Palavra-passe fraca.** No passo anterior, tente `1234567890` → recusada com explicação, e o código **continua válido**.
 5. **Sem email.** Primeiro acesso com a cotação da **Mariana** + `000000005LA005` → «Ainda não temos um email registado… contacte o seu mediador».
 6. **Documento errado.** Qualquer referência com documento errado → «O número de documento não corresponde».
-7. **Esqueci-me.** `/acesso` → «Esqueci-me» → email da Ana → código → nova palavra-passe → entra. Com um email inexistente, o ecrã responde igual e não chega código.
+7. **Esqueci-me.** `/portal-cliente/acesso` → «Esqueci-me» → email da Ana → código → nova palavra-passe → entra. Com um email inexistente, o ecrã responde igual e não chega código.
 8. **Sessão.** Passados 30 minutos pede nova entrada.
 
-> Para repetir o teste 3 com o Carlos, volte a correr `python manage.py seed_portal_demo` (repõe-no sem conta).
+> Para repetir o teste com Carlos ou Empresa Kilamba, volte a correr `python manage.py seed_portal_demo` em desenvolvimento: repõe esses clientes sem palavra-passe. A Ana já tem uma palavra-passe demo, mas o fluxo de primeiro acesso também envia um código para ela e permite defini-la novamente.
 
 ### 4.2 Dentro do portal (entrar como **Ana**)
 | Onde | O que deve ver |
@@ -216,7 +220,22 @@ $pay = @{ paidAt=(Get-Date).ToUniversalTime().ToString('o'); paymentReference='T
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/policies/$($policy.id)/installments/1/payment" -Headers $h -ContentType 'application/json' -Body $pay
 ```
 
-   A Diana passa a ver a apólice no portal; para entrar pela primeira vez com a apólice, use o §4.1 com o email dela (`diana.lopes@demo.q360.local` já tem conta e palavra-passe).
+**Como a assinatura presencial fica registada:** no pedido que emite a apólice, `signatureMethod='PRESENCIAL'` identifica que o cliente assinou fisicamente. O utilizador da plataforma preenche também o nome, tipo/número do documento, qualidade de representação (`TOMADOR`, `REPRESENTANTE_LEGAL` ou `PROCURADOR`) e a data/hora real da assinatura. Não se deve marcar uma cotação como assinada antes de o documento físico ter sido assinado.
+
+> **Limite actual da interface:** ainda não existe um formulário/botão de emissão da apólice no ecrã da plataforma. Por isso, neste momento, o utilizador autorizado regista a assinatura presencial através do pedido API acima (`POST /api/v1/quotes/{quoteId}/policy`). A plataforma não tem actualmente um campo visual para carregar/arquivar o documento físico assinado. O registo do método e dos dados do signatário fica na API; a emissão e o primeiro pagamento são operações separadas.
+
+A Diana passa a ver a apólice no Portal depois de emitida; para a tornar activa, registe também o primeiro pagamento. A conta demo dela já está associada ao registo e pode entrar com a palavra-passe demo.
+
+### Gestão de uma apólice, em termos simples
+
+1. **Preparar:** o subscritor cria uma cotação, escolhe o plano, inclui as pessoas e calcula o prémio.
+2. **Decidir:** a equipa de subscrição avalia e aprova ou recusa a cotação.
+3. **Formalizar:** se o cliente aceitar e assinar presencialmente, o utilizador autorizado regista os dados do signatário e a data/hora. No sistema actual, faz este passo no endpoint de emissão da apólice; o método é `PRESENCIAL`.
+4. **Emitir:** a cotação aprovada passa a apólice e fica **Pendente do primeiro pagamento**. A assinatura, por si só, não activa a cobertura.
+5. **Activar:** o utilizador regista o recebimento da primeira prestação. A apólice passa a **Activa**; a data de início é calculada para respeitar a data mais tardia entre assinatura e pagamento.
+6. **Acompanhar:** a equipa consulta estado, condições contratadas, membros e prestações; pode acompanhar renovações. O cliente vê a mesma apólice no Portal e pode consultar/pedir alterações, mas não altera directamente o contrato.
+
+No fluxo do §6.1, teste os passos 1–2 na plataforma, o passo 3–4 pelo endpoint documentado e o passo 5 pela API de pagamento. Depois, confirme a apólice do cliente no Portal. Para o primeiro acesso de Ana, Carlos ou Empresa Kilamba, use o email e a referência da tabela do §3.
 
 ### 6.2 Outras áreas (rápido)
 | Área | O que testar |
@@ -235,7 +254,7 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/policies/$($po
 
 | Sintoma | Causa provável |
 |---|---|
-| Portal: «Tenant…» / 404 ao entrar | o `NEXT_PUBLIC_CUSTOMER_PORTAL_TENANT_ID` não é o do tenant `demo-saude` |
+| Portal: «Tenant…» / 404 ao entrar | `VITE_CUSTOMER_PORTAL_TENANT_ID` não é o UUID do tenant `demo-saude`, ou o Vite não foi reiniciado |
 | 500 em `/auth/login` com «column … does not exist» | falta `python manage.py migrate` |
 | Não chega o código | está a usar SMTP real: veja o terminal se mudou para o backend de consola (§2.2), ou veja o spam |
 | «Conta temporariamente bloqueada» | 5 tentativas falhadas: espere 30 minutos ou volte a correr `seed_portal_demo` |
@@ -248,5 +267,7 @@ O deploy do frontend publica a Plataforma e o Portal Cliente juntos. Não há
 um segundo deploy nem uma segunda aplicação web para o portal.
 
 - Desligar o login antigo: `CUSTOMER_PORTAL_LEGACY_LOGIN_ENABLED=false`.
-- Não correr `seed_demo_data` nem `seed_portal_demo` (criam palavras-passe fixas).
-- Aplicar as migrações do `customer_portal` (0002 e 0003).
+- Não correr `seed_demo_data` nem `seed_portal_demo` (criam cenários fictícios e palavras-passe fixas; os comandos também recusam execução com `DEBUG=False`).
+- Para preparar teste real de email no tenant, usar apenas `prepare_portal_test_accounts --tenant-id <UUID> --confirm-production`, depois de confirmar que os três clientes e suas apólices/cotações já existem nesse ambiente.
+- Configurar SMTP de produção e verificar que as três caixas autorizadas recebem email. Nunca usar o backend de email de consola em produção e nunca copiar códigos OTP para logs ou documentação.
+- Antes de usar o Portal no ambiente, aplicar todas as migrações pendentes com `python manage.py migrate`. Isso inclui as migrações do `customer_portal` (0001 a 0004, incluindo as contas do Portal).
