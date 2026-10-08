@@ -21,6 +21,9 @@ CONFIG_CATALOG=[
 {"key":"proposal.texts","category":"DOCUMENTS","label":"Textos e cláusulas","priority":"HIGH","value_type":"object"},
 {"key":"network.rules","category":"NETWORK","label":"Rede convencionada e livre escolha","priority":"MEDIUM","value_type":"object"},
 {"key":"foreign_coverage.rules","category":"NETWORK","label":"Cobertura no estrangeiro","priority":"MEDIUM","value_type":"object"},
-{"key":"security.approval_rules","category":"SECURITY","label":"Aprovação e autonomia","priority":"HIGH","value_type":"object"}
+{"key":"security.approval_rules","category":"SECURITY","label":"Aprovação e autonomia","priority":"HIGH","value_type":"object"},
+{"key":"security.role_permissions","category":"SECURITY","label":"Permissões por perfil","priority":"HIGH","value_type":"object"},
+{"key":"rules.custom","category":"RULES","label":"Regras personalizadas (Quando… então…)","priority":"HIGH","value_type":"object"},
+{"key":"proposal.branding","category":"PROPOSAL","label":"Identidade visual dos documentos","priority":"MEDIUM","value_type":"object"}
 ]
 CATALOG_BY_KEY={x["key"]:x for x in CONFIG_CATALOG}
