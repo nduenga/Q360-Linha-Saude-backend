@@ -59,11 +59,11 @@ def validate_pre_existing_decision(
     warnings: list[dict[str, str]] = []
 
     if not isinstance(raw, dict):
-        raise _err("decision must be an object")
+        raise _err("decision tem de ser um objeto")
     raw = dict(raw)
     mode = raw.get("mode")
     if mode not in PRE_EXISTING_MODES:
-        raise _err(f"mode must be one of {list(PRE_EXISTING_MODES)}")
+        raise _err(f"mode tem de ser um de {list(PRE_EXISTING_MODES)}")
 
     # Política de negócio por gravidade: restringe os tratamentos permitidos
     # e fornece os valores por omissão (carência, sobreprémio, sublimite).
@@ -87,14 +87,14 @@ def validate_pre_existing_decision(
             raw["sublimitAmount"] = rule["sublimit"]
 
     if segment == "INDIVIDUAL_FAMILY" and mode not in _INDIVIDUAL_MODES:
-        raise _err(f"{mode} only applies to GROUP plans with mandatory adhesion")
+        raise _err(f"{mode} só se aplica a planos GROUP com adesão obrigatória")
     if segment == "GROUP":
         if mode == "FULL_ACCEPTANCE" and adhesion != "MANDATORY":
-            raise _err("FULL_ACCEPTANCE only applies to GROUP plans with MANDATORY adhesion")
+            raise _err("FULL_ACCEPTANCE só se aplica a planos GROUP com adesão obrigatória (MANDATORY)")
         if mode in ("SPECIFIC_EXCLUSION", "ACCEPTED_WITH_WAITING", "ACCEPTED_WITH_LOADING"):
-            raise _err(f"{mode} is an individual-insurance treatment; a GROUP plan accepts with sublimit or fully")
+            raise _err(f"{mode} é um tratamento do seguro individual; um plano GROUP aceita com sublimite ou na totalidade")
         if mode == "TOTAL_EXCLUSION" and adhesion == "MANDATORY":
-            raise _err("A GROUP plan with mandatory adhesion accepts pre-existing conditions (sublimit or fully)")
+            raise _err("Um plano GROUP com adesão obrigatória aceita doenças preexistentes (com sublimite ou na totalidade)")
 
     decision: dict[str, Any] = {"mode": mode}
     if severity is not None:
@@ -102,7 +102,7 @@ def validate_pre_existing_decision(
     if mode == "ACCEPTED_WITH_WAITING":
         months = raw.get("waitingMonths")
         if isinstance(months, bool) or not isinstance(months, int) or not 12 <= months <= 24:
-            raise _err("waitingMonths must be an integer between 12 and 24")
+            raise _err("waitingMonths tem de ser um número inteiro entre 12 e 24")
         decision["waitingMonths"] = months
         if segment == "INDIVIDUAL_FAMILY" and settings.get("tier") != "SUPERIOR":
             warnings.append(
@@ -121,14 +121,14 @@ def validate_pre_existing_decision(
     if mode == "SPECIFIC_EXCLUSION":
         condition = (raw.get("condition") or "").strip() if isinstance(raw.get("condition"), str) else ""
         if not condition:
-            raise _err("SPECIFIC_EXCLUSION needs the declared condition ('condition')")
+            raise _err("SPECIFIC_EXCLUSION exige a doença declarada ('condition')")
         decision["condition"] = condition
     elif isinstance(raw.get("condition"), str) and raw["condition"].strip():
         decision["condition"] = raw["condition"].strip()
 
     # PDF: sem questionário clínico não há aceitação expressa no individual.
     if segment == "INDIVIDUAL_FAMILY" and mode != "TOTAL_EXCLUSION" and not raw.get("clinicalQuestionnaireCompleted"):
-        raise _err("accepting a pre-existing condition in individual insurance requires the clinical questionnaire (clinicalQuestionnaireCompleted=true)")
+        raise _err("aceitar uma doença preexistente no seguro individual exige o questionário clínico (clinicalQuestionnaireCompleted=true)")
     if raw.get("clinicalQuestionnaireCompleted"):
         decision["clinicalQuestionnaireCompleted"] = True
     return decision, warnings

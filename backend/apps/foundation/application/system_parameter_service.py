@@ -37,7 +37,7 @@ class SystemParameterConflictError(DomainProblem):
 def _definition(code: str):
     definition = DEFINITIONS.get(code)
     if definition is None:
-        raise UnknownSystemParameterError(f"Unknown system parameter '{code}'")
+        raise UnknownSystemParameterError(f"Parâmetro de sistema '{code}' desconhecido")
     return definition
 
 
@@ -98,7 +98,7 @@ def set_value(*, code: str, value: Any, reason: str | None, row_version: int, ac
     definition = _definition(code)
     if definition.category != OPERATIONAL:
         raise StructuralParameterError(
-            f"'{code}' is a structural parameter (part of the calculation engine): changing it needs a system evolution"
+            f"'{code}' é um parâmetro estrutural (faz parte do motor de cálculo): alterá-lo exige uma evolução do sistema"
         )
     reason = require_reason(reason)
     clean = validate_value(definition, value)
@@ -110,12 +110,12 @@ def set_value(*, code: str, value: Any, reason: str | None, row_version: int, ac
         row = SystemParameter.objects.select_for_update().filter(code=code).first()
         if row is None:
             if row_version != 0:
-                raise SystemParameterConflictError(f"'{code}' has no stored value yet: rowVersion must be 0")
+                raise SystemParameterConflictError(f"'{code}' ainda não tem valor guardado: a versão (rowVersion) tem de ser 0")
             SystemParameter.objects.create(tenant_id=tenant_id, code=code, value_json=clean, updated_by=actor_id)
         else:
             if row.row_version != row_version:
                 raise SystemParameterConflictError(
-                    f"'{code}' rowVersion {row_version} does not match the current version {row.row_version}"
+                    f"A versão (rowVersion) {row_version} de '{code}' não coincide com a versão atual {row.row_version}"
                 )
             SystemParameter.objects.filter(id=row.id).update(value_json=clean, updated_by=actor_id, row_version=row_version + 1)
         _record_revision(code=code, action=action, value=clean, reason=reason)
@@ -138,7 +138,7 @@ def rollback(*, code: str, revision_no: int, reason: str | None) -> dict[str, An
     reason = require_reason(reason)
     revision = SystemParameterRevision.objects.filter(code=code, revision_no=revision_no).first()
     if revision is None:
-        raise UnknownSystemParameterError(f"'{code}' has no revision {revision_no}")
+        raise UnknownSystemParameterError(f"'{code}' não tem a revisão {revision_no}")
     current = SystemParameter.objects.filter(code=code).first()
     return set_value(
         code=code,

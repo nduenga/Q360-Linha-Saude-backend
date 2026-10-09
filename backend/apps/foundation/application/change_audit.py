@@ -27,7 +27,7 @@ class ReasonRequiredError(DomainProblem):
 def require_reason(reason: str | None, *, min_length: int = MIN_REASON_LENGTH) -> str:
     cleaned = (reason or "").strip()
     if len(cleaned) < min_length:
-        raise ReasonRequiredError(f"A justification ('reason') of at least {min_length} characters is required")
+        raise ReasonRequiredError(f"É obrigatória uma justificação ('reason') com pelo menos {min_length} caracteres")
     return cleaned
 
 

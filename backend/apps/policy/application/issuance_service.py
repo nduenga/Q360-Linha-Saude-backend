@@ -85,9 +85,9 @@ def issue_policy(
     correlation_id: str | None,
 ) -> Policy:
     if quote.status != QuoteStatus.APPROVED.value:
-        raise PolicyStateError(f"Quote {quote.id} is {quote.status}; only an APPROVED quote can be signed")
+        raise PolicyStateError(f"A cotação {quote.id} está em {quote.status}; só uma cotação APROVADA (APPROVED) pode ser assinada")
     if quote.valid_until is not None and signed_at.date() > quote.valid_until:
-        raise PolicyStateError(f"Quote {quote.id} expired on {quote.valid_until}; a new quote is required")
+        raise PolicyStateError(f"A cotação {quote.id} expirou em {quote.valid_until}; é necessária uma nova cotação")
 
     if requested_start_date is not None:
         # OD-APO-003: never before the quote's effectiveDate (the tarifa
@@ -98,18 +98,17 @@ def issue_policy(
         # register_first_premium_payment().
         if requested_start_date < quote.effective_date or requested_start_date <= signed_at.date():
             raise InvalidStartDateError(
-                f"requestedStartDate {requested_start_date} must be on/after the quote's effectiveDate "
-                f"({quote.effective_date}) and strictly after the signature date ({signed_at.date()})"
+                f"A data de início pedida ({requested_start_date}) tem de ser igual ou posterior à data de início da cotação ({quote.effective_date}) e posterior à data de assinatura ({signed_at.date()})"
             )
 
     snapshot = (
         QuoteSnapshot.objects.filter(quote=quote, snapshot_type="APPROVAL").order_by("-snapshot_no").first()
     )
     if snapshot is None:
-        raise PolicyStateError(f"Quote {quote.id} has no APPROVAL snapshot; cannot determine contracted terms")
+        raise PolicyStateError(f"A cotação {quote.id} não tem registo de aprovação (snapshot); não é possível determinar os termos contratados")
 
     if Policy.objects.filter(source_quote=quote).exists():
-        raise DuplicatePolicyError(f"Quote {quote.id} already produced a Policy")
+        raise DuplicatePolicyError(f"A cotação {quote.id} já originou uma apólice")
 
     tenant_id = CurrentTenantProvider.require()
     actor = CurrentActorProvider.get()
@@ -136,9 +135,9 @@ def issue_policy(
             if updated == 0:
                 quote.refresh_from_db()
                 if quote.status != QuoteStatus.APPROVED.value:
-                    raise PolicyStateError(f"Quote {quote.id} is {quote.status}; only an APPROVED quote can be signed")
+                    raise PolicyStateError(f"A cotação {quote.id} está em {quote.status}; só uma cotação APROVADA (APPROVED) pode ser assinada")
                 raise RowVersionMismatchError(
-                    f"Quote {quote.id} rowVersion {row_version} does not match the current version"
+                    f"A versão da cotação {quote.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
                 )
 
             policy = Policy.objects.create(
@@ -379,15 +378,15 @@ def register_first_premium_payment(
     correlation_id: str | None,
 ) -> Policy:
     if policy.status != PolicyStatus.PENDING_FIRST_PREMIUM.value:
-        raise PolicyStateError(f"Policy {policy.id} is {policy.status}; only PENDING_FIRST_PREMIUM can be activated")
+        raise PolicyStateError(f"A apólice {policy.id} está em {policy.status}; só uma apólice PENDING_FIRST_PREMIUM (a aguardar a 1.ª prestação) pode ser ativada")
 
     installment = PremiumInstallment.objects.filter(policy=policy, installment_no=1, status="DUE").first()
     if installment is None:
-        raise ReferencedEntityNotFoundError(f"Policy {policy.id} has no DUE first installment")
+        raise ReferencedEntityNotFoundError(f"A apólice {policy.id} não tem a 1.ª prestação por pagar")
 
     signature = PolicySignature.objects.filter(policy=policy).first()
     if signature is None:
-        raise PolicyStateError(f"Policy {policy.id} has no signature on record")
+        raise PolicyStateError(f"A apólice {policy.id} não tem assinatura registada")
 
     tenant_id = CurrentTenantProvider.require()
     actor = CurrentActorProvider.get()
@@ -409,9 +408,9 @@ def register_first_premium_payment(
         if updated == 0:
             policy.refresh_from_db()
             if policy.status != PolicyStatus.PENDING_FIRST_PREMIUM.value:
-                raise PolicyStateError(f"Policy {policy.id} is {policy.status}; only PENDING_FIRST_PREMIUM can be activated")
+                raise PolicyStateError(f"A apólice {policy.id} está em {policy.status}; só uma apólice PENDING_FIRST_PREMIUM (a aguardar a 1.ª prestação) pode ser ativada")
             raise RowVersionMismatchError(
-                f"Policy {policy.id} rowVersion {row_version} does not match the current version"
+                f"A versão da apólice {policy.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
             )
 
         PremiumInstallment.objects.filter(id=installment.id).update(
@@ -495,3 +494,76 @@ def _create_remaining_installments(*, policy: Policy, start_date: datetime.date,
             currency_code=policy.currency_code,
             status="DUE",
         )
+
+
+def effective_installment_status(installment: PremiumInstallment, today: datetime.date | None = None) -> str:
+    """`DUE` com vencimento já passado conta como `OVERDUE` (nada marca o atraso
+    na base de dados; deduz-se da data)."""
+    today = today or timezone_now().date()
+    if installment.status == "DUE" and installment.due_date < today:
+        return "OVERDUE"
+    return installment.status
+
+
+def register_installment_payment(
+    *,
+    policy: Policy,
+    installment_no: int,
+    paid_at: datetime.datetime,
+    payment_reference: str | None,
+    payment_method: str | None,
+    correlation_id: str | None,
+) -> PremiumInstallment:
+    """Regista o pagamento de uma prestação **posterior à 1.ª** de uma apólice em
+    vigor. As prestações pagam-se por ordem: a anterior tem de estar paga."""
+    if installment_no < 2:
+        raise ReferencedEntityNotFoundError("A 1.ª prestação regista-se com o fluxo de ativação da apólice")
+    if policy.status != PolicyStatus.ACTIVE.value:
+        raise PolicyStateError(
+            f"A apólice {policy.policy_number} está em {policy.status}; só se registam pagamentos em apólices ativas (ACTIVE)"
+        )
+    if paid_at.date() > timezone_now().date():
+        raise InvalidStartDateError("A data de pagamento não pode estar no futuro")
+
+    installment = PremiumInstallment.objects.filter(policy=policy, installment_no=installment_no).exclude(status="VOID").first()
+    if installment is None:
+        raise ReferencedEntityNotFoundError(f"A apólice {policy.policy_number} não tem a prestação {installment_no}")
+    if installment.status == "PAID":
+        raise PolicyStateError(f"A prestação {installment_no} da apólice {policy.policy_number} já está paga")
+    unpaid_before = (
+        PremiumInstallment.objects.filter(policy=policy, installment_no__lt=installment_no)
+        .exclude(status__in=("PAID", "VOID"))
+        .order_by("installment_no")
+        .first()
+    )
+    if unpaid_before is not None:
+        raise PolicyStateError(f"Registe primeiro o pagamento da prestação {unpaid_before.installment_no}")
+
+    actor = CurrentActorProvider.get()
+    actor_id = actor.actor_id if actor else "unknown"
+    with transaction.atomic():
+        updated = PremiumInstallment.objects.filter(id=installment.id).exclude(status="PAID").update(
+            status="PAID",
+            paid_at=paid_at,
+            payment_reference=payment_reference,
+            payment_method=payment_method,
+            registered_by=actor_id,
+        )
+        if updated == 0:
+            raise PolicyStateError(f"A prestação {installment_no} da apólice {policy.policy_number} já está paga")
+    installment.refresh_from_db()
+    _audit.record(
+        action="policy.installment_paid",
+        entity_type="Policy",
+        entity_id=str(policy.id),
+        correlation_id=correlation_id,
+        metadata={"installmentNo": installment_no, "paymentReference": payment_reference},
+    )
+    _outbox.append(
+        aggregate_type="Policy",
+        aggregate_id=str(policy.id),
+        event_type="POLICY.INSTALLMENT.PAID",
+        correlation_id=correlation_id,
+        payload={"policyId": str(policy.id), "policyNumber": policy.policy_number, "installmentNo": installment_no},
+    )
+    return installment

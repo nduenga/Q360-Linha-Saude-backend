@@ -109,7 +109,7 @@ def _check_rules(key: str, value: dict[str, Any]) -> None:
     for row in value.get("premiums") or []:
         low, high = row.get("age_from"), row.get("age_to")
         if high is not None and low is not None and high < low:
-            raise InvalidConfiguration(f"premiums: age_to ({high}) < age_from ({low})")
+            raise InvalidConfiguration(f"premiums: age_to ({high}) é inferior a age_from ({low})")
     for row in value.get("items") or []:
         if key == "product.age_limits" and row.get("renewal_max_age") is not None and row.get("entry_max_age") is not None:
             if row["renewal_max_age"] < row["entry_max_age"]:

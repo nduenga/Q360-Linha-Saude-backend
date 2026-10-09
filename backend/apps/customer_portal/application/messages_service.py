@@ -31,15 +31,15 @@ def _tenant_id():
 def _clean_body(body: str) -> str:
     body = (body or "").strip()
     if not body:
-        raise PortalRequestInvalidError("body is required")
+        raise PortalRequestInvalidError("A mensagem (body) é obrigatória")
     if len(body) > MAX_BODY:
-        raise PortalRequestInvalidError(f"body must have at most {MAX_BODY} characters")
+        raise PortalRequestInvalidError(f"A mensagem (body) pode ter no máximo {MAX_BODY} caracteres")
     return body
 
 
 def _check_context_type(context_type: str) -> None:
     if context_type not in CONTEXT_TYPES:
-        raise PortalRequestInvalidError(f"contextType must be one of {list(CONTEXT_TYPES)}")
+        raise PortalRequestInvalidError(f"O contexto (contextType) tem de ser um de {list(CONTEXT_TYPES)}")
 
 
 def _resolve(context_type: str, ref: str, *, proposer_ids: list[uuid.UUID] | None):
@@ -58,7 +58,7 @@ def _resolve(context_type: str, ref: str, *, proposer_ids: list[uuid.UUID] | Non
         queryset = queryset.exclude(status=QuoteStatus.DRAFT.value) if proposer_ids is not None else queryset
     row = queryset.first()
     if row is None:
-        raise PortalResourceNotFoundError(f"No {context_type.lower()} found for this reference")
+        raise PortalResourceNotFoundError(f"Não foi encontrado nenhum(a) {context_type.lower()} para esta referência")
     return row
 
 

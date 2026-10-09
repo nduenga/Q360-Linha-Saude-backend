@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -20,7 +21,11 @@ from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.policy.application import emission_service, policy_document
-from apps.policy.application.issuance_service import issue_policy, register_first_premium_payment
+from apps.policy.application.issuance_service import (
+    issue_policy,
+    register_first_premium_payment,
+    register_installment_payment,
+)
 from apps.policy.infrastructure.models import Policy, PolicyMember, PolicySignature, PremiumInstallment
 from apps.policy.interfaces.serializers import (
     EmitPolicyRequestSerializer,
@@ -133,26 +138,36 @@ class PolicyInstallmentListView(APIView):
 
 @requires_idempotency
 class RegisterFirstPremiumPaymentView(APIView):
-    """`POST /api/v1/policies/{policyId}/installments/1/payment` — Decreto
-    2/02 art. 17.º: the 1.ª fracção turns `PENDING_FIRST_PREMIUM` into
-    `ACTIVE` and starts the risk (ROADMAP_APOLICES.md Fase 3). Only the
-    first installment is handled here — recurring installments/suspension
-    for missed payments are Fase 7, not yet built."""
+    """`POST /api/v1/policies/{policyId}/installments/{n}/payment` — regista o
+    pagamento de uma prestação.
+
+    * n = 1: Decreto 2/02 art. 17.º, a 1.ª fração passa `PENDING_FIRST_PREMIUM`
+      a `ACTIVE` e começa o risco (exige `rowVersion`).
+    * n >= 2: apólice ativa; as prestações pagam-se por ordem.
+
+    A suspensão por falta de pagamento (Fase 7) ainda não existe."""
 
     permission_classes = [require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_APPROVE)]
 
     def post(self, request, policy_id, installment_no):
         policy = get_object_or_404(Policy, id=policy_id)
-        if installment_no != 1:
-            from apps.policy.domain.errors import ReferencedEntityNotFoundError
-
-            raise ReferencedEntityNotFoundError(
-                "Only the first installment can be registered here — recurring installment payments "
-                "are not yet built (ROADMAP_APOLICES.md Fase 7)"
-            )
         body = RegisterFirstPremiumPaymentRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         data = body.validated_data
+        if installment_no != 1:
+            installment = register_installment_payment(
+                policy=policy,
+                installment_no=installment_no,
+                paid_at=data["paidAt"],
+                payment_reference=data["paymentReference"],
+                payment_method=data["paymentMethod"],
+                correlation_id=get_correlation_id(),
+            )
+            payload = dict(PolicySerializer(policy).data)
+            payload["installment"] = PremiumInstallmentSerializer(installment).data
+            return Response(payload)
+        if data["rowVersion"] is None:
+            raise ValidationError({"rowVersion": "A versão (rowVersion) é obrigatória ao registar a 1.ª prestação."})
         updated = register_first_premium_payment(
             policy=policy,
             paid_at=data["paidAt"],
@@ -161,7 +176,74 @@ class RegisterFirstPremiumPaymentView(APIView):
             row_version=data["rowVersion"],
             correlation_id=get_correlation_id(),
         )
-        return Response(PolicySerializer(updated).data)
+        payload = dict(PolicySerializer(updated).data)
+        payload["installment"] = PremiumInstallmentSerializer(
+            PremiumInstallment.objects.get(policy=updated, installment_no=1)
+        ).data
+        return Response(payload)
+
+
+class InstallmentListView(APIView):
+    """`GET /api/v1/installments` — cobranças: as prestações de todas as
+    apólices, para o GTE ver o que está por pagar e registar pagamentos.
+
+    Filtros: `status` (DUE, OVERDUE, PAID), `dueBefore` (AAAA-MM-DD),
+    `policyNumber`, `q` (nome do tomador). Atrasadas = por pagar e com
+    vencimento já passado."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request):
+        import datetime
+
+        from apps.client.infrastructure.models import Proposer
+        from apps.policy.application.issuance_service import effective_installment_status
+
+        today = datetime.date.today()
+        queryset = PremiumInstallment.objects.select_related("policy").exclude(status="VOID").order_by("due_date", "installment_no")
+        status_filter = request.query_params.get("status")
+        if status_filter == "OVERDUE":
+            queryset = queryset.filter(status__in=("DUE", "OVERDUE"), due_date__lt=today)
+        elif status_filter == "DUE":
+            queryset = queryset.filter(status="DUE", due_date__gte=today)
+        elif status_filter == "PAID":
+            queryset = queryset.filter(status="PAID")
+        elif status_filter:
+            raise ValidationError({"status": "O estado tem de ser DUE, OVERDUE ou PAID."})
+        due_before = request.query_params.get("dueBefore")
+        if due_before:
+            try:
+                queryset = queryset.filter(due_date__lte=datetime.date.fromisoformat(due_before))
+            except ValueError as exc:
+                raise ValidationError({"dueBefore": "A data tem de estar no formato AAAA-MM-DD."}) from exc
+        policy_number = request.query_params.get("policyNumber")
+        if policy_number:
+            queryset = queryset.filter(policy__policy_number=policy_number)
+        search = (request.query_params.get("q") or "").strip()
+        if search:
+            holder_ids = Proposer.objects.filter(display_name__icontains=search).values_list("id", flat=True)
+            queryset = queryset.filter(policy__proposer_id__in=list(holder_ids))
+        paginator = Q360PageNumberPagination()
+        page = paginator.paginate_queryset(queryset, request)
+        holders = dict(
+            Proposer.objects.filter(id__in={i.policy.proposer_id for i in page}).values_list("id", "display_name")
+        )
+        items = []
+        for installment in page:
+            effective = effective_installment_status(installment, today)
+            items.append(
+                {
+                    **PremiumInstallmentSerializer(installment).data,
+                    "status": effective,
+                    "policyId": str(installment.policy_id),
+                    "policyNumber": installment.policy.policy_number,
+                    "policyStatus": installment.policy.status,
+                    "holderName": holders.get(installment.policy.proposer_id),
+                    "daysOverdue": (today - installment.due_date).days if effective == "OVERDUE" else 0,
+                    "canRegisterPayment": effective in ("DUE", "OVERDUE") and installment.policy.status == "ACTIVE",
+                }
+            )
+        return paginator.get_paginated_response(items)
 
 
 class PolicyDraftView(APIView):

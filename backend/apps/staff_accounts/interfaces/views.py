@@ -31,7 +31,7 @@ def _too_many_requests() -> Response:
             "title": "Limite excedido",
             "status": 429,
             "code": "RATE-LIMIT",
-            "detail": "Too many login attempts. Try again later.",
+            "detail": "Demasiadas tentativas de início de sessão. Tente de novo mais tarde.",
             "correlationId": get_correlation_id() or "",
         },
         status=429,

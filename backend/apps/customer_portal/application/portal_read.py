@@ -32,7 +32,7 @@ from apps.policy.infrastructure.models import (
     PremiumInstallment,
 )
 from apps.pricing.domain.money import round_amount
-from apps.policy.application import policy_document
+from apps.policy.application import issuance_service, policy_document
 from apps.quote.application import proposal_service
 from apps.quote.domain.enums import QuoteStatus
 from apps.quote.infrastructure.models import Document, Quote
@@ -94,7 +94,7 @@ def _installment_item(installment: PremiumInstallment, policy_number: str | None
         "dueDate": installment.due_date,
         "amount": _money(installment.amount),
         "currencyCode": installment.currency_code,
-        "status": installment.status,
+        "status": issuance_service.effective_installment_status(installment),
         "paidAt": installment.paid_at,
     }
 
@@ -107,7 +107,7 @@ def get_my_quote(quote_number: str, *, today: datetime.date | None = None) -> di
     today = _today(today)
     quote = my_visible_quotes().filter(quote_number=quote_number).first()
     if quote is None:
-        raise PortalResourceNotFoundError("No quote found for this quoteNumber")
+        raise PortalResourceNotFoundError("Não foi encontrada nenhuma cotação com este número (quoteNumber)")
 
     policy = Policy.objects.filter(source_quote_id=quote.id).first()
     item = portal_quote_item(quote, policy_number=policy.policy_number if policy else None, today=today)
@@ -264,13 +264,15 @@ def list_my_payments(*, status: str | None = None) -> dict:
     installments = list(queryset.order_by("due_date"))
     totals: dict[str, dict[str, Decimal]] = defaultdict(lambda: {"paid": Decimal("0"), "pending": Decimal("0"), "overdue": Decimal("0")})
     for installment in installments:
-        bucket = {"PAID": "paid", "DUE": "pending", "OVERDUE": "overdue"}.get(installment.status)
+        bucket = {"PAID": "paid", "DUE": "pending", "OVERDUE": "overdue"}.get(
+            issuance_service.effective_installment_status(installment)
+        )
         if bucket:
             totals[installment.currency_code][bucket] += installment.amount
     items = [
         _installment_item(i, policies[i.policy_id].policy_number)
         for i in installments
-        if status is None or i.status == status
+        if status is None or issuance_service.effective_installment_status(i) == status
     ]
     return {
         "installments": items,
@@ -345,7 +347,7 @@ def open_my_document(document_id: uuid.UUID) -> tuple[bytes, str, str | None]:
     if document is None:
         policy = Policy.objects.filter(id=document_id, proposer_id__in=proposer_ids).first() if proposer_ids else None
         if policy is None:
-            raise PortalResourceNotFoundError("No such document")
+            raise PortalResourceNotFoundError("Documento não encontrado")
         return policy_document.policy_document(policy, "PDF")
     return proposal_service.read_file(document), document.content_type or "application/octet-stream", document.file_name
 
@@ -381,7 +383,7 @@ def get_my_card(policy_number: str, member_id: uuid.UUID, *, today: datetime.dat
     row = PolicyMember.objects.filter(policy=policy, member_id=member_id).first()
     member = InsuredMember.objects.filter(id=member_id).first() if row else None
     if row is None or member is None:
-        raise PortalResourceNotFoundError("No such member on this policy")
+        raise PortalResourceNotFoundError("Esta pessoa segura não pertence a esta apólice")
     return {
         "memberName": _member_name(member),
         "memberNumber": str(member.id).split("-")[0].upper(),

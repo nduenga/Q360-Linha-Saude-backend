@@ -35,7 +35,7 @@ def _clean_profile(profile: dict[str, Any] | None) -> dict[str, Any]:
 def _get(tenant_id) -> Tenant:
     tenant = Tenant.objects.filter(id=tenant_id).first()
     if tenant is None:
-        raise PlatformNotFoundError("Tenant not found")
+        raise PlatformNotFoundError("Tenant não encontrado")
     return tenant
 
 
@@ -53,7 +53,7 @@ def _create_admin(tenant_id, email: str, name: str) -> tuple[StaffAccount, str]:
 def create_tenant(*, actor_id, code, name, profile, admin_email, admin_name, correlation_id):
     # O login do staff é só por email: o email é único em toda a plataforma.
     if StaffAccount.all_tenants.filter(email__iexact=admin_email).exists():
-        raise PlatformConflictError("Administrator email already exists on the platform")
+        raise PlatformConflictError("O email do administrador já existe na plataforma")
     try:
         with transaction.atomic():
             tenant = Tenant.objects.create(
@@ -61,7 +61,7 @@ def create_tenant(*, actor_id, code, name, profile, admin_email, admin_name, cor
             )
             admin, password = _create_admin(tenant.id, admin_email, admin_name)
     except IntegrityError as exc:
-        raise PlatformConflictError("Tenant code or administrator email already exists") from exc
+        raise PlatformConflictError("O código do tenant ou o email do administrador já existe") from exc
     record_platform_audit(
         actor_id=actor_id, action="platform.tenant_created", entity_type="Tenant", entity_id=str(tenant.id),
         correlation_id=correlation_id,
@@ -131,7 +131,7 @@ def update_tenant(*, actor_id, tenant_id, name=None, profile=None, status=None, 
 def add_tenant_admin(*, actor_id, tenant_id, email, name, correlation_id):
     tenant = _get(tenant_id)
     if StaffAccount.all_tenants.filter(email__iexact=email).exists():
-        raise PlatformConflictError("Email already exists on the platform")
+        raise PlatformConflictError("O email já existe na plataforma")
     admin, password = _create_admin(tenant.id, email, name)
     record_platform_audit(
         actor_id=actor_id, action="platform.tenant_admin_added", entity_type="Tenant", entity_id=str(tenant.id),
@@ -145,7 +145,7 @@ def reset_tenant_account_password(*, actor_id, tenant_id, account_id, correlatio
     tenant = _get(tenant_id)
     account = StaffAccount.all_tenants.filter(id=account_id, tenant_id=tenant.id).first()
     if account is None:
-        raise PlatformNotFoundError("Account not found in this tenant")
+        raise PlatformNotFoundError("Conta não encontrada neste tenant")
     password = _temporary_password()
     StaffAccount.all_tenants.filter(id=account.id).update(
         password_hash=make_password(password), failed_login_attempts=0, locked_until=None

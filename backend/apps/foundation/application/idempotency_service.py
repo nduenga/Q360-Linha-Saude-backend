@@ -115,7 +115,7 @@ class IdempotencyService:
             if existing.status == "COMPLETED":
                 if existing.request_hash != request_hash:
                     raise IdempotencyReplayError(
-                        f"Idempotency-Key '{idempotency_key}' already used with a different payload"
+                        f"A chave de idempotência '{idempotency_key}' já foi usada com um conteúdo diferente"
                     )
                 return IdempotencyBeginResult(
                     started_new=False,
@@ -126,7 +126,7 @@ class IdempotencyService:
             if existing.status == "FAILED":
                 if existing.request_hash != request_hash:
                     raise IdempotencyReplayError(
-                        f"Idempotency-Key '{idempotency_key}' already used with a different payload"
+                        f"A chave de idempotência '{idempotency_key}' já foi usada com um conteúdo diferente"
                     )
                 return IdempotencyBeginResult(started_new=True, record_id=existing.id)
             if existing.status == "IN_PROGRESS":
@@ -145,7 +145,7 @@ class IdempotencyService:
         )
         if existing is not None and existing.status == "IN_PROGRESS":
             raise IdempotencyReplayError(
-                f"Idempotency-Key '{idempotency_key}' is already being processed; try again shortly"
+                f"A chave de idempotência '{idempotency_key}' já está a ser processada; tente de novo dentro de instantes"
             )
         return IdempotencyBeginResult(started_new=True, record_id=None)
 

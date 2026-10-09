@@ -225,7 +225,7 @@ def _execute(
 
     plan = Plan.objects.filter(id=plan_id).first()
     if plan is None:
-        raise ReferencedEntityNotFoundError("Referenced planId does not exist for this tenant")
+        raise ReferencedEntityNotFoundError("O plano (planId) indicado não existe neste tenant")
 
     # PDF "Coberturas e Capitais": plan settings, coverage capitals, the A-E
     # participation option and the optional coverages the customer chose all
@@ -235,15 +235,15 @@ def _execute(
     commercial_adjustments = parse_commercial_adjustments(context.get("adjustments"))
     pre_existing: dict[str, dict[str, Any]] = context.get("preExisting") or {}
     if not isinstance(pre_existing, dict):
-        raise ReferencedEntityNotFoundError("context.preExisting must be an object keyed by memberId")
+        raise ReferencedEntityNotFoundError("context.preExisting tem de ser um objeto indexado por memberId")
 
     if not member_ids:
-        raise ReferencedEntityNotFoundError("memberIds must contain at least one member")
+        raise ReferencedEntityNotFoundError("memberIds tem de conter pelo menos uma pessoa segura")
     members = list(InsuredMember.objects.filter(id__in=member_ids))
     members_by_id = {str(m.id): m for m in members}
     missing = [str(m) for m in member_ids if str(m) not in members_by_id]
     if missing:
-        raise ReferencedEntityNotFoundError(f"Unknown memberIds: {', '.join(missing)}")
+        raise ReferencedEntityNotFoundError(f"memberIds desconhecidos: {', '.join(missing)}")
 
     # A configuração de negócio publicada é a fonte de verdade do cálculo.
     # O caminho legado só é usado para compatibilidade com cotações/integrações
@@ -269,21 +269,21 @@ def _execute(
         if config_overrides.get("ratingTableId"):
             rating_table = RatingTable.objects.filter(id=config_overrides["ratingTableId"]).first()
         if rating_table is None:
-            raise PricingConfigError(f"No published RatingTable '{rating_table_code}' effective on {effective_date}")
+            raise PricingConfigError(f"Não existe a tabela de tarifação '{rating_table_code}' publicada em vigor em {effective_date}")
         if not rating_table.currency_code:
-            raise PricingConfigError(f"RatingTable '{rating_table_code}' has no currencyCode")
+            raise PricingConfigError(f"A tabela de tarifação '{rating_table_code}' não tem moeda (currencyCode)")
 
         parameter_set = resolve_pricing_parameter_set(code=parameter_set_code, effective_date=effective_date)
         if config_overrides.get("parameterSetId"):
             parameter_set = PricingParameterSet.objects.filter(id=config_overrides["parameterSetId"]).first()
         if parameter_set is None:
             raise PricingConfigError(
-                f"No published PricingParameterSet '{parameter_set_code}' effective on {effective_date}"
+                f"Não existe o conjunto de parâmetros de preço '{parameter_set_code}' publicado em vigor em {effective_date}"
             )
         base_premium = resolve_decimal_parameter(parameter_set, _BASE_PREMIUM_PARAMETER_CODE)
         if base_premium is None:
             raise PricingConfigError(
-                f"PricingParameterSet '{parameter_set_code}' has no DECIMAL parameter '{_BASE_PREMIUM_PARAMETER_CODE}'"
+                f"O conjunto de parâmetros de preço '{parameter_set_code}' não tem o parâmetro DECIMAL '{_BASE_PREMIUM_PARAMETER_CODE}'"
             )
 
     rule_version = None
@@ -292,12 +292,12 @@ def _execute(
     if rule_version_code:
         rule_version = resolve_pricing_rule_version(code=rule_version_code, effective_date=effective_date)
         if rule_version is None:
-            raise PricingConfigError(f"No published PRICING RuleVersion '{rule_version_code}' effective on {effective_date}")
+            raise PricingConfigError(f"Não existe a versão de regra de PRICING '{rule_version_code}' publicada em vigor em {effective_date}")
         rule_config = parse_pricing_config(rule_version)
     if config_overrides.get("ruleVersionId"):
         rule_version = RuleVersion.objects.select_related("rule_set").filter(id=config_overrides["ruleVersionId"]).first()
         if rule_version is None:
-            raise PricingConfigError("configOverrides.ruleVersionId does not exist")
+            raise PricingConfigError("configOverrides.ruleVersionId não existe")
         rule_config = parse_pricing_config(rule_version)
 
     per_member_context: dict[str, dict[str, Any]] = context.get("members") or {}
@@ -594,7 +594,7 @@ def _run_calculation(
             )
         else:
             if base_premium is None:
-                raise PricingConfigError("Legacy pricing requires BASE_PREMIUM.")
+                raise PricingConfigError("A tarifação legada exige BASE_PREMIUM.")
             running_amount = round_amount(base_premium)
         if actuarial_model is None:
             _guard_amount(running_amount)
@@ -1122,6 +1122,6 @@ def _guard_amount(amount: Decimal) -> None:
     signals a runaway calculation (e.g. a misconfigured factor chain) —
     both fail the run rather than persist or return a bad price."""
     if amount < 0:
-        raise PricingCalculationFailedError("Calculation produced a negative amount")
+        raise PricingCalculationFailedError("O cálculo produziu um valor negativo")
     if amount > _OVERFLOW_GUARD:
-        raise PricingCalculationFailedError("Calculation exceeded the safety overflow guard")
+        raise PricingCalculationFailedError("O cálculo excedeu o limite de segurança contra overflow")

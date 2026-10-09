@@ -13,7 +13,7 @@ class Command(BaseCommand):
         generated, contract = build.build(write=not options["check"])
         if options["check"]:
             if build.GENERATED.read_text(encoding="utf-8") != generated or build.CONTRACT.read_text(encoding="utf-8") != contract:
-                raise CommandError("OpenAPI files are out of date: run `manage.py build_openapi`.")
+                raise CommandError("Os ficheiros OpenAPI estão desatualizados: execute `manage.py build_openapi`.")
             self.stdout.write("OpenAPI files are up to date.")
         else:
             self.stdout.write(f"Wrote {build.GENERATED} and {build.CONTRACT}")

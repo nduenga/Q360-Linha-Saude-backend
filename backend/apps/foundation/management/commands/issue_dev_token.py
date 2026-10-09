@@ -44,13 +44,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if not settings.OIDC_STATIC_VERIFICATION_KEY:
             raise CommandError(
-                "OIDC_STATIC_VERIFICATION_KEY is not set. Add it to your .env "
-                "(dev-only - see .env.example) before minting local tokens."
+                "OIDC_STATIC_VERIFICATION_KEY não está definida. Adicione-a ao seu .env (só para desenvolvimento, ver .env.example) antes de gerar tokens locais."
             )
         if "HS256" not in settings.OIDC_ALGORITHMS:
             raise CommandError(
-                "OIDC_ALGORITHMS must include HS256 to verify a token signed "
-                "with a static shared secret (it currently only lists "
+                "OIDC_ALGORITHMS tem de incluir HS256 para verificar um token assinado "
+                "com um segredo partilhado estático (neste momento só lista "
                 f"{settings.OIDC_ALGORITHMS})."
             )
 
@@ -58,8 +57,7 @@ class Command(BaseCommand):
             tenant = Tenant.objects.get(code=options["tenant_code"])
         except Tenant.DoesNotExist as exc:
             raise CommandError(
-                f"No tenant with code '{options['tenant_code']}'. Run "
-                f"`manage.py seed_dev_tenant --code {options['tenant_code']}` first."
+                f"Não existe nenhum tenant com o código '{options['tenant_code']}'. Execute primeiro `manage.py seed_dev_tenant --code {options['tenant_code']}`."
             ) from exc
 
         claims = {

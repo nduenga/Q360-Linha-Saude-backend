@@ -169,3 +169,52 @@ def test_emitting_closes_the_customers_acceptance_request(admin_client, tenant):
     request.refresh_from_db()
     assert request.status == "COMPLETED"
     assert "emitida" in (request.resolution_note or "")
+
+
+# ------------------------------------------------------- cobranças
+@pytest.mark.django_db
+def test_later_installments_are_paid_in_order_and_listed_as_collections(admin_client, tenant):
+    quote = _approved_quote(admin_client, tenant, suffix="E7")
+    approver = _approver(tenant)
+    policy = approver.post(
+        f"/api/v1/quotes/{quote['id']}/policy/emit",
+        {**_BODY, "paymentFrequency": "MENSAL", "rowVersion": quote["rowVersion"], "payment": _PAYMENT},
+        format="json",
+    ).data
+    assert policy["status"] == "ACTIVE"
+    base = f"/api/v1/policies/{policy['id']}/installments"
+    pay = {"paidAt": "2026-07-11T10:00:00Z", "paymentMethod": "NUMERARIO", "paymentReference": "CX-2"}
+
+    out_of_order = approver.post(f"{base}/3/payment", pay, format="json")
+    assert out_of_order.status_code == 409
+    assert "Registe primeiro o pagamento da prestação 2" in out_of_order.data["detail"]
+
+    ok = approver.post(f"{base}/2/payment", pay, format="json")
+    assert ok.status_code == 200, ok.data
+    assert ok.data["installment"]["status"] == "PAID" and ok.data["installment"]["paymentReference"] == "CX-2"
+    again = approver.post(f"{base}/2/payment", pay, format="json")
+    assert again.status_code == 409 and "já está paga" in again.data["detail"]
+    assert approver.post(f"{base}/99/payment", pay, format="json").status_code == 400
+    future = approver.post(f"{base}/3/payment", {**pay, "paidAt": "2999-01-01T10:00:00Z"}, format="json")
+    assert future.status_code == 400 and "futuro" in future.data["detail"]
+
+    listing = admin_client.get("/api/v1/installments", {"policyNumber": policy["policyNumber"], "status": "OVERDUE"})
+    assert listing.status_code == 200, listing.data
+    items = listing.data["items"]
+    assert items and all(i["status"] == "OVERDUE" and i["daysOverdue"] > 0 for i in items)
+    assert items[0]["installmentNo"] == 3 and items[0]["holderName"] == "Holder" and items[0]["canRegisterPayment"] is True
+    paid = admin_client.get("/api/v1/installments", {"policyNumber": policy["policyNumber"], "status": "PAID"}).data["items"]
+    assert [i["installmentNo"] for i in paid] == [1, 2]
+    assert admin_client.get("/api/v1/installments", {"status": "NOPE"}).status_code == 400
+
+
+@pytest.mark.django_db
+def test_validation_messages_are_in_portuguese(admin_client, tenant):
+    quote = _approved_quote(admin_client, tenant, suffix="E8")
+    response = _approver(tenant).post(f"/api/v1/quotes/{quote['id']}/policy/emit", {"termMonths": 12}, format="json")
+    assert response.status_code == 400
+    messages = [e["message"] for e in response.data["fieldErrors"]]
+    assert messages and all("required" not in m.lower() for m in messages)
+    assert "Este campo é obrigatório." in messages
+    assert "signatoryName" in response.data["detail"]  # resumo legível, não a repr do DRF
+    assert "ErrorDetail" not in response.data["detail"]

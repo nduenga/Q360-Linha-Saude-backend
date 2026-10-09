@@ -795,3 +795,41 @@ class EmittedPolicy(s.Serializer):
     currencyCode = s.CharField(allow_null=True)
     rowVersion = s.IntegerField()
     documentPath = s.CharField(help_text="GET desta rota devolve a apólice digital.")
+
+
+# ------------------------------------------------------- cobranças (prestações)
+class CollectionInstallment(s.Serializer):
+    """Uma prestação na lista de cobranças."""
+
+    id = s.UUIDField()
+    installmentNo = s.IntegerField()
+    periodFrom = s.DateField()
+    periodTo = s.DateField()
+    dueDate = s.DateField()
+    amount = Money()
+    currencyCode = s.CharField()
+    status = s.ChoiceField(choices=["DUE", "OVERDUE", "PAID"], help_text="OVERDUE = por pagar com vencimento já passado.")
+    paidAt = s.DateTimeField(allow_null=True)
+    paymentReference = s.CharField(allow_null=True)
+    paymentMethod = s.CharField(allow_null=True)
+    policyId = s.UUIDField()
+    policyNumber = s.CharField(allow_null=True)
+    policyStatus = s.CharField()
+    holderName = s.CharField(allow_null=True)
+    daysOverdue = s.IntegerField()
+    canRegisterPayment = s.BooleanField(help_text="A apólice está ativa e a prestação por pagar.")
+
+
+class PaymentRegistered(s.Serializer):
+    """Resposta do registo de pagamento: a apólice e a prestação paga."""
+
+    id = s.UUIDField()
+    policyNumber = s.CharField(allow_null=True)
+    status = s.CharField()
+    startDate = s.DateField(allow_null=True)
+    endDate = s.DateField(allow_null=True)
+    rowVersion = s.IntegerField()
+
+    installment = s.DictField(
+        help_text="A prestação paga: id, installmentNo, periodFrom, periodTo, dueDate, amount, currencyCode, status, paidAt, paymentReference, paymentMethod."
+    )

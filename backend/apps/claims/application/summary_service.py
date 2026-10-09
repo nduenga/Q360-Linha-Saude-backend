@@ -73,7 +73,7 @@ def summary(
     claim_rows = list(claims.values("occurrence_date", "benefit_code", "paid_amount", "provision_amount"))
     premium_rows = list(premiums.values("period_start", "period_end", "premium_amount", "insured_count"))
     if not claim_rows and not premium_rows:
-        raise ClaimsDataError(f"No claims or premiums imported for this client in {currency}")
+        raise ClaimsDataError(f"Não há sinistros nem prémios importados para este cliente em {currency}")
 
     all_dates = [r["occurrence_date"] for r in claim_rows]
     for r in premium_rows:
@@ -81,7 +81,7 @@ def summary(
     start = date_from or min(all_dates)
     end = date_to or max(all_dates)
     if end < start:
-        raise ClaimsDataError("'to' is before 'from'")
+        raise ClaimsDataError("'to' é anterior a 'from'")
 
     in_range = [r for r in claim_rows if start <= r["occurrence_date"] <= end]
     paid = sum((r["paid_amount"] for r in in_range), Decimal("0"))
@@ -149,7 +149,7 @@ def profit_sharing(
     data = summary(proposer_id=proposer_id, policy_id=policy_id, date_from=date_from, date_to=date_to, currency=currency)
     earned = Decimal(data["premium"]["earned"])
     if data["lossRatioPct"] is None:
-        raise ClaimsDataError("Profit sharing needs earned premium in the period")
+        raise ClaimsDataError("A participação nos resultados precisa de prémio adquirido no período")
     loss_ratio = Decimal(data["lossRatioPct"])
     below = loss_ratio < threshold_pct
     refund = earned * (threshold_pct - loss_ratio) / Decimal("100") * share_pct / Decimal("100") if below else Decimal("0")

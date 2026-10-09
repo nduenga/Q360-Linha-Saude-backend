@@ -70,20 +70,20 @@ class ValidatingNoopPublisher:
     def publish(self, envelope: dict[str, Any]) -> None:
         missing = _REQUIRED_ENVELOPE_FIELDS - set(envelope.keys())
         if missing:
-            raise PublishError(f"envelope missing required fields: {sorted(missing)}")
+            raise PublishError(f"Faltam campos obrigatórios no envelope: {sorted(missing)}")
         for field in ("eventType", "tenantId", "aggregateType", "aggregateId"):
             value = envelope.get(field)
             if value is None or value == "":
-                raise PublishError(f"envelope field {field} must be non-empty")
+                raise PublishError(f"O campo {field} do envelope não pode estar vazio")
 
         try:
             round_trip = json.loads(json.dumps(envelope, default=str))
         except (TypeError, ValueError) as exc:
-            raise PublishError(f"envelope is not JSON-serialisable: {exc}") from exc
+            raise PublishError(f"O envelope não é serializável em JSON: {exc}") from exc
 
         forbidden_found = _scan_forbidden_keys(round_trip)
         if forbidden_found:
-            raise PublishError(f"payload contains forbidden keys: {sorted(forbidden_found)}")
+            raise PublishError(f"O conteúdo (payload) tem chaves proibidas: {sorted(forbidden_found)}")
 
 
 def _scan_forbidden_keys(node: Any, _found: set[str] | None = None) -> set[str]:

@@ -113,9 +113,9 @@ def _dec(raw: Any, path: str, **kwargs: Any) -> Decimal:
 
 def _int(raw: Any, path: str, *, minimum: int = 0, maximum: int | None = None) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int):
-        raise _err(f"{path} must be an integer")
+        raise _err(f"{path} tem de ser um número inteiro")
     if raw < minimum or (maximum is not None and raw > maximum):
-        raise _err(f"{path} must be between {minimum} and {maximum if maximum is not None else '∞'}")
+        raise _err(f"{path} tem de estar entre {minimum} e {maximum if maximum is not None else '∞'}")
     return raw
 
 
@@ -140,7 +140,7 @@ def validate_coverage_config(
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):
-        raise _err("configuration must be an object")
+        raise _err("configuration tem de ser um objeto")
     raw = _normalise_keys(raw)
     unknown = set(raw) - _ALLOWED_KEYS
     if unknown:
@@ -163,18 +163,18 @@ def validate_coverage_config(
     # ---- inclusão (B/O)
     inclusion = config.get("inclusion", "INCLUDED")
     if inclusion not in INCLUSIONS:
-        raise _err(f"inclusion must be one of {list(INCLUSIONS)} (a coverage that is not available is simply not attached)")
+        raise _err(f"inclusion tem de ser um de {list(INCLUSIONS)} (uma cobertura que não está disponível simplesmente não é associada)")
     if benefit_category == "BASE" and inclusion != "INCLUDED":
-        raise _err(f"'{benefit_code}' is a mandatory (BASE) coverage: it must be INCLUDED in every plan")
+        raise _err(f"'{benefit_code}' é uma cobertura obrigatória (BASE): tem de estar INCLUÍDA em todos os planos")
     config["inclusion"] = inclusion
 
     # ---- moeda (Kz ou USD, só onde a cobertura o permite)
     allowed_currencies = definition.get("allowedCurrencies") or ["AOA"]
     currency = config.get("currency") or settings.get("currency") or "AOA"
     if currency not in ("AOA", "USD"):
-        raise _err("currency must be AOA or USD")
+        raise _err("A moeda (currency) tem de ser AOA ou USD")
     if currency not in allowed_currencies:
-        raise _err(f"currency '{currency}' is not allowed for '{benefit_code}' (allowed: {allowed_currencies})")
+        raise _err(f"A moeda '{currency}' não é permitida para '{benefit_code}' (permitidas: {allowed_currencies})")
     config["currency"] = currency
     if currency == "USD":
         warnings.append(_warning("FX_RISK", "Capital em USD: considerar o risco cambial e a moeda do capital."))
@@ -182,7 +182,7 @@ def validate_coverage_config(
     # ---- limites / capitais
     limits = config.get("limits", [])
     if not isinstance(limits, list):
-        raise _err("limits must be a list")
+        raise _err("limits tem de ser uma lista")
     primary_amount: Decimal | None = None
     cap_seen: dict[str, int] = {}
     event_labels: set[str] = set()
@@ -191,23 +191,23 @@ def validate_coverage_config(
     for idx, limit in enumerate(limits):
         path = f"limits[{idx}]"
         if not isinstance(limit, dict):
-            raise _err(f"{path} must be an object")
+            raise _err(f"{path} tem de ser um objeto")
         kind = limit.get("kind")
         if kind not in GUARANTEE_FORMS and kind != "COINSURANCE_PCT":
-            raise _err(f"{path}.kind must be one of {sorted(GUARANTEE_FORMS)}")
+            raise _err(f"{path}.kind tem de ser um de {sorted(GUARANTEE_FORMS)}")
         entry = dict(limit)
         if kind in _SUB_KINDS or kind == _EVENT_KIND:
             if not limit.get("label") and kind != _EVENT_KIND:
-                raise _err(f"{path}.label is required for a {kind} limit")
+                raise _err(f"{path}.label é obrigatório num limite {kind}")
         if kind in _AMOUNT_KINDS:
             entry["_amount"] = _dec(limit.get("amount"), f"{path}.amount", minimum=Decimal("0.01"))
         if kind == "QUANTITY":
             _int(limit.get("count"), f"{path}.count", minimum=1)
             if not limit.get("label"):
-                raise _err(f"{path}.label is required for a QUANTITY limit")
+                raise _err(f"{path}.label é obrigatório num limite QUANTITY")
         if kind == "COINSURANCE_PCT":
             if coinsurance_seen:
-                raise _err("Only one COINSURANCE_PCT limit is allowed")
+                raise _err("Só é permitido um limite COINSURANCE_PCT")
             coinsurance_seen = True
             _dec(limit.get("pct"), f"{path}.pct", minimum=Decimal("0.01"), maximum=Decimal("100"))
         if kind in _SINGLE_PRIMARY_KINDS:
@@ -215,21 +215,20 @@ def validate_coverage_config(
         if kind == _EVENT_KIND:
             label = limit.get("label") or "default"
             if label in event_labels:
-                raise _err(f"{path}: duplicate PER_EVENT label '{label}'")
+                raise _err(f"{path}: etiqueta PER_EVENT '{label}' repetida")
             event_labels.add(label)
         if kind == "HOUSEHOLD_SHARED" and segment == "GROUP":
-            raise _err("HOUSEHOLD_SHARED capital (one capital for the whole family) only applies to INDIVIDUAL_FAMILY plans")
+            raise _err("O capital HOUSEHOLD_SHARED (um capital para toda a família) só se aplica a planos INDIVIDUAL_FAMILY")
         if kind in _CAP_KINDS and "_amount" in entry:
             primary_amount = entry["_amount"]
         parsed_limits.append(entry)
     if sum(cap_seen.values()) > 1:
         raise _err(
-            "A coverage has a single main capital (ANNUAL_PER_PERSON, HOUSEHOLD_SHARED, BIENNIAL or FIXED_AMOUNT); "
-            "use SUBLIMIT/PER_ACT_OR_DAY/QUANTITY for limits inside it"
+            "Uma cobertura tem um único capital principal (ANNUAL_PER_PERSON, HOUSEHOLD_SHARED, BIENNIAL ou FIXED_AMOUNT); use SUBLIMIT/PER_ACT_OR_DAY/QUANTITY para limites dentro dele"
         )
     for entry in parsed_limits:
         if entry["kind"] in ("SUBLIMIT", "PER_ACT_OR_DAY") and primary_amount is not None and entry["_amount"] > primary_amount:
-            raise _err(f"Sublimit '{entry.get('label')}' cannot exceed the coverage capital ({primary_amount})")
+            raise _err(f"O sublimite '{entry.get('label')}' não pode exceder o capital da cobertura ({primary_amount})")
         entry.pop("_amount", None)
     config["limits"] = parsed_limits
 
@@ -239,33 +238,33 @@ def validate_coverage_config(
     # ---- participação por sistema de acesso
     participation = config.get("participation", {})
     if not isinstance(participation, dict):
-        raise _err("participation must be an object")
+        raise _err("participation tem de ser um objeto")
     if set(participation) - set(ACCESS_BLOCKS):
-        raise _err(f"participation keys must be within {list(ACCESS_BLOCKS)}")
+        raise _err(f"As chaves de participation têm de estar dentro de {list(ACCESS_BLOCKS)}")
     for block, spec in participation.items():
         path = f"participation.{block}"
         if not isinstance(spec, dict):
-            raise _err(f"{path} must be an object")
+            raise _err(f"{path} tem de ser um objeto")
         ptype = spec.get("type", "NONE")
         if ptype not in PARTICIPATION_TYPES:
-            raise _err(f"{path}.type must be one of {list(PARTICIPATION_TYPES)}")
+            raise _err(f"{path}.type tem de ser um de {list(PARTICIPATION_TYPES)}")
         if ptype == "COPAY_FIXED":
             if block != "NETWORK":
-                raise _err(f"{path}: a fixed copayment is paid to the provider in the agreed network (NETWORK only)")
+                raise _err(f"{path}: um copagamento fixo é pago ao prestador da rede convencionada (só NETWORK)")
             _dec(spec.get("copayAmount"), f"{path}.copayAmount", minimum=Decimal("0.01"))
         if ptype == "COINSURANCE":
             _dec(spec.get("insurerPct"), f"{path}.insurerPct", maximum=Decimal("100"))
             if spec.get("insuredAnnualCap") is not None:
                 _dec(spec["insuredAnnualCap"], f"{path}.insuredAnnualCap")
         if ptype != "COINSURANCE" and spec.get("insuredAnnualCap") is not None:
-            raise _err(f"{path}.insuredAnnualCap (annual ceiling) only applies to COINSURANCE")
+            raise _err(f"{path}.insuredAnnualCap (teto anual) só se aplica a COINSURANCE")
         if ptype == "NONE" and (spec.get("copayAmount") is not None or spec.get("insurerPct") is not None):
-            raise _err(f"{path}: type NONE (no participation) cannot carry copayAmount/insurerPct")
+            raise _err(f"{path}: o tipo NONE (sem participação) não pode ter copayAmount/insurerPct")
         for field in ("annualDeductible", "perEventDeductible"):
             if spec.get(field) is not None:
                 _dec(spec[field], f"{path}.{field}")
         if definition.get("noParticipation") and (ptype != "NONE" or spec.get("annualDeductible") or spec.get("perEventDeductible")):
-            raise _err(f"'{benefit_code}' is paid in full by the insurer (no participation)")
+            raise _err(f"'{benefit_code}' é pago na totalidade pela seguradora (sem participação)")
     if access_system == "NETWORK" and "REIMBURSEMENT" in participation:
         warnings.append(_warning("ACCESS_SYSTEM_MISMATCH", "O plano é só de rede convencionada: o bloco de reembolso será ignorado."))
     if access_system == "REIMBURSEMENT" and "NETWORK" in participation:
@@ -282,12 +281,12 @@ def validate_coverage_config(
     # ---- carências
     waiting = config.get("waitingDays", {})
     if not isinstance(waiting, dict):
-        raise _err("waitingDays must be an object")
+        raise _err("waitingDays tem de ser um objeto")
     for key in ("individual", "group", "scheduledSurgery"):
         if key in waiting:
             _int(waiting[key], f"waitingDays.{key}", maximum=3650)
     if "accidentWaived" in waiting and not isinstance(waiting["accidentWaived"], bool):
-        raise _err("waitingDays.accidentWaived must be a boolean")
+        raise _err("waitingDays.accidentWaived tem de ser verdadeiro ou falso")
     if segment == "INDIVIDUAL_FAMILY" and definition.get("antiSelectionWaiting") and not waiting.get("individual"):
         warnings.append(
             _warning(
@@ -302,9 +301,9 @@ def validate_coverage_config(
 
     # ---- aprovação prévia (evacuação sem aprovação prévia é exclusão)
     if "requiresPriorApproval" in config and not isinstance(config["requiresPriorApproval"], bool):
-        raise _err("requiresPriorApproval must be a boolean")
+        raise _err("requiresPriorApproval tem de ser verdadeiro ou falso")
     if definition.get("requiresPriorApproval") and config.get("requiresPriorApproval") is False:
-        raise _err(f"'{benefit_code}' requires prior approval (treatment abroad without prior approval is excluded)")
+        raise _err(f"'{benefit_code}' exige aprovação prévia (o tratamento no estrangeiro sem aprovação prévia está excluído)")
     if definition.get("requiresPriorApproval"):
         config["requiresPriorApproval"] = True
 
@@ -312,7 +311,7 @@ def validate_coverage_config(
     if "destinations" in config:
         destinations = config["destinations"]
         if not isinstance(destinations, list) or not all(isinstance(d, str) and d for d in destinations):
-            raise _err("destinations must be a list of names")
+            raise _err("destinations tem de ser uma lista de nomes")
     elif benefit_code == "MEDICAL_EVACUATION" and inclusion == "INCLUDED":
         warnings.append(_warning("EVACUATION_DESTINATIONS", "Definir os destinos da evacuação (ex.: Portugal, África do Sul, Brasil, Namíbia)."))
     if "closedDiseaseList" in config:
@@ -331,7 +330,7 @@ def validate_coverage_config(
         _int(config["timeDeductibleDays"], "timeDeductibleDays", maximum=30)
     for key in ("excludedItems", "exclusions"):
         if key in config and not isinstance(config[key], list):
-            raise _err(f"{key} must be a list")
+            raise _err(f"{key} tem de ser uma lista")
 
     return config, warnings
 

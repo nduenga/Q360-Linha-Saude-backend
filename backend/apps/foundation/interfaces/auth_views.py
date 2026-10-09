@@ -96,7 +96,7 @@ class DevLoginView(APIView):
 
         user = _DEV_USERS.get(email)
         if user is None or user["password"] != password:
-            raise AuthenticationFailed("Invalid email or password.")
+            raise AuthenticationFailed("Email ou palavra-passe inválidos.")
 
         tenant, _ = Tenant.objects.get_or_create(
             code=_DEV_TENANT_CODE, defaults={"name": "Dev Tenant"}

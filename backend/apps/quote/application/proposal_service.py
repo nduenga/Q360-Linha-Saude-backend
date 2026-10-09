@@ -58,11 +58,11 @@ class DocumentNotFoundError(DomainProblem):
 
 
 def resolve_template(*, code: str, effective_date: datetime.date) -> DocumentTemplateVersion:
-    template = document_service._resolve_published_template(template_code=code, effective_date=effective_date)
+    template = document_service.resolve_template_for(template_code=code, effective_date=effective_date)
     if template is not None:
         return template
     if code != document_service.DEFAULT_TEMPLATE_CODE:
-        raise document_service.TemplateNotFoundError(f"No published document template '{code}' effective on {effective_date}")
+        raise document_service.TemplateNotFoundError(document_service.template_not_found_message(template_code=code, effective_date=effective_date))
     created = document_service.create_document_template(
         template_code=code, storage_ref=default_body(), effective_from=datetime.date(2020, 1, 1)
     )
@@ -73,18 +73,18 @@ def _scenario_for(quote: Quote, scenario_id) -> QuoteScenario | None:
     if scenario_id:
         scenario = QuoteScenario.objects.filter(id=scenario_id, quote=quote).first()
         if scenario is None:
-            raise ProposalRequestError(f"scenarioId {scenario_id} does not belong to quote {quote.id}")
+            raise ProposalRequestError(f"O cenário {scenario_id} não pertence à cotação {quote.id}")
         return scenario
     return QuoteScenario.objects.filter(quote=quote, is_selected=True).first()
 
 
 def _content_for(quote: Quote, scenario: QuoteScenario | None, render: Callable) -> dict[str, Any]:
     if quote.status in _BLOCKED:
-        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; a proposal cannot be generated")
+        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; não é possível gerar a proposta")
     if scenario is not None:
         if scenario_service.is_stale(scenario):
             raise ProposalError(
-                f"Scenario '{scenario.name}' is out of date (plan, tariffs or population changed): recalculate it first"
+                f"O cenário '{scenario.name}' está desatualizado (o plano, as tarifas ou as pessoas seguras mudaram): recalcule-o primeiro"
             )
         calculation = scenario.result_json
     else:
@@ -103,7 +103,7 @@ def preview(*, quote: Quote, scenario_id, template_code: str | None, fmt: str, r
 
 def _render(content: dict[str, Any], template: DocumentTemplateVersion, fmt: str, *, document_number: str | None) -> tuple[bytes, str]:
     if fmt not in proposal_layout.RENDERERS:
-        raise ProposalRequestError(f"format must be one of {list(FORMATS)}")
+        raise ProposalRequestError(f"O formato tem de ser um de {list(FORMATS)}")
     spec = parse_template(template.storage_ref)
     generated_on = content["meta"]["generatedOn"]
     variables = proposal_layout.variables_for(content, document_number=document_number, generated_on=generated_on)
@@ -118,7 +118,7 @@ def generate(
     *, quote: Quote, template_code: str | None, scenario_id, fmt: str, render: Callable
 ) -> Document:
     if fmt not in proposal_layout.RENDERERS:
-        raise ProposalRequestError(f"format must be one of {list(FORMATS)}")
+        raise ProposalRequestError(f"O formato tem de ser um de {list(FORMATS)}")
     scenario = _scenario_for(quote, scenario_id)
     content = _content_for(quote, scenario, render)
     template = resolve_template(code=template_code or document_service.DEFAULT_TEMPLATE_CODE, effective_date=quote.effective_date)
@@ -186,7 +186,7 @@ def _produce(*, document: Document, content: dict[str, Any], template: DocumentT
 
 def retry(*, document: Document) -> Document:
     if document.status != DocumentStatus.FAILED.value:
-        raise ProposalError(f"Document {document.id} is {document.status}; only a FAILED document can be retried")
+        raise ProposalError(f"O documento {document.id} está em {document.status}; só um documento com falha (FAILED) pode ser repetido")
     content = document.snapshot.snapshot_json["content"]
     return _produce(document=document, content=content, template=document.template_version, quote=document.quote)
 
@@ -198,16 +198,16 @@ def list_documents(*, quote: Quote):
 def get_document(document_id) -> Document:
     document = Document.objects.select_related("quote", "snapshot", "template_version").filter(id=document_id).first()
     if document is None:
-        raise DocumentNotFoundError(f"Document {document_id} does not exist")
+        raise DocumentNotFoundError(f"O documento {document_id} não existe")
     return document
 
 
 def read_file(document: Document) -> bytes:
     if document.status != DocumentStatus.GENERATED.value or not document.storage_ref:
-        raise ProposalError(f"Document {document.id} has no generated file ({document.status})")
+        raise ProposalError(f"O documento {document.id} não tem ficheiro gerado ({document.status})")
     data = Path(document.storage_ref).read_bytes()
     if hashlib.sha256(data).hexdigest() != document.checksum:
-        raise ProposalError(f"Document {document.id} failed its integrity check (checksum mismatch)")
+        raise ProposalError(f"O documento {document.id} falhou a verificação de integridade (checksum não coincide)")
     return data
 
 

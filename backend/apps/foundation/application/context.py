@@ -47,5 +47,5 @@ class CurrentTenantProvider:
     def require() -> TenantId:
         tenant_id = CurrentTenantProvider.get()
         if tenant_id is None:
-            raise LookupError("No authenticated tenant bound to the current context")
+            raise LookupError("Nenhum tenant autenticado no contexto atual")
         return tenant_id

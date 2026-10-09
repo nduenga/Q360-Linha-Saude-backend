@@ -78,22 +78,22 @@ class StaffAccountAuthService:
         # tenant_scoping), not a business-data query.
         account = StaffAccount.all_tenants.filter(email__iexact=email).first()
         if account is None or account.status != StaffAccount.ACTIVE:
-            raise InvalidStaffCredentialsError("Invalid email or password")
+            raise InvalidStaffCredentialsError("Email ou palavra-passe inválidos")
 
         tenant = Tenant.objects.filter(id=account.tenant_id).first()
         if tenant is None or tenant.status != "ACTIVE":
-            raise InvalidStaffCredentialsError("Tenant is suspended or inactive")
+            raise InvalidStaffCredentialsError("O tenant está suspenso ou inativo")
 
         _bind_actor_for(account.tenant_id, str(account.id))
 
         now = timezone.now()
         state = LockoutState(failed_attempts=account.failed_login_attempts, locked_until=account.locked_until)
         if is_locked(state, now=now):
-            raise StaffAccountLockedError("Account temporarily locked after repeated failed attempts")
+            raise StaffAccountLockedError("Conta temporariamente bloqueada após tentativas falhadas repetidas")
 
         if not check_password(password, account.password_hash):
             self._register_failure(account, state, now, correlation_id)
-            raise InvalidStaffCredentialsError("Invalid email or password")
+            raise InvalidStaffCredentialsError("Email ou palavra-passe inválidos")
 
         roles = list(
             StaffAccountRole.objects.filter(staff_account_id=account.id).values_list("role", flat=True)
@@ -143,22 +143,22 @@ class StaffAccountAuthService:
     def refresh(self, *, refresh_token: str, correlation_id: str | None) -> AuthResult:
         token_id, _, secret = refresh_token.partition(".")
         if not token_id or not secret:
-            raise InvalidRefreshTokenError("Malformed refresh token")
+            raise InvalidRefreshTokenError("Token de renovação malformado")
 
         row = StaffRefreshToken.all_tenants.filter(id=token_id).first()
         if row is None or row.revoked_at is not None or row.expires_at <= timezone.now():
-            raise InvalidRefreshTokenError("Refresh token is invalid, expired, or already used")
+            raise InvalidRefreshTokenError("Token de renovação inválido, expirado ou já utilizado")
         if not check_password(secret, row.token_hash):
-            raise InvalidRefreshTokenError("Refresh token is invalid, expired, or already used")
+            raise InvalidRefreshTokenError("Token de renovação inválido, expirado ou já utilizado")
 
         tenant = Tenant.objects.filter(id=row.tenant_id).first()
         if tenant is None or tenant.status != "ACTIVE":
-            raise InvalidRefreshTokenError("Tenant is suspended or inactive")
+            raise InvalidRefreshTokenError("O tenant está suspenso ou inativo")
 
         _bind_actor_for(row.tenant_id, str(row.staff_account_id))
         account = StaffAccount.objects.filter(id=row.staff_account_id).first()
         if account is None or account.status != StaffAccount.ACTIVE:
-            raise InvalidRefreshTokenError("Account is no longer active")
+            raise InvalidRefreshTokenError("A conta já não está ativa")
 
         roles = list(
             StaffAccountRole.objects.filter(staff_account_id=account.id).values_list("role", flat=True)

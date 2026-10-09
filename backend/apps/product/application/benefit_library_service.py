@@ -79,30 +79,30 @@ def validate_definition(definition: Any) -> dict[str, Any]:
     if definition is None:
         return {}
     if not isinstance(definition, dict):
-        raise InvalidBenefitDefinitionError("definition must be a JSON object")
+        raise InvalidBenefitDefinitionError("definition tem de ser um objeto JSON")
     form = definition.get("guaranteeForm")
     if form is not None and form not in GUARANTEE_FORMS:
         raise InvalidBenefitDefinitionError(
-            f"definition.guaranteeForm '{form}' is not one of {sorted(GUARANTEE_FORMS)}"
+            f"definition.guaranteeForm '{form}' não é um de {sorted(GUARANTEE_FORMS)}"
         )
     for key in ("typicalSublimits", "exclusions"):
         value = definition.get(key)
         if value is not None and not isinstance(value, list):
-            raise InvalidBenefitDefinitionError(f"definition.{key} must be a list")
+            raise InvalidBenefitDefinitionError(f"definition.{key} tem de ser uma lista")
     if definition.get("requiresPriorApproval") is not None and not isinstance(
         definition["requiresPriorApproval"], bool
     ):
-        raise InvalidBenefitDefinitionError("definition.requiresPriorApproval must be a boolean")
+        raise InvalidBenefitDefinitionError("definition.requiresPriorApproval tem de ser verdadeiro ou falso")
     currencies = definition.get("allowedCurrencies")
     if currencies is not None:
         if not isinstance(currencies, list) or not currencies or not set(currencies) <= _ALLOWED_CURRENCIES:
             raise InvalidBenefitDefinitionError(
-                f"definition.allowedCurrencies must be a non-empty list within {sorted(_ALLOWED_CURRENCIES)}"
+                f"definition.allowedCurrencies tem de ser uma lista não vazia dentro de {sorted(_ALLOWED_CURRENCIES)}"
             )
     waiting = definition.get("typicalWaitingDays")
     if waiting is not None:
         if not isinstance(waiting, dict):
-            raise InvalidBenefitDefinitionError("definition.typicalWaitingDays must be an object")
+            raise InvalidBenefitDefinitionError("definition.typicalWaitingDays tem de ser um objeto")
         for segment, rng in waiting.items():
             if (
                 not isinstance(rng, list)
@@ -111,7 +111,7 @@ def validate_definition(definition: Any) -> dict[str, Any]:
                 or rng[0] > rng[1]
             ):
                 raise InvalidBenefitDefinitionError(
-                    f"definition.typicalWaitingDays.{segment} must be [min, max] with 0 <= min <= max"
+                    f"definition.typicalWaitingDays.{segment} tem de ser [mín, máx] com 0 <= mín <= máx"
                 )
     return definition
 
@@ -150,12 +150,12 @@ def create_benefit(
     # erro se o resultado final não obedecer ao padrão estrito do sistema.
     if not _CODE_PATTERN_LENIENT.match(code):
         raise InvalidBenefitDefinitionError(
-            "code must start with a letter and contain 2-60 alphanumeric characters, spaces, hyphens, underscores or dots"
+            "O código tem de começar por uma letra e ter 2 a 60 caracteres alfanuméricos, espaços, hífenes, sublinhados ou pontos"
         )
     code = _normalise_code(code)
     if not _CODE_PATTERN_STRICT.match(code):
         raise InvalidBenefitDefinitionError(
-            f"normalised code '{code}' does not match the canonical pattern ^[A-Z][A-Z0-9_]{{1,59}}$ — remove leading numbers or special chars and try again"
+            f"O código normalizado '{code}' não cumpre o padrão ^[A-Z][A-Z0-9_]{{1,59}}$: retire números iniciais ou caracteres especiais e tente de novo"
         )
     definition = validate_definition(definition)
     tenant_id = CurrentTenantProvider.require().value
@@ -172,7 +172,7 @@ def create_benefit(
             )
             _record_revision(benefit=benefit, action="CREATED", reason=None)
     except IntegrityError as exc:
-        raise DuplicateCodeError(f"Benefit code '{code}' already exists for this tenant") from exc
+        raise DuplicateCodeError(f"O código de cobertura '{code}' já existe neste tenant") from exc
     _audit.record(
         action="benefit.created",
         entity_type="Benefit",
@@ -199,7 +199,7 @@ def update_benefit(
         )
         if updated == 0:
             raise RowVersionMismatchError(
-                f"Benefit {benefit.id} rowVersion {row_version} does not match the current version"
+                f"A versão da cobertura {benefit.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
             )
         benefit.refresh_from_db()
         _record_revision(benefit=benefit, action="UPDATED", reason=reason)
@@ -216,7 +216,7 @@ def set_benefit_status(*, benefit: Benefit, active: bool, reason: str | None) ->
     reason = require_reason(reason)
     if not active and benefit.benefit_type == BASE:
         raise ProtectedBenefitError(
-            f"Benefit '{benefit.code}' is a mandatory (BASE) coverage and cannot be deactivated"
+            f"A cobertura '{benefit.code}' é obrigatória (BASE) e não pode ser desativada"
         )
     target = BenefitStatus.ACTIVE.value if active else BenefitStatus.INACTIVE.value
     before = benefit_snapshot(benefit)
@@ -246,7 +246,7 @@ def list_revisions(*, benefit: Benefit):
 def get_revision(*, benefit: Benefit, revision_no: int) -> BenefitRevision:
     revision = BenefitRevision.objects.filter(benefit=benefit, revision_no=revision_no).first()
     if revision is None:
-        raise BenefitRevisionNotFoundError(f"Benefit {benefit.id} has no revision {revision_no}")
+        raise BenefitRevisionNotFoundError(f"A cobertura {benefit.id} não tem a revisão {revision_no}")
     return revision
 
 
@@ -259,7 +259,7 @@ def rollback_benefit(*, benefit: Benefit, revision_no: int, reason: str | None) 
     snapshot = revision.snapshot_json
     target_status = snapshot.get("status", benefit.status)
     if target_status == BenefitStatus.INACTIVE.value and benefit.benefit_type == BASE:
-        raise ProtectedBenefitError(f"Benefit '{benefit.code}' is BASE and cannot be restored to INACTIVE")
+        raise ProtectedBenefitError(f"A cobertura '{benefit.code}' é BASE e não pode ser restaurada para INACTIVE")
     before = benefit_snapshot(benefit)
     with transaction.atomic():
         Benefit.objects.filter(id=benefit.id).update(
@@ -362,7 +362,7 @@ def _parse_rows(*, filename: str, content: bytes) -> list[dict[str, str]]:
             for row in reader
             if any((v or "").strip() for v in row.values())
         ]
-    raise InvalidBenefitDefinitionError("Unsupported file type: use .xlsx or .csv")
+    raise InvalidBenefitDefinitionError("Tipo de ficheiro não suportado: use .xlsx ou .csv")
 
 
 def import_benefits(*, filename: str, content: bytes, dry_run: bool) -> dict[str, Any]:
@@ -381,25 +381,25 @@ def import_benefits(*, filename: str, content: bytes, dry_run: bool) -> dict[str
         name = (row.get("name") or "").strip()
         try:
             if not code or not name:
-                raise InvalidBenefitDefinitionError("code and name are required")
+                raise InvalidBenefitDefinitionError("código e nome são obrigatórios")
             if not _CODE_PATTERN_LENIENT.match(code):
                 raise InvalidBenefitDefinitionError(
-                    "code must start with a letter and contain 2-60 alphanumeric chars/spaces/hyphens/underscores/dots"
+                    "O código tem de começar por uma letra e ter 2 a 60 caracteres alfanuméricos/espaços/hífenes/sublinhados/pontos"
                 )
             code = _normalise_code(code)
             if not _CODE_PATTERN_STRICT.match(code):
-                raise InvalidBenefitDefinitionError(f"normalised code '{code}' must match ^[A-Z][A-Z0-9_]{{1,59}}$")
+                raise InvalidBenefitDefinitionError(f"O código normalizado '{code}' tem de cumprir ^[A-Z][A-Z0-9_]{{1,59}}$")
             definition_raw = row.get("definition_json") or ""
             try:
                 definition = json.loads(definition_raw) if definition_raw else None
             except json.JSONDecodeError as exc:
-                raise InvalidBenefitDefinitionError(f"definition_json is not valid JSON: {exc.msg}") from exc
+                raise InvalidBenefitDefinitionError(f"definition_json não é JSON válido: {exc.msg}") from exc
             validate_definition(definition)
             description = row.get("description") or None
             existing = Benefit.objects.filter(code=code).first()
             if existing is None:
                 if (row.get("category") or COMPLEMENTARY).upper() == BASE:
-                    raise InvalidBenefitDefinitionError("a BASE coverage cannot be created through import")
+                    raise InvalidBenefitDefinitionError("Uma cobertura BASE não pode ser criada por importação")
                 if not dry_run:
                     create_benefit(code=code, name=name, description=description, definition=definition)
                 created.append(code)

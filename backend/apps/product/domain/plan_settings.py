@@ -55,43 +55,43 @@ def decimal_value(raw: Any, path: str, *, minimum: Decimal | None = Decimal("0")
     """Money/percentages travel as decimal strings (ART-006 rule used
     everywhere in this API)."""
     if isinstance(raw, bool) or not isinstance(raw, (str, int)):
-        raise InvalidPlanSettingsError(f"{path} must be a decimal serialised as a string")
+        raise InvalidPlanSettingsError(f"{path} tem de ser um decimal escrito como texto")
     try:
         value = Decimal(str(raw))
     except InvalidOperation as exc:
-        raise InvalidPlanSettingsError(f"{path} is not a valid decimal") from exc
+        raise InvalidPlanSettingsError(f"{path} não é um decimal válido") from exc
     if not value.is_finite():
-        raise InvalidPlanSettingsError(f"{path} is not a finite decimal")
+        raise InvalidPlanSettingsError(f"{path} não é um decimal finito")
     if minimum is not None and value < minimum:
-        raise InvalidPlanSettingsError(f"{path} must be >= {minimum}")
+        raise InvalidPlanSettingsError(f"{path} tem de ser maior ou igual a {minimum}")
     if maximum is not None and value > maximum:
-        raise InvalidPlanSettingsError(f"{path} must be <= {maximum}")
+        raise InvalidPlanSettingsError(f"{path} tem de ser menor ou igual a {maximum}")
     return value
 
 
 def _obj(raw: Any, path: str) -> dict[str, Any]:
     if not isinstance(raw, dict):
-        raise InvalidPlanSettingsError(f"{path} must be an object")
+        raise InvalidPlanSettingsError(f"{path} tem de ser um objeto")
     return raw
 
 
 def _int(raw: Any, path: str, *, minimum: int = 0, maximum: int | None = None) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int):
-        raise InvalidPlanSettingsError(f"{path} must be an integer")
+        raise InvalidPlanSettingsError(f"{path} tem de ser um número inteiro")
     if raw < minimum or (maximum is not None and raw > maximum):
-        raise InvalidPlanSettingsError(f"{path} must be between {minimum} and {maximum if maximum is not None else '∞'}")
+        raise InvalidPlanSettingsError(f"{path} tem de estar entre {minimum} e {maximum if maximum is not None else '∞'}")
     return raw
 
 
 def _bool(raw: Any, path: str) -> bool:
     if not isinstance(raw, bool):
-        raise InvalidPlanSettingsError(f"{path} must be a boolean")
+        raise InvalidPlanSettingsError(f"{path} tem de ser verdadeiro ou falso")
     return raw
 
 
 def _choice(raw: Any, path: str, choices: tuple[str, ...]) -> str:
     if raw not in choices:
-        raise InvalidPlanSettingsError(f"{path} must be one of {list(choices)}")
+        raise InvalidPlanSettingsError(f"{path} tem de ser um de {list(choices)}")
     return raw
 
 
@@ -108,7 +108,7 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
 
     unknown = set(settings) - _ALLOWED_KEYS
     if unknown:
-        raise InvalidPlanSettingsError(f"Unknown plan setting(s): {sorted(unknown)}")
+        raise InvalidPlanSettingsError(f"Definição(ões) de plano desconhecida(s): {sorted(unknown)}")
 
     segment = _choice(settings.get("segment"), "settings.segment", SEGMENTS)
     if "tier" in settings and settings["tier"] is not None:
@@ -119,8 +119,7 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
         _choice(settings["currency"], "settings.currency", ("AOA", "USD"))
     if settings.get("noProRata") is False:
         raise InvalidPlanSettingsError(
-            "settings.noProRata cannot be false: in health insurance there is no pro-rata rule — once the annual "
-            "capital is exhausted the insurer stops paying until the next anniversary"
+            "settings.noProRata não pode ser falso: no seguro de saúde não há rateio; esgotado o capital anual, a seguradora deixa de pagar até ao aniversário seguinte"
         )
 
     # ---- idades (PDF: entrada até 60–65, renovação até 70–75; tarifar por escalão etário)
@@ -129,12 +128,12 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
         entry = _obj(settings["entryAge"], "settings.entryAge")
         entry_age = (_int(entry.get("min", 0), "settings.entryAge.min", maximum=120), _int(entry.get("max"), "settings.entryAge.max", maximum=120))
         if entry_age[0] > entry_age[1]:
-            raise InvalidPlanSettingsError("settings.entryAge.min cannot exceed settings.entryAge.max")
+            raise InvalidPlanSettingsError("settings.entryAge.min não pode exceder settings.entryAge.max")
     if "permanenceAge" in settings:
         permanence = _obj(settings["permanenceAge"], "settings.permanenceAge")
         permanence_age = _int(permanence.get("max"), "settings.permanenceAge.max", maximum=120)
     if entry_age and permanence_age is not None and entry_age[1] > permanence_age:
-        raise InvalidPlanSettingsError("settings.permanenceAge.max cannot be lower than settings.entryAge.max")
+        raise InvalidPlanSettingsError("settings.permanenceAge.max não pode ser inferior a settings.entryAge.max")
     if segment == "INDIVIDUAL_FAMILY" and (entry_age is None or permanence_age is None):
         warnings.append(
             _warning(
@@ -147,7 +146,7 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
     # ---- agregado familiar (só Individual/Familiar)
     if "household" in settings:
         if segment != "INDIVIDUAL_FAMILY":
-            raise InvalidPlanSettingsError("settings.household only applies to INDIVIDUAL_FAMILY plans")
+            raise InvalidPlanSettingsError("settings.household só se aplica a planos INDIVIDUAL_FAMILY")
         household = _obj(settings["household"], "settings.household")
         if "spouse" in household:
             _bool(household["spouse"], "settings.household.spouse")
@@ -163,8 +162,7 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
             required = _bool(questionnaire["required"], "settings.clinicalQuestionnaire.required")
             if segment == "INDIVIDUAL_FAMILY" and not required:
                 raise InvalidPlanSettingsError(
-                    "settings.clinicalQuestionnaire.required cannot be false on an INDIVIDUAL_FAMILY plan: "
-                    "the clinical questionnaire is mandatory in individual health insurance"
+                    "settings.clinicalQuestionnaire.required não pode ser falso num plano INDIVIDUAL_FAMILY: o questionário clínico é obrigatório no seguro de saúde individual"
                 )
         if "medicalExamAboveAge" in questionnaire:
             _int(questionnaire["medicalExamAboveAge"], "settings.clinicalQuestionnaire.medicalExamAboveAge", maximum=120)
@@ -177,7 +175,7 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
     group_adhesion = None
     if "group" in settings:
         if segment != "GROUP":
-            raise InvalidPlanSettingsError("settings.group only applies to GROUP plans")
+            raise InvalidPlanSettingsError("settings.group só se aplica a planos GROUP")
         group = _obj(settings["group"], "settings.group")
         if "minInsured" in group:
             minimum = _int(group["minInsured"], "settings.group.minInsured", minimum=1)
@@ -222,13 +220,13 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
     option_codes: list[str] = []
     if options is not None:
         if not isinstance(options, list) or not options:
-            raise InvalidPlanSettingsError("settings.participationOptions must be a non-empty list")
+            raise InvalidPlanSettingsError("settings.participationOptions tem de ser uma lista não vazia")
         parsed: dict[str, dict[str, Any]] = {}
         for idx, option in enumerate(options):
             option = _obj(option, f"settings.participationOptions[{idx}]")
             code = _choice(option.get("code"), f"settings.participationOptions[{idx}].code", PARTICIPATION_CODES)
             if code in parsed:
-                raise InvalidPlanSettingsError(f"settings.participationOptions has duplicate option '{code}'")
+                raise InvalidPlanSettingsError(f"settings.participationOptions tem a opção '{code}' repetida")
             entry: dict[str, Any] = {"code": code}
             for field in ("annualDeductible", "copayPerConsultation", "perEventDeductible"):
                 if option.get(field) is not None:
@@ -251,7 +249,7 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
         selected = _choice(settings["participationOption"], "settings.participationOption", PARTICIPATION_CODES)
         if options is None or selected not in option_codes:
             raise InvalidPlanSettingsError(
-                f"settings.participationOption '{selected}' must be defined in settings.participationOptions"
+                f"settings.participationOption '{selected}' tem de estar definida em settings.participationOptions"
             )
 
     # ---- doenças preexistentes (6 tratamentos do PDF)
@@ -261,7 +259,7 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
         if mode == "FULL_ACCEPTANCE":
             if segment != "GROUP" or group_adhesion != "MANDATORY":
                 raise InvalidPlanSettingsError(
-                    "FULL_ACCEPTANCE of pre-existing conditions only applies to GROUP plans with MANDATORY adhesion"
+                    "A aceitação integral (FULL_ACCEPTANCE) de doenças preexistentes só se aplica a planos GROUP com adesão obrigatória (MANDATORY)"
                 )
         if mode == "ACCEPTED_WITH_WAITING":
             _int(treatment.get("waitingMonths"), "settings.preExistingTreatment.waitingMonths", minimum=12, maximum=24)
@@ -291,7 +289,7 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
         network = _obj(settings["network"], "settings.network")
         regions = network.get("regions", [])
         if not isinstance(regions, list) or not set(regions) <= set(NETWORK_REGIONS):
-            raise InvalidPlanSettingsError(f"settings.network.regions must be a list within {list(NETWORK_REGIONS)}")
+            raise InvalidPlanSettingsError(f"settings.network.regions tem de ser uma lista dentro de {list(NETWORK_REGIONS)}")
         if access in ("NETWORK", "MIXED") and not regions:
             warnings.append(
                 _warning("NETWORK_COVERAGE", "Verificar a cobertura geográfica da rede (Luanda vs províncias) e as tabelas de preços acordadas.")
@@ -329,18 +327,17 @@ def _validate_participation_monotonic(options: list[dict[str, Any]]) -> None:
         if previous is not None:
             if option["premiumAdjustmentPct"] >= previous["premiumAdjustmentPct"]:
                 raise InvalidPlanSettingsError(
-                    f"participation option {option['code']} must have a lower premium adjustment than "
-                    f"{previous['code']} (the higher the participation, the lower the premium)"
+                    f"a opção de participação {option['code']} tem de ter um ajuste de prémio inferior a {previous['code']} (quanto maior a participação, menor o prémio)"
                 )
             if option["code"] != "E":
                 for field in ("annualDeductible", "copayPerConsultation"):
                     if field in option and field in previous and option[field] < previous[field]:
                         raise InvalidPlanSettingsError(
-                            f"participation option {option['code']} cannot have a lower {field} than {previous['code']}"
+                            f"a opção de participação {option['code']} não pode ter {field} inferior a {previous['code']}"
                         )
                 if "reimbursementPct" in option and "reimbursementPct" in previous and option["reimbursementPct"] > previous["reimbursementPct"]:
                     raise InvalidPlanSettingsError(
-                        f"participation option {option['code']} cannot reimburse a higher share than {previous['code']}"
+                        f"a opção de participação {option['code']} não pode reembolsar uma percentagem maior do que {previous['code']}"
                     )
         previous = option
 

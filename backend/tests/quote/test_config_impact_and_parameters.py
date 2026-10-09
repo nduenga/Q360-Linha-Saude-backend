@@ -147,7 +147,7 @@ def test_structural_parameters_cannot_be_changed_by_the_gte(admin_client):
     resp = admin_client.put(
         "/api/v1/system-parameters/pricing.rounding_policy", {"value": "OTHER", "rowVersion": 0, "reason": REASON}, format="json"
     )
-    assert resp.status_code == 403 and resp.data["code"] == "SEC-403" and "structural" in resp.data["detail"]
+    assert resp.status_code == 403 and resp.data["code"] == "SEC-403" and "estrutural" in resp.data["detail"]
     assert admin_client.put(
         "/api/v1/system-parameters/capital.pro_rata_rule", {"value": True, "rowVersion": 0, "reason": REASON}, format="json"
     ).status_code == 403

@@ -168,7 +168,7 @@ MEDIA_ROOT = BASE_DIR / "media"
 # environment rather than hardcoded in apps/quote/application/quote_service.py.
 QUOTE_DEFAULT_VALIDITY_DAYS = int(os.environ.get("QUOTE_DEFAULT_VALIDITY_DAYS", "30"))
 
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = "pt-pt"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True

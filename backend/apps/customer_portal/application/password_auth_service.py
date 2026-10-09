@@ -74,9 +74,9 @@ def _resolve_proposer(*, reference: str, registration_number: str) -> Proposer:
     )
     proposer = Proposer.objects.filter(id=proposer_id).first() if proposer_id else None
     if proposer is None:
-        raise PortalPolicyNotFoundError(f"No policy or quote found for '{reference}'")
+        raise PortalPolicyNotFoundError(f"Não foi encontrada nenhuma apólice ou cotação com a referência '{reference}'")
     if proposer.registration_number != registration_number.strip():
-        raise PortalRegistrationMismatchError("registrationNumber does not match the holder of this policy or quote")
+        raise PortalRegistrationMismatchError("O número de registo (registrationNumber) não corresponde ao titular desta apólice ou cotação")
     return proposer
 
 
@@ -87,7 +87,7 @@ def _account_for(email: str) -> CustomerAccount | None:
 def _assert_not_locked(account: CustomerAccount) -> None:
     state = LockoutState(failed_attempts=account.failed_otp_attempts, locked_until=account.locked_until)
     if is_locked(state, now=timezone.now()):
-        raise PortalAccountLockedError("Account temporarily locked after repeated failed attempts")
+        raise PortalAccountLockedError("Conta temporariamente bloqueada após tentativas falhadas repetidas")
 
 
 def _register_failure(account: CustomerAccount, *, audit_action: str, correlation_id: str | None) -> bool:
@@ -128,8 +128,8 @@ def _consume_code(account: CustomerAccount, otp: str, *, correlation_id: str | N
     )
     if challenge is None or not _matches_otp_hash(otp, challenge.otp_hash):
         if _register_failure(account, audit_action="customer_portal.set_password_code_failed", correlation_id=correlation_id):
-            raise PortalAccountLockedError("Account locked after repeated failed attempts")
-        raise InvalidPortalCredentialsError("Invalid or expired code")
+            raise PortalAccountLockedError("Conta bloqueada após tentativas falhadas repetidas")
+        raise InvalidPortalCredentialsError("Código inválido ou expirado")
     return challenge
 
 
@@ -160,7 +160,7 @@ class CustomerPortalPasswordAuthService:
         proposer = _resolve_proposer(reference=reference, registration_number=registration_number)
         email = _normalise(proposer.email or "")
         if "@" not in email:
-            raise PortalNoEmailOnFileError("There is no email registered for this customer; contact your Q360 mediator")
+            raise PortalNoEmailOnFileError("Não há nenhum email registado para este cliente; contacte o seu mediador Q360")
         with transaction.atomic():
             account = _account_for(email) or CustomerAccount.objects.create(tenant_id=_tenant_id(), email=email)
             _assert_not_locked(account)
@@ -182,7 +182,7 @@ class CustomerPortalPasswordAuthService:
         email = _normalise(proposer.email or "")
         account = _account_for(email) if "@" in email else None
         if account is None:
-            raise InvalidPortalCredentialsError("No access request was made for this customer — request a new code first")
+            raise InvalidPortalCredentialsError("Não foi feito nenhum pedido de acesso para este cliente: peça primeiro um novo código")
         validate_password_strength(password, email=account.email)
         challenge = _consume_code(account, otp, correlation_id=correlation_id)
         return _finish(account, challenge, password, audit_action="customer_portal.password_set", correlation_id=correlation_id)
@@ -209,7 +209,7 @@ class CustomerPortalPasswordAuthService:
     ) -> tuple[str, int]:
         account = _account_for(_normalise(email))
         if account is None:
-            raise InvalidPortalCredentialsError("Invalid or expired code")
+            raise InvalidPortalCredentialsError("Código inválido ou expirado")
         validate_password_strength(password, email=account.email)
         challenge = _consume_code(account, otp, correlation_id=correlation_id)
         return _finish(account, challenge, password, audit_action="customer_portal.password_reset", correlation_id=correlation_id)
@@ -219,12 +219,12 @@ class CustomerPortalPasswordAuthService:
         account = _account_for(_normalise(email))
         if account is None or not account.password_hash:
             check_password(password, _DUMMY_HASH)  # same cost as a real check
-            raise InvalidPortalCredentialsError("Invalid email or password")
+            raise InvalidPortalCredentialsError("Email ou palavra-passe inválidos")
         _assert_not_locked(account)
         if not check_password(password, account.password_hash):
             if _register_failure(account, audit_action="customer_portal.login_failed", correlation_id=correlation_id):
-                raise PortalAccountLockedError("Account locked after repeated failed attempts")
-            raise InvalidPortalCredentialsError("Invalid email or password")
+                raise PortalAccountLockedError("Conta bloqueada após tentativas falhadas repetidas")
+            raise InvalidPortalCredentialsError("Email ou palavra-passe inválidos")
         CustomerAccount.objects.filter(id=account.id).update(
             failed_otp_attempts=register_success().failed_attempts, locked_until=None
         )

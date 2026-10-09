@@ -33,7 +33,7 @@ def set_plan_settings(*, plan: Plan, settings: dict[str, Any], row_version: int)
         settings_json=normalised, row_version=row_version + 1
     )
     if updated == 0:
-        raise RowVersionMismatchError(f"Plan {plan.id} rowVersion {row_version} does not match the current version")
+        raise RowVersionMismatchError(f"A versão do plano {plan.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
     plan.refresh_from_db()
     _audit.record(
         action="plan.settings_updated",
@@ -53,7 +53,7 @@ def configure_plan_benefit(
     must stay INCLUDED. An INACTIVE coverage cannot be newly attached."""
     existing = PlanBenefit.objects.filter(plan=plan, benefit=benefit).first()
     if existing is None and benefit.status != BenefitStatus.ACTIVE.value:
-        raise InvalidBenefitSelectionError(f"Benefit '{benefit.code}' is INACTIVE and cannot be added to a plan")
+        raise InvalidBenefitSelectionError(f"A cobertura '{benefit.code}' está inativa (INACTIVE) e não pode ser adicionada a um plano")
     normalised, warnings = validate_coverage_config(
         configuration,
         benefit_code=benefit.code,

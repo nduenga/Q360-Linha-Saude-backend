@@ -29,7 +29,7 @@ def list_admins() -> list[PlatformAdmin]:
 def _get(admin_id) -> PlatformAdmin:
     admin = PlatformAdmin.objects.filter(id=admin_id).first()
     if admin is None:
-        raise PlatformNotFoundError("Platform administrator not found")
+        raise PlatformNotFoundError("Administrador da plataforma não encontrado")
     return admin
 
 
@@ -41,7 +41,7 @@ def create_admin(*, actor_id: str, email: str, name: str, correlation_id: str | 
             id=uuid.uuid4(), email=email.strip().lower(), name=name.strip(), password_hash=make_password(password)
         )
     except IntegrityError as exc:
-        raise PlatformConflictError("A platform administrator with this email already exists") from exc
+        raise PlatformConflictError("Já existe um administrador da plataforma com este email") from exc
     record_platform_audit(
         actor_id=actor_id, action="platform.admin_created", entity_type="PlatformAdmin", entity_id=str(admin.id),
         correlation_id=correlation_id, metadata={"email": admin.email},
@@ -54,10 +54,10 @@ def set_status(*, actor_id: str, admin_id, status: str, correlation_id: str | No
     admin = _get(admin_id)
     if status == PlatformAdmin.DISABLED:
         if str(admin.id) == actor_id:
-            raise PlatformRuleError("You cannot disable your own account")
+            raise PlatformRuleError("Não pode desativar a sua própria conta")
         others = PlatformAdmin.objects.filter(status=PlatformAdmin.ACTIVE).exclude(id=admin.id).count()
         if admin.status == PlatformAdmin.ACTIVE and others == 0:
-            raise PlatformRuleError("At least one active platform administrator is required")
+            raise PlatformRuleError("É necessário pelo menos um administrador da plataforma ativo")
     PlatformAdmin.objects.filter(id=admin.id).update(status=status)
     admin.status = status
     record_platform_audit(
@@ -84,9 +84,9 @@ def reset_password(*, actor_id: str, admin_id, correlation_id: str | None) -> tu
 def change_own_password(*, admin_id: str, current: str, new: str, correlation_id: str | None) -> None:
     admin = _get(admin_id)
     if not check_password(current, admin.password_hash):
-        raise PlatformRuleError("Current password is incorrect")
+        raise PlatformRuleError("A palavra-passe atual está incorreta")
     if len(new) < MIN_PASSWORD:
-        raise PlatformRuleError(f"Password must contain at least {MIN_PASSWORD} characters")
+        raise PlatformRuleError(f"A palavra-passe tem de ter pelo menos {MIN_PASSWORD} caracteres")
     PlatformAdmin.objects.filter(id=admin.id).update(password_hash=make_password(new))
     record_platform_audit(
         actor_id=str(admin.id), action="platform.admin_password_changed", entity_type="PlatformAdmin",

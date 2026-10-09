@@ -129,8 +129,7 @@ def get_member_coverage(
 
     if policy_member is None:
         raise ReferencedEntityNotFoundError(
-            f"Member {member_id} is not associated "
-            f"with policy {policy.id}"
+            f"A pessoa segura {member_id} não está associada à apólice {policy.id}"
         )
 
     return check_coverage(

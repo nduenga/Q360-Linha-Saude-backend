@@ -50,7 +50,7 @@ class JwtActorAdapter:
 
         subject = claims.get("sub")
         if not subject:
-            raise InvalidTokenError("Token is missing required claim 'sub'")
+            raise InvalidTokenError("O token não tem a claim obrigatória 'sub'")
 
         token_type = claims.get("token_type", "staff")
         roles = _parse_roles(claims.get(settings.OIDC_ROLES_CLAIM, []))
@@ -58,7 +58,7 @@ class JwtActorAdapter:
 
         if token_type == "platform":
             if Role.PLATFORM_ADMIN not in roles:
-                raise InvalidTokenError("Platform token must contain PLATFORM_ADMIN role")
+                raise InvalidTokenError("O token da plataforma tem de ter o perfil PLATFORM_ADMIN")
             return Actor(
                 actor_id=str(subject),
                 tenant_id=None,
@@ -70,11 +70,11 @@ class JwtActorAdapter:
         tenant_claim = settings.OIDC_TENANT_CLAIM
         raw_tenant_id = claims.get(tenant_claim)
         if not raw_tenant_id:
-            raise InvalidTokenError(f"Token is missing required claim '{tenant_claim}'")
+            raise InvalidTokenError(f"O token não tem a claim obrigatória '{tenant_claim}'")
         try:
             tenant_id = TenantId.parse(raw_tenant_id)
         except (ValueError, AttributeError) as exc:
-            raise InvalidTokenError(f"Claim '{tenant_claim}' is not a valid tenant identifier") from exc
+            raise InvalidTokenError(f"A claim '{tenant_claim}' não é um identificador de tenant válido") from exc
 
         return Actor(actor_id=str(subject), tenant_id=tenant_id, roles=roles, scopes=scopes, actor_type="USER")
 
@@ -85,11 +85,11 @@ class JwtActorAdapter:
                 options={"verify_signature": False, "verify_exp": False, "verify_aud": False, "verify_iss": False},
             )
         except jwt.PyJWTError as exc:
-            raise InvalidTokenError("Malformed JWT") from exc
+            raise InvalidTokenError("JWT malformado") from exc
 
         if unverified.get("token_type", "staff") == "platform":
             if not settings.PLATFORM_ADMIN_JWT_SIGNING_KEY:
-                raise InvalidTokenError("PLATFORM_ADMIN_JWT_SIGNING_KEY is not configured")
+                raise InvalidTokenError("PLATFORM_ADMIN_JWT_SIGNING_KEY não está configurada")
             return jwt.decode(
                 bearer_token,
                 key=settings.PLATFORM_ADMIN_JWT_SIGNING_KEY,
@@ -106,7 +106,7 @@ class JwtActorAdapter:
         elif settings.OIDC_STATIC_VERIFICATION_KEY:
             signing_key = settings.OIDC_STATIC_VERIFICATION_KEY
         else:
-            raise InvalidTokenError("No OIDC_JWKS_URL, Q360_JWT_SIGNING_KEY or OIDC_STATIC_VERIFICATION_KEY configured")
+            raise InvalidTokenError("Nenhuma de OIDC_JWKS_URL, Q360_JWT_SIGNING_KEY ou OIDC_STATIC_VERIFICATION_KEY está configurada")
 
         return jwt.decode(
             bearer_token, key=signing_key, algorithms=settings.OIDC_ALGORITHMS,

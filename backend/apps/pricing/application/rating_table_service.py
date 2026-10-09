@@ -65,7 +65,7 @@ def create_rating_table(
                 ]
             )
     except IntegrityError as exc:
-        raise DuplicateCodeError(f"RatingTable '{code}' could not be created: version already exists") from exc
+        raise DuplicateCodeError(f"Não foi possível criar a tabela de tarifação '{code}': a versão já existe") from exc
 
     _audit.record(
         action="rating_table.created",
@@ -89,7 +89,7 @@ def update_rating_table(
         ).update(name=name, currency_code=currency_code)
         if updated == 0:
             raise ImmutableVersionError(
-                f"RatingTable {rating_table.id} is not DRAFT; only a DRAFT rating table can be edited"
+                f"A tabela de tarifação {rating_table.id} não está em rascunho (DRAFT); só um rascunho pode ser editado"
             )
         RatingFactor.objects.filter(rating_table=rating_table).delete()
         RatingFactor.objects.bulk_create(
@@ -128,7 +128,7 @@ def delete_rating_table(rating_table: RatingTable) -> None:
         ).exists()
         if not still_draft:
             raise ImmutableVersionError(
-                f"RatingTable {rating_table.id} is not DRAFT; only a DRAFT rating table can be deleted"
+                f"A tabela de tarifação {rating_table.id} não está em rascunho (DRAFT); só um rascunho pode ser eliminado"
             )
         RatingFactor.objects.filter(rating_table_id=rating_table.id).delete()
         RatingTable.objects.filter(id=rating_table.id).delete()
@@ -149,7 +149,7 @@ def retire_rating_table(rating_table: RatingTable) -> RatingTable:
     ).update(status=VersionedConfigStatus.RETIRED.value)
     if updated == 0:
         raise ImmutableVersionError(
-            f"RatingTable {rating_table.id} is not PUBLISHED; only a PUBLISHED rating table can be retired"
+            f"A tabela de tarifação {rating_table.id} não está publicada (PUBLISHED); só uma tabela publicada pode ser retirada"
         )
     rating_table.refresh_from_db()
     _audit.record(
@@ -167,7 +167,7 @@ def publish_rating_table(rating_table: RatingTable) -> RatingTable:
         published_by=actor.actor_id if actor else None,
     )
     if updated == 0:
-        raise ImmutableVersionError(f"RatingTable {rating_table.id} is not DRAFT; only DRAFT can be published")
+        raise ImmutableVersionError(f"A tabela de tarifação {rating_table.id} não está em rascunho (DRAFT); só um rascunho pode ser publicado")
     rating_table.refresh_from_db()
 
     _audit.record(

@@ -39,7 +39,7 @@ class InvalidDocumentLinkError(DomainProblem):
 def create_link(*, document_id: uuid.UUID) -> dict:
     document = proposal_service.get_document(document_id)
     if document.status != "GENERATED":
-        raise proposal_service.ProposalError(f"Document {document.id} has no generated file ({document.status})")
+        raise proposal_service.ProposalError(f"O documento {document.id} não tem ficheiro gerado ({document.status})")
     ttl = int(system_parameter_service.get_value(TTL_PARAMETER))
     expires = timezone.now() + datetime.timedelta(seconds=ttl)
     token = signing.dumps(

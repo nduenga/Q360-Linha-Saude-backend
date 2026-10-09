@@ -55,7 +55,7 @@ def _my_quote(quote_number: str) -> Quote:
         else None
     )
     if quote is None:
-        raise PortalResourceNotFoundError("No quote found for this quoteNumber")
+        raise PortalResourceNotFoundError("Não foi encontrada nenhuma cotação com este número (quoteNumber)")
     return quote
 
 
@@ -64,7 +64,7 @@ def _default_proposer_id() -> uuid.UUID:
     oldest linked proposer."""
     proposer_ids = _scoped_proposer_ids()
     if not proposer_ids:
-        raise PortalResourceNotFoundError("No customer account proposer")
+        raise PortalResourceNotFoundError("A conta de cliente não tem nenhum cliente associado")
     return proposer_ids[0]
 
 
@@ -72,24 +72,24 @@ def _validate_payload(request_type: str, payload: Any, policy: Policy | None) ->
     if payload is None:
         payload = {}
     if not isinstance(payload, dict) or len(payload) > _MAX_PAYLOAD_KEYS:
-        raise rules.PortalRequestInvalidError(f"payload must be an object with at most {_MAX_PAYLOAD_KEYS} fields")
+        raise rules.PortalRequestInvalidError(f"O conteúdo (payload) tem de ser um objeto com no máximo {_MAX_PAYLOAD_KEYS} campos")
     if request_type == "MEMBER_INCLUSION":
         missing = [f for f in _INCLUSION_FIELDS if not str(payload.get(f) or "").strip()]
         if missing:
-            raise rules.PortalRequestInvalidError(f"payload is missing: {', '.join(missing)}")
+            raise rules.PortalRequestInvalidError(f"Faltam campos no conteúdo (payload): {', '.join(missing)}")
         try:
             datetime.date.fromisoformat(str(payload["dateOfBirth"]))
         except ValueError as exc:
-            raise rules.PortalRequestInvalidError("payload.dateOfBirth must be YYYY-MM-DD") from exc
+            raise rules.PortalRequestInvalidError("A data de nascimento (payload.dateOfBirth) tem de estar no formato AAAA-MM-DD") from exc
     if request_type == "MEMBER_EXCLUSION":
         try:
             member_id = uuid.UUID(str(payload.get("memberId")))
         except ValueError as exc:
-            raise rules.PortalRequestInvalidError("payload.memberId is required") from exc
+            raise rules.PortalRequestInvalidError("A pessoa segura (payload.memberId) é obrigatória") from exc
         if policy is None or not PolicyMember.objects.filter(
             policy=policy, member_id=member_id, status__in=("ACTIVE", "PENDING")
         ).exists():
-            raise rules.PortalRequestInvalidError("payload.memberId is not an insured member of this policy")
+            raise rules.PortalRequestInvalidError("A pessoa segura indicada (payload.memberId) não pertence a esta apólice")
     return payload
 
 
@@ -106,26 +106,26 @@ def create_request(
 ) -> PortalRequest:
     spec = rules.REQUEST_TYPES.get(request_type)
     if spec is None:
-        raise rules.PortalRequestInvalidError(f"requestType must be one of {sorted(rules.REQUEST_TYPES)}")
+        raise rules.PortalRequestInvalidError(f"O tipo de pedido (requestType) tem de ser um de {sorted(rules.REQUEST_TYPES)}")
     today = today or datetime.date.today()
 
     policy = resolve_my_policy(policy_number) if policy_number else None
     quote = _my_quote(quote_number) if quote_number else None
     if spec["policy"] and policy is None:
-        raise rules.PortalRequestInvalidError("policyNumber is required for this request type")
+        raise rules.PortalRequestInvalidError("O número da apólice (policyNumber) é obrigatório para este tipo de pedido")
     if spec["quote"] and quote is None:
-        raise rules.PortalRequestInvalidError("quoteNumber is required for this request type")
+        raise rules.PortalRequestInvalidError("O número da cotação (quoteNumber) é obrigatório para este tipo de pedido")
 
     if request_type == "RENEWAL":
         days_left = (policy.end_date - today).days if policy.end_date else None
         if policy.status != "ACTIVE" or days_left is None or days_left > RENEWAL_WINDOW_DAYS or days_left < 0:
             raise rules.PortalRequestInvalidError(
-                f"A renewal can only be requested for an active policy ending within {RENEWAL_WINDOW_DAYS} days"
+                f"A renovação só pode ser pedida para uma apólice ativa que termine dentro de {RENEWAL_WINDOW_DAYS} dias"
             )
     if request_type == "CANCELLATION" and policy.status not in _CANCELLABLE_POLICY_STATUSES:
-        raise rules.PortalRequestInvalidError("This policy cannot be cancelled in its current state")
+        raise rules.PortalRequestInvalidError("Esta apólice não pode ser cancelada no estado em que se encontra")
     if request_type == "ACCEPT_QUOTE" and portal_quote_status(quote, today) != "AWAITING_SIGNATURE":
-        raise rules.PortalRequestInvalidError("Only an approved quote that is still valid can be accepted")
+        raise rules.PortalRequestInvalidError("Só é possível aceitar uma cotação aprovada e ainda dentro da validade")
 
     payload = _validate_payload(request_type, payload, policy)
 
@@ -135,7 +135,7 @@ def create_request(
             policy_id=policy.id if policy else None, quote_id=quote.id if quote else None,
         ).exists()
         if clash:
-            raise rules.PortalRequestConflictError("There is already an open request of this type for this target")
+            raise rules.PortalRequestConflictError("Já existe um pedido em aberto deste tipo para este destino")
 
     proposer_id = policy.proposer_id if policy else quote.proposer_id if quote else _default_proposer_id()
     with transaction.atomic():
@@ -213,7 +213,7 @@ def _my_request(request_number: str) -> PortalRequest:
         else None
     )
     if request is None:
-        raise PortalResourceNotFoundError("No request found for this requestNumber")
+        raise PortalResourceNotFoundError("Não foi encontrado nenhum pedido com este número (requestNumber)")
     return request
 
 
@@ -248,7 +248,7 @@ def staff_list(*, status: str | None = None, request_type: str | None = None) ->
 def staff_get(request_number: str) -> dict:
     request = PortalRequest.objects.filter(request_number=request_number).first()
     if request is None:
-        raise PortalResourceNotFoundError("No request found for this requestNumber")
+        raise PortalResourceNotFoundError("Não foi encontrado nenhum pedido com este número (requestNumber)")
     holder = Proposer.objects.filter(id=request.proposer_id).first()
     return {
         **items_for([request])[0],
@@ -261,7 +261,7 @@ def staff_get(request_number: str) -> dict:
 def staff_transition(*, request_number: str, to_status: str, note: str | None, actor_ref: str) -> dict:
     request = PortalRequest.objects.filter(request_number=request_number).first()
     if request is None:
-        raise PortalResourceNotFoundError("No request found for this requestNumber")
+        raise PortalResourceNotFoundError("Não foi encontrado nenhum pedido com este número (requestNumber)")
     rules.assert_transition(request.status, to_status, note)
     previous = request.status
     resolution_note = request.resolution_note
@@ -274,7 +274,7 @@ def staff_transition(*, request_number: str, to_status: str, note: str | None, a
             row_version=request.row_version + 1,
         )
         if updated == 0:
-            raise rules.PortalRequestConflictError("The request changed meanwhile; reload and try again")
+            raise rules.PortalRequestConflictError("O pedido foi alterado entretanto; recarregue e tente de novo")
         PortalRequestEvent.objects.create(
             tenant_id=_tenant_id(), request=request, from_status=previous, to_status=to_status,
             note=(note or "").strip() or None, actor_type="STAFF", actor_ref=actor_ref,

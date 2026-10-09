@@ -36,7 +36,10 @@ class RegisterFirstPremiumPaymentRequestSerializer(serializers.Serializer):
     paidAt = serializers.DateTimeField()
     paymentReference = serializers.CharField(required=False, default=None, allow_null=True, max_length=200)
     paymentMethod = serializers.CharField(required=False, default=None, allow_null=True, max_length=50)
-    rowVersion = serializers.IntegerField(min_value=0)
+    rowVersion = serializers.IntegerField(
+        min_value=0, required=False, default=None, allow_null=True,
+        help_text="Obrigatório na 1.ª prestação (ativa a apólice); ignorado nas seguintes.",
+    )
 
 
 class EmitPaymentSerializer(serializers.Serializer):

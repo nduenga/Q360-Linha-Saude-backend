@@ -85,8 +85,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if not settings.DEBUG:
             raise CommandError(
-                "seed_demo_data is restricted to DEBUG environments. "
-                "For production, use prepare_portal_test_accounts with an explicit tenant ID."
+                "seed_demo_data só pode ser executado em ambientes DEBUG. Em produção, use prepare_portal_test_accounts com um ID de tenant explícito."
             )
         tenant, _ = Tenant.objects.get_or_create(
             code=options["tenant_code"], defaults={"name": options["tenant_name"]}
@@ -275,8 +274,7 @@ class Command(BaseCommand):
         )
         if len(active_tables) != 1 or len(active_parameter_sets) != 1:
             raise CommandError(
-                "The demo tenant has ambiguous published pricing configuration. "
-                "Use a fresh tenant (the default is demo-saude) or retire extra published configuration codes."
+                "O tenant de demonstração tem configuração de preços publicada ambígua. Use um tenant novo (por omissão demo-saude) ou retire os códigos de configuração publicados em excesso."
             )
 
     def _ensure_products_and_plans(self, tenant: Tenant) -> dict[str, Plan]:

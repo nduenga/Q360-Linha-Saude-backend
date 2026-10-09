@@ -38,7 +38,7 @@ _outbox = get_outbox_service()
 
 def _check_date_of_birth_coherent(date_of_birth: datetime.date | None) -> None:
     if date_of_birth is not None and date_of_birth > timezone.now().date():
-        raise IncoherentDateError(f"dateOfBirth {date_of_birth} is in the future")
+        raise IncoherentDateError(f"A data de nascimento {date_of_birth} está no futuro")
 
 
 def create_member(
@@ -70,7 +70,7 @@ def create_member(
             )
     except IntegrityError as exc:
         raise DuplicateExternalReferenceError(
-            f"externalReference '{external_reference}' already exists for proposer {proposer.id}"
+            f"A referência externa '{external_reference}' já existe para o cliente {proposer.id}"
         ) from exc
 
     _audit.record(action="member.created", entity_type="InsuredMember", entity_id=str(member.id))
@@ -114,7 +114,7 @@ def update_member(
     )
     if updated == 0:
         raise RowVersionMismatchError(
-            f"InsuredMember {member.id} rowVersion {row_version} does not match the current version"
+            f"A versão da pessoa segura {member.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
         )
     member.refresh_from_db()
     _audit.record(
@@ -150,7 +150,7 @@ def deactivate_member(*, member: InsuredMember, row_version: int) -> InsuredMemb
     ).update(status=MemberStatus.INACTIVE.value, row_version=row_version + 1)
     if updated == 0:
         raise RowVersionMismatchError(
-            f"InsuredMember {member.id} rowVersion {row_version} does not match the current version"
+            f"A versão da pessoa segura {member.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
         )
     member.refresh_from_db()
     _audit.record(

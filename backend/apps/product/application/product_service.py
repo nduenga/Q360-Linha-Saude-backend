@@ -68,7 +68,7 @@ def create_product(*, code: str, name: str, description: str | None) -> Product:
                 status=ProductStatus.ACTIVE.value,
             )
     except IntegrityError as exc:
-        raise DuplicateCodeError(f"Product code '{code}' already exists for this tenant") from exc
+        raise DuplicateCodeError(f"O código de produto '{code}' já existe neste tenant") from exc
 
     _audit.record(action="product.created", entity_type="Product", entity_id=str(product.id))
     return product
@@ -99,7 +99,7 @@ def update_product(
     updated = Product.objects.filter(id=product.id, row_version=row_version).update(**fields)
     if updated == 0:
         raise RowVersionMismatchError(
-            f"Product {product.id} rowVersion {row_version} does not match the current version"
+            f"A versão do produto {product.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
         )
     product.refresh_from_db()
     _audit.record(
@@ -133,8 +133,7 @@ def delete_product(*, product: Product) -> None:
             Product.objects.filter(id=locked_product.id).delete()
     except IntegrityError as exc:
         raise ImmutableVersionError(
-            f"Product {product.id} cannot be deleted: at least one of its plans is already "
-            "referenced by a Quote, PricingRun or eligibility evaluation"
+            f"O produto {product.id} não pode ser eliminado: pelo menos um dos seus planos já é usado por uma cotação, cálculo ou avaliação de elegibilidade"
         ) from exc
 
     _audit.record(
@@ -190,8 +189,7 @@ def create_plan(
                 )
                 if existing_ids == candidate_coverage_ids and _plan_signature(existing_plan.settings_json) == candidate_signature:
                     raise DuplicatePlanCoverageSetError(
-                        f"Plan '{existing_plan.code}' already has this exact set of coverages "
-                        f"in product {locked_product.id}"
+                        f"O plano '{existing_plan.code}' já tem exatamente este conjunto de coberturas no produto {locked_product.id}"
                     )
 
             plan = Plan.objects.create(
@@ -204,7 +202,7 @@ def create_plan(
                 settings_json=plan_settings,
             )
     except IntegrityError as exc:
-        raise DuplicateCodeError(f"Plan code '{code}' already exists for product {product.id}") from exc
+        raise DuplicateCodeError(f"O código de plano '{code}' já existe no produto {product.id}") from exc
 
     # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1: every Plan always carries the
     # 3 market-mandatory (BASE) coverages — never something a caller opts
@@ -249,7 +247,7 @@ def update_plan(
     updated = Plan.objects.filter(id=plan.id, row_version=row_version).update(**fields)
     if updated == 0:
         raise RowVersionMismatchError(
-            f"Plan {plan.id} rowVersion {row_version} does not match the current version"
+            f"A versão do plano {plan.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
         )
     plan.refresh_from_db()
     _audit.record(
@@ -271,7 +269,6 @@ def delete_plan(*, plan: Plan) -> None:
             Plan.objects.filter(id=plan.id).delete()
     except IntegrityError as exc:
         raise ImmutableVersionError(
-            f"Plan {plan.id} cannot be deleted: it is already referenced by a Quote, PricingRun or "
-            "eligibility evaluation"
+            f"O plano {plan.id} não pode ser eliminado: já é usado por uma cotação, cálculo ou avaliação de elegibilidade"
         ) from exc
     _audit.record(action="plan.deleted", entity_type="Plan", entity_id=str(plan.id), metadata={"code": plan.code})

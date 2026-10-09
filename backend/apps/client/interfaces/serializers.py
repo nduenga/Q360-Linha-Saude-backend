@@ -188,7 +188,7 @@ class ImportCommitRequestSerializer(serializers.Serializer):
 
     def validate_confirm(self, value: bool) -> bool:
         if value is not True:
-            raise serializers.ValidationError("confirm must be true.")
+            raise serializers.ValidationError("É necessário confirmar (confirm tem de ser true).")
         return value
 
 

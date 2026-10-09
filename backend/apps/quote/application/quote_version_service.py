@@ -142,7 +142,7 @@ def list_versions(*, quote: Quote):
 def get_version(*, quote: Quote, version_no: int) -> QuoteVersion:
     version = QuoteVersion.objects.filter(quote=quote, version_no=version_no).first()
     if version is None:
-        raise QuoteVersionNotFoundError(f"Quote {quote.id} has no version {version_no}")
+        raise QuoteVersionNotFoundError(f"A cotação {quote.id} não tem a versão {version_no}")
     return version
 
 
@@ -210,12 +210,12 @@ def compare_versions(*, quote: Quote, version_no: int, against: int | None) -> d
 # ---------------------------------------------------------------- restore
 def restore_version(*, quote: Quote, version_no: int, reason: str | None) -> tuple[Quote, dict[str, Any]]:
     if quote.status not in _EDITABLE:
-        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; a version can only be restored while DRAFT or READY")
+        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; só se pode restaurar uma versão em rascunho (DRAFT) ou pronta (READY)")
     reason = require_reason(reason)
     version = get_version(quote=quote, version_no=version_no)
     state = version.snapshot_json
     if state["planId"] != str(quote.plan_id):
-        raise ReferencedEntityNotFoundError("The version belongs to a different plan and cannot be restored")
+        raise ReferencedEntityNotFoundError("A versão pertence a outro plano e não pode ser restaurada")
 
     # Validate before touching anything: the plan/coverage configuration may
     # have changed since the version was saved.

@@ -44,7 +44,7 @@ def resolve_my_policy(policy_number: str) -> Policy:
         else None
     )
     if policy is None:
-        raise PortalResourceNotFoundError("No policy found for this policyNumber")
+        raise PortalResourceNotFoundError("Não foi encontrada nenhuma apólice com este número (policyNumber)")
     return policy
 
 

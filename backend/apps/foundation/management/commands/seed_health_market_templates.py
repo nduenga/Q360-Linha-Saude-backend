@@ -23,7 +23,7 @@ class Command(BaseCommand):
         try:
             tenant = Tenant.objects.get(code=options["tenant_code"])
         except Tenant.DoesNotExist as exc:
-            raise CommandError(f"No tenant with code '{options['tenant_code']}'.") from exc
+            raise CommandError(f"Não existe nenhum tenant com o código '{options['tenant_code']}'.") from exc
         CurrentActorProvider.bind(
             Actor(actor_id="system-seed", tenant_id=TenantId.parse(tenant.id), roles=frozenset(), scopes=frozenset())
         )

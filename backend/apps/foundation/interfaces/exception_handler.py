@@ -34,11 +34,11 @@ _TITLES: dict[str, str] = {
     "AUTH-403": "Sem autorização",
     "SEC-403": "Violação de segurança/tenant/four-eyes",
     "VALIDATION-400": "Pedido inválido",
-    "VERSION-CONFLICT": "Optimistic/version conflict",
+    "VERSION-CONFLICT": "Conflito de versão",
     "QUOTE-STATE": "Transição inválida",
     "PRICING-CONFIG": "Configuração de pricing ausente/inválida",
     "PRICING-FAILED": "Falha de cálculo",
-    "IDEMP-REPLAY": "Idempotency key reutilizada com payload diferente",
+    "IDEMP-REPLAY": "Chave de idempotência reutilizada com conteúdo diferente",
     "NOT-FOUND": "Recurso não encontrado",
     "CONFLICT": "Conflito genérico",
     "RATE-LIMIT": "Limite excedido",
@@ -86,7 +86,17 @@ def q360_exception_handler(exc, context):
         return response
 
     field_errors = _field_errors(exc.detail) if isinstance(exc, ValidationError) else None
-    return _problem_response(code, response.status_code, str(exc), field_errors=field_errors)
+    detail = _readable(field_errors) if field_errors else str(exc)
+    return _problem_response(code, response.status_code, detail, field_errors=field_errors)
+
+
+def _readable(field_errors: list[dict[str, str]]) -> str:
+    """Resumo em português do que falhou, em vez da representação técnica do DRF."""
+    parts = []
+    for error in field_errors:
+        field = error["field"]
+        parts.append(error["message"] if field == "non_field_errors" else f"{field}: {error['message']}")
+    return " | ".join(parts)
 
 
 def _field_errors(detail, prefix: str = "") -> list[dict[str, str]]:

@@ -120,9 +120,9 @@ def test_demo_seeders_create_every_portal_scenario():
 @pytest.mark.django_db(transaction=True)
 def test_production_preparation_is_explicit_idempotent_and_preserves_passwords(settings):
     settings.DEBUG = False
-    with pytest.raises(CommandError, match="DEBUG environments"):
+    with pytest.raises(CommandError, match="ambientes DEBUG"):
         call_command("seed_demo_data")
-    with pytest.raises(CommandError, match="DEBUG environments"):
+    with pytest.raises(CommandError, match="ambientes DEBUG"):
         call_command("seed_portal_demo")
     settings.DEBUG = True
 

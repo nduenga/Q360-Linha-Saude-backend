@@ -21,5 +21,5 @@ from apps.foundation.application.context import CurrentActorProvider
 def require_customer_proposer_ids() -> frozenset[str]:
     actor = CurrentActorProvider.get()
     if actor is None or actor.actor_type != "CUSTOMER":
-        raise LookupError("No authenticated customer-portal actor bound to the current context")
+        raise LookupError("Nenhum cliente do portal autenticado no contexto atual")
     return actor.customer_proposer_ids

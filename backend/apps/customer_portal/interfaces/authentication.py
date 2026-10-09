@@ -47,7 +47,7 @@ class CustomerPortalJwtAuthentication(authentication.BaseAuthentication):
         from apps.foundation.application import tenant_status
 
         if tenant_status.is_blocked(actor.tenant_id.value):
-            raise exceptions.AuthenticationFailed("Tenant is suspended or inactive.")
+            raise exceptions.AuthenticationFailed("O tenant está suspenso ou inativo.")
         CurrentActorProvider.bind(actor)
         return ActorUser(actor), token
 

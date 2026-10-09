@@ -78,7 +78,7 @@ def create_account(*, email: str, name: str, roles: list[str], password: str | N
                 ]
             )
     except IntegrityError as exc:
-        raise DuplicateStaffAccountEmailError(f"email '{email}' already exists for this tenant") from exc
+        raise DuplicateStaffAccountEmailError(f"O email '{email}' já existe neste tenant") from exc
 
     _audit.record(
         action="staff_account.created", entity_type="StaffAccount", entity_id=str(account.id),
@@ -90,7 +90,7 @@ def create_account(*, email: str, name: str, roles: list[str], password: str | N
 def update_roles(*, account_id: uuid.UUID, roles: list[str]) -> StaffAccountView:
     account = StaffAccount.objects.filter(id=account_id).first()
     if account is None:
-        raise NotFound(f"No staff account {account_id} in this tenant")
+        raise NotFound(f"Não existe a conta de utilizador {account_id} neste tenant")
 
     tenant_id = CurrentTenantProvider.require().value
     with transaction.atomic():
@@ -111,7 +111,7 @@ def update_roles(*, account_id: uuid.UUID, roles: list[str]) -> StaffAccountView
 def set_status(*, account_id: uuid.UUID, status: str) -> StaffAccountView:
     account = StaffAccount.objects.filter(id=account_id).first()
     if account is None:
-        raise NotFound(f"No staff account {account_id} in this tenant")
+        raise NotFound(f"Não existe a conta de utilizador {account_id} neste tenant")
 
     with transaction.atomic():
         StaffAccount.objects.filter(id=account.id).update(status=status)
@@ -137,7 +137,7 @@ def reset_password(*, account_id: uuid.UUID) -> str:
     it once (plaintext) for the admin to hand to the user out of band."""
     account = StaffAccount.objects.filter(id=account_id).first()
     if account is None:
-        raise NotFound(f"No staff account {account_id} in this tenant")
+        raise NotFound(f"Não existe a conta de utilizador {account_id} neste tenant")
 
     new_password = secrets.token_urlsafe(12)
     with transaction.atomic():

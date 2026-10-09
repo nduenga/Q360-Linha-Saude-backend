@@ -28,11 +28,10 @@ from apps.product.infrastructure.models import PricingParameterSet
 def _single_published_code(codes: list[str], *, resource_name: str) -> str:
     distinct = sorted(set(codes))
     if len(distinct) == 0:
-        raise PricingConfigError(f"No published {resource_name} is configured for this date")
+        raise PricingConfigError(f"Não há nenhum(a) {resource_name} publicado(a) configurado(a) para esta data")
     if len(distinct) > 1:
         raise PricingConfigError(
-            f"Multiple published {resource_name} codes exist ({', '.join(distinct)}) — ambiguous; "
-            "an administrator must retire the ones not in use"
+            f"Existem vários códigos publicados de {resource_name} ({', '.join(distinct)}): é ambíguo; um administrador tem de retirar os que não estão em uso"
         )
     return distinct[0]
 

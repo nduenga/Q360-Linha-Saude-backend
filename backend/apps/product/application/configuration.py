@@ -45,7 +45,7 @@ def publish_configuration(*, config_type: str, config_id: uuid.UUID) -> dict:
         try:
             parameter_set = PricingParameterSet.objects.get(id=config_id)
         except PricingParameterSet.DoesNotExist as exc:
-            raise NotFound(f"PricingParameterSet {config_id} not found") from exc
+            raise NotFound(f"O conjunto de parâmetros de preço {config_id} não foi encontrado") from exc
         published = publish_pricing_parameter_set(parameter_set)
         return _header(
             id=published.id,
@@ -61,7 +61,7 @@ def publish_configuration(*, config_type: str, config_id: uuid.UUID) -> dict:
         try:
             rule_version = RuleVersion.objects.select_related("rule_set").get(id=config_id)
         except RuleVersion.DoesNotExist as exc:
-            raise NotFound(f"RuleVersion {config_id} not found") from exc
+            raise NotFound(f"A versão de regra {config_id} não foi encontrada") from exc
         published = publish_rule_version(rule_version)
         return _header(
             id=published.id,
@@ -77,7 +77,7 @@ def publish_configuration(*, config_type: str, config_id: uuid.UUID) -> dict:
         try:
             rating_table = RatingTable.objects.get(id=config_id)
         except RatingTable.DoesNotExist as exc:
-            raise NotFound(f"RatingTable {config_id} not found") from exc
+            raise NotFound(f"A tabela de tarifação {config_id} não foi encontrada") from exc
         published = publish_rating_table(rating_table)
         return _header(
             id=published.id,
@@ -89,7 +89,7 @@ def publish_configuration(*, config_type: str, config_id: uuid.UUID) -> dict:
             checksum=published.checksum,
         )
 
-    raise NotFound(f"Configuration type '{config_type}' is not available yet")
+    raise NotFound(f"O tipo de configuração '{config_type}' ainda não está disponível")
 
 
 def retire_configuration(*, config_type: str, config_id: uuid.UUID) -> dict:
@@ -100,7 +100,7 @@ def retire_configuration(*, config_type: str, config_id: uuid.UUID) -> dict:
         try:
             parameter_set = PricingParameterSet.objects.get(id=config_id)
         except PricingParameterSet.DoesNotExist as exc:
-            raise NotFound(f"PricingParameterSet {config_id} not found") from exc
+            raise NotFound(f"O conjunto de parâmetros de preço {config_id} não foi encontrado") from exc
         retired = retire_pricing_parameter_set(parameter_set)
         return _header(
             id=retired.id, code=retired.code, version_no=retired.version_no,
@@ -112,7 +112,7 @@ def retire_configuration(*, config_type: str, config_id: uuid.UUID) -> dict:
         try:
             rule_version = RuleVersion.objects.select_related("rule_set").get(id=config_id)
         except RuleVersion.DoesNotExist as exc:
-            raise NotFound(f"RuleVersion {config_id} not found") from exc
+            raise NotFound(f"A versão de regra {config_id} não foi encontrada") from exc
         retired = retire_rule_version(rule_version)
         return _header(
             id=retired.id, code=retired.rule_set.code, version_no=retired.version_no,
@@ -124,7 +124,7 @@ def retire_configuration(*, config_type: str, config_id: uuid.UUID) -> dict:
         try:
             rating_table = RatingTable.objects.get(id=config_id)
         except RatingTable.DoesNotExist as exc:
-            raise NotFound(f"RatingTable {config_id} not found") from exc
+            raise NotFound(f"A tabela de tarifação {config_id} não foi encontrada") from exc
         retired = retire_rating_table(rating_table)
         return _header(
             id=retired.id, code=retired.code, version_no=retired.version_no,
@@ -132,4 +132,4 @@ def retire_configuration(*, config_type: str, config_id: uuid.UUID) -> dict:
             status=retired.status, checksum=retired.checksum,
         )
 
-    raise NotFound(f"Configuration type '{config_type}' is not available yet")
+    raise NotFound(f"O tipo de configuração '{config_type}' ainda não está disponível")

@@ -4888,6 +4888,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatusOk'
           description: Resposta.
+  /api/v1/installments:
+    get:
+      operationId: getInstallmentList
+      description: "`GET /api/v1/installments` — cobranças: as prestações de todas as\n apólices, para o GTE ver\
+        \ o que está por pagar e registar pagamentos.\n\n Filtros: `status` (DUE, OVERDUE, PAID), `dueBefore` (AAAA-MM-DD),\n\
+        \ `policyNumber`, `q` (nome do tomador). Atrasadas = por pagar e com\n vencimento já passado.\n\nRequer:\
+        \ scope q360.read.\n\nCobranças: as prestações de todas as apólices, para registar pagamentos."
+      summary: Listar installment list
+      parameters:
+      - in: query
+        name: dueBefore
+        schema:
+          type: string
+        description: 'AAAA-MM-DD: vencimento até esta data.'
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Página (começa em 0).
+      - in: query
+        name: policyNumber
+        schema:
+          type: string
+        description: Número da apólice.
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Nome do tomador (contém).
+      - in: query
+        name: size
+        schema:
+          type: integer
+        description: Itens por página (máx. 200).
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: DUE (por pagar), OVERDUE (atrasadas) ou PAID.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionInstallment'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/me:
     get:
       operationId: getMe
@@ -6931,10 +7000,10 @@ paths:
   /api/v1/policies/{policy_id}/installments/{installment_no}/payment:
     post:
       operationId: postRegisterFirstPremiumPayment
-      description: "`POST /api/v1/policies/{policyId}/installments/1/payment` — Decreto\n 2/02 art. 17.º: the 1.ª\
-        \ fracção turns `PENDING_FIRST_PREMIUM` into\n `ACTIVE` and starts the risk (ROADMAP_APOLICES.md Fase 3).\
-        \ Only the\n first installment is handled here — recurring installments/suspension\n for missed payments\
-        \ are Fase 7, not yet built.\n\nRequer: scope q360.approve, permissão quote:approve."
+      description: "`POST /api/v1/policies/{policyId}/installments/{n}/payment` — regista o\n pagamento de uma prestação.\n\
+        \n * n = 1: Decreto 2/02 art. 17.º, a 1.ª fração passa `PENDING_FIRST_PREMIUM`\n a `ACTIVE` e começa o risco\
+        \ (exige `rowVersion`).\n * n >= 2: apólice ativa; as prestações pagam-se por ordem.\n\n A suspensão por\
+        \ falta de pagamento (Fase 7) ainda não existe.\n\nRequer: scope q360.approve, permissão quote:approve."
       summary: Criar register first premium payment
       parameters:
       - in: header
@@ -6970,7 +7039,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Policy'
+                $ref: '#/components/schemas/PaymentRegistered'
           description: Sucesso.
         '400':
           content:
@@ -13246,6 +13315,100 @@ components:
       - period
       - premium
       - proposerId
+    CollectionInstallment:
+      type: object
+      description: Uma prestação na lista de cobranças.
+      properties:
+        id:
+          type: string
+          format: uuid
+        installmentNo:
+          type: integer
+        periodFrom:
+          type: string
+          format: date
+        periodTo:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        amount:
+          type: string
+          description: 'Valor monetário/decimal exato serializado como string (ex.: ''1200.00'').'
+        currencyCode:
+          type: string
+        status:
+          allOf:
+          - $ref: '#/components/schemas/CollectionInstallmentStatusEnum'
+          description: 'OVERDUE = por pagar com vencimento já passado.
+
+
+            * `DUE` - DUE
+
+            * `OVERDUE` - OVERDUE
+
+            * `PAID` - PAID'
+        paidAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        paymentReference:
+          type:
+          - string
+          - 'null'
+        paymentMethod:
+          type:
+          - string
+          - 'null'
+        policyId:
+          type: string
+          format: uuid
+        policyNumber:
+          type:
+          - string
+          - 'null'
+        policyStatus:
+          type: string
+        holderName:
+          type:
+          - string
+          - 'null'
+        daysOverdue:
+          type: integer
+        canRegisterPayment:
+          type: boolean
+          description: A apólice está ativa e a prestação por pagar.
+      required:
+      - amount
+      - canRegisterPayment
+      - currencyCode
+      - daysOverdue
+      - dueDate
+      - holderName
+      - id
+      - installmentNo
+      - paidAt
+      - paymentMethod
+      - paymentReference
+      - periodFrom
+      - periodTo
+      - policyId
+      - policyNumber
+      - policyStatus
+      - status
+    CollectionInstallmentStatusEnum:
+      enum:
+      - DUE
+      - OVERDUE
+      - PAID
+      type: string
+      description: '* `DUE` - DUE
+
+        * `OVERDUE` - OVERDUE
+
+        * `PAID` - PAID'
     ConfigKeyEnum:
       enum:
       - product.plans
@@ -14876,6 +15039,44 @@ components:
         * `MULTICAIXA` - MULTICAIXA
 
         * `TPA` - TPA'
+    PaymentRegistered:
+      type: object
+      description: 'Resposta do registo de pagamento: a apólice e a prestação paga.'
+      properties:
+        id:
+          type: string
+          format: uuid
+        policyNumber:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+        startDate:
+          type:
+          - string
+          - 'null'
+          format: date
+        endDate:
+          type:
+          - string
+          - 'null'
+          format: date
+        rowVersion:
+          type: integer
+        installment:
+          type: object
+          additionalProperties: {}
+          description: 'A prestação paga: id, installmentNo, periodFrom, periodTo, dueDate, amount, currencyCode,
+            status, paidAt, paymentReference, paymentMethod.'
+      required:
+      - endDate
+      - id
+      - installment
+      - policyNumber
+      - rowVersion
+      - startDate
+      - status
     Plan:
       type: object
       description: 'DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): `productId` replaces
@@ -17934,11 +18135,13 @@ components:
           - 'null'
           maxLength: 50
         rowVersion:
-          type: integer
+          type:
+          - integer
+          - 'null'
           minimum: 0
+          description: Obrigatório na 1.ª prestação (ativa a apólice); ignorado nas seguintes.
       required:
       - paidAt
-      - rowVersion
     RelationshipCode:
       type: object
       description: 'Pragmatic V1 addition, not in ART-006 — see

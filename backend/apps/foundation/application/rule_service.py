@@ -89,7 +89,7 @@ def update_rule_version(
     )
     if updated == 0:
         raise RuleVersionImmutableError(
-            f"RuleVersion {rule_version.id} is not DRAFT; only a DRAFT rule version can be edited"
+            f"A versão de regra {rule_version.id} não está em rascunho (DRAFT); só um rascunho pode ser editado"
         )
     RuleSet.objects.filter(id=rule_version.rule_set_id).update(name=name)
     rule_version.refresh_from_db()
@@ -108,7 +108,7 @@ def delete_rule_version(rule_version: RuleVersion) -> None:
     deleted, _ = RuleVersion.objects.filter(id=rule_version.id, status="DRAFT").delete()
     if deleted == 0:
         raise RuleVersionImmutableError(
-            f"RuleVersion {rule_version.id} is not DRAFT; only a DRAFT rule version can be deleted"
+            f"A versão de regra {rule_version.id} não está em rascunho (DRAFT); só um rascunho pode ser eliminado"
         )
     _audit.record(
         action="rule_version.deleted", entity_type="RuleVersion", entity_id=str(rule_version.id),
@@ -122,7 +122,7 @@ def retire_rule_version(rule_version: RuleVersion) -> RuleVersion:
     updated = RuleVersion.objects.filter(id=rule_version.id, status="PUBLISHED").update(status="RETIRED")
     if updated == 0:
         raise RuleVersionImmutableError(
-            f"RuleVersion {rule_version.id} is not PUBLISHED; only a PUBLISHED rule version can be retired"
+            f"A versão de regra {rule_version.id} não está publicada (PUBLISHED); só uma versão publicada pode ser retirada"
         )
     rule_version.refresh_from_db()
     _audit.record(
@@ -141,7 +141,7 @@ def publish_rule_version(rule_version: RuleVersion) -> RuleVersion:
     )
     if updated == 0:
         raise RuleVersionImmutableError(
-            f"RuleVersion {rule_version.id} is not DRAFT; only DRAFT can be published"
+            f"A versão de regra {rule_version.id} não está em rascunho (DRAFT); só um rascunho pode ser publicado"
         )
     rule_version.refresh_from_db()
 

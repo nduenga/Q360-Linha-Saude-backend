@@ -79,8 +79,7 @@ class Command(BaseCommand):
             tenant = Tenant.objects.get(code=options["tenant_code"])
         except Tenant.DoesNotExist as exc:
             raise CommandError(
-                f"No tenant with code '{options['tenant_code']}'. Run "
-                f"`manage.py seed_dev_tenant --code {options['tenant_code']}` first."
+                f"Não existe nenhum tenant com o código '{options['tenant_code']}'. Execute primeiro `manage.py seed_dev_tenant --code {options['tenant_code']}`."
             ) from exc
 
         tenant_id = TenantId.parse(tenant.id)

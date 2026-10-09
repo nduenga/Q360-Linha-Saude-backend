@@ -269,7 +269,7 @@ class QuoteDecisionView(APIView):
         actor = getattr(getattr(request, "user", None), "actor", None)
         required_permission = _DECISION_PERMISSION[data["decision"]]
         if not PermissionEvaluator.is_authorised(actor, required_permission):
-            raise PermissionDenied(f"Actor lacks {required_permission.value} for decision {data['decision']}")
+            raise PermissionDenied(f"O utilizador não tem a permissão {required_permission.value} para a decisão {data['decision']}")
 
         updated = quote_service.decide_quote(
             quote=quote,
@@ -603,7 +603,7 @@ def _ids_param(request) -> list[uuid.UUID] | None:
     try:
         return [uuid.UUID(part) for part in raw.split(",") if part]
     except ValueError:
-        raise PermissionDenied("ids must be a comma-separated list of scenario ids") from None
+        raise PermissionDenied("ids tem de ser uma lista de ids de cenários separados por vírgula") from None
 
 
 @requires_idempotency

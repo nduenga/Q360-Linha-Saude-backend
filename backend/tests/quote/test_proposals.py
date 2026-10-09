@@ -183,7 +183,7 @@ def test_stale_or_foreign_scenarios_do_not_produce_proposals(admin_client):
         {"configuration": {"limits": [{"kind": "ANNUAL_PER_PERSON", "amount": "20000000"}]}}, format="json",
     )
     stale = _generate(admin_client, scope, scenarioId=scenario["id"])
-    assert stale.status_code == 409 and "recalculate" in stale.data["detail"]
+    assert stale.status_code == 409 and "recalcule" in stale.data["detail"]
     admin_client.post(f"/api/v1/scenarios/{scenario['id']}/recalculate", {}, format="json")
     assert _generate(admin_client, scope, scenarioId=scenario["id"]).status_code == 201
     import uuid
@@ -275,7 +275,7 @@ def test_download_detects_a_tampered_file(admin_client):
     path = Path(Document._base_manager.get(id=doc["id"]).storage_ref)
     path.write_bytes(path.read_bytes() + b"<!-- adulterado -->")
     resp = admin_client.get(doc["downloadUrl"])
-    assert resp.status_code == 409 and "integrity" in resp.data["detail"]
+    assert resp.status_code == 409 and "integridade" in resp.data["detail"]
 
 
 @pytest.mark.django_db
@@ -297,3 +297,36 @@ def test_proposal_generation_is_audited(admin_client, tenant):
     events = auditor.get(f"/api/v1/audit-events?entityId={doc['id']}").data["items"]
     generated = next(e for e in events if e["action"] == "document.generated")
     assert generated["metadata"]["after"]["format"] == "PDF" and generated["metadata"]["checksum"] == doc["checksum"]
+
+
+@pytest.mark.django_db
+def test_a_template_in_force_today_is_used_even_if_the_quote_starts_earlier(admin_client):
+    """Antes só contava a data de início da cotação: um modelo criado hoje só servia
+    para cotações a começar nesse dia."""
+    import datetime
+
+    scope = _scope(admin_client)  # cotação com início em 2026-06-01
+    body = {"title": "Modelo novo {{quote.number}}", "intro": "Texto do modelo novo.", "sections": ["summary"]}
+    created = admin_client.post(
+        "/api/v1/document-templates",
+        {"templateCode": "QUOTE_PROPOSAL_DEFAULT", "storageRef": json.dumps(body),
+         "effectiveFrom": datetime.date.today().isoformat()}, format="json",
+    ).data
+    admin_client.post(f"/api/v1/document-templates/{created['id']}/publish")
+    assert "Texto do modelo novo." in _html(admin_client, scope)
+
+
+@pytest.mark.django_db
+def test_missing_template_error_is_in_portuguese_and_lists_the_periods(admin_client):
+    scope = _scope(admin_client)
+    created = admin_client.post(
+        "/api/v1/document-templates",
+        {"templateCode": "OUTRO", "storageRef": json.dumps({"title": "T", "intro": "I", "sections": ["summary"]}),
+         "effectiveFrom": "2020-01-01", "effectiveTo": "2020-12-31"}, format="json",
+    ).data
+    admin_client.post(f"/api/v1/document-templates/{created['id']}/publish")
+    response = admin_client.get(f"/api/v1/quotes/{scope['quoteId']}/proposals/preview?templateCode=OUTRO")
+    assert response.status_code == 404
+    detail = response.data["detail"]
+    assert "Não há nenhum modelo de documento 'OUTRO' em vigor hoje" in detail
+    assert "de 2020-01-01 a 2020-12-31" in detail

@@ -115,6 +115,15 @@ REGISTRY: dict[str, dict] = {
                     "eventType": ("string", False, "ACCIDENT: a carência não se aplica onde o plano o indica; ILLNESS (por omissão).")},
     },
     "PolicyDraftView.get": {"response": d.PolicyDraft},
+    "InstallmentListView.get": {
+        "response": d.CollectionInstallment,
+        "queries": {"status": ("string", False, "DUE (por pagar), OVERDUE (atrasadas) ou PAID."),
+                    "dueBefore": ("string", False, "AAAA-MM-DD: vencimento até esta data."),
+                    "policyNumber": ("string", False, "Número da apólice."),
+                    "q": ("string", False, "Nome do tomador (contém).")},
+        "notes": "Cobranças: as prestações de todas as apólices, para registar pagamentos.",
+    },
+    "RegisterFirstPremiumPaymentView.post": {"response": d.PaymentRegistered},
     "EmitPolicyView.post": {"response": {201: d.EmittedPolicy}, "status": 201},
     "PolicyDocumentView.get": {
         "media": "application/pdf", "queries": {"fileType": ("string", False, "pdf (por omissão), html ou docx.")},

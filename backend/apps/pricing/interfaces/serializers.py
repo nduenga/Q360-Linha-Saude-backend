@@ -29,18 +29,18 @@ class RatingFactorSerializer(serializers.Serializer):
 
     def validate_dimensions(self, value):
         if not isinstance(value, dict):
-            raise serializers.ValidationError("dimensions must be a JSON object.")
+            raise serializers.ValidationError("dimensions tem de ser um objeto JSON.")
         return value
 
     def validate_factorValue(self, value) -> Decimal:
         if not isinstance(value, str) or not re.fullmatch(_DECIMAL_STRING_PATTERN, value):
             raise serializers.ValidationError(
-                "factorValue must be a decimal serialised as a string (e.g. '1.05')."
+                "factorValue tem de ser um decimal escrito como texto (ex.: '1.05')."
             )
         try:
             return Decimal(value)
         except InvalidOperation as exc:
-            raise serializers.ValidationError("Not a valid decimal.") from exc
+            raise serializers.ValidationError("Não é um decimal válido.") from exc
 
 
 class RatingTableRequestSerializer(serializers.Serializer):
@@ -53,7 +53,7 @@ class RatingTableRequestSerializer(serializers.Serializer):
 
     def validate_factors(self, factors: list[dict]) -> list[dict]:
         if not factors:
-            raise serializers.ValidationError("At least one factor is required.")
+            raise serializers.ValidationError("É necessário pelo menos um fator.")
         return factors
 
 
@@ -68,7 +68,7 @@ class RatingTableUpdateRequestSerializer(serializers.Serializer):
 
     def validate_factors(self, factors: list[dict]) -> list[dict]:
         if not factors:
-            raise serializers.ValidationError("At least one factor is required.")
+            raise serializers.ValidationError("É necessário pelo menos um fator.")
         return factors
 
 

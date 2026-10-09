@@ -50,7 +50,7 @@ def test_no_pro_rata_rule_cannot_be_disabled():
     """PDF: "No seguro de saúde não há regra de rateio"."""
     normalised, _ = validate_plan_settings({"segment": "GROUP"})
     assert normalised["noProRata"] is True
-    with pytest.raises(InvalidPlanSettingsError, match="pro-rata"):
+    with pytest.raises(InvalidPlanSettingsError, match="rateio"):
         validate_plan_settings({"segment": "GROUP", "noProRata": False})
 
 
@@ -73,7 +73,7 @@ def test_household_only_on_individual_family():
 
 
 def test_clinical_questionnaire_is_mandatory_in_individual():
-    with pytest.raises(InvalidPlanSettingsError, match="mandatory"):
+    with pytest.raises(InvalidPlanSettingsError, match="obrigatório"):
         validate_plan_settings({**INDIVIDUAL, "clinicalQuestionnaire": {"required": False}})
     validate_plan_settings({**INDIVIDUAL, "clinicalQuestionnaire": {"required": True, "medicalExamAboveAge": 55}})
     validate_plan_settings({**GROUP, "clinicalQuestionnaire": {"required": False}})
@@ -106,7 +106,7 @@ def test_participation_options_follow_higher_participation_lower_premium():
     for option in bad_premium["participationOptions"]:
         if option["code"] == "C":
             option["premiumAdjustmentPct"] = "5"  # mais participação mas prémio mais caro
-    with pytest.raises(InvalidPlanSettingsError, match="lower premium"):
+    with pytest.raises(InvalidPlanSettingsError, match="ajuste de prémio inferior"):
         validate_plan_settings(bad_premium)
 
     bad_deductible = copy.deepcopy(settings)
@@ -192,7 +192,7 @@ def test_capital_forms_and_sublimit_inside_capital():
         category="BASE",
     )
     assert config["inclusion"] == "INCLUDED"
-    with pytest.raises(InvalidCoverageConfigError, match="cannot exceed"):
+    with pytest.raises(InvalidCoverageConfigError, match="não pode exceder"):
         _cfg("HOSPITALIZATION", {"limits": [{"kind": "ANNUAL_PER_PERSON", "amount": "100"}, {"kind": "SUBLIMIT", "label": "x", "amount": "500"}]}, category="BASE")
 
 
@@ -205,7 +205,7 @@ def test_quantity_limit_needs_count_and_label():
 
 
 def test_single_main_capital_and_per_event_variants():
-    with pytest.raises(InvalidCoverageConfigError, match="single main capital"):
+    with pytest.raises(InvalidCoverageConfigError, match="único capital principal"):
         _cfg("OUTPATIENT", {"limits": [{"kind": "ANNUAL_PER_PERSON", "amount": "1"}, {"kind": "FIXED_AMOUNT", "amount": "2"}]})
     # Parto normal / cesariana: dois capitais por evento com rótulos distintos
     _cfg("MATERNITY", {"limits": [{"kind": "PER_EVENT", "label": "Parto normal", "amount": "600000"}, {"kind": "PER_EVENT", "label": "Cesariana", "amount": "1000000"}]})
@@ -254,7 +254,7 @@ def test_participation_types_and_where_they_apply():
 def test_no_participation_coverage_assistance_24h():
     """PDF: sem participação em urgências vitais, evacuação aprovada, assistência 24h."""
     _cfg("ASSISTANCE_24H", {"participation": {"NETWORK": {"type": "NONE"}}})
-    with pytest.raises(InvalidCoverageConfigError, match="no participation"):
+    with pytest.raises(InvalidCoverageConfigError, match="sem participação"):
         _cfg("ASSISTANCE_24H", {"participation": {"NETWORK": {"type": "COPAY_FIXED", "copayAmount": "100"}}})
     _, warnings = _cfg("MEDICAL_EVACUATION", {"participation": {"NETWORK": {"type": "COINSURANCE", "insurerPct": "80"}}})
     assert "EVACUATION_PARTICIPATION" in _codes(warnings)
@@ -292,9 +292,9 @@ def test_evacuation_rules_prior_approval_currency_destinations():
     config, warnings = _cfg("MEDICAL_EVACUATION", {"currency": "USD", "limits": [{"kind": "ANNUAL_PER_PERSON", "amount": "100000"}]})
     assert config["requiresPriorApproval"] is True
     assert {"FX_RISK", "EVACUATION_DESTINATIONS"} <= _codes(warnings)
-    with pytest.raises(InvalidCoverageConfigError, match="prior approval"):
+    with pytest.raises(InvalidCoverageConfigError, match="aprovação prévia"):
         _cfg("MEDICAL_EVACUATION", {"requiresPriorApproval": False})
-    with pytest.raises(InvalidCoverageConfigError, match="not allowed"):
+    with pytest.raises(InvalidCoverageConfigError, match="não é permitida"):
         _cfg("OUTPATIENT", {"currency": "USD"})
     with pytest.raises(InvalidCoverageConfigError):
         _cfg("MEDICAL_EVACUATION", {"currency": "EUR"})
@@ -322,7 +322,7 @@ def test_hospital_daily_allowance_days_and_time_deductible():
 
 
 def test_base_coverage_must_be_included_and_unknown_keys_warn():
-    with pytest.raises(InvalidCoverageConfigError, match="mandatory"):
+    with pytest.raises(InvalidCoverageConfigError, match="obrigatória"):
         _cfg("HOSPITALIZATION", {"inclusion": "OPTIONAL"}, category="BASE")
     with pytest.raises(InvalidCoverageConfigError):
         _cfg("OUTPATIENT", {"inclusion": "UNAVAILABLE"})

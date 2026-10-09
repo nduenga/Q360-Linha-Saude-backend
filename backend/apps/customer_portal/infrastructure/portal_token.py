@@ -53,5 +53,5 @@ class PortalTokenService:
         except jwt.PyJWTError as exc:
             raise InvalidPortalTokenError(str(exc)) from exc
         if claims.get("typ") != TOKEN_TYPE:
-            raise InvalidPortalTokenError("Token is not a customer-portal token")
+            raise InvalidPortalTokenError("O token não é um token do portal do cliente")
         return claims

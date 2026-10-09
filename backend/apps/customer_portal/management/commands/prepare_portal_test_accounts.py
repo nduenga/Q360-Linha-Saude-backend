@@ -43,13 +43,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if not options["confirm_production"]:
             raise CommandError(
-                "This command changes customer-account associations. Re-run with "
-                "--confirm-production after verifying the tenant and customer records."
+                "Este comando altera associações de contas de clientes. Volte a executar com --confirm-production depois de verificar o tenant e os registos dos clientes."
             )
 
         tenant = Tenant.objects.filter(id=options["tenant_id"]).first()
         if tenant is None:
-            raise CommandError(f"Tenant '{options['tenant_id']}' was not found.")
+            raise CommandError(f"O tenant '{options['tenant_id']}' não foi encontrado.")
 
         records = {}
         errors = []
@@ -85,8 +84,7 @@ class Command(BaseCommand):
 
         if errors:
             raise CommandError(
-                "No changes were made. Add or verify the existing customer email and "
-                "policy/quote records before retrying:\n- " + "\n- ".join(errors)
+                "Não foi feita nenhuma alteração. Adicione ou verifique o email do cliente e os registos de apólice/cotação antes de tentar de novo:\n- " + "\n- ".join(errors)
             )
 
         created_accounts = 0

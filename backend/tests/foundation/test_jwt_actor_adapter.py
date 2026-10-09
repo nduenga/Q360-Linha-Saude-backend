@@ -80,7 +80,7 @@ def test_resolve_rejects_bad_signature():
 @override_settings(OIDC_STATIC_VERIFICATION_KEY="", OIDC_JWKS_URL="")
 def test_resolve_fails_closed_when_unconfigured():
     token = _sign({"sub": "user-1", "tenant_id": _TENANT_ID, "exp": int(time.time()) + 300})
-    with pytest.raises(InvalidTokenError, match="No OIDC_JWKS_URL"):
+    with pytest.raises(InvalidTokenError, match="Nenhuma de OIDC_JWKS_URL"):
         JwtActorAdapter().resolve(token)
 
 

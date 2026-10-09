@@ -84,13 +84,13 @@ def resolve_plan_pricing_context(
     # override goes through the exact same validation as a real edit.
     overrides = selection.get("coverageOverrides") or {}
     if not isinstance(overrides, dict):
-        raise ReferencedEntityNotFoundError("selection.coverageOverrides must be an object keyed by coverage code")
+        raise ReferencedEntityNotFoundError("selection.coverageOverrides tem de ser um objeto indexado pelo código da cobertura")
     normalised_overrides: dict[str, Any] = {}
     override_warnings: list[dict[str, str]] = [{**w, "scope": "businessConfig"} for w in overlay_warnings]
     for code, override in sorted(overrides.items()):
         pb = plan_benefits.get(code)
         if pb is None:
-            raise ReferencedEntityNotFoundError(f"selection.coverageOverrides: '{code}' is not a coverage of plan '{plan.code}'")
+            raise ReferencedEntityNotFoundError(f"selection.coverageOverrides: '{code}' não é uma cobertura do plano '{plan.code}'")
         try:
             normalised, cov_warnings = validate_coverage_config(
                 override,
@@ -109,12 +109,11 @@ def resolve_plan_pricing_context(
 
     chosen = selection.get("optionalBenefitCodes") or []
     if not isinstance(chosen, list) or not all(isinstance(c, str) for c in chosen):
-        raise ReferencedEntityNotFoundError("selection.optionalBenefitCodes must be a list of coverage codes")
+        raise ReferencedEntityNotFoundError("selection.optionalBenefitCodes tem de ser uma lista de códigos de cobertura")
     unknown = sorted(set(chosen) - set(optional_codes))
     if unknown:
         raise ReferencedEntityNotFoundError(
-            f"selection.optionalBenefitCodes {unknown} are not optional coverages of plan '{plan.code}' "
-            f"(optional: {optional_codes})"
+            f"selection.optionalBenefitCodes {unknown} não são coberturas opcionais do plano '{plan.code}' (opcionais: {optional_codes})"
         )
     chosen_codes = tuple(sorted(set(chosen)))
 
@@ -129,8 +128,7 @@ def resolve_plan_pricing_context(
         definitions = {o["code"]: o for o in settings.get("participationOptions", [])}
         if option_code not in definitions:
             raise ReferencedEntityNotFoundError(
-                f"participationOption '{option_code}' is not defined for plan '{plan.code}' "
-                f"(defined: {sorted(definitions)})"
+                f"A opção de participação '{option_code}' não está definida para o plano '{plan.code}' (definidas: {sorted(definitions)})"
             )
         option = ParticipationOption(code=option_code, adjustment_pct=Decimal(str(definitions[option_code]["premiumAdjustmentPct"])))
         dims["participationOption"] = option_code

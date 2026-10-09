@@ -116,30 +116,30 @@ def validate_value(definition: ParameterDefinition, raw: Any) -> Any:
     vt = definition.value_type
     if vt == "INTEGER":
         if isinstance(raw, bool) or not isinstance(raw, int):
-            raise InvalidSystemParameterError(f"{definition.code} must be an integer")
+            raise InvalidSystemParameterError(f"{definition.code} tem de ser um número inteiro")
         if definition.minimum is not None and raw < int(definition.minimum):
-            raise InvalidSystemParameterError(f"{definition.code} must be >= {definition.minimum}")
+            raise InvalidSystemParameterError(f"{definition.code} tem de ser maior ou igual a {definition.minimum}")
         if definition.maximum is not None and raw > int(definition.maximum):
-            raise InvalidSystemParameterError(f"{definition.code} must be <= {definition.maximum}")
+            raise InvalidSystemParameterError(f"{definition.code} tem de ser menor ou igual a {definition.maximum}")
         return raw
     if vt == "DECIMAL":
         if isinstance(raw, bool) or not isinstance(raw, (str, int)):
-            raise InvalidSystemParameterError(f"{definition.code} must be a decimal serialised as a string")
+            raise InvalidSystemParameterError(f"{definition.code} tem de ser um decimal escrito como texto")
         try:
             value = Decimal(str(raw))
         except InvalidOperation as exc:
-            raise InvalidSystemParameterError(f"{definition.code} is not a valid decimal") from exc
+            raise InvalidSystemParameterError(f"{definition.code} não é um decimal válido") from exc
         if not value.is_finite():
-            raise InvalidSystemParameterError(f"{definition.code} is not a finite decimal")
+            raise InvalidSystemParameterError(f"{definition.code} não é um decimal finito")
         if definition.minimum is not None and value < Decimal(str(definition.minimum)):
-            raise InvalidSystemParameterError(f"{definition.code} must be >= {definition.minimum}")
+            raise InvalidSystemParameterError(f"{definition.code} tem de ser maior ou igual a {definition.minimum}")
         if definition.maximum is not None and value > Decimal(str(definition.maximum)):
-            raise InvalidSystemParameterError(f"{definition.code} must be <= {definition.maximum}")
+            raise InvalidSystemParameterError(f"{definition.code} tem de ser menor ou igual a {definition.maximum}")
         return format(value.normalize(), "f")
     if vt == "BOOLEAN":
         if not isinstance(raw, bool):
-            raise InvalidSystemParameterError(f"{definition.code} must be a boolean")
+            raise InvalidSystemParameterError(f"{definition.code} tem de ser verdadeiro ou falso")
         return raw
     if not isinstance(raw, str) or not raw.strip():
-        raise InvalidSystemParameterError(f"{definition.code} must be a non-empty text")
+        raise InvalidSystemParameterError(f"{definition.code} tem de ser um texto não vazio")
     return raw.strip()

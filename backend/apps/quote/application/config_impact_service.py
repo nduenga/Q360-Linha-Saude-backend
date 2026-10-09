@@ -45,7 +45,7 @@ def simulate_impact(*, config_type: str, config_id: uuid.UUID, limit: int = 50) 
     candidate = configuration_lifecycle.load(config_type, config_id)
     if config_type == "rule-version" and candidate.rule_set.rule_domain != "PRICING":
         raise ImpactSimulationNotSupportedError(
-            "Impact simulation supports rating tables, pricing parameter sets and PRICING rule versions"
+            "A simulação de impacto suporta tabelas de tarifação, conjuntos de parâmetros de preço e versões de regra de PRICING"
         )
     code = configuration_lifecycle.code_of(config_type, candidate)
     context_key = {"rating-table": "ratingTableCode", "pricing-parameter-set": "parameterSetCode", "rule-version": "ruleVersionCode"}[config_type]

@@ -272,7 +272,7 @@ class CustomerPortalPlanBenefitsView(APIView):
         policy = resolve_my_policy(policy_number)
         plan = Plan.objects.filter(id=policy.plan_id).first()
         if plan is None:
-            raise PortalResourceNotFoundError("No plan found for this policy")
+            raise PortalResourceNotFoundError("Não foi encontrado nenhum plano para esta apólice")
 
         # What the customer actually has — from the contracted snapshot (never
         # the live plan, never the optional coverages that were only offered),
@@ -371,4 +371,4 @@ def _parse_date(raw: str | None) -> datetime.date:
 
 def _assert_member_belongs_to_policy(*, policy, member_id) -> None:
     if not PolicyMember.objects.filter(policy=policy, member_id=member_id).exists():
-        raise PortalResourceNotFoundError("No such member on this policy")
+        raise PortalResourceNotFoundError("Esta pessoa segura não pertence a esta apólice")

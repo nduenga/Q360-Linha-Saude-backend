@@ -105,17 +105,17 @@ def create_renewal(
 
     policy = Policy.objects.select_related("source_quote", "plan", "proposer").filter(id=source_policy_id).first()
     if policy is None:
-        raise ReferencedEntityNotFoundError(f"sourcePolicyId {source_policy_id} does not exist for this tenant")
+        raise ReferencedEntityNotFoundError(f"A apólice de origem (sourcePolicyId) {source_policy_id} não existe neste tenant")
     if policy.status not in _RENEWABLE_POLICY_STATUSES:
-        raise QuoteStateError(f"Policy {policy.policy_number} is {policy.status}; only an ACTIVE or EXPIRED policy can be renewed")
+        raise QuoteStateError(f"A apólice {policy.policy_number} está em {policy.status}; só uma apólice ativa (ACTIVE) ou expirada (EXPIRED) pode ser renovada")
     if policy.end_date is None:
-        raise QuoteStateError(f"Policy {policy.policy_number} has no end date yet and cannot be renewed")
+        raise QuoteStateError(f"A apólice {policy.policy_number} ainda não tem data de fim e não pode ser renovada")
     if Quote.objects.filter(source_policy_id=policy.id, quote_type="RENEWAL").exclude(status__in=("CANCELLED", "REJECTED", "EXPIRED")).exists():
-        raise QuoteStateError(f"Policy {policy.policy_number} already has an open renewal quote")
+        raise QuoteStateError(f"A apólice {policy.policy_number} já tem uma cotação de renovação em aberto")
 
     renewal_date = effective_date or policy.end_date + datetime.timedelta(days=1)
     if effective_date is not None and effective_date < policy.end_date:
-        raise QuoteStateError("A renewal cannot start before the end of the current policy period")
+        raise QuoteStateError("Uma renovação não pode começar antes do fim do período atual da apólice")
     target_plan_id = plan_id or policy.plan_id
     same_plan = target_plan_id == policy.plan_id
 
@@ -225,7 +225,7 @@ def apply_indexation(
     *, quote: Quote, pct: str | None, rounding: str | None, reason: str | None, dry_run: bool, render: Callable
 ) -> dict[str, Any]:
     if quote.quote_type != "RENEWAL":
-        raise QuoteStateError("Capital indexation applies to renewal quotes")
+        raise QuoteStateError("A indexação de capitais aplica-se a cotações de renovação")
     reason = require_reason(reason)
     from apps.foundation.application import system_parameter_service
 
@@ -234,7 +234,7 @@ def apply_indexation(
         configured = system_parameter_service.get_stored_value("renewal.default_medical_inflation_pct")
     raw_pct = pct if pct is not None else configured
     if raw_pct is None:
-        raise ReferencedEntityNotFoundError("medicalInflationPct is required (the plan has no capitalIndexation.medicalInflationPct)")
+        raise ReferencedEntityNotFoundError("A inflação médica (medicalInflationPct) é obrigatória (o plano não define capitalIndexation.medicalInflationPct)")
     try:
         percentage = decimal_value(raw_pct, "medicalInflationPct", maximum=Decimal("1000"))
         step = decimal_value(rounding if rounding is not None else "1", "roundTo", minimum=Decimal("1"))

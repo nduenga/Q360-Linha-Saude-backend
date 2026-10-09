@@ -54,7 +54,7 @@ def _policy_content(policy: Policy) -> dict[str, Any]:
     quote = policy.source_quote
     run = quote.latest_pricing_run
     if run is None:
-        raise PolicyStateError(f"Policy {policy.id} has no priced quote to build the document from")
+        raise PolicyStateError(f"A apólice {policy.id} não tem cotação com prémio calculado para gerar o documento")
     calculation = _render_preview()(run)
     return proposal_content.build_content(
         quote=quote, scenario=None, calculation=calculation, generated_on=timezone.now().date()
@@ -202,7 +202,7 @@ def policy_blocks(policy: Policy) -> tuple[list[tuple], str]:
 # ---------------------------------------------------------------- statements
 def statement_blocks(policy: Policy, *, kind: str, installment_no: int | None) -> tuple[list[tuple], str]:
     if kind not in STATEMENT_KINDS:
-        raise ReferencedEntityNotFoundError(f"kind must be one of {list(STATEMENT_KINDS)}")
+        raise ReferencedEntityNotFoundError(f"O tipo (kind) tem de ser um de {list(STATEMENT_KINDS)}")
     content = _policy_content(policy)
     holder, plan = content["client"], content["plan"]
     today = timezone.now().date().isoformat()
@@ -210,7 +210,7 @@ def statement_blocks(policy: Policy, *, kind: str, installment_no: int | None) -
 
     if kind == "COVERAGE":
         if policy.status != "ACTIVE":
-            raise PolicyStateError(f"Policy {policy.policy_number} is {policy.status}; a coverage statement needs an ACTIVE policy")
+            raise PolicyStateError(f"A apólice {policy.policy_number} está em {policy.status}; a declaração de cobertura exige uma apólice ativa (ACTIVE)")
         title = f"Declaração de cobertura — apólice {policy.policy_number}"
         names = {p["memberId"]: p["name"] for p in content["population"]}
         people = [[names.get(str(pm.member_id), "—"), _day(pm.inclusion_date)] for pm, _ in _member_names(policy) if pm.status == "ACTIVE"]
@@ -233,7 +233,7 @@ def statement_blocks(policy: Policy, *, kind: str, installment_no: int | None) -
         else PremiumInstallment.objects.filter(policy=policy, status="PAID").order_by("-installment_no").first()
     )
     if installment is None:
-        raise ReferencedEntityNotFoundError("No paid installment found for this payment receipt")
+        raise ReferencedEntityNotFoundError("Não existe nenhuma prestação paga para emitir o comprovativo")
     title = f"Comprovativo de pagamento — apólice {policy.policy_number}"
     blocks += [
         ("title", title),
@@ -260,7 +260,7 @@ def statement_blocks(policy: Policy, *, kind: str, installment_no: int | None) -
 def _render(blocks: list[tuple], title: str, fmt: str) -> tuple[bytes, str, str]:
     fmt = fmt.upper()
     if fmt not in proposal_layout.RENDERERS:
-        raise ReferencedEntityNotFoundError(f"format must be one of {list(proposal_layout.RENDERERS)}")
+        raise ReferencedEntityNotFoundError(f"O formato (fileType) tem de ser um de {list(proposal_layout.RENDERERS)}")
     renderer, content_type, ext = proposal_layout.RENDERERS[fmt]
     return renderer(blocks, title=title), content_type, ext
 

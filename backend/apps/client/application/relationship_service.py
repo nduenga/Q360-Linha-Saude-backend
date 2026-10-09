@@ -63,7 +63,6 @@ def validate_relationship_code(*, tenant_id: uuid.UUID, code: str) -> Relationsh
     relationship_code = RelationshipCode.objects.filter(code=code).first()
     if relationship_code is None:
         raise UnknownRelationshipCodeError(
-            f"'{code}' is not a valid relationshipCode for this tenant "
-            f"(see GET /api/v1/relationship-codes for the allowed values)"
+            f"'{code}' não é um código de parentesco válido neste tenant (consulte GET /api/v1/relationship-codes para ver os valores permitidos)"
         )
     return relationship_code

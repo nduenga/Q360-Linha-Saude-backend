@@ -49,7 +49,7 @@ def create_proposer(
         if Proposer.objects.filter(nif=nif).exists():
             raise DuplicateNifError(f"Já existe um proponente com o NIF '{nif}' neste tenant.") from exc
         raise DuplicateExternalReferenceError(
-            f"externalReference '{external_reference}' already exists for this tenant"
+            f"A referência externa '{external_reference}' já existe neste tenant"
         ) from exc
 
     _audit.record(action="proposer.created", entity_type="Proposer", entity_id=str(proposer.id))
@@ -94,7 +94,7 @@ def update_proposer(
         raise DuplicateNifError(f"Já existe um proponente com o NIF '{nif}' neste tenant.") from exc
     if updated == 0:
         raise RowVersionMismatchError(
-            f"Proposer {proposer.id} rowVersion {row_version} does not match the current version"
+            f"A versão do cliente {proposer.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
         )
     proposer.refresh_from_db()
     _audit.record(
@@ -135,8 +135,7 @@ def deactivate_proposer(
 
     if updated == 0:
         raise RowVersionMismatchError(
-            f"Proposer {proposer.id} rowVersion "
-            f"{row_version} does not match the current version"
+            f"A versão do cliente {proposer.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
         )
 
     proposer.refresh_from_db()

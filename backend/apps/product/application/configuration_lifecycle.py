@@ -60,9 +60,9 @@ def load(config_type: str, config_id: uuid.UUID):
     elif config_type == "rule-version":
         obj = RuleVersion.objects.select_related("rule_set").filter(id=config_id).first()
     else:
-        raise NotFound(f"Configuration type '{config_type}' is not available")
+        raise NotFound(f"O tipo de configuração '{config_type}' não está disponível")
     if obj is None:
-        raise NotFound(f"{config_type} {config_id} not found")
+        raise NotFound(f"{config_type} {config_id} não foi encontrado")
     return obj
 
 
@@ -153,7 +153,7 @@ def diff(*, config_type: str, config_id: uuid.UUID, against_id: uuid.UUID) -> di
     first = load(config_type, config_id)
     second = load(config_type, against_id)
     if code_of(config_type, first) != code_of(config_type, second):
-        raise ConfigurationRollbackError("Only versions of the same code can be compared")
+        raise ConfigurationRollbackError("Só é possível comparar versões do mesmo código")
     a, b = _content(config_type, first), _content(config_type, second)
     changes: list[dict[str, Any]] = []
     if a["currencyCode"] != b["currencyCode"]:
@@ -205,11 +205,11 @@ def rollback(*, config_type: str, config_id: uuid.UUID, reason: str | None) -> d
     reason = require_reason(reason)
     target = load(config_type, config_id)
     if target.status == "DRAFT":
-        raise ConfigurationRollbackError("A DRAFT version was never in force: publish it instead of restoring it")
+        raise ConfigurationRollbackError("Um rascunho (DRAFT) nunca esteve em vigor: publique-o em vez de o restaurar")
     versions = _versions_of(config_type, target)
     newer_published = [v for v in versions if v.status == "PUBLISHED" and v.version_no > target.version_no]
     if target.status == "PUBLISHED" and not newer_published:
-        raise ConfigurationRollbackError(f"Version {target.version_no} is already the current published version")
+        raise ConfigurationRollbackError(f"A versão {target.version_no} já é a versão publicada atual")
     published = [v for v in versions if v.status == "PUBLISHED"]
     effective_from = max([v.effective_from for v in published] + [target.effective_from])
 

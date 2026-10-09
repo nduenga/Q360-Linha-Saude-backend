@@ -113,7 +113,7 @@ class Command(BaseCommand):
 
         loop = not once
         if interval is not None and interval <= 0:
-            raise ValueError("--interval must be positive")
+            raise ValueError("--interval tem de ser positivo")
 
         publisher = get_outbox_service().get_publisher()
 

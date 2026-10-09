@@ -54,43 +54,43 @@ class DuplicateAssumptionSetError(DomainProblem):
 
 def _dec(raw: Any, path: str, *, minimum: str = "-100", maximum: str = "1000") -> Decimal:
     if isinstance(raw, bool) or not isinstance(raw, (str, int)):
-        raise InvalidProjectionError(f"{path} must be a decimal serialised as a string")
+        raise InvalidProjectionError(f"{path} tem de ser um decimal escrito como texto")
     try:
         value = Decimal(str(raw))
     except InvalidOperation as exc:
-        raise InvalidProjectionError(f"{path} is not a valid decimal") from exc
+        raise InvalidProjectionError(f"{path} não é um decimal válido") from exc
     if not value.is_finite() or value < Decimal(minimum) or value > Decimal(maximum):
-        raise InvalidProjectionError(f"{path} must be between {minimum} and {maximum}")
+        raise InvalidProjectionError(f"{path} tem de estar entre {minimum} e {maximum}")
     return value
 
 
 def validate_params(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
-        raise InvalidProjectionError("assumptions must be an object")
+        raise InvalidProjectionError("assumptions tem de ser um objeto")
     allowed = {"horizonMonths", "targetLossRatioPct", "projectedInsured", "scenarios", "windowMonths"}
     if set(raw) - allowed:
-        raise InvalidProjectionError(f"Unknown assumption(s): {sorted(set(raw) - allowed)}")
+        raise InvalidProjectionError(f"Pressuposto(s) desconhecido(s): {sorted(set(raw) - allowed)}")
     horizon = raw.get("horizonMonths")
     if isinstance(horizon, bool) or not isinstance(horizon, int) or not 1 <= horizon <= 60:
-        raise InvalidProjectionError("horizonMonths must be an integer between 1 and 60")
+        raise InvalidProjectionError("horizonMonths tem de ser um número inteiro entre 1 e 60")
     window = raw.get("windowMonths", 12)
     if isinstance(window, bool) or not isinstance(window, int) or not 1 <= window <= 60:
-        raise InvalidProjectionError("windowMonths must be an integer between 1 and 60")
+        raise InvalidProjectionError("windowMonths tem de ser um número inteiro entre 1 e 60")
     target = _dec(raw.get("targetLossRatioPct"), "targetLossRatioPct", minimum="1", maximum="100")
     params: dict[str, Any] = {"horizonMonths": horizon, "windowMonths": window, "targetLossRatioPct": str(target)}
     if raw.get("projectedInsured") is not None:
         insured = raw["projectedInsured"]
         if isinstance(insured, bool) or not isinstance(insured, int) or insured < 1:
-            raise InvalidProjectionError("projectedInsured must be a positive integer")
+            raise InvalidProjectionError("projectedInsured tem de ser um número inteiro positivo")
         params["projectedInsured"] = insured
     scenarios = raw.get("scenarios")
     if not isinstance(scenarios, dict) or set(scenarios) != set(SCENARIOS):
-        raise InvalidProjectionError(f"scenarios must define exactly {list(SCENARIOS)} (no defaults are assumed)")
+        raise InvalidProjectionError(f"scenarios tem de definir exatamente {list(SCENARIOS)} (não se assumem valores por omissão)")
     parsed: dict[str, dict[str, str]] = {}
     for name in SCENARIOS:
         spec = scenarios[name]
         if not isinstance(spec, dict):
-            raise InvalidProjectionError(f"scenarios.{name} must be an object")
+            raise InvalidProjectionError(f"scenarios.{name} tem de ser um objeto")
         parsed[name] = {
             "medicalInflationPct": str(_dec(spec.get("medicalInflationPct"), f"scenarios.{name}.medicalInflationPct")),
             "frequencyTrendPct": str(_dec(spec.get("frequencyTrendPct"), f"scenarios.{name}.frequencyTrendPct")),
@@ -98,7 +98,7 @@ def validate_params(raw: Any) -> dict[str, Any]:
     for key in ("medicalInflationPct", "frequencyTrendPct"):
         values = [Decimal(parsed[n][key]) for n in SCENARIOS]
         if not values[0] <= values[1] <= values[2]:
-            raise InvalidProjectionError(f"{key} must satisfy OPTIMISTIC <= BASE <= PESSIMISTIC")
+            raise InvalidProjectionError(f"{key} tem de cumprir OPTIMISTIC <= BASE <= PESSIMISTIC")
     params["scenarios"] = parsed
     return params
 
@@ -110,7 +110,7 @@ def _q(value: Decimal) -> str:
 def project(*, proposer_id, params: dict[str, Any], policy_id=None, currency: str = "AOA") -> dict[str, Any]:
     months_available = summary_service.history_months(proposer_id=proposer_id, currency=currency)
     if months_available == 0:
-        raise InvalidProjectionError(f"No history imported for this client in {currency}")
+        raise InvalidProjectionError(f"Não há histórico importado para este cliente em {currency}")
     # window ends at the last month with data
     probe = summary_service.summary(proposer_id=proposer_id, policy_id=policy_id, currency=currency, record_audit=False)
     end = datetime.date.fromisoformat(probe["period"]["to"])
@@ -123,7 +123,7 @@ def project(*, proposer_id, params: dict[str, Any], policy_id=None, currency: st
     claims_total = Decimal(base["claims"]["total"])
     earned = Decimal(base["premium"]["earned"])
     if earned <= 0:
-        raise InvalidProjectionError("Projection needs earned premium in the window (import premiums too)")
+        raise InvalidProjectionError("A projeção precisa de prémio adquirido na janela (importe também os prémios)")
     warnings = []
     if window < params["windowMonths"]:
         warnings.append(f"Só existem {window} meses de histórico (pedidos {params['windowMonths']}).")
@@ -137,7 +137,7 @@ def project(*, proposer_id, params: dict[str, Any], policy_id=None, currency: st
     if params.get("projectedInsured"):
         years = base["premium"]["insuredYears"]
         if years is None:
-            raise InvalidProjectionError("projectedInsured needs insured_count in the imported premiums")
+            raise InvalidProjectionError("projectedInsured precisa de insured_count nos prémios importados")
         avg_insured = Decimal(years) / (Decimal(window) / Decimal(12))
         scale = Decimal(params["projectedInsured"]) / avg_insured
     target = Decimal(params["targetLossRatioPct"])
@@ -196,7 +196,7 @@ def create_assumption_set(*, name: str, params: dict[str, Any]) -> ProjectionAss
                 created_by=actor.actor_id if actor else "unknown",
             )
     except IntegrityError as exc:
-        raise DuplicateAssumptionSetError(f"An assumption set named '{name}' already exists") from exc
+        raise DuplicateAssumptionSetError(f"Já existe um conjunto de pressupostos com o nome '{name}'") from exc
     _audit.record(
         action="claims.assumption_set_created", entity_type="ProjectionAssumptionSet", entity_id=str(created.id),
         metadata=change_metadata(after={"name": name, "params": clean}),
@@ -207,16 +207,16 @@ def create_assumption_set(*, name: str, params: dict[str, Any]) -> ProjectionAss
 def get_assumption_set(set_id) -> ProjectionAssumptionSet:
     obj = ProjectionAssumptionSet.objects.filter(id=set_id).first()
     if obj is None:
-        raise ProjectionNotFoundError(f"Assumption set {set_id} does not exist")
+        raise ProjectionNotFoundError(f"O conjunto de pressupostos {set_id} não existe")
     return obj
 
 
 def run_projection(*, proposer_id, policy_id, assumption_set_id, assumptions: dict | None, currency: str) -> ProjectionRun:
     if not Proposer.objects.filter(id=proposer_id).exists():
-        raise InvalidProjectionError(f"proposerId {proposer_id} does not exist for this tenant")
+        raise InvalidProjectionError(f"O cliente (proposerId) {proposer_id} não existe neste tenant")
     assumption_set = get_assumption_set(assumption_set_id) if assumption_set_id else None
     if assumption_set is None and assumptions is None:
-        raise InvalidProjectionError("Provide assumptionSetId or assumptions")
+        raise InvalidProjectionError("Indique assumptionSetId ou assumptions")
     params = assumption_set.params_json if assumption_set else validate_params(assumptions)
     result = project(proposer_id=proposer_id, params=params, policy_id=policy_id, currency=currency)
     actor = CurrentActorProvider.get()
@@ -234,7 +234,7 @@ def run_projection(*, proposer_id, policy_id, assumption_set_id, assumptions: di
 def get_run(run_id) -> ProjectionRun:
     run = ProjectionRun.objects.filter(id=run_id).first()
     if run is None:
-        raise ProjectionNotFoundError(f"Projection {run_id} does not exist")
+        raise ProjectionNotFoundError(f"A projeção {run_id} não existe")
     return run
 
 

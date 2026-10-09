@@ -145,10 +145,10 @@ class PricingParameterSetRequestSerializer(serializers.Serializer):
 
     def validate_parameters(self, parameters: list[dict]) -> list[dict]:
         if not parameters:
-            raise serializers.ValidationError("At least one parameter is required.")
+            raise serializers.ValidationError("É necessário pelo menos um parâmetro.")
         codes = [p["code"] for p in parameters]
         if len(codes) != len(set(codes)):
-            raise serializers.ValidationError("Parameter codes must be unique within the set.")
+            raise serializers.ValidationError("Os códigos dos parâmetros têm de ser únicos no conjunto.")
         return parameters
 
 
@@ -160,10 +160,10 @@ class PricingParameterSetUpdateRequestSerializer(serializers.Serializer):
 
     def validate_parameters(self, parameters: list[dict]) -> list[dict]:
         if not parameters:
-            raise serializers.ValidationError("At least one parameter is required.")
+            raise serializers.ValidationError("É necessário pelo menos um parâmetro.")
         codes = [p["code"] for p in parameters]
         if len(codes) != len(set(codes)):
-            raise serializers.ValidationError("Parameter codes must be unique within the set.")
+            raise serializers.ValidationError("Os códigos dos parâmetros têm de ser únicos no conjunto.")
         return parameters
 
 

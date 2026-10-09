@@ -42,7 +42,7 @@ _password_service = CustomerPortalPasswordAuthService()
 
 def _require_legacy_login() -> None:
     if not settings.CUSTOMER_PORTAL_LEGACY_LOGIN_ENABLED:
-        raise PortalLegacyLoginDisabledError("This login method is no longer available")
+        raise PortalLegacyLoginDisabledError("Este método de início de sessão já não está disponível")
 
 
 def _bind_anonymous_customer_actor(tenant_id) -> None:
@@ -68,7 +68,7 @@ def _too_many_requests() -> Response:
             "title": "Limite excedido",
             "status": 429,
             "code": "RATE-LIMIT",
-            "detail": "Too many login attempts. Try again later.",
+            "detail": "Demasiadas tentativas de início de sessão. Tente de novo mais tarde.",
             "correlationId": get_correlation_id() or "",
         },
         status=429,

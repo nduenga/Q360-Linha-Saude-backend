@@ -56,7 +56,7 @@ class AuditService:
     ) -> None:
         actor = CurrentActorProvider.get()
         if actor is None:
-            raise LookupError("AuditService.record requires an authenticated actor")
+            raise LookupError("O registo de auditoria exige um utilizador autenticado")
         tenant_id = CurrentTenantProvider.require()
         effective_correlation_id = correlation_id if correlation_id is not None else get_correlation_id()
         effective_metadata: dict[str, Any] = dict(metadata or {})

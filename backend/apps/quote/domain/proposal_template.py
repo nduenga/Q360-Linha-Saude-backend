@@ -121,24 +121,24 @@ def validate_template_body(storage_ref: str) -> None:
     try:
         body = json.loads(storage_ref)
     except json.JSONDecodeError as exc:
-        raise InvalidTemplateError(f"The template body is not valid JSON: {exc.msg}") from exc
+        raise InvalidTemplateError(f"O corpo do modelo não é JSON válido: {exc.msg}") from exc
     if not isinstance(body, dict):
-        raise InvalidTemplateError("The template body must be a JSON object")
+        raise InvalidTemplateError("O corpo do modelo tem de ser um objeto JSON")
     unknown_keys = set(body) - {*_TEXT_KEYS, "sections"}
     if unknown_keys:
-        raise InvalidTemplateError(f"Unknown template field(s): {sorted(unknown_keys)}")
+        raise InvalidTemplateError(f"Campo(s) do modelo desconhecido(s): {sorted(unknown_keys)}")
     for key in _TEXT_KEYS:
         if key in body:
             if not isinstance(body[key], str):
-                raise InvalidTemplateError(f"Template field '{key}' must be text")
+                raise InvalidTemplateError(f"O campo '{key}' do modelo tem de ser texto")
             unknown = sorted({v for v in extract_variables(body[key]) if v not in VARIABLES})
             if unknown:
-                raise InvalidTemplateError(f"Template field '{key}' uses unknown variable(s): {unknown}; allowed: {sorted(VARIABLES)}")
+                raise InvalidTemplateError(f"O campo '{key}' do modelo usa variável(is) desconhecida(s): {unknown}; permitidas: {sorted(VARIABLES)}")
     sections = body.get("sections", DEFAULT_TEMPLATE["sections"])
     if not isinstance(sections, list) or not sections:
-        raise InvalidTemplateError("Template 'sections' must be a non-empty list")
+        raise InvalidTemplateError("As secções ('sections') do modelo têm de ser uma lista não vazia")
     bad = [s for s in sections if s not in SECTIONS]
     if bad:
-        raise InvalidTemplateError(f"Unknown section(s) {bad}; allowed: {sorted(SECTIONS)}")
+        raise InvalidTemplateError(f"Secção(ões) desconhecida(s) {bad}; permitidas: {sorted(SECTIONS)}")
     if len(set(sections)) != len(sections):
-        raise InvalidTemplateError("Template 'sections' has duplicates")
+        raise InvalidTemplateError("As secções ('sections') do modelo têm duplicados")

@@ -118,7 +118,7 @@ def resolve_complementary_benefits(*, tenant_id: uuid.UUID, benefit_ids: list[uu
         found_ids = {b.id for b in benefits}
         missing = unique_ids - found_ids
         raise InvalidBenefitSelectionError(
-            f"complementaryBenefitIds contains unknown, inactive or non-COMPLEMENTARY ids: {sorted(str(i) for i in missing)}"
+            f"complementaryBenefitIds contém ids desconhecidos, inativos ou que não são COMPLEMENTARY: {sorted(str(i) for i in missing)}"
         )
     return benefits
 
@@ -142,7 +142,7 @@ class CoreBenefitRemovalError(MissingCoreBenefitsError):
 def remove_plan_benefit(*, plan: Plan, benefit: Benefit) -> None:
     if benefit.benefit_type == BASE:
         raise CoreBenefitRemovalError(
-            f"Benefit '{benefit.code}' is a core (BASE) coverage and cannot be removed from a Plan"
+            f"A cobertura '{benefit.code}' é uma cobertura base (BASE) e não pode ser removida de um plano"
         )
     PlanBenefit.objects.filter(plan=plan, benefit=benefit).delete()
 

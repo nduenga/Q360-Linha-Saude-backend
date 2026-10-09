@@ -57,8 +57,7 @@ def create_pricing_parameter_set(
             )
     except IntegrityError as exc:
         raise DuplicateCodeError(
-            f"PricingParameterSet '{code}' could not be created: version already exists, "
-            "or a parameterCode is duplicated within the set"
+            f"Não foi possível criar o conjunto de parâmetros '{code}': a versão já existe ou há um parameterCode repetido no conjunto"
         ) from exc
 
     _audit.record(
@@ -82,7 +81,7 @@ def update_pricing_parameter_set(
         ).exists()
         if not still_draft:
             raise ImmutableVersionError(
-                f"PricingParameterSet {parameter_set.id} is not DRAFT; only a DRAFT set can be edited"
+                f"O conjunto de parâmetros {parameter_set.id} não está em rascunho (DRAFT); só um rascunho pode ser editado"
             )
         PricingParameter.objects.filter(parameter_set=parameter_set).delete()
         try:
@@ -93,7 +92,7 @@ def update_pricing_parameter_set(
                 ]
             )
         except IntegrityError as exc:
-            raise DuplicateCodeError("A parameterCode is duplicated within the set") from exc
+            raise DuplicateCodeError("Há um parameterCode repetido no conjunto") from exc
     parameter_set.refresh_from_db()
 
     _audit.record(
@@ -116,7 +115,7 @@ def delete_pricing_parameter_set(parameter_set: PricingParameterSet) -> None:
         ).exists()
         if not still_draft:
             raise ImmutableVersionError(
-                f"PricingParameterSet {parameter_set.id} is not DRAFT; only a DRAFT set can be deleted"
+                f"O conjunto de parâmetros {parameter_set.id} não está em rascunho (DRAFT); só um rascunho pode ser eliminado"
             )
         PricingParameter.objects.filter(parameter_set_id=parameter_set.id).delete()
         PricingParameterSet.objects.filter(id=parameter_set.id).delete()
@@ -134,7 +133,7 @@ def retire_pricing_parameter_set(parameter_set: PricingParameterSet) -> PricingP
     ).update(status=VersionedConfigStatus.RETIRED.value)
     if updated == 0:
         raise ImmutableVersionError(
-            f"PricingParameterSet {parameter_set.id} is not PUBLISHED; only a PUBLISHED set can be retired"
+            f"O conjunto de parâmetros {parameter_set.id} não está publicado (PUBLISHED); só um conjunto publicado pode ser retirado"
         )
     parameter_set.refresh_from_db()
     _audit.record(
@@ -158,7 +157,7 @@ def publish_pricing_parameter_set(parameter_set: PricingParameterSet) -> Pricing
     )
     if updated == 0:
         raise ImmutableVersionError(
-            f"PricingParameterSet {parameter_set.id} is not DRAFT; only DRAFT can be published"
+            f"O conjunto de parâmetros {parameter_set.id} não está em rascunho (DRAFT); só um rascunho pode ser publicado"
         )
     parameter_set.refresh_from_db()
 

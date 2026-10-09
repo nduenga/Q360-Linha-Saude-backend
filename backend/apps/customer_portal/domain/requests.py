@@ -80,7 +80,7 @@ class PortalRequestConflictError(DomainProblem):
 def assert_transition(current: str, target: str, note: str | None) -> None:
     if target not in TRANSITIONS.get(current, frozenset()):
         raise PortalRequestConflictError(
-            f"A request in {current} cannot move to {target}; allowed: {sorted(TRANSITIONS.get(current, ()))}"
+            f"Um pedido em {current} não pode passar a {target}; permitido: {sorted(TRANSITIONS.get(current, ()))}"
         )
     if target in NOTE_REQUIRED and not (note or "").strip():
-        raise PortalRequestInvalidError(f"A note for the customer is required when moving to {target}")
+        raise PortalRequestInvalidError(f"É obrigatório escrever uma nota para o cliente ao passar a {target}")

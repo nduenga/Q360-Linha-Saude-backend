@@ -77,7 +77,7 @@ def create_document_template(
                 effective_to=effective_to,
             )
     except IntegrityError as exc:
-        raise DuplicateTemplateCodeError(f"Document template '{template_code}' version already exists") from exc
+        raise DuplicateTemplateCodeError(f"Já existe a versão deste modelo de documento '{template_code}'") from exc
 
     _audit.record(action="document_template.created", entity_type="DocumentTemplateVersion", entity_id=str(template.id))
     return template
@@ -89,7 +89,7 @@ def publish_document_template(template: DocumentTemplateVersion) -> DocumentTemp
         status=DocumentTemplateStatus.PUBLISHED.value, published_at=timezone.now(), published_by=actor.actor_id if actor else None
     )
     if updated == 0:
-        raise TemplateImmutableError(f"DocumentTemplateVersion {template.id} is not DRAFT; only DRAFT can be published")
+        raise TemplateImmutableError(f"O modelo de documento {template.id} não está em rascunho (DRAFT); só um rascunho pode ser publicado")
     template.refresh_from_db()
     _audit.record(action="document_template.published", entity_type="DocumentTemplateVersion", entity_id=str(template.id))
     return template
@@ -107,7 +107,7 @@ def update_document_template(
     ).update(storage_ref=storage_ref, checksum=checksum)
     if updated == 0:
         raise TemplateImmutableError(
-            f"DocumentTemplateVersion {template.id} is not DRAFT; only a DRAFT template can be edited"
+            f"O modelo de documento {template.id} não está em rascunho (DRAFT); só um rascunho pode ser editado"
         )
     template.refresh_from_db()
     _audit.record(action="document_template.updated", entity_type="DocumentTemplateVersion", entity_id=str(template.id))
@@ -121,7 +121,7 @@ def delete_document_template(template: DocumentTemplateVersion) -> None:
     ).delete()
     if deleted == 0:
         raise TemplateImmutableError(
-            f"DocumentTemplateVersion {template.id} is not DRAFT; only a DRAFT template can be deleted"
+            f"O modelo de documento {template.id} não está em rascunho (DRAFT); só um rascunho pode ser eliminado"
         )
     _audit.record(action="document_template.deleted", entity_type="DocumentTemplateVersion", entity_id=str(template.id))
 
@@ -135,7 +135,7 @@ def retire_document_template(template: DocumentTemplateVersion) -> DocumentTempl
     ).update(status=DocumentTemplateStatus.RETIRED.value)
     if updated == 0:
         raise TemplateImmutableError(
-            f"DocumentTemplateVersion {template.id} is not PUBLISHED; only a PUBLISHED template can be retired"
+            f"O modelo de documento {template.id} não está publicado (PUBLISHED); só um modelo publicado pode ser retirado"
         )
     template.refresh_from_db()
     _audit.record(action="document_template.retired", entity_type="DocumentTemplateVersion", entity_id=str(template.id))
@@ -155,6 +155,39 @@ def _resolve_published_template(*, template_code: str, effective_date) -> Docume
     )
 
 
+def resolve_template_for(*, template_code: str, effective_date) -> DocumentTemplateVersion | None:
+    """Modelo publicado em vigor para gerar um documento.
+
+    Um documento é emitido agora, por isso o modelo que conta é o que está em
+    vigor **hoje**; só se não houver, tenta-se o que vigora na data de início
+    da cotação. (Antes só se olhava para a data de início da cotação, e um
+    modelo criado hoje só servia para cotações a começar nesse dia.)"""
+    for day in (timezone.now().date(), effective_date):
+        template = _resolve_published_template(template_code=template_code, effective_date=day)
+        if template is not None:
+            return template
+    return None
+
+
+def template_not_found_message(*, template_code: str, effective_date) -> str:
+    published = list(
+        DocumentTemplateVersion.objects.filter(template_code=template_code, status=DocumentTemplateStatus.PUBLISHED.value)
+        .order_by("effective_from", "version_no")
+    )
+    if not published:
+        detail = "Não há nenhuma versão publicada deste modelo: crie-a e publique-a em «Modelos de documento»."
+    else:
+        periods = "; ".join(
+            f"v{t.version_no}: de {t.effective_from} " + (f"a {t.effective_to}" if t.effective_to else "sem data de fim")
+            for t in published
+        )
+        detail = f"Versões publicadas e respetivos períodos de vigência: {periods}."
+    return (
+        f"Não há nenhum modelo de documento '{template_code}' em vigor hoje ({timezone.now().date()}) "
+        f"nem na data de início da cotação ({effective_date}). {detail}"
+    )
+
+
 # OD-006 placeholder: no approved document names a real template code, so
 # this is this module's own fixed convention (mirrors S04-PRICING-CONTEXT-001's
 # BASE_PREMIUM parameter code convention) - an Admin must create+publish a
@@ -166,7 +199,7 @@ DEFAULT_TEMPLATE_CODE = "QUOTE_PROPOSAL_DEFAULT"
 
 def generate_quote_proposal(*, quote: Quote) -> Document:
     if quote.status != QuoteStatus.APPROVED.value:
-        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; a proposal can only be generated once APPROVED")
+        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; só se pode gerar a proposta depois de a cotação estar aprovada (APPROVED)")
 
     approval_snapshot = (
         QuoteSnapshot.objects.filter(quote=quote, snapshot_type=QuoteSnapshotType.APPROVAL.value)
@@ -174,13 +207,12 @@ def generate_quote_proposal(*, quote: Quote) -> Document:
         .first()
     )
     if approval_snapshot is None:
-        raise QuoteStateError(f"Quote {quote.id} has no APPROVAL snapshot to generate a proposal from")
+        raise QuoteStateError(f"A cotação {quote.id} não tem registo de aprovação (snapshot) para gerar a proposta")
 
-    template = _resolve_published_template(template_code=DEFAULT_TEMPLATE_CODE, effective_date=quote.effective_date)
+    template = resolve_template_for(template_code=DEFAULT_TEMPLATE_CODE, effective_date=quote.effective_date)
     if template is None:
         raise TemplateNotFoundError(
-            f"No published document template '{DEFAULT_TEMPLATE_CODE}' effective on {quote.effective_date} — "
-            "an Admin must create and publish one first"
+template_not_found_message(template_code=DEFAULT_TEMPLATE_CODE, effective_date=quote.effective_date)
         )
 
     actor = CurrentActorProvider.get()

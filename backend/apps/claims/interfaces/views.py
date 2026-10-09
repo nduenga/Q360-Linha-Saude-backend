@@ -79,7 +79,7 @@ def _date_param(request, name):
     try:
         return datetime.date.fromisoformat(raw)
     except ValueError:
-        raise summary_service.ClaimsDataError(f"'{name}' must be YYYY-MM-DD") from None
+        raise summary_service.ClaimsDataError(f"'{name}' tem de estar no formato AAAA-MM-DD") from None
 
 
 def _required_uuid(request, name):
@@ -87,7 +87,7 @@ def _required_uuid(request, name):
     try:
         return uuid.UUID(raw)
     except (TypeError, ValueError):
-        raise summary_service.ClaimsDataError(f"'{name}' is required and must be a UUID") from None
+        raise summary_service.ClaimsDataError(f"'{name}' é obrigatório e tem de ser um UUID") from None
 
 
 def _optional_uuid(request, name):
@@ -97,7 +97,7 @@ def _optional_uuid(request, name):
     try:
         return uuid.UUID(raw)
     except ValueError:
-        raise summary_service.ClaimsDataError(f"'{name}' must be a UUID") from None
+        raise summary_service.ClaimsDataError(f"'{name}' tem de ser um UUID") from None
 
 
 def _group_default(field: str, fallback: str) -> str:
@@ -114,9 +114,9 @@ def _decimal_param(request, name, default):
     try:
         value = Decimal(str(raw))
     except InvalidOperation:
-        raise summary_service.ClaimsDataError(f"'{name}' must be a decimal") from None
+        raise summary_service.ClaimsDataError(f"'{name}' tem de ser um decimal") from None
     if not value.is_finite() or not Decimal("0") <= value <= Decimal("100"):
-        raise summary_service.ClaimsDataError(f"'{name}' must be between 0 and 100")
+        raise summary_service.ClaimsDataError(f"'{name}' tem de estar entre 0 e 100")
     return value
 
 
@@ -244,7 +244,7 @@ class ClaimsProfitSharingParametersView(APIView):
         ):
             value = Decimal(_group_default(field, fallback))
             if not value.is_finite() or not Decimal("0") <= value <= Decimal("100"):
-                raise summary_service.ClaimsDataError(f"Configured {name} must be between 0 and 100")
+                raise summary_service.ClaimsDataError(f"O valor configurado de {name} tem de estar entre 0 e 100")
             values.append(value.quantize(Decimal("0.01")))
         return Response({"thresholdPct": str(values[0]), "sharePct": str(values[1])})
 

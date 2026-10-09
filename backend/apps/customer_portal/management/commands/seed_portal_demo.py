@@ -55,14 +55,13 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if not settings.DEBUG:
             raise CommandError(
-                "seed_portal_demo is restricted to DEBUG environments. "
-                "For production, use prepare_portal_test_accounts with an explicit tenant ID."
+                "seed_portal_demo só pode ser executado em ambientes DEBUG. Em produção, use prepare_portal_test_accounts com um ID de tenant explícito."
             )
         try:
             tenant = Tenant.objects.get(code=options["tenant_code"])
         except Tenant.DoesNotExist as exc:
             raise CommandError(
-                f"No tenant '{options['tenant_code']}'. Run `manage.py seed_demo_data` first."
+                f"Não existe o tenant '{options['tenant_code']}'. Execute primeiro `manage.py seed_demo_data`."
             ) from exc
 
         demo = DemoCommand()
@@ -73,7 +72,7 @@ class Command(BaseCommand):
                 for key, email, _name, _roles in _STAFF
             }
             if not all(staff.values()):
-                raise CommandError("Demo staff accounts are missing. Run `manage.py seed_demo_data` first.")
+                raise CommandError("Faltam as contas de utilizador de demonstração. Execute primeiro `manage.py seed_demo_data`.")
             demo._bind(tenant, staff["admin"], Role.ADMIN)  # noqa: SLF001
 
             proposers = {
@@ -84,11 +83,11 @@ class Command(BaseCommand):
                 )
             }
             if not all(proposers.values()):
-                raise CommandError("Demo customers are missing. Run `manage.py seed_demo_data` first.")
+                raise CommandError("Faltam os clientes de demonstração. Execute primeiro `manage.py seed_demo_data`.")
             ana_policy = Policy.objects.filter(proposer=proposers["ana"], status="ACTIVE").order_by("created_at").first()
             empresa_policy = Policy.objects.filter(proposer=proposers["empresa"], status="ACTIVE").first()
             if ana_policy is None or empresa_policy is None:
-                raise CommandError("Demo policies are missing. Run `manage.py seed_demo_data` first.")
+                raise CommandError("Faltam as apólices de demonstração. Execute primeiro `manage.py seed_demo_data`.")
 
             accounts = {
                 "ana": self._account(tenant, proposers["ana"], options["password"]),

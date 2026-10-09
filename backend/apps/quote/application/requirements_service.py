@@ -428,5 +428,5 @@ def enforce_requirements(quote: Quote) -> None:
     result = evaluate_requirements(quote)
     if result["blocking"]:
         raise QuoteRequirementsError(
-            "The quote does not satisfy the plan's underwriting rules: " + " | ".join(e["message"] for e in result["errors"])
+            "A cotação não cumpre as regras de subscrição do plano: " + " | ".join(e["message"] for e in result["errors"])
         )

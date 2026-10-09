@@ -292,7 +292,7 @@ def test_projection_assumption_validation(admin_client):
     ).data["id"]
     _upload(admin_client, {"proposerId": other}, "occurrence_date,benefit_code,paid_amount\n2025-01-01,DENTAL,1\n", kind="CLAIMS")
     resp = admin_client.post("/api/v1/claims/projections", {"proposerId": other, "assumptions": ASSUMPTIONS}, format="json")
-    assert resp.status_code == 400 and "premium" in resp.data["detail"]
+    assert resp.status_code == 400 and "prémio" in resp.data["detail"]
 
 
 @pytest.mark.django_db

@@ -121,7 +121,7 @@ class IdempotencyMiddleware:
             return self._problem_response(
                 code=IdempotencyMissingKeyError.problem_code,
                 status=IdempotencyMissingKeyError.http_status,
-                detail="Idempotency-Key header is required for this operation",
+                detail="O cabeçalho Idempotency-Key é obrigatório nesta operação",
             )
 
         from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
@@ -370,7 +370,7 @@ class RateLimitMiddleware:
                     "title": "Limite excedido",
                     "status": 429,
                     "code": "RATE-LIMIT",
-                    "detail": "Too many requests in the current time window.",
+                    "detail": "Demasiados pedidos no período atual. Tente de novo dentro de instantes.",
                     "correlationId": get_correlation_id() or "",
                 },
                 status=429,

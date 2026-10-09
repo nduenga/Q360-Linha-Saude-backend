@@ -66,16 +66,14 @@ class ScenarioStateError(DomainProblem):
 def _require_scenario_editable(quote: Quote) -> None:
     if quote.status not in _SCENARIO_EDITABLE:
         raise QuoteStateError(
-            f"Quote {quote.id} is {quote.status}; "
-            "scenarios can only be changed while DRAFT, READY or IN_REVIEW"
+            f"A cotação {quote.id} está em {quote.status}; os cenários só podem ser alterados em rascunho (DRAFT), pronta (READY) ou em revisão (IN_REVIEW)"
         )
 
 
 def _require_quote_editable(quote: Quote) -> None:
     if quote.status not in _QUOTE_EDITABLE:
         raise QuoteStateError(
-            f"Quote {quote.id} is {quote.status}; "
-            "the official quote can only be changed while DRAFT or READY"
+            f"A cotação {quote.id} está em {quote.status}; a cotação oficial só pode ser alterada em rascunho (DRAFT) ou pronta (READY)"
         )
 
 def _fmt(value: Decimal) -> str:
@@ -99,16 +97,16 @@ def normalise_parameters(quote: Quote, raw: Any) -> dict[str, Any]:
         raw = {}
     if not isinstance(raw, dict) or set(raw) - {"selection", "adjustments", "projection"}:
         raise ReferencedEntityNotFoundError(
-            "parameters must be an object with 'selection', 'adjustments' and/or 'projection'"
+            "parameters tem de ser um objeto com 'selection', 'adjustments' e/ou 'projection'"
         )
     plan_context = resolve_plan_pricing_context(plan=quote.plan, selection=raw.get("selection") or {}, effective_date=quote.effective_date)
     adjustments = raw.get("adjustments") or []
     if not isinstance(adjustments, list):
-        raise ReferencedEntityNotFoundError("parameters.adjustments must be a list")
+        raise ReferencedEntityNotFoundError("parameters.adjustments tem de ser uma lista")
     clean: list[dict[str, Any]] = []
     for spec in adjustments:
         if not isinstance(spec, dict):
-            raise ReferencedEntityNotFoundError("each adjustment must be an object")
+            raise ReferencedEntityNotFoundError("cada ajuste tem de ser um objeto")
         valid = simulator_service._validate_adjustment_spec(quote, spec)
         item: dict[str, Any] = {"kind": valid["kind"], "value": _fmt(valid["value"]), "scope": valid["scope"], "memberId": valid["memberId"]}
         if spec.get("reason"):
@@ -127,16 +125,16 @@ def _validate_projection_link(quote: Quote, projection: Any) -> dict[str, str]:
     from apps.claims.application import projection_service
 
     if not isinstance(projection, dict) or set(projection) - {"projectionRunId", "scenario"}:
-        raise ReferencedEntityNotFoundError("parameters.projection must be {projectionRunId, scenario}")
+        raise ReferencedEntityNotFoundError("parameters.projection tem de ser {projectionRunId, scenario}")
     scenario_name = projection.get("scenario")
     if scenario_name not in projection_service.SCENARIOS:
-        raise ReferencedEntityNotFoundError(f"projection.scenario must be one of {list(projection_service.SCENARIOS)}")
+        raise ReferencedEntityNotFoundError(f"projection.scenario tem de ser um de {list(projection_service.SCENARIOS)}")
     try:
         run = projection_service.get_run(projection.get("projectionRunId"))
     except DomainProblem as exc:
         raise ReferencedEntityNotFoundError(str(exc)) from exc
     if run.proposer_id != quote.proposer_id:
-        raise ReferencedEntityNotFoundError("The projection belongs to a different client")
+        raise ReferencedEntityNotFoundError("A projeção pertence a outro cliente")
     chosen = run.result_json["scenarios"][scenario_name]
     return {
         "projectionRunId": str(run.id),
@@ -195,7 +193,7 @@ def _calculate(quote: Quote, parameters: dict[str, Any], render: Callable) -> tu
 def get_scenario(scenario_id: uuid.UUID) -> QuoteScenario:
     scenario = QuoteScenario.objects.select_related("quote", "quote__plan").filter(id=scenario_id).first()
     if scenario is None:
-        raise ScenarioNotFoundError(f"Scenario {scenario_id} does not exist")
+        raise ScenarioNotFoundError(f"O cenário {scenario_id} não existe")
     return scenario
 
 
@@ -246,7 +244,7 @@ def create_scenario(
                 created_by=actor.actor_id if actor else "unknown",
             )
     except IntegrityError as exc:
-        raise DuplicateScenarioNameError(f"Quote {quote.id} already has a scenario named '{name}'") from exc
+        raise DuplicateScenarioNameError(f"A cotação {quote.id} já tem um cenário com o nome '{name}'") from exc
     _audit.record(
         action="quote.scenario_created",
         entity_type="QuoteScenario",
@@ -286,10 +284,10 @@ def update_scenario(
             )
             if updated == 0:
                 raise RowVersionMismatchError(
-                    f"Scenario {scenario.id} rowVersion {row_version} does not match the current version"
+                    f"A versão do cenário {scenario.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
                 )
     except IntegrityError as exc:
-        raise DuplicateScenarioNameError(f"Quote {quote.id} already has a scenario named '{name}'") from exc
+        raise DuplicateScenarioNameError(f"A cotação {quote.id} já tem um cenário com o nome '{name}'") from exc
     scenario = get_scenario(scenario.id)
     _audit.record(
         action="quote.scenario_updated",
@@ -338,7 +336,7 @@ def clone_scenario(*, scenario: QuoteScenario, name: str | None, render: Callabl
 def delete_scenario(*, scenario: QuoteScenario) -> None:
     _require_scenario_editable(scenario.quote)
     if scenario.is_selected:
-        raise ScenarioStateError("The selected scenario cannot be deleted: select another one first")
+        raise ScenarioStateError("O cenário selecionado não pode ser eliminado: selecione primeiro outro")
     QuoteScenario.objects.filter(id=scenario.id).delete()
     _audit.record(
         action="quote.scenario_deleted",
@@ -443,9 +441,9 @@ def compare_scenarios(*, quote: Quote, scenario_ids: list[uuid.UUID] | None) -> 
         queryset = queryset.filter(id__in=scenario_ids)
     scenarios = list(queryset)
     if scenario_ids and len(scenarios) != len(set(scenario_ids)):
-        raise ScenarioNotFoundError("One or more scenarios do not belong to this quote")
+        raise ScenarioNotFoundError("Um ou mais cenários não pertencem a esta cotação")
     if len(scenarios) < 2:
-        raise ReferencedEntityNotFoundError("At least two scenarios are needed to compare")
+        raise ReferencedEntityNotFoundError("São necessários pelo menos dois cenários para comparar")
 
     contexts = {s.id: resolve_plan_pricing_context(plan=quote.plan, selection=s.parameters_json.get("selection") or {}, effective_date=quote.effective_date) for s in scenarios}
     totals = {s.id: Decimal(s.result_json["totalAmount"]) for s in scenarios}

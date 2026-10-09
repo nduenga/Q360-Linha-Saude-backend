@@ -40,8 +40,7 @@ class Command(BaseCommand):
             tenant = Tenant.objects.get(code=options["tenant_code"])
         except Tenant.DoesNotExist as exc:
             raise CommandError(
-                f"No tenant with code '{options['tenant_code']}'. Run "
-                f"`manage.py seed_dev_tenant --code {options['tenant_code']}` first."
+                f"Não existe nenhum tenant com o código '{options['tenant_code']}'. Execute primeiro `manage.py seed_dev_tenant --code {options['tenant_code']}`."
             ) from exc
 
         roles = [r.strip() for r in options["roles"].split(",") if r.strip()]
@@ -49,10 +48,10 @@ class Command(BaseCommand):
             try:
                 Role(role)
             except ValueError as exc:
-                raise CommandError(f"Unknown role '{role}'. Valid: {', '.join(r.value for r in Role)}") from exc
+                raise CommandError(f"Perfil '{role}' desconhecido. Válidos: {', '.join(r.value for r in Role)}") from exc
 
         if StaffAccount.all_tenants.filter(tenant_id=tenant.id, email__iexact=options["email"]).exists():
-            raise CommandError(f"A staff account for '{options['email']}' already exists in tenant '{tenant.code}'.")
+            raise CommandError(f"Já existe uma conta para '{options['email']}' no tenant '{tenant.code}'.")
 
         password = options["password"] or secrets.token_urlsafe(12)
         account = StaffAccount.all_tenants.create(

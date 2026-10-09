@@ -35,7 +35,7 @@ class StaffSigningKeyMissingError(Exception):
 
 def issue_access_token(*, actor_id: uuid.UUID, tenant_id: uuid.UUID, roles: list[str], scopes: list[str]) -> tuple[str, int]:
     if not settings.Q360_JWT_SIGNING_KEY:
-        raise StaffSigningKeyMissingError("Q360_JWT_SIGNING_KEY is not configured")
+        raise StaffSigningKeyMissingError("A chave Q360_JWT_SIGNING_KEY não está configurada")
 
     ttl_seconds = settings.Q360_STAFF_ACCESS_TOKEN_TTL_SECONDS
     now = datetime.datetime.now(datetime.timezone.utc)

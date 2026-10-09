@@ -268,7 +268,7 @@ def create_quote(
             proposer = Proposer.objects.filter(id=proposer_id).first()
             plan = Plan.objects.filter(id=plan_id).first()
             if proposer is None or plan is None:
-                raise ReferencedEntityNotFoundError("Referenced proposerId or planId does not exist for this tenant")
+                raise ReferencedEntityNotFoundError("O cliente (proposerId) ou o plano (planId) indicado não existe neste tenant")
             if plan.status != PlanStatus.ACTIVE.value:
                 # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): reformulation of the
                 # old OD-ANGOLA-009 ("versão antiga nunca inicia negócio novo") now
@@ -277,7 +277,7 @@ def create_quote(
                 # working after it goes INACTIVE (same OD-ANGOLA-004 guarantee,
                 # just expressed on the Plan instead of the version).
                 raise ReferencedEntityNotFoundError(
-                    f"Plan {plan_id} is {plan.status}; only an ACTIVE plan can be used to start a new quote"
+                    f"O plano {plan_id} está em {plan.status}; só um plano ativo (ACTIVE) pode iniciar uma nova cotação"
                 )
 
             available, why = plan_availability(plan, effective_date)
@@ -362,8 +362,7 @@ def _demote_to_draft_if_ready(quote: Quote) -> None:
 def add_quote_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str | None) -> Quote:
     if quote.status not in (QuoteStatus.DRAFT.value, QuoteStatus.READY.value):
         raise QuoteStateError(
-            f"Quote {quote.id} is {quote.status}; members can only be edited while DRAFT or READY."
-            f" Current status {quote.status} means the quote has already been submitted or approved."
+            f"A cotação {quote.id} está em {quote.status}; as pessoas seguras só podem ser alteradas em rascunho (DRAFT) ou pronta (READY). O estado {quote.status} indica que a cotação já foi submetida ou aprovada."
         )
 
     member = InsuredMember.objects.filter(id=member_id).first()
@@ -409,7 +408,7 @@ def add_quote_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str 
                 eligibility_evaluation=evaluation,
             )
     except IntegrityError as exc:
-        raise DuplicateMemberError(f"Member {member_id} is already associated with quote {quote.id}") from exc
+        raise DuplicateMemberError(f"A pessoa segura {member_id} já está associada à cotação {quote.id}") from exc
 
     _demote_to_draft_if_ready(quote)
     _audit.record(
@@ -437,11 +436,11 @@ def add_quote_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str 
 
 def remove_quote_member(*, quote: Quote, member_id: uuid.UUID) -> None:
     if quote.status not in (QuoteStatus.DRAFT.value, QuoteStatus.READY.value):
-        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; members can only be edited while DRAFT or READY")
+        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; as pessoas seguras só podem ser alteradas em rascunho (DRAFT) ou pronta (READY)")
 
     deleted, _ = QuoteMember.objects.filter(quote=quote, member_id=member_id).delete()
     if deleted == 0:
-        raise ReferencedEntityNotFoundError(f"Member {member_id} is not associated with quote {quote.id}")
+        raise ReferencedEntityNotFoundError(f"A pessoa segura {member_id} não está associada à cotação {quote.id}")
 
     _demote_to_draft_if_ready(quote)
     _audit.record(action="quote.member_removed", entity_type="Quote", entity_id=str(quote.id), metadata={"memberId": str(member_id)})
@@ -468,7 +467,7 @@ def update_quote(*, quote: Quote, effective_date: datetime.date, row_version: in
         row_version=row_version + 1,
     )
     if updated == 0:
-        raise RowVersionMismatchError(f"Quote {quote.id} rowVersion {row_version} does not match the current version")
+        raise RowVersionMismatchError(f"A versão da cotação {quote.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
     quote.refresh_from_db()
     if was_ready:
         _record_transition(quote, from_status=QuoteStatus.READY.value, to_status=QuoteStatus.DRAFT.value, reason_code="MATERIAL_EDIT")
@@ -544,7 +543,7 @@ def build_pricing_context(
         actuarial_profile = proposer_attributes.get("actuarialProfile")
         if actuarial_profile is not None:
             if not isinstance(actuarial_profile, dict):
-                raise ReferencedEntityNotFoundError("proposer.attributes.actuarialProfile must be an object")
+                raise ReferencedEntityNotFoundError("proposer.attributes.actuarialProfile tem de ser um objeto")
             context["actuarialProfile"] = actuarial_profile
     # A configuração de negócio publicada (pricing.*) tem prioridade; sem ela,
     # mantém-se a resolução legada RatingTable/PricingParameterSet.
@@ -582,7 +581,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
                 " um subscritor a estiver a rever. Primeiro devolva-a para READY via decision=RETURN."
             )
         raise QuoteStateError(
-            f"Quote {quote.id} is {quote.status}; pricing can only run while DRAFT or READY.{extra}"
+            f"A cotação {quote.id} está em {quote.status}; o cálculo do prémio só pode correr em rascunho (DRAFT) ou pronta (READY).{extra}"
         )
 
     if not recalculate and quote.latest_pricing_run_id and quote.latest_pricing_run.status == "CALCULATED":
@@ -873,7 +872,7 @@ def submit_quote(*, quote: Quote, row_version: int, correlation_id: str | None) 
     becoming READY already proved (see price_quote) - submit just requires
     the quote to still be READY."""
     if quote.status != QuoteStatus.READY.value:
-        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; only a READY quote can be submitted")
+        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; só uma cotação pronta (READY) pode ser submetida")
 
     # Plan-level underwriting rules (group minimum size, age limits,
     # household) — only evaluated for plans that configured them.
@@ -891,8 +890,8 @@ def submit_quote(*, quote: Quote, row_version: int, correlation_id: str | None) 
         # "it's no longer READY" (QUOTE-STATE) — re-check which happened.
         quote.refresh_from_db()
         if quote.status != QuoteStatus.READY.value:
-            raise QuoteStateError(f"Quote {quote.id} is {quote.status}; only a READY quote can be submitted")
-        raise RowVersionMismatchError(f"Quote {quote.id} rowVersion {row_version} does not match the current version")
+            raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; só uma cotação pronta (READY) pode ser submetida")
+        raise RowVersionMismatchError(f"A versão da cotação {quote.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
     quote.refresh_from_db()
 
     ReviewTask.objects.create(tenant_id=quote.tenant_id, quote=quote, created_by=actor_id)
@@ -953,11 +952,11 @@ def decide_quote(
     correlation_id: str | None,
 ) -> Quote:
     if quote.status != QuoteStatus.IN_REVIEW.value:
-        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; only an IN_REVIEW quote can be decided")
+        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; só uma cotação em revisão (IN_REVIEW) pode ser decidida")
 
     review_task = get_active_review_task(quote=quote)
     if review_task is None or review_task.status not in (ReviewTaskStatus.OPEN.value, ReviewTaskStatus.IN_PROGRESS.value):
-        raise QuoteStateError(f"Quote {quote.id} has no active review task")
+        raise QuoteStateError(f"A cotação {quote.id} não tem nenhuma tarefa de revisão ativa")
 
     actor = CurrentActorProvider.get()
     actor_id = actor.actor_id if actor else "unknown"
@@ -968,7 +967,7 @@ def decide_quote(
     # here first for a clean SEC-403 instead of a raw IntegrityError.
     if quote.submitted_by and quote.submitted_by == actor_id:
         raise SegregationOfDutiesError(
-            f"Actor {actor_id} submitted quote {quote.id} and cannot decide on it (four-eyes)"
+            f"O utilizador {actor_id} submeteu a cotação {quote.id} e não pode decidir sobre ela (regra dos quatro olhos)"
         )
 
     authority_policy = None
@@ -979,7 +978,7 @@ def decide_quote(
 
             if quote.latest_pricing_run.total_amount > Decimal(str(max_amount)):
                 raise SegregationOfDutiesError(
-                    f"Quote {quote.id} total exceeds the approval authority configured in policy {authority_policy.code}"
+                    f"O total da cotação {quote.id} excede a autoridade de aprovação configurada na política {authority_policy.code}"
                 )
 
     target_status = {
@@ -1016,8 +1015,8 @@ def decide_quote(
         if updated == 0:
             quote.refresh_from_db()
             if quote.status != QuoteStatus.IN_REVIEW.value:
-                raise QuoteStateError(f"Quote {quote.id} is {quote.status}; only an IN_REVIEW quote can be decided")
-            raise RowVersionMismatchError(f"Quote {quote.id} rowVersion {row_version} does not match the current version")
+                raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; só uma cotação em revisão (IN_REVIEW) pode ser decidida")
+            raise RowVersionMismatchError(f"A versão da cotação {quote.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
 
         ReviewTask.objects.filter(id=review_task.id).update(status=review_target_status, decided_at=timezone_now())
         quote.refresh_from_db()
@@ -1094,7 +1093,7 @@ CANCELLABLE_QUOTE_STATUSES = (
 
 def cancel_quote(*, quote: Quote, reason_code: str, reason_text: str | None, row_version: int, correlation_id: str | None) -> Quote:
     if quote.status not in CANCELLABLE_QUOTE_STATUSES:
-        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; it cannot be cancelled from this state")
+        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; não pode ser cancelada neste estado")
 
     from_status = quote.status
     updated = Quote.objects.filter(id=quote.id, status=from_status, row_version=row_version).update(
@@ -1103,8 +1102,8 @@ def cancel_quote(*, quote: Quote, reason_code: str, reason_text: str | None, row
     if updated == 0:
         quote.refresh_from_db()
         if quote.status not in CANCELLABLE_QUOTE_STATUSES:
-            raise QuoteStateError(f"Quote {quote.id} is {quote.status}; it cannot be cancelled from this state")
-        raise RowVersionMismatchError(f"Quote {quote.id} rowVersion {row_version} does not match the current version")
+            raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; não pode ser cancelada neste estado")
+        raise RowVersionMismatchError(f"A versão da cotação {quote.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
     quote.refresh_from_db()
 
     # QT-009's "Close/void active review task consistently" has no clean

@@ -72,7 +72,7 @@ def _rows(filename: str, content: bytes) -> list[dict[str, str]]:
     if name.endswith(".csv"):
         reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")), delimiter=";" if b";" in content.split(b"\n")[0] else ",")
         return [{(k or "").strip().lower(): (v or "").strip() for k, v in row.items()} for row in reader if any((v or "").strip() for v in row.values())]
-    raise ClaimsImportError("Unsupported file type: use .xlsx or .csv")
+    raise ClaimsImportError("Tipo de ficheiro não suportado: use .xlsx ou .csv")
 
 
 def _date(raw: str, field: str) -> datetime.date:
@@ -81,7 +81,7 @@ def _date(raw: str, field: str) -> datetime.date:
             return datetime.datetime.strptime(raw, fmt).date()
         except ValueError:
             continue
-    raise ValueError(f"{field} '{raw}' is not a date (use YYYY-MM-DD or DD/MM/YYYY)")
+    raise ValueError(f"{field} '{raw}' não é uma data (use AAAA-MM-DD ou DD/MM/AAAA)")
 
 
 def _amount(raw: str, field: str, *, allow_zero: bool = True) -> Decimal:
@@ -91,9 +91,9 @@ def _amount(raw: str, field: str, *, allow_zero: bool = True) -> Decimal:
     try:
         value = Decimal(text)
     except InvalidOperation as exc:
-        raise ValueError(f"{field} '{raw}' is not a number") from exc
+        raise ValueError(f"{field} '{raw}' não é um número") from exc
     if not value.is_finite() or value < 0 or (value == 0 and not allow_zero):
-        raise ValueError(f"{field} must be {'>= 0' if allow_zero else '> 0'}")
+        raise ValueError(f"{field} tem de ser {'>= 0' if allow_zero else '> 0'}")
     return value
 
 
@@ -101,18 +101,18 @@ def import_file(
     *, kind: str, proposer_id, policy_id, source: str, filename: str, content: bytes, dry_run: bool
 ) -> dict[str, Any]:
     if kind not in KINDS:
-        raise ClaimsImportError(f"kind must be one of {list(KINDS)}")
+        raise ClaimsImportError(f"O tipo (kind) tem de ser um de {list(KINDS)}")
     if source not in SOURCES:
-        raise ClaimsImportError(f"source must be one of {list(SOURCES)}")
+        raise ClaimsImportError(f"A origem (source) tem de ser uma de {list(SOURCES)}")
     proposer = Proposer.objects.filter(id=proposer_id).first()
     if proposer is None:
-        raise ClaimsImportError(f"proposerId {proposer_id} does not exist for this tenant")
+        raise ClaimsImportError(f"O cliente (proposerId) {proposer_id} não existe neste tenant")
     rows = _rows(filename, content)
     if not rows:
-        raise ClaimsImportError("The file has no data rows")
+        raise ClaimsImportError("O ficheiro não tem linhas de dados")
     missing = [c for c in _REQUIRED[kind] if c not in rows[0]]
     if missing:
-        raise ClaimsImportError(f"Missing required column(s): {missing}")
+        raise ClaimsImportError(f"Faltam colunas obrigatórias: {missing}")
 
     tenant_id = CurrentTenantProvider.require().value
     ensure_market_catalog(tenant_id)
@@ -123,14 +123,14 @@ def import_file(
         try:
             currency = (row.get("currency") or "AOA").upper()
             if currency not in _CURRENCIES:
-                raise ValueError(f"currency must be one of {list(_CURRENCIES)}")
+                raise ValueError(f"A moeda (currency) tem de ser uma de {list(_CURRENCIES)}")
             if kind == "CLAIMS":
                 code = (row.get("benefit_code") or "").upper()
                 if code not in known_benefits:
-                    raise ValueError(f"benefit_code '{code}' is not a coverage of the library")
+                    raise ValueError(f"benefit_code '{code}' não é uma cobertura da biblioteca")
                 status = (row.get("status") or "PAID").upper()
                 if status not in _STATUSES:
-                    raise ValueError(f"status must be one of {list(_STATUSES)}")
+                    raise ValueError(f"O estado (status) tem de ser um de {list(_STATUSES)}")
                 valid.append(
                     {
                         "occurrence_date": _date(row["occurrence_date"], "occurrence_date"),
@@ -145,11 +145,11 @@ def import_file(
             else:
                 start, end = _date(row["period_start"], "period_start"), _date(row["period_end"], "period_end")
                 if end < start:
-                    raise ValueError("period_end is before period_start")
+                    raise ValueError("period_end é anterior a period_start")
                 insured = row.get("insured_count")
                 if insured:
                     if not insured.isdigit() or int(insured) < 1:
-                        raise ValueError("insured_count must be a positive integer")
+                        raise ValueError("insured_count tem de ser um número inteiro positivo")
                 valid.append(
                     {
                         "period_start": start,
@@ -198,7 +198,7 @@ def list_imports(*, proposer_id=None, policy_id=None):
 def get_import(import_id) -> ClaimsImport:
     job = ClaimsImport.objects.filter(id=import_id).first()
     if job is None:
-        raise ClaimsImportNotFoundError(f"Claims import {import_id} does not exist")
+        raise ClaimsImportNotFoundError(f"A importação de sinistros {import_id} não existe")
     return job
 
 
@@ -219,7 +219,7 @@ IMPORT_FORMATS: dict[str, dict[str, Any]] = {
 def import_template_csv(kind: str) -> str:
     """CSV com o cabeçalho aceito e uma linha de exemplo (dados fictícios)."""
     if kind not in IMPORT_FORMATS:
-        raise ClaimsImportError(f"kind must be one of {list(KINDS)}")
+        raise ClaimsImportError(f"O tipo (kind) tem de ser um de {list(KINDS)}")
     spec = IMPORT_FORMATS[kind]
     out = io.StringIO()
     writer = csv.writer(out)

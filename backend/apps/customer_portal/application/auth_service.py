@@ -106,14 +106,13 @@ class CustomerPortalAuthService:
         account = CustomerAccount.objects.filter(tenant_id=tenant_id, email=email).first()
         if account is None:
             raise InvalidPortalCredentialsError(
-                "No access request was made for this policyNumber/registrationNumber/email combination "
-                "— request a new code first"
+                "Não foi feito nenhum pedido de acesso para esta combinação de apólice/registo/email: peça primeiro um novo código"
             )
 
         now = timezone.now()
         state = LockoutState(failed_attempts=account.failed_otp_attempts, locked_until=account.locked_until)
         if is_locked(state, now=now):
-            raise PortalAccountLockedError("Account temporarily locked after repeated failed attempts")
+            raise PortalAccountLockedError("Conta temporariamente bloqueada após tentativas falhadas repetidas")
 
         challenge = (
             CustomerLoginChallenge.objects.filter(
@@ -141,8 +140,8 @@ class CustomerPortalAuthService:
                 metadata={"locked": new_state.locked_until is not None},
             )
             if new_state.locked_until is not None:
-                raise PortalAccountLockedError("Account locked after repeated failed attempts")
-            raise InvalidPortalCredentialsError("Invalid or expired code")
+                raise PortalAccountLockedError("Conta bloqueada após tentativas falhadas repetidas")
+            raise InvalidPortalCredentialsError("Código inválido ou expirado")
 
         proposer_ids = list(
             CustomerAccountProposer.objects.filter(tenant_id=tenant_id, customer_account=account).values_list(
@@ -180,9 +179,9 @@ class CustomerPortalAuthService:
             .first()
         )
         if policy is None or policy.proposer is None:
-            raise PortalPolicyNotFoundError(f"No policy found for policyNumber '{policy_number}'")
+            raise PortalPolicyNotFoundError(f"Não foi encontrada nenhuma apólice com o número '{policy_number}'")
         if policy.proposer.registration_number != registration_number:
             raise PortalRegistrationMismatchError(
-                "registrationNumber does not match the proposer of this policy"
+                "O número de registo (registrationNumber) não corresponde ao tomador desta apólice"
             )
         return policy.proposer

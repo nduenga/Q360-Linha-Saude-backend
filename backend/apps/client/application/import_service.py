@@ -237,7 +237,7 @@ def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFi
 def commit_member_import(*, import_job: ImportJob, actor_id: str) -> ImportJob:
     if import_job.status != ImportJobStatus.VALIDATED.value:
         raise ImportCommitNotAllowedError(
-            f"ImportJob {import_job.id} is {import_job.status}; only a VALIDATED job can be committed"
+            f"O processo de importação {import_job.id} está em {import_job.status}; só um processo VALIDATED pode ser confirmado"
         )
     if import_job.proposer_id is None:
         # ART-006 allows `proposerId` to be omitted on upload, but
@@ -246,7 +246,7 @@ def commit_member_import(*, import_job: ImportJob, actor_id: str) -> ImportJob:
         # explicitly resolved by any document; documented in
         # OPEN_DECISIONS.md#S03-IMPORT-001.
         raise ImportCommitNotAllowedError(
-            f"ImportJob {import_job.id} has no proposer; a proposer is required to commit members"
+            f"O processo de importação {import_job.id} não tem cliente (proposer); é necessário um para confirmar as pessoas seguras"
         )
 
     tenant_id = CurrentTenantProvider.require()

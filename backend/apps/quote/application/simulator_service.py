@@ -56,7 +56,7 @@ class AdjustmentNotFoundError(DomainProblem):
 
 def _require_editable(quote: Quote) -> None:
     if quote.status not in _EDITABLE:
-        raise QuoteStateError(f"Quote {quote.id} is {quote.status}; it can only be changed while DRAFT or READY")
+        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; só pode ser alterada em rascunho (DRAFT) ou pronta (READY)")
 
 
 def _money(value: Decimal | None) -> str | None:
@@ -112,7 +112,7 @@ def set_selection(*, quote: Quote, selection: dict[str, Any], row_version: int) 
             selection_json=plan_context.selection, row_version=row_version + 1
         )
         if updated == 0:
-            raise RowVersionMismatchError(f"Quote {quote.id} rowVersion {row_version} does not match the current version")
+            raise RowVersionMismatchError(f"A versão da cotação {quote.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
         quote.refresh_from_db()
         quote_service._demote_to_draft_if_ready(quote)
         quote.refresh_from_db()
@@ -159,23 +159,23 @@ def preview_quote(
 def _validate_adjustment_spec(quote: Quote, spec: dict[str, Any]) -> dict[str, Any]:
     kind, scope = spec.get("kind"), spec.get("scope", "QUOTE")
     if kind not in KINDS:
-        raise ReferencedEntityNotFoundError(f"kind must be one of {list(KINDS)}")
+        raise ReferencedEntityNotFoundError(f"O tipo (kind) tem de ser um de {list(KINDS)}")
     if scope not in SCOPES:
-        raise ReferencedEntityNotFoundError(f"scope must be one of {list(SCOPES)}")
+        raise ReferencedEntityNotFoundError(f"O âmbito (scope) tem de ser um de {list(SCOPES)}")
     try:
         value = Decimal(str(spec.get("value")))
     except (InvalidOperation, ValueError) as exc:
-        raise ReferencedEntityNotFoundError("value must be a decimal") from exc
+        raise ReferencedEntityNotFoundError("O valor (value) tem de ser um número decimal") from exc
     if not value.is_finite() or value <= 0:
-        raise ReferencedEntityNotFoundError("value must be greater than zero")
+        raise ReferencedEntityNotFoundError("O valor (value) tem de ser maior que zero")
     if kind == "DISCOUNT_PERCENT" and value >= 100:
-        raise ReferencedEntityNotFoundError("a percentage discount must be below 100")
+        raise ReferencedEntityNotFoundError("Um desconto percentual tem de ser inferior a 100")
     member_id = spec.get("memberId")
     if scope == "MEMBER":
         if not member_id or not QuoteMember.objects.filter(quote=quote, member_id=member_id).exists():
-            raise ReferencedEntityNotFoundError("memberId must be a member of this quote when scope is MEMBER")
+            raise ReferencedEntityNotFoundError("memberId tem de ser uma pessoa segura desta cotação quando o âmbito (scope) é MEMBER")
     elif member_id:
-        raise ReferencedEntityNotFoundError("memberId is only allowed when scope is MEMBER")
+        raise ReferencedEntityNotFoundError("memberId só é permitido quando o âmbito (scope) é MEMBER")
     return {"kind": kind, "scope": scope, "value": value, "memberId": str(member_id) if member_id else None}
 
 
@@ -204,8 +204,7 @@ def _enforce_authority(quote: Quote, spec: dict[str, Any]) -> bool:
     actor = CurrentActorProvider.get()
     if actor is None or not actor.has_permission(Permission.PRICING_CONFIG_MANAGE):
         raise AdjustmentAuthorityError(
-            f"A {spec['kind']} of {spec['value']} exceeds the authority limit ({key}={limit}); "
-            "a subscription manager must apply it"
+            f"Um(a) {spec['kind']} de {spec['value']} excede o limite de autoridade ({key}={limit}); tem de ser aplicado por um gestor de subscrição"
         )
     return True
 
@@ -280,9 +279,9 @@ def remove_adjustment(*, quote: Quote, adjustment_id: uuid.UUID, reason: str | N
     reason = require_reason(reason)
     adjustment = QuoteAdjustment.objects.filter(id=adjustment_id, quote=quote).first()
     if adjustment is None:
-        raise AdjustmentNotFoundError(f"Adjustment {adjustment_id} does not exist on quote {quote.id}")
+        raise AdjustmentNotFoundError(f"O ajuste {adjustment_id} não existe na cotação {quote.id}")
     if adjustment.status == "REMOVED":
-        raise QuoteStateError(f"Adjustment {adjustment_id} was already removed")
+        raise QuoteStateError(f"O ajuste {adjustment_id} já foi removido")
     actor = CurrentActorProvider.get()
     with transaction.atomic():
         baseline_context, member_ids = quote_service.build_pricing_context(quote)
@@ -327,7 +326,7 @@ def set_member_pre_existing(
     reason = require_reason(reason)
     quote_member = QuoteMember.objects.filter(quote=quote, member_id=member_id).first()
     if quote_member is None:
-        raise ReferencedEntityNotFoundError(f"Member {member_id} is not associated with quote {quote.id}")
+        raise ReferencedEntityNotFoundError(f"A pessoa segura {member_id} não está associada à cotação {quote.id}")
     clean, warnings = validate_pre_existing_decision(decision, plan_settings=effective_plan_settings(quote.plan, quote.effective_date))
     actor = CurrentActorProvider.get()
     stored = {
@@ -362,7 +361,7 @@ def clear_member_pre_existing(*, quote: Quote, member_id: uuid.UUID, reason: str
     reason = require_reason(reason)
     quote_member = QuoteMember.objects.filter(quote=quote, member_id=member_id).first()
     if quote_member is None:
-        raise ReferencedEntityNotFoundError(f"Member {member_id} is not associated with quote {quote.id}")
+        raise ReferencedEntityNotFoundError(f"A pessoa segura {member_id} não está associada à cotação {quote.id}")
     before = quote_member.pre_existing_json or None
     with transaction.atomic():
         QuoteMember.objects.filter(id=quote_member.id).update(pre_existing_json={})

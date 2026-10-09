@@ -59,29 +59,29 @@ def parse_commercial_adjustments(raw: Any) -> list[CommercialAdjustment]:
     if raw is None:
         return []
     if not isinstance(raw, list):
-        raise ReferencedEntityNotFoundError("context.adjustments must be a list")
+        raise ReferencedEntityNotFoundError("context.adjustments tem de ser uma lista")
     parsed: list[CommercialAdjustment] = []
     for idx, item in enumerate(raw):
         if not isinstance(item, dict):
-            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}] must be an object")
+            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}] tem de ser um objeto")
         kind = item.get("kind")
         scope = item.get("scope", "QUOTE")
         if kind not in KINDS:
-            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}].kind must be one of {list(KINDS)}")
+            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}].kind tem de ser um de {list(KINDS)}")
         if scope not in SCOPES:
-            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}].scope must be one of {list(SCOPES)}")
+            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}].scope tem de ser um de {list(SCOPES)}")
         try:
             value = Decimal(str(item.get("value")))
         except InvalidOperation as exc:
-            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}].value is not a decimal") from exc
+            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}].value não é um decimal") from exc
         if not value.is_finite() or value <= 0:
-            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}].value must be greater than zero")
+            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}].value tem de ser maior que zero")
         if kind == "DISCOUNT_PERCENT" and value >= 100:
-            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}]: a percentage discount must be below 100")
+            raise ReferencedEntityNotFoundError(f"context.adjustments[{idx}]: um desconto percentual tem de ser inferior a 100")
         member_id = item.get("memberId")
         if (scope == "MEMBER") != bool(member_id):
             raise ReferencedEntityNotFoundError(
-                f"context.adjustments[{idx}]: memberId is required exactly when scope is MEMBER"
+                f"context.adjustments[{idx}]: memberId é obrigatório exatamente quando o âmbito (scope) é MEMBER"
             )
         parsed.append(
             CommercialAdjustment(

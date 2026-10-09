@@ -54,9 +54,9 @@ class JwtActorAuthentication(authentication.BaseAuthentication):
         # não há tenant e as consultas falhariam de forma opaca.
         on_platform_route = request.path.startswith("/api/v1/platform/")
         if actor.actor_type == "PLATFORM_ADMIN" and not on_platform_route:
-            raise exceptions.PermissionDenied("Platform administrator tokens cannot access tenant routes.")
+            raise exceptions.PermissionDenied("Os tokens de administrador da plataforma não podem aceder a rotas de tenant.")
         if actor.actor_type != "PLATFORM_ADMIN" and actor.tenant_id is not None and tenant_status.is_blocked(actor.tenant_id.value):
-            raise exceptions.AuthenticationFailed("Tenant is suspended or inactive.")
+            raise exceptions.AuthenticationFailed("O tenant está suspenso ou inativo.")
 
         CurrentActorProvider.bind(actor)
         return ActorUser(actor), token
