@@ -270,8 +270,18 @@ class DocumentTemplateCreateRequestSerializer(serializers.Serializer):
     """Pragmatic V1 addition, not in ART-006 (see
     apps/quote/application/document_service.py module docstring)."""
 
-    templateCode = serializers.CharField(source="template_code")
-    storageRef = serializers.CharField(source="storage_ref")
+    documentType = serializers.ChoiceField(
+        source="document_type", choices=["QUOTE_PROPOSAL", "POLICY"], default="QUOTE_PROPOSAL",
+        help_text="Para que documento serve: a proposta (cotação) ou a apólice.",
+    )
+    templateCode = serializers.CharField(
+        source="template_code", required=False, default=None, allow_null=True,
+        help_text="Omitir: usa QUOTE_PROPOSAL_DEFAULT (proposta) ou POLICY_DEFAULT (apólice).",
+    )
+    storageRef = serializers.CharField(
+        source="storage_ref", required=False, default=None, allow_null=True,
+        help_text="Corpo JSON opcional (títulos e secções). Omitir usa o corpo por omissão; o aspeto vem do papel timbrado e/ou do Word carregados.",
+    )
     effectiveFrom = serializers.DateField(source="effective_from")
     effectiveTo = serializers.DateField(source="effective_to", allow_null=True, required=False, default=None)
 
@@ -291,6 +301,41 @@ class DocumentTemplateHeaderSerializer(serializers.Serializer):
     effectiveFrom = serializers.DateField(source="effective_from")
     effectiveTo = serializers.DateField(source="effective_to", allow_null=True)
     checksum = serializers.CharField(allow_null=True)
+    documentType = serializers.CharField(source="document_type")
+    hasLetterhead = serializers.SerializerMethodField()
+    letterhead = serializers.SerializerMethodField()
+    hasWordTemplate = serializers.SerializerMethodField()
+    word = serializers.SerializerMethodField()
+
+    def get_hasLetterhead(self, obj) -> bool:
+        return bool(obj.letterhead_key)
+
+    def get_letterhead(self, obj) -> dict | None:
+        meta = (obj.settings_json or {}).get("letterhead")
+        if not obj.letterhead_key or not meta:
+            return None
+        return {"fileName": obj.letterhead_name, "pages": meta.get("pages"), "marginsCm": meta.get("marginsCm")}
+
+    def get_hasWordTemplate(self, obj) -> bool:
+        return bool(obj.word_key)
+
+    def get_word(self, obj) -> dict | None:
+        meta = (obj.settings_json or {}).get("word")
+        if not obj.word_key or not meta:
+            return None
+        return {"fileName": obj.word_name, "placeholders": meta.get("placeholders", [])}
+
+
+class TemplateLetterheadUploadSerializer(serializers.Serializer):
+    file = serializers.FileField(help_text="PDF com o aspeto da seguradora (logótipo, cabeçalho, rodapé, fundo). Até 10 MB.")
+    left = serializers.FloatField(required=False, help_text="Margem esquerda em cm (por omissão 2).")
+    right = serializers.FloatField(required=False, help_text="Margem direita em cm (por omissão 2).")
+    top = serializers.FloatField(required=False, help_text="Margem de topo em cm, para não escrever sobre o cabeçalho (por omissão 3,5).")
+    bottom = serializers.FloatField(required=False, help_text="Margem de base em cm, para não escrever sobre o rodapé (por omissão 3).")
+
+
+class TemplateWordUploadSerializer(serializers.Serializer):
+    file = serializers.FileField(help_text="Modelo .docx com marcas {{variável}}. Até 10 MB.")
 
 
 class ScenarioSerializer(serializers.Serializer):

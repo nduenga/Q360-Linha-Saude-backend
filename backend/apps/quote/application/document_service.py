@@ -52,10 +52,16 @@ class TemplateNotFoundError(QuoteStateError):
     problem_code = "NOT-FOUND"
 
 
+TEMPLATE_DOCUMENT_TYPES = ("QUOTE_PROPOSAL", "POLICY")
+POLICY_TEMPLATE_CODE = "POLICY_DEFAULT"
+
+
 def create_document_template(
-    *, template_code: str, storage_ref: str, effective_from, effective_to=None
+    *, template_code: str, storage_ref: str, effective_from, effective_to=None, document_type: str = "QUOTE_PROPOSAL"
 ) -> DocumentTemplateVersion:
     tenant_id = CurrentTenantProvider.require()
+    if document_type not in TEMPLATE_DOCUMENT_TYPES:
+        raise QuoteStateError(f"O tipo de documento (documentType) tem de ser um de {list(TEMPLATE_DOCUMENT_TYPES)}")
     validate_template_body(storage_ref)
     checksum = hashlib.sha256(storage_ref.encode("utf-8")).hexdigest()
     try:
@@ -75,6 +81,7 @@ def create_document_template(
                 checksum=checksum,
                 effective_from=effective_from,
                 effective_to=effective_to,
+                document_type=document_type,
             )
     except IntegrityError as exc:
         raise DuplicateTemplateCodeError(f"Já existe a versão deste modelo de documento '{template_code}'") from exc

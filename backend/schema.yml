@@ -3213,6 +3213,110 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/customer-portal/members/{member_id}/documents:
+    get:
+      operationId: getCustomerPortalMemberDocuments
+      description: "Documentos em falta de uma pessoa segura: `GET` lista o que já enviou e o que\n falta; `POST`\
+        \ (multipart) envia um documento novo para análise."
+      summary: Obter customer portal member documents
+      parameters:
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberDocumentsOverview'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    post:
+      operationId: postCustomerPortalMemberDocuments
+      description: "Documentos em falta de uma pessoa segura: `GET` lista o que já enviou e o que\n falta; `POST`\
+        \ (multipart) envia um documento novo para análise."
+      summary: Criar customer portal member documents
+      parameters:
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MemberDocumentUpload'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MemberDocumentUpload'
+        required: true
+      security:
+      - customerPortalBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberDocumentItem'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/customer-portal/messages:
     get:
       operationId: getCustomerPortalMessages
@@ -4280,6 +4384,165 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/document-templates/{template_id}/letterhead:
+    get:
+      operationId: getDocumentTemplateLetterhead
+      description: "`/document-templates/{id}/letterhead` — papel timbrado em PDF (opção A).\n `POST` (multipart)\
+        \ carrega ou substitui, `GET` descarrega, `DELETE` remove;\n só num modelo em rascunho. O conteúdo do documento\
+        \ é escrito por cima do PDF.\n\nRequer: scope q360.admin, permissão product:manage.\n\nO papel timbrado\
+        \ carregado."
+      summary: Obter document template letterhead
+      parameters:
+      - in: path
+        name: template_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Documents
+      security:
+      - oauth2:
+        - q360.admin
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    post:
+      operationId: postDocumentTemplateLetterhead
+      description: "`/document-templates/{id}/letterhead` — papel timbrado em PDF (opção A).\n `POST` (multipart)\
+        \ carrega ou substitui, `GET` descarrega, `DELETE` remove;\n só num modelo em rascunho. O conteúdo do documento\
+        \ é escrito por cima do PDF.\n\nRequer: scope q360.admin, permissão product:manage."
+      summary: Criar document template letterhead
+      parameters:
+      - in: path
+        name: template_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Documents
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TemplateLetterheadUpload'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TemplateLetterheadUpload'
+        required: true
+      security:
+      - oauth2:
+        - q360.admin
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentTemplateHeader'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+    delete:
+      operationId: deleteDocumentTemplateLetterhead
+      description: "`/document-templates/{id}/letterhead` — papel timbrado em PDF (opção A).\n `POST` (multipart)\
+        \ carrega ou substitui, `GET` descarrega, `DELETE` remove;\n só num modelo em rascunho. O conteúdo do documento\
+        \ é escrito por cima do PDF.\n\nRequer: scope q360.admin, permissão product:manage."
+      summary: Remover document template letterhead
+      parameters:
+      - in: path
+        name: template_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Documents
+      security:
+      - oauth2:
+        - q360.admin
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentTemplateHeader'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/document-templates/{template_id}/preview:
     get:
       operationId: getDocumentTemplatePreview
@@ -4439,6 +4702,164 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/document-templates/{template_id}/word:
+    get:
+      operationId: getDocumentTemplateWord
+      description: "`/document-templates/{id}/word` — modelo Word com marcas {{variável}}\n (opção B). `POST` (multipart)\
+        \ carrega ou substitui e valida as marcas, `GET`\n descarrega, `DELETE` remove; só num modelo em rascunho.\n\
+        \nRequer: scope q360.admin, permissão product:manage.\n\nO modelo Word carregado."
+      summary: Obter document template word
+      parameters:
+      - in: path
+        name: template_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Documents
+      security:
+      - oauth2:
+        - q360.admin
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    post:
+      operationId: postDocumentTemplateWord
+      description: "`/document-templates/{id}/word` — modelo Word com marcas {{variável}}\n (opção B). `POST` (multipart)\
+        \ carrega ou substitui e valida as marcas, `GET`\n descarrega, `DELETE` remove; só num modelo em rascunho.\n\
+        \nRequer: scope q360.admin, permissão product:manage."
+      summary: Criar document template word
+      parameters:
+      - in: path
+        name: template_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Documents
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TemplateWordUpload'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TemplateWordUpload'
+        required: true
+      security:
+      - oauth2:
+        - q360.admin
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentTemplateHeader'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+    delete:
+      operationId: deleteDocumentTemplateWord
+      description: "`/document-templates/{id}/word` — modelo Word com marcas {{variável}}\n (opção B). `POST` (multipart)\
+        \ carrega ou substitui e valida as marcas, `GET`\n descarrega, `DELETE` remove; só num modelo em rascunho.\n\
+        \nRequer: scope q360.admin, permissão product:manage."
+      summary: Remover document template word
+      parameters:
+      - in: path
+        name: template_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Documents
+      security:
+      - oauth2:
+        - q360.admin
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentTemplateHeader'
+          description: Sucesso.
         '401':
           content:
             application/problem+json:
@@ -4982,6 +5403,174 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/member-documents:
+    get:
+      operationId: getMemberDocumentQueue
+      description: "`GET /member-documents` — fila de análise do GTE (por omissão, os que\n aguardam análise).\n\
+        \nRequer: scope q360.read.\n\nFila de análise do GTE."
+      summary: Listar member document queue
+      parameters:
+      - in: query
+        name: memberId
+        schema:
+          type: string
+        description: Só os documentos desta pessoa segura.
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Página (começa em 0).
+      - in: query
+        name: size
+        schema:
+          type: integer
+        description: Itens por página (máx. 200).
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: SUBMITTED (por omissão, a aguardar análise), APPROVED, REJECTED ou ALL.
+      tags:
+      - Identity
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberDocumentQueueItem'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/member-documents/{document_id}/download:
+    get:
+      operationId: getMemberDocumentDownload
+      description: '`GET /member-documents/{documentId}/download` — o ficheiro original.
+
+
+        Requer: scope q360.read.
+
+
+        Ficheiro original enviado (PDF, JPG ou PNG).'
+      summary: Obter member document download
+      parameters:
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Identity
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/member-documents/{document_id}/review:
+    post:
+      operationId: postMemberDocumentReview
+      description: "`POST /member-documents/{documentId}/review` — aprova ou recusa. Ao aprovar,\n a pessoa é reavaliada:\
+        \ se já cumpre as regras fica elegível na cotação e\n ativa (coberta) na apólice.\n\nRequer: scope q360.approve,\
+        \ permissão quote:approve."
+      summary: Criar member document review
+      parameters:
+      - in: path
+        name: document_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Identity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberDocumentReview'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberDocumentReviewResult'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/member-imports:
     post:
       operationId: postMemberImportUpload
@@ -5384,6 +5973,112 @@ paths:
               schema:
                 $ref: '#/components/schemas/Member'
           description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/members/{member_id}/documents:
+    get:
+      operationId: getMemberDocumentListCreate
+      description: "`GET /members/{memberId}/documents` — documentos enviados e o que ainda falta.\n `POST` — o\
+        \ GTE anexa um documento (recebido em papel, por email…).\n\nRequer: scope q360.read."
+      summary: Listar member document list create
+      parameters:
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Identity
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberDocumentsOverview'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    post:
+      operationId: postMemberDocumentListCreate
+      description: "`GET /members/{memberId}/documents` — documentos enviados e o que ainda falta.\n `POST` — o\
+        \ GTE anexa um documento (recebido em papel, por email…).\n\nRequer: scope q360.write, permissão quote:edit."
+      summary: Criar member document list create
+      parameters:
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Identity
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MemberDocumentUpload'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MemberDocumentUpload'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberDocumentItem'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
         '401':
           content:
             application/problem+json:
@@ -13632,6 +14327,14 @@ components:
       - publishedBy
       - status
       - versionNo
+    ContextEnum:
+      enum:
+      - POLICY
+      - QUOTE
+      type: string
+      description: '* `POLICY` - POLICY
+
+        * `QUOTE` - QUOTE'
     CoverageMemberResult:
       type: object
       properties:
@@ -13783,22 +14486,11 @@ components:
           default: ILLNESS
       required:
       - policyNumber
-    DecisionEnum:
-      enum:
-      - APPROVE
-      - REJECT
-      - RETURN
-      type: string
-      description: '* `APPROVE` - APPROVE
-
-        * `REJECT` - REJECT
-
-        * `RETURN` - RETURN'
     DecisionRequest:
       type: object
       properties:
         decision:
-          $ref: '#/components/schemas/DecisionEnum'
+          $ref: '#/components/schemas/DecisionRequestDecisionEnum'
         reasonCode:
           type: string
           maxLength: 100
@@ -13814,6 +14506,17 @@ components:
       - decision
       - reasonCode
       - rowVersion
+    DecisionRequestDecisionEnum:
+      enum:
+      - APPROVE
+      - REJECT
+      - RETURN
+      type: string
+      description: '* `APPROVE` - APPROVE
+
+        * `REJECT` - REJECT
+
+        * `RETURN` - RETURN'
     DevLoginRequest:
       type: object
       properties:
@@ -13849,7 +14552,7 @@ components:
           type: string
           format: uuid
         documentType:
-          $ref: '#/components/schemas/DocumentTypeEnum'
+          $ref: '#/components/schemas/DocumentDocumentTypeEnum'
         documentNumber:
           type:
           - string
@@ -13868,6 +14571,11 @@ components:
       - id
       - quoteId
       - status
+    DocumentDocumentTypeEnum:
+      enum:
+      - QUOTE_PROPOSAL
+      type: string
+      description: '* `QUOTE_PROPOSAL` - QUOTE_PROPOSAL'
     DocumentStatusEnum:
       enum:
       - REQUESTED
@@ -13885,10 +14593,27 @@ components:
 
         apps/quote/application/document_service.py module docstring).'
       properties:
+        documentType:
+          allOf:
+          - $ref: '#/components/schemas/DocumentTemplateCreateRequestDocumentTypeEnum'
+          default: QUOTE_PROPOSAL
+          description: 'Para que documento serve: a proposta (cotação) ou a apólice.
+
+
+            * `QUOTE_PROPOSAL` - QUOTE_PROPOSAL
+
+            * `POLICY` - POLICY'
         templateCode:
-          type: string
+          type:
+          - string
+          - 'null'
+          description: 'Omitir: usa QUOTE_PROPOSAL_DEFAULT (proposta) ou POLICY_DEFAULT (apólice).'
         storageRef:
-          type: string
+          type:
+          - string
+          - 'null'
+          description: Corpo JSON opcional (títulos e secções). Omitir usa o corpo por omissão; o aspeto vem do
+            papel timbrado e/ou do Word carregados.
         effectiveFrom:
           type: string
           format: date
@@ -13899,8 +14624,14 @@ components:
           format: date
       required:
       - effectiveFrom
-      - storageRef
-      - templateCode
+    DocumentTemplateCreateRequestDocumentTypeEnum:
+      enum:
+      - QUOTE_PROPOSAL
+      - POLICY
+      type: string
+      description: '* `QUOTE_PROPOSAL` - QUOTE_PROPOSAL
+
+        * `POLICY` - POLICY'
     DocumentTemplateHeader:
       type: object
       properties:
@@ -13925,14 +14656,39 @@ components:
           type:
           - string
           - 'null'
+        documentType:
+          type: string
+        hasLetterhead:
+          type: boolean
+          readOnly: true
+        letterhead:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          readOnly: true
+        hasWordTemplate:
+          type: boolean
+          readOnly: true
+        word:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          readOnly: true
       required:
       - checksum
+      - documentType
       - effectiveFrom
       - effectiveTo
+      - hasLetterhead
+      - hasWordTemplate
       - id
+      - letterhead
       - status
       - templateCode
       - versionNo
+      - word
     DocumentTemplateHeaderPage:
       type: object
       description: Página de DocumentTemplateHeaderSerializer.
@@ -13946,11 +14702,6 @@ components:
       required:
       - items
       - page
-    DocumentTypeEnum:
-      enum:
-      - QUOTE_PROPOSAL
-      type: string
-      description: '* `QUOTE_PROPOSAL` - QUOTE_PROPOSAL'
     EligibilityExecution:
       type: object
       properties:
@@ -14228,6 +14979,20 @@ components:
       description: '* `ACCIDENT` - ACCIDENT
 
         * `ILLNESS` - ILLNESS'
+    EvidenceTypeEnum:
+      enum:
+      - ENROLLMENT_CERTIFICATE
+      - UNION_HOMOLOGATION
+      - DEPENDENCY_PROOF
+      - OTHER
+      type: string
+      description: '* `ENROLLMENT_CERTIFICATE` - ENROLLMENT_CERTIFICATE
+
+        * `UNION_HOMOLOGATION` - UNION_HOMOLOGATION
+
+        * `DEPENDENCY_PROOF` - DEPENDENCY_PROOF
+
+        * `OTHER` - OTHER'
     ExclusionItem:
       type: object
       properties:
@@ -14761,6 +15526,217 @@ components:
       required:
       - proposerId
       - relationshipCode
+    MemberDocumentItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+        evidenceType:
+          $ref: '#/components/schemas/EvidenceTypeEnum'
+        evidenceLabel:
+          type: string
+        status:
+          $ref: '#/components/schemas/StatusC27Enum'
+        statusLabel:
+          type: string
+          description: Em análise, Aceite ou Recusado.
+        fileName:
+          type: string
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+        note:
+          type:
+          - string
+          - 'null'
+        submittedBy:
+          $ref: '#/components/schemas/SubmittedByEnum'
+        submittedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        reviewNote:
+          type:
+          - string
+          - 'null'
+      required:
+      - contentType
+      - evidenceLabel
+      - evidenceType
+      - fileName
+      - id
+      - memberId
+      - note
+      - reviewNote
+      - reviewedAt
+      - sizeBytes
+      - status
+      - statusLabel
+      - submittedAt
+      - submittedBy
+    MemberDocumentQueueItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+        evidenceType:
+          $ref: '#/components/schemas/EvidenceTypeEnum'
+        evidenceLabel:
+          type: string
+        status:
+          $ref: '#/components/schemas/StatusC27Enum'
+        statusLabel:
+          type: string
+          description: Em análise, Aceite ou Recusado.
+        fileName:
+          type: string
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+        note:
+          type:
+          - string
+          - 'null'
+        submittedBy:
+          $ref: '#/components/schemas/SubmittedByEnum'
+        submittedAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        reviewNote:
+          type:
+          - string
+          - 'null'
+        memberName:
+          type:
+          - string
+          - 'null'
+        relationshipCode:
+          type: string
+      required:
+      - contentType
+      - evidenceLabel
+      - evidenceType
+      - fileName
+      - id
+      - memberId
+      - memberName
+      - note
+      - relationshipCode
+      - reviewNote
+      - reviewedAt
+      - sizeBytes
+      - status
+      - statusLabel
+      - submittedAt
+      - submittedBy
+    MemberDocumentReview:
+      type: object
+      properties:
+        decision:
+          $ref: '#/components/schemas/MemberDocumentReviewDecisionEnum'
+        note:
+          type: string
+          default: ''
+          maxLength: 1000
+      required:
+      - decision
+    MemberDocumentReviewDecisionEnum:
+      enum:
+      - APPROVE
+      - REJECT
+      type: string
+      description: '* `APPROVE` - APPROVE
+
+        * `REJECT` - REJECT'
+    MemberDocumentReviewResult:
+      type: object
+      properties:
+        document:
+          $ref: '#/components/schemas/MemberDocumentItem'
+        reevaluation:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          description: 'Só ao aprovar: {quoteMembers[], policyMembers[]} com o antes/depois de cada vínculo (policyMembers[].to
+            = ACTIVE e endorsementNo quando a pessoa ficou coberta).'
+      required:
+      - document
+      - reevaluation
+    MemberDocumentUpload:
+      type: object
+      properties:
+        file:
+          type: string
+          format: uri
+          description: PDF, JPG ou PNG, até 10 MB.
+        evidenceType:
+          allOf:
+          - $ref: '#/components/schemas/EvidenceTypeEnum'
+          description: 'Que documento é: certificado de matrícula, comprovativo de união, prova de dependência ou
+            outro.
+
+
+            * `ENROLLMENT_CERTIFICATE` - ENROLLMENT_CERTIFICATE
+
+            * `UNION_HOMOLOGATION` - UNION_HOMOLOGATION
+
+            * `DEPENDENCY_PROOF` - DEPENDENCY_PROOF
+
+            * `OTHER` - OTHER'
+        note:
+          type: string
+          default: ''
+          maxLength: 1000
+        unionBondType:
+          allOf:
+          - $ref: '#/components/schemas/UnionBondTypeEnum'
+          description: 'Só em UNION_HOMOLOGATION: tipo de união que o documento comprova.
+
+
+            * `UNIAO_DE_FACTO` - UNIAO_DE_FACTO
+
+            * `CASAMENTO_CIVIL` - CASAMENTO_CIVIL'
+      required:
+      - evidenceType
+      - file
+    MemberDocumentsOverview:
+      type: object
+      properties:
+        memberId:
+          type: string
+          format: uuid
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberDocumentItem'
+        pending:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberPendingRequirement'
+          description: O que ainda falta enviar para a pessoa ficar coberta.
+      required:
+      - documents
+      - pending
     MemberImportRequest:
       type: object
       properties:
@@ -14787,6 +15763,51 @@ components:
       required:
       - items
       - page
+    MemberPendingRequirement:
+      type: object
+      properties:
+        context:
+          allOf:
+          - $ref: '#/components/schemas/ContextEnum'
+          description: 'Onde a pessoa está pendente.
+
+
+            * `POLICY` - POLICY
+
+            * `QUOTE` - QUOTE'
+        reference:
+          type:
+          - string
+          - 'null'
+          description: Número da apólice ou da cotação.
+        reasonCode:
+          type:
+          - string
+          - 'null'
+        message:
+          type:
+          - string
+          - 'null'
+          description: 'Texto para o cliente (ex.: «Só falta mais uma coisa: envie…»).'
+        needsDocument:
+          type: boolean
+          description: 'false = pendência que um documento não resolve (ex.: junta médica).'
+        documentType:
+          type:
+          - string
+          - 'null'
+        documentLabel:
+          type:
+          - string
+          - 'null'
+      required:
+      - context
+      - documentLabel
+      - documentType
+      - message
+      - needsDocument
+      - reasonCode
+      - reference
     MemberUpdateRequest:
       type: object
       properties:
@@ -18951,6 +19972,17 @@ components:
       - reasonCode
       - reasonText
       - toStatus
+    StatusC27Enum:
+      enum:
+      - SUBMITTED
+      - APPROVED
+      - REJECTED
+      type: string
+      description: '* `SUBMITTED` - SUBMITTED
+
+        * `APPROVED` - APPROVED
+
+        * `REJECTED` - REJECTED'
     StatusOk:
       type: object
       properties:
@@ -18959,6 +19991,14 @@ components:
           description: '''ok'' ou ''unavailable''.'
       required:
       - status
+    SubmittedByEnum:
+      enum:
+      - CUSTOMER
+      - STAFF
+      type: string
+      description: '* `CUSTOMER` - CUSTOMER
+
+        * `STAFF` - STAFF'
     SystemParameter:
       type: object
       properties:
@@ -19096,6 +20136,31 @@ components:
         * `TEXT` - TEXT
 
         * `BOOLEAN` - BOOLEAN'
+    TemplateLetterheadUpload:
+      type: object
+      properties:
+        file:
+          type: string
+          format: uri
+          description: PDF com o aspeto da seguradora (logótipo, cabeçalho, rodapé, fundo). Até 10 MB.
+        left:
+          type: number
+          format: double
+          description: Margem esquerda em cm (por omissão 2).
+        right:
+          type: number
+          format: double
+          description: Margem direita em cm (por omissão 2).
+        top:
+          type: number
+          format: double
+          description: Margem de topo em cm, para não escrever sobre o cabeçalho (por omissão 3,5).
+        bottom:
+          type: number
+          format: double
+          description: Margem de base em cm, para não escrever sobre o rodapé (por omissão 3).
+      required:
+      - file
     TemplateSchema:
       type: object
       properties:
@@ -19122,6 +20187,15 @@ components:
       - formats
       - sections
       - variables
+    TemplateWordUpload:
+      type: object
+      properties:
+        file:
+          type: string
+          format: uri
+          description: Modelo .docx com marcas {{variável}}. Até 10 MB.
+      required:
+      - file
     TemporaryPasswordResponse:
       type: object
       properties:
@@ -19304,6 +20378,14 @@ components:
       - name
       - refreshToken
       - roles
+    UnionBondTypeEnum:
+      enum:
+      - UNIAO_DE_FACTO
+      - CASAMENTO_CIVIL
+      type: string
+      description: '* `UNIAO_DE_FACTO` - UNIAO_DE_FACTO
+
+        * `CASAMENTO_CIVIL` - CASAMENTO_CIVIL'
     VerifyOtp:
       type: object
       properties:

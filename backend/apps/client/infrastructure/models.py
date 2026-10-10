@@ -143,3 +143,34 @@ class ImportRowError(TenantScopedModel):
     class Meta:
         managed = False
         db_table = "import_row_error"
+
+
+class MemberDocument(TenantScopedModel):
+    """Documento de suporte enviado para uma pessoa segura (ver
+    `apps.client.domain.member_documents`). O ficheiro vive em
+    `MEDIA_ROOT/<storage_key>`; aqui ficam os metadados e a decisão."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    member = models.ForeignKey(
+        InsuredMember, on_delete=models.DO_NOTHING, db_column="member_id", related_name="documents"
+    )
+    evidence_type = models.CharField(max_length=40)
+    status = models.CharField(max_length=20, default="SUBMITTED")
+    original_filename = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100)
+    size_bytes = models.BigIntegerField()
+    checksum = models.CharField(max_length=128)
+    storage_key = models.TextField()
+    metadata_json = models.JSONField(default=dict)
+    note = models.TextField(null=True, blank=True)
+    submitted_by_type = models.CharField(max_length=10)
+    submitted_by_ref = models.CharField(max_length=200)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    reviewed_by = models.CharField(max_length=200, null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.TextField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "member_document"

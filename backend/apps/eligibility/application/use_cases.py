@@ -26,6 +26,27 @@ _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
 
 
+def _with_member_evidence(context: dict[str, Any] | None, member: InsuredMember | None) -> dict[str, Any]:
+    """Junta à evidência de quem chama a que vem dos documentos aprovados da pessoa
+    (só acrescenta; nunca retira nem substitui o que foi indicado)."""
+    if member is None:
+        return context or {}
+    from apps.client.application.member_document_service import evidence_for
+
+    found = evidence_for(member)
+    if not found:
+        return context or {}
+    merged = dict(context or {})
+    angola = dict(merged.get("angola") or {})
+    for key, value in found.items():
+        if key == "unionBondType":
+            angola.setdefault(key, value)
+        elif value:
+            angola[key] = True
+    merged["angola"] = angola
+    return merged
+
+
 class EvaluateEligibilityUseCase:
     def execute(
         self,
@@ -53,6 +74,10 @@ class EvaluateEligibilityUseCase:
 
         if plan is None:
             raise ReferencedEntityNotFoundError("O plano (planId) indicado não existe neste tenant")
+
+        # Documentos de suporte já aprovados (certificado de matrícula, prova de
+        # união…) entram como evidência: assim a pendência resolve-se sozinha.
+        context = _with_member_evidence(context, member)
 
         rule_version = resolve_eligibility_rule_version(effective_date)
         config = parse_config(rule_version) if rule_version else None

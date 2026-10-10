@@ -32,6 +32,7 @@ from apps.policy.infrastructure.models import (
     PremiumInstallment,
 )
 from apps.pricing.domain.money import round_amount
+from apps.client.domain.member_documents import requirement_for_reason
 from apps.policy.application import issuance_service, policy_document
 from apps.quote.application import proposal_service
 from apps.quote.domain.enums import QuoteStatus
@@ -213,6 +214,11 @@ def _policy_members(policy: Policy) -> list[dict]:
 
                 # Data em que foi excluído.
                 "exclusionDate": row.exclusion_date,
+
+                # Pendência: o que falta enviar para esta pessoa ficar coberta
+                # (envio em POST /customer-portal/members/{memberId}/documents).
+                "pendingReasonCode": row.pending_reason_code,
+                "requiredDocument": requirement_for_reason(row.pending_reason_code),
             }
         )
 

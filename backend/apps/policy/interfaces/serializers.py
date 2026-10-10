@@ -110,3 +110,21 @@ class PolicySignatureSerializer(serializers.Serializer):
     signatoryCapacity = serializers.CharField(source="signatory_capacity")
     signatureMethod = serializers.CharField(source="signature_method")
     signedAt = serializers.DateTimeField(source="signed_at")
+
+
+class MemberDocumentUploadSerializer(serializers.Serializer):
+    file = serializers.FileField(help_text="PDF, JPG ou PNG, até 10 MB.")
+    evidenceType = serializers.ChoiceField(
+        choices=["ENROLLMENT_CERTIFICATE", "UNION_HOMOLOGATION", "DEPENDENCY_PROOF", "OTHER"],
+        help_text="Que documento é: certificado de matrícula, comprovativo de união, prova de dependência ou outro.",
+    )
+    note = serializers.CharField(required=False, allow_blank=True, default="", max_length=1000)
+    unionBondType = serializers.ChoiceField(
+        choices=["UNIAO_DE_FACTO", "CASAMENTO_CIVIL"], required=False,
+        help_text="Só em UNION_HOMOLOGATION: tipo de união que o documento comprova.",
+    )
+
+
+class MemberDocumentReviewSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(choices=["APPROVE", "REJECT"])
+    note = serializers.CharField(required=False, allow_blank=True, default="", max_length=1000)

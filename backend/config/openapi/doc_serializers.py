@@ -833,3 +833,51 @@ class PaymentRegistered(s.Serializer):
     installment = s.DictField(
         help_text="A prestação paga: id, installmentNo, periodFrom, periodTo, dueDate, amount, currencyCode, status, paidAt, paymentReference, paymentMethod."
     )
+
+
+# ------------------------------------------------- documentos em falta (pessoas seguras)
+class MemberDocumentItem(s.Serializer):
+    id = s.UUIDField()
+    memberId = s.UUIDField()
+    evidenceType = s.ChoiceField(choices=["ENROLLMENT_CERTIFICATE", "UNION_HOMOLOGATION", "DEPENDENCY_PROOF", "OTHER"])
+    evidenceLabel = s.CharField()
+    status = s.ChoiceField(choices=["SUBMITTED", "APPROVED", "REJECTED"])
+    statusLabel = s.CharField(help_text="Em análise, Aceite ou Recusado.")
+    fileName = s.CharField()
+    contentType = s.CharField()
+    sizeBytes = s.IntegerField()
+    note = s.CharField(allow_null=True)
+    submittedBy = s.ChoiceField(choices=["CUSTOMER", "STAFF"])
+    submittedAt = s.DateTimeField()
+    reviewedAt = s.DateTimeField(allow_null=True)
+    reviewNote = s.CharField(allow_null=True)
+
+
+class MemberDocumentQueueItem(MemberDocumentItem):
+    memberName = s.CharField(allow_null=True)
+    relationshipCode = s.CharField()
+
+
+class MemberPendingRequirement(s.Serializer):
+    context = s.ChoiceField(choices=["POLICY", "QUOTE"], help_text="Onde a pessoa está pendente.")
+    reference = s.CharField(allow_null=True, help_text="Número da apólice ou da cotação.")
+    reasonCode = s.CharField(allow_null=True)
+    message = s.CharField(allow_null=True, help_text="Texto para o cliente (ex.: «Só falta mais uma coisa: envie…»).")
+    needsDocument = s.BooleanField(help_text="false = pendência que um documento não resolve (ex.: junta médica).")
+    documentType = s.CharField(allow_null=True)
+    documentLabel = s.CharField(allow_null=True)
+
+
+class MemberDocumentsOverview(s.Serializer):
+    memberId = s.UUIDField(required=False)
+    documents = MemberDocumentItem(many=True)
+    pending = MemberPendingRequirement(many=True, help_text="O que ainda falta enviar para a pessoa ficar coberta.")
+
+
+class MemberDocumentReviewResult(s.Serializer):
+    document = MemberDocumentItem()
+    reevaluation = s.DictField(
+        allow_null=True,
+        help_text="Só ao aprovar: {quoteMembers[], policyMembers[]} com o antes/depois de cada vínculo "
+        "(policyMembers[].to = ACTIVE e endorsementNo quando a pessoa ficou coberta).",
+    )

@@ -271,7 +271,9 @@ def render_html(blocks: list[Block], *, title: str) -> bytes:
     return "".join(out).encode("utf-8")
 
 
-def render_pdf(blocks: list[Block], *, title: str) -> bytes:
+def render_pdf(blocks: list[Block], *, title: str, layout: dict[str, Any] | None = None) -> bytes:
+    """`layout` (opcional) ajusta a página ao papel timbrado do GTE:
+    `{"pageSize": (largura, altura) em pontos, "margins": (esq, dir, topo, base) em pontos}`."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -284,8 +286,12 @@ def render_pdf(blocks: list[Block], *, title: str) -> bytes:
     note = ParagraphStyle("note", parent=body, fontSize=8, textColor=colors.HexColor("#555555"))
     esc = html.escape
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=2 * cm, rightMargin=2 * cm, topMargin=2 * cm, bottomMargin=2 * cm, title=title)
-    width = A4[0] - 4 * cm
+    page_size = tuple((layout or {}).get("pageSize") or A4)
+    left, right, top, bottom = (layout or {}).get("margins") or (2 * cm, 2 * cm, 2 * cm, 2 * cm)
+    doc = SimpleDocTemplate(
+        buffer, pagesize=page_size, leftMargin=left, rightMargin=right, topMargin=top, bottomMargin=bottom, title=title
+    )
+    width = page_size[0] - left - right
     story: list[Any] = []
 
     def table(rows, header=None, col_widths=None, header_bold=True):

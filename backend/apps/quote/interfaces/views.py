@@ -12,6 +12,7 @@ import uuid
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -33,6 +34,8 @@ from apps.quote.application import (
     requirements_service,
     scenario_service,
     simulator_service,
+    template_files,
+    word_template,
 )
 from apps.quote.domain.enums import QuoteDecisionType
 from apps.quote.infrastructure.models import DocumentTemplateVersion, Quote, ReviewTask
@@ -44,6 +47,8 @@ from apps.quote.interfaces.serializers import (
     DocumentSerializer,
     DocumentTemplateCreateRequestSerializer,
     DocumentTemplateHeaderSerializer,
+    TemplateLetterheadUploadSerializer,
+    TemplateWordUploadSerializer,
     DocumentTemplateUpdateRequestSerializer,
     PreExistingDecisionRequestSerializer,
     ProposalDocumentSerializer,
@@ -403,11 +408,14 @@ class DocumentTemplateListCreateView(APIView):
         body = DocumentTemplateCreateRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         data = body.validated_data
+        document_type = data["document_type"]
         template = document_service.create_document_template(
-            template_code=data["template_code"],
-            storage_ref=data["storage_ref"],
+            template_code=data["template_code"]
+            or (document_service.POLICY_TEMPLATE_CODE if document_type == "POLICY" else document_service.DEFAULT_TEMPLATE_CODE),
+            storage_ref=data["storage_ref"] or default_body(),
             effective_from=data["effective_from"],
             effective_to=data["effective_to"],
+            document_type=document_type,
         )
         return Response(DocumentTemplateHeaderSerializer(template).data, status=201)
 
@@ -1014,6 +1022,63 @@ class DocumentTemplatePreviewView(APIView):
         return _file_response(data, content_type)
 
 
+class DocumentTemplateLetterheadView(APIView):
+    """`/document-templates/{id}/letterhead` — papel timbrado em PDF (opção A).
+    `POST` (multipart) carrega ou substitui, `GET` descarrega, `DELETE` remove;
+    só num modelo em rascunho. O conteúdo do documento é escrito por cima do PDF."""
+
+    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+    def post(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        body = TemplateLetterheadUploadSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        updated = template_files.save_letterhead(
+            template, data["file"], {k: data.get(k) for k in ("left", "right", "top", "bottom")}
+        )
+        return Response(DocumentTemplateHeaderSerializer(updated).data)
+
+    def get(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        data = template_files.read_letterhead(template)
+        if data is None:
+            raise Http404
+        return _file_response(data, "application/pdf")
+
+    def delete(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        return Response(DocumentTemplateHeaderSerializer(template_files.delete_letterhead(template)).data)
+
+
+class DocumentTemplateWordView(APIView):
+    """`/document-templates/{id}/word` — modelo Word com marcas {{variável}}
+    (opção B). `POST` (multipart) carrega ou substitui e valida as marcas, `GET`
+    descarrega, `DELETE` remove; só num modelo em rascunho."""
+
+    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+    def post(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        body = TemplateWordUploadSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        updated, _report = template_files.save_word(template, body.validated_data["file"])
+        return Response(DocumentTemplateHeaderSerializer(updated).data)
+
+    def get(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        data = template_files.read_word(template)
+        if data is None:
+            raise Http404
+        return _file_response(data, word_template.DOCX_CONTENT_TYPE)
+
+    def delete(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        return Response(DocumentTemplateHeaderSerializer(template_files.delete_word(template)).data)
+
+
 class DocumentTemplateSchemaView(APIView):
     """GET /document-templates/schema - what a template body may contain:
     the default body, the allowed sections and the allowed {{variables}}."""
@@ -1027,6 +1092,15 @@ class DocumentTemplateSchemaView(APIView):
                 "sections": proposal_template.SECTIONS,
                 "variables": proposal_template.VARIABLES,
                 "formats": list(proposal_service.FORMATS),
+                # Marcas {{...}} permitidas no modelo Word, por tipo de documento.
+                "word": {
+                    "QUOTE_PROPOSAL": word_template.schema("QUOTE_PROPOSAL"),
+                    "POLICY": word_template.schema("POLICY"),
+                    "howTo": (
+                        "Escreva as marcas no Word, ex.: {{client.name}}. Numa linha de tabela (ou num parágrafo) "
+                        "que tenha uma marca de lista, ex.: {{insured.name}}, a linha repete-se por cada elemento."
+                    ),
+                },
             }
         )
 
