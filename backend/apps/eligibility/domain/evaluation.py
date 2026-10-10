@@ -340,7 +340,7 @@ def _waiting_period_message(*, data: EvaluationInput, config: EligibilityRuleCon
     evidence = data.angola_evidence or AngolaEvidence()
     waived = wp.waived_on_verified_portability and bool(evidence.previous_policy_number) and evidence.previous_policy_continuous
     days = 0 if waived else wp.default_days
-    return EligibilityMessage("ELIG-WAITING-PERIOD", "INFO", f"Waiting period: {days} day(s)")
+    return EligibilityMessage("ELIG-WAITING-PERIOD", "INFO", f"Período de carência: {days} dia(s).")
 
 
 def evaluate(

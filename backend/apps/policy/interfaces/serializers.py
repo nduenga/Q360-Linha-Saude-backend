@@ -68,6 +68,17 @@ class PolicySerializer(serializers.Serializer):
     paymentFrequency = serializers.CharField(source="payment_frequency")
     currencyCode = serializers.CharField(source="currency_code", allow_null=True)
     rowVersion = serializers.IntegerField(source="row_version")
+    # Pragmatic addition: só para mostrar nomes em vez de ids na UI.
+    proposerName = serializers.SerializerMethodField(method_name="get_proposer_name")
+    planName = serializers.SerializerMethodField(method_name="get_plan_name")
+
+    def get_proposer_name(self, obj) -> str | None:
+        proposer = getattr(obj, "proposer", None)
+        return proposer.display_name if proposer else None
+
+    def get_plan_name(self, obj) -> str | None:
+        plan = getattr(obj, "plan", None)
+        return plan.name if plan else None
 
 
 class PolicyMemberSerializer(serializers.Serializer):

@@ -43,6 +43,20 @@ class QuoteSerializer(serializers.Serializer):
     premiumAnnualAmount = serializers.SerializerMethodField(method_name="get_premium_annual_amount")
     premiumAnnualCurrency = serializers.SerializerMethodField(method_name="get_premium_annual_currency")
     latestPricingRun = serializers.SerializerMethodField(method_name="get_latest_pricing_run_summary")
+    # Pragmatic addition: só para mostrar nomes em vez de ids na UI — não
+    # reintroduz productVersionId (planId continua a ser a única forma de
+    # o cliente referenciar o produto/plano).
+    planName = serializers.SerializerMethodField(method_name="get_plan_name")
+    productName = serializers.SerializerMethodField(method_name="get_product_name")
+
+    def get_plan_name(self, obj) -> str | None:
+        plan = getattr(obj, "plan", None)
+        return plan.name if plan else None
+
+    def get_product_name(self, obj) -> str | None:
+        plan = getattr(obj, "plan", None)
+        product = getattr(plan, "product", None) if plan else None
+        return product.name if product else None
 
     def get_premium_annual_amount(self, obj) -> str | None:
         pr = getattr(obj, "latest_pricing_run", None)
