@@ -292,6 +292,14 @@ class DocumentTemplateVersion(TenantScopedModel):
     published_at = models.DateTimeField(null=True, blank=True)
     published_by = models.CharField(max_length=200, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # A proposta ou a apólice; e os ficheiros opcionais carregados pelo GTE:
+    # papel timbrado (PDF) e modelo Word com marcas {{variável}}.
+    document_type = models.CharField(max_length=20, default="QUOTE_PROPOSAL")
+    letterhead_key = models.TextField(null=True, blank=True)
+    letterhead_name = models.CharField(max_length=255, null=True, blank=True)
+    word_key = models.TextField(null=True, blank=True)
+    word_name = models.CharField(max_length=255, null=True, blank=True)
+    settings_json = models.JSONField(default=dict)
 
     class Meta:
         managed = False

@@ -21,7 +21,7 @@ from apps.business_config.application.branding import load_logo
 from apps.client.infrastructure.models import InsuredMember
 from apps.policy.domain.errors import PolicyStateError, ReferencedEntityNotFoundError
 from apps.policy.infrastructure.models import Policy, PolicyMember, PolicySignature, PremiumInstallment
-from apps.quote.application import proposal_content, proposal_layout
+from apps.quote.application import document_service, letterhead, proposal_content, proposal_layout, template_files, word_template
 
 STATUS_TEXT = {
     "PENDING_FIRST_PREMIUM": "A aguardar o pagamento da 1.ª prestação",
@@ -81,8 +81,8 @@ def _installment_total(installments: list[PremiumInstallment]):
     return sum((i.amount for i in installments), start=0)
 
 
-def policy_blocks(policy: Policy) -> tuple[list[tuple], str]:
-    content = _policy_content(policy)
+def policy_blocks(policy: Policy, content: dict[str, Any] | None = None) -> tuple[list[tuple], str]:
+    content = content or _policy_content(policy)
     currency = content["meta"]["currency"]
     holder, plan = content["client"], content["plan"]
     signature = PolicySignature.objects.filter(policy=policy).first()
@@ -257,12 +257,67 @@ def statement_blocks(policy: Policy, *, kind: str, installment_no: int | None) -
 
 
 # ------------------------------------------------------------------- render
-def _render(blocks: list[tuple], title: str, fmt: str) -> tuple[bytes, str, str]:
+def _policy_template(policy: Policy):
+    """Modelo `POLICY_DEFAULT` em vigor (papel timbrado e/ou Word), se o GTE o carregou."""
+    return document_service.resolve_template_for(
+        template_code=document_service.POLICY_TEMPLATE_CODE,
+        effective_date=policy.start_date or timezone.now().date(),
+    )
+
+
+def _render(blocks: list[tuple], title: str, fmt: str, template=None) -> tuple[bytes, str, str]:
     fmt = fmt.upper()
     if fmt not in proposal_layout.RENDERERS:
         raise ReferencedEntityNotFoundError(f"O formato (fileType) tem de ser um de {list(proposal_layout.RENDERERS)}")
     renderer, content_type, ext = proposal_layout.RENDERERS[fmt]
+    if fmt == "PDF" and template is not None:
+        # Opção A: o texto cai dentro da área livre do papel timbrado.
+        data = renderer(blocks, title=title, layout=template_files.layout_for(template))
+        paper = template_files.read_letterhead(template)
+        return (letterhead.apply(data, paper) if paper else data), content_type, ext
     return renderer(blocks, title=title), content_type, ext
+
+
+def _word_data(policy: Policy, content: dict[str, Any]) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
+    """Valores e listas para preencher o modelo Word da apólice."""
+    signature = PolicySignature.objects.filter(policy=policy).first()
+    installments = _installments(policy)
+    first_paid = next((i for i in installments if i.installment_no == 1 and i.status == "PAID"), None)
+    currency = content["meta"]["currency"]
+    total = _installment_total(installments)
+    client, plan = content["client"], content["plan"]
+    scalars = {
+        "client.name": client["name"], "client.nif": client["nif"], "client.email": client.get("email"), "client.phone": client.get("phone"),
+        "plan.name": plan["name"], "plan.product": plan["product"], "plan.segment": plan["segment"], "plan.accessSystem": plan.get("accessSystem"),
+        "premium.total": proposal_content.money(total, currency) if installments else content["premium"]["totalText"],
+        "premium.currency": currency,
+        "document.number": policy.policy_number, "document.date": timezone.now().date().isoformat(),
+        "insured.count": len(content["population"]),
+        "quote.number": content["meta"]["quoteNumber"],
+        "policy.number": policy.policy_number, "policy.status": STATUS_TEXT.get(policy.status, policy.status),
+        "policy.type": "Grupo" if policy.policy_type == "GROUP" else "Individual / Familiar",
+        "policy.issueDate": _day(policy.issued_at), "policy.startDate": _day(policy.start_date), "policy.endDate": _day(policy.end_date),
+        "policy.termMonths": policy.term_months,
+        "policy.paymentFrequency": FREQUENCY_TEXT.get(policy.payment_frequency, policy.payment_frequency),
+        "policy.totalPremium": proposal_content.money(total, currency) if installments else content["premium"]["totalText"],
+        "signature.name": signature.signatory_name if signature else None,
+        "signature.document": f"{signature.signatory_document_type} {signature.signatory_document_number}" if signature else None,
+        "signature.capacity": CAPACITY_TEXT.get(signature.signatory_capacity, signature.signatory_capacity) if signature else None,
+        "signature.date": _day(signature.signed_at) if signature else None,
+        "payment.firstDate": _day(first_paid.paid_at) if first_paid else None,
+        "payment.firstMethod": PAYMENT_METHOD_TEXT.get(first_paid.payment_method or "", first_paid.payment_method) if first_paid else None,
+        "payment.firstReference": first_paid.payment_reference if first_paid else None,
+    }
+    status_by_member = {str(pm.member_id): {"ACTIVE": "Segura", "PENDING": "Pendente"}.get(pm.status, pm.status) for pm, _ in _member_names(policy)}
+    groups = word_template.groups_from_content(content, policy_members=status_by_member)
+    groups["installment"] = [
+        {
+            "no": i.installment_no, "period": f"{_day(i.period_from)} a {_day(i.period_to)}", "dueDate": _day(i.due_date),
+            "amount": proposal_content.money(i.amount, i.currency_code), "status": "Paga" if i.status == "PAID" else "Por pagar",
+        }
+        for i in installments
+    ]
+    return scalars, groups
 
 
 def _safe(number: str | None) -> str:
@@ -276,7 +331,7 @@ def _stored_path(policy: Policy) -> Path:
 def store_policy_document(policy: Policy) -> Path:
     """Grava o PDF da apólice (chamado ao emitir e ao activar)."""
     blocks, title = policy_blocks(policy)
-    data, _, _ = _render(blocks, title, "PDF")
+    data, _, _ = _render(blocks, title, "PDF", _policy_template(policy))
     path = _stored_path(policy)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
@@ -287,13 +342,20 @@ def policy_document(policy: Policy, fmt: str = "PDF") -> tuple[bytes, str, str]:
     """(bytes, content_type, file_name) da apólice digital."""
     if fmt.upper() == "PDF" and _stored_path(policy).exists():
         return _stored_path(policy).read_bytes(), "application/pdf", f"apolice-{_safe(policy.policy_number)}.pdf"
-    blocks, title = policy_blocks(policy)
-    data, content_type, ext = _render(blocks, title, fmt)
+    template = _policy_template(policy)
+    content = _policy_content(policy)
+    if fmt.upper() == "DOCX" and template is not None and template.word_key:
+        # Opção B: o Word do GTE com as marcas {{variável}} substituídas.
+        scalars, groups = _word_data(policy, content)
+        data = word_template.fill(template_files.read_word(template), scalars=scalars, groups=groups)
+        return data, word_template.DOCX_CONTENT_TYPE, f"apolice-{_safe(policy.policy_number)}.docx"
+    blocks, title = policy_blocks(policy, content)
+    data, content_type, ext = _render(blocks, title, fmt, template)
     return data, content_type, f"apolice-{_safe(policy.policy_number)}.{ext}"
 
 
 def statement_document(policy: Policy, *, kind: str, installment_no: int | None = None) -> tuple[bytes, str, str]:
     blocks, title = statement_blocks(policy, kind=kind, installment_no=installment_no)
-    data, content_type, _ = _render(blocks, title, "PDF")
+    data, content_type, _ = _render(blocks, title, "PDF", _policy_template(policy))
     prefix = "declaracao-cobertura" if kind == "COVERAGE" else "comprovativo-pagamento"
     return data, content_type, f"{prefix}-{_safe(policy.policy_number)}.pdf"

@@ -56,3 +56,24 @@ class ImportCommitNotAllowedError(DomainProblem):
 
     http_status = 409
     problem_code = "CONFLICT"
+
+
+class InvalidMemberDocumentError(DomainProblem):
+    """Ficheiro ou tipo de documento inválido (formato, tamanho, tipo de evidência)."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+class MemberDocumentNotFoundError(DomainProblem):
+    """O documento (ou a pessoa segura) não existe neste tenant."""
+
+    http_status = 404
+    problem_code = "NOT-FOUND"
+
+
+class MemberDocumentStateError(DomainProblem):
+    """O documento já foi analisado."""
+
+    http_status = 409
+    problem_code = "CONFLICT"

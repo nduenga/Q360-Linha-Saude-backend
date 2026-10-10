@@ -250,7 +250,7 @@ def test_failed_generation_is_recorded_and_can_be_retried(admin_client, monkeypa
     scope = _scope(admin_client)
     original = proposal_layout.RENDERERS["PDF"]
 
-    def boom(blocks, *, title):
+    def boom(blocks, *, title, layout=None):
         raise RuntimeError("falha de renderização simulada")
 
     monkeypatch.setitem(proposal_layout.RENDERERS, "PDF", (boom, original[1], original[2]))

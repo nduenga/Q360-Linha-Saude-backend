@@ -7,14 +7,16 @@ import uuid
 
 from django.http import HttpResponse
 from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.customer_portal.application import portal_read
+from apps.customer_portal.application import member_documents, portal_read
 from apps.customer_portal.infrastructure.models import CustomerAccount
 from apps.customer_portal.interfaces.authentication import CustomerPortalJwtAuthentication
 from apps.customer_portal.interfaces.permissions import IsCustomerPortalActor
 from apps.foundation.application.context import CurrentActorProvider
+from apps.policy.interfaces.serializers import MemberDocumentUploadSerializer
 
 _PHASES = {"ACTIVE", "EXPIRING", "RENEWED", "EXPIRED", "CANCELLED", "OTHER"}
 _INSTALLMENT_STATUSES = {"DUE", "PAID", "OVERDUE"}
@@ -75,6 +77,29 @@ class CustomerPortalPolicyStatementView(_PortalView):
         except ValueError as exc:
             raise ValidationError({"installmentNo": "Must be an integer."}) from exc
         return _file(*portal_read.my_policy_statement(policy_number, kind=kind, installment_no=installment_no))
+
+
+class CustomerPortalMemberDocumentsView(_PortalView):
+    """Documentos em falta de uma pessoa segura: `GET` lista o que já enviou e o que
+    falta; `POST` (multipart) envia um documento novo para análise."""
+
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get(self, request, member_id: uuid.UUID):
+        return Response(member_documents.list_my_member_documents(member_id))
+
+    def post(self, request, member_id: uuid.UUID):
+        body = MemberDocumentUploadSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        document = member_documents.upload_my_member_document(
+            member_id=member_id,
+            uploaded_file=data["file"],
+            evidence_type=data["evidenceType"],
+            note=data["note"],
+            union_bond_type=data.get("unionBondType"),
+        )
+        return Response(document, status=201)
 
 
 class CustomerPortalPolicyHistoryView(_PortalView):

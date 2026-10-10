@@ -186,14 +186,21 @@ Exemplo (`sudo crontab -u www-data -e`; ajuste os caminhos):
 
 O `dispatch_outbox` só é preciso se ligar um broker de mensagens real; por omissão não envia nada para fora.
 
-## Ficheiros gerados (apólices e propostas)
+## Ficheiros gerados e carregados (pasta `media/`)
 
-A API grava os PDFs das apólices e das propostas em `backend/media/` (`policies/` e `documents/`). **Esta pasta tem de ser persistente e entrar no backup**, ao lado da base de dados:
+A API guarda ficheiros em `backend/media/`. **Esta pasta tem de ser persistente e entrar no backup**, ao lado da base de dados:
+
+| Subpasta | O que tem | Se se perder |
+|---|---|---|
+| `policies/` | PDF de cada apólice emitida | É gerado de novo a partir dos dados, mas deixa de ser o documento original da emissão. |
+| `documents/` | Propostas geradas | Regeneram-se. |
+| `document-templates/` | Papel timbrado (PDF) e modelos Word carregados pelo GTE | **Perdem-se**: o GTE tem de os carregar outra vez. |
+| `member-documents/` | Documentos enviados pelos clientes (matrícula, prova de união…) | **Perdem-se** e não há como os regenerar. |
+
+`member-documents/` guarda documentos pessoais (e possivelmente de saúde): restrinja o acesso à pasta (só o utilizador do serviço), inclua-a no backup cifrado e nunca a sirva diretamente pelo Nginx.
 
 - Num servidor normal, basta não a apagar ao atualizar o código (o `git pull` não toca nela).
 - Em Docker, monte um volume: `-v /var/lib/q360/media:/app/media`.
-
-Se um PDF de apólice se perder, a API volta a gerá-lo na hora a partir dos dados da apólice.
 
 ## Atualizar uma nova versão
 

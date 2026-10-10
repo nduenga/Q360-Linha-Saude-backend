@@ -114,7 +114,23 @@ REGISTRY: dict[str, dict] = {
                     "benefitCategory": ("string", False, "Código da cobertura a verificar."),
                     "eventType": ("string", False, "ACCIDENT: a carência não se aplica onde o plano o indica; ILLNESS (por omissão).")},
     },
+    "DocumentTemplateLetterheadView.get": {"media": "application/pdf", "notes": "O papel timbrado carregado."},
+    "DocumentTemplateWordView.get": {
+        "media": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "notes": "O modelo Word carregado.",
+    },
     "PolicyDraftView.get": {"response": d.PolicyDraft},
+    "MemberDocumentListCreateView.get": {"response": d.MemberDocumentsOverview},
+    "MemberDocumentListCreateView.post": {"response": {201: d.MemberDocumentItem}, "status": 201},
+    "MemberDocumentQueueView.get": {
+        "response": d.MemberDocumentQueueItem,
+        "queries": {"status": ("string", False, "SUBMITTED (por omissão, a aguardar análise), APPROVED, REJECTED ou ALL."),
+                    "memberId": ("string", False, "Só os documentos desta pessoa segura.")},
+        "notes": "Fila de análise do GTE.",
+    },
+    "MemberDocumentDownloadView.get": {"media": "application/octet-stream", "notes": "Ficheiro original enviado (PDF, JPG ou PNG)."},
+    "MemberDocumentReviewView.post": {"response": d.MemberDocumentReviewResult},
+    "CustomerPortalMemberDocumentsView.get": {"response": d.MemberDocumentsOverview},
+    "CustomerPortalMemberDocumentsView.post": {"response": {201: d.MemberDocumentItem}, "status": 201},
     "InstallmentListView.get": {
         "response": d.CollectionInstallment,
         "queries": {"status": ("string", False, "DUE (por pagar), OVERDUE (atrasadas) ou PAID."),

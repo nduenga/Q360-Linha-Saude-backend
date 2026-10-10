@@ -29,7 +29,16 @@ from apps.foundation.application.context import CurrentActorProvider, CurrentTen
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.domain.problem import DomainProblem
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
-from apps.quote.application import document_service, proposal_content, proposal_layout, scenario_service, simulator_service
+from apps.quote.application import (
+    document_service,
+    letterhead,
+    proposal_content,
+    proposal_layout,
+    scenario_service,
+    simulator_service,
+    template_files,
+    word_template,
+)
 from apps.quote.application.numbering_service import next_continuous_value
 from apps.quote.domain.enums import DocumentStatus, DocumentType, QuoteSnapshotType, QuoteStatus
 from apps.quote.domain.errors import QuoteStateError
@@ -107,11 +116,30 @@ def _render(content: dict[str, Any], template: DocumentTemplateVersion, fmt: str
     spec = parse_template(template.storage_ref)
     generated_on = content["meta"]["generatedOn"]
     variables = proposal_layout.variables_for(content, document_number=document_number, generated_on=generated_on)
+    if fmt == "DOCX" and template.word_key:
+        # Opção B: o Word do GTE com as marcas {{variável}} substituídas.
+        client = content["client"]
+        scalars = {
+            **variables,
+            "client.email": client.get("email"),
+            "client.phone": client.get("phone"),
+            "plan.accessSystem": content["plan"].get("accessSystem"),
+        }
+        data = word_template.fill(
+            template_files.read_word(template), scalars=scalars, groups=word_template.groups_from_content(content)
+        )
+        return data, word_template.DOCX_CONTENT_TYPE
     blocks = proposal_layout.build_blocks(content, spec, variables)
     renderer, content_type, _ext = proposal_layout.RENDERERS[fmt]
     from apps.quote.domain.proposal_template import render_text
 
-    return renderer(blocks, title=render_text(spec["title"], variables)), content_type
+    title = render_text(spec["title"], variables)
+    if fmt == "PDF":
+        # Opção A: o texto cai dentro da área livre do papel timbrado do GTE.
+        data = renderer(blocks, title=title, layout=template_files.layout_for(template))
+        letter = template_files.read_letterhead(template)
+        return (letterhead.apply(data, letter) if letter else data), content_type
+    return renderer(blocks, title=title), content_type
 
 
 def generate(
@@ -237,5 +265,32 @@ def sample_content() -> dict[str, Any]:
     }
 
 
+def _sample_policy_word_data(content: dict[str, Any]) -> tuple[dict[str, Any], dict[str, list[dict[str, Any]]]]:
+    """Valores de exemplo para pré-visualizar um modelo Word de apólice."""
+    client, plan = content["client"], content["plan"]
+    scalars = {
+        "client.name": client["name"], "client.nif": client["nif"], "client.email": "cliente@exemplo.ao", "client.phone": "+244 900 000 000",
+        "plan.name": plan["name"], "plan.product": plan["product"], "plan.segment": plan["segment"], "plan.accessSystem": plan["accessSystem"],
+        "premium.total": content["premium"]["totalText"], "premium.currency": "AOA",
+        "document.number": "APO-EXEMPLO", "document.date": "2026-01-01", "insured.count": len(content["population"]),
+        "quote.number": content["meta"]["quoteNumber"], "policy.number": "APO-EXEMPLO", "policy.status": "Em vigor",
+        "policy.type": "Grupo", "policy.issueDate": "2026-01-01", "policy.startDate": "2026-01-02", "policy.endDate": "2027-01-01",
+        "policy.termMonths": 12, "policy.paymentFrequency": "Trimestral", "policy.totalPremium": content["premium"]["totalText"],
+        "signature.name": "Pessoa Exemplo", "signature.document": "BI 000000000LA000", "signature.capacity": "Tomador",
+        "signature.date": "2026-01-01", "payment.firstDate": "2026-01-01", "payment.firstMethod": "Transferência bancária",
+        "payment.firstReference": "TRF-EXEMPLO",
+    }
+    groups = word_template.groups_from_content(content)
+    groups["installment"] = [
+        {"no": n, "period": f"2026-0{n}-02 a 2026-0{n + 2}-01", "dueDate": f"2026-0{n}-02", "amount": "25.000 Kz", "status": "Por pagar"}
+        for n in (1, 4, 7)
+    ]
+    return scalars, groups
+
+
 def preview_template(*, template: DocumentTemplateVersion, fmt: str = "HTML") -> tuple[bytes, str]:
-    return _render(sample_content(), template, fmt, document_number="DOC-EXEMPLO")
+    content = sample_content()
+    if template.document_type == "POLICY" and fmt == "DOCX" and template.word_key:
+        scalars, groups = _sample_policy_word_data(content)
+        return word_template.fill(template_files.read_word(template), scalars=scalars, groups=groups), word_template.DOCX_CONTENT_TYPE
+    return _render(content, template, fmt, document_number="DOC-EXEMPLO")
