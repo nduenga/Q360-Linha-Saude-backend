@@ -23,7 +23,6 @@ from apps.client.domain.errors import UnknownRelationshipCodeError
 from apps.client.infrastructure.models import RelationshipCode
 
 MARKET_CATALOG: list[dict[str, str]] = [
-    {"code": "TITULAR", "label": "Titular", "category": RelationshipCategory.TITULAR.value},
     {"code": "CONJUGE", "label": "Cônjuge ou Equiparado(a)", "category": RelationshipCategory.SPOUSE.value},
     {"code": "FILHO", "label": "Filho(a)", "category": RelationshipCategory.CHILD.value},
     {
@@ -47,10 +46,18 @@ def ensure_relationship_catalog(tenant_id: uuid.UUID) -> None:
         )
 
 
+
 def list_relationship_codes() -> Any:
     tenant_id = CurrentTenantProvider.require().value
     ensure_relationship_catalog(tenant_id)
-    return RelationshipCode.objects.order_by("category", "code")
+
+    return (
+        RelationshipCode.objects
+        .filter(tenant_id=tenant_id)
+        .exclude(code="TITULAR")
+        .order_by("category", "code")
+    )
+
 
 
 def validate_relationship_code(*, tenant_id: uuid.UUID, code: str) -> RelationshipCode:
