@@ -290,10 +290,19 @@ paths:
   /api/v1/audit-events:
     get:
       operationId: getAuditEventList
-      description: "ART-006 `/api/v1/audit-events`, operationId `listAuditEvents`.\n\n Query filters are exactly\
-        \ those documented in ART-006 (`entityType`,\n `entityId`, `correlationId`) — no additional filtering is\
-        \ exposed\n here because the contract does not describe it. Tenant scoping is\n applied by the model's default\
-        \ manager via `TenantScopedModel`.\n\nRequer: scope q360.audit."
+      description: 'ART-006 `/api/v1/audit-events`, operationId `listAuditEvents`.
+
+
+        Query filters are exactly those documented in ART-006 (`entityType`,
+
+        `entityId`, `correlationId`) — no additional filtering is exposed
+
+        here because the contract does not describe it. Tenant scoping is
+
+        applied by the model''s default manager via `TenantScopedModel`.
+
+
+        Requer: scope q360.audit.'
       summary: Listar audit event list
       parameters:
       - in: query
@@ -494,9 +503,16 @@ paths:
   /api/v1/benefits:
     get:
       operationId: getBenefitList
-      description: "Biblioteca de coberturas (R6). `GET` lists (filters: `category`,\n `status` = ACTIVE|INACTIVE|ALL,\
-        \ default ACTIVE, and free-text `q`);\n `POST` creates a COMPLEMENTARY coverage (never BASE). Seeds the\
-        \ market\n catalogue for the tenant on first use.\n\nRequer: scope q360.read."
+      description: 'Biblioteca de coberturas (R6). `GET` lists (filters: `category`,
+
+        `status` = ACTIVE|INACTIVE|ALL, default ACTIVE, and free-text `q`);
+
+        `POST` creates a COMPLEMENTARY coverage (never BASE). Seeds the market
+
+        catalogue for the tenant on first use.
+
+
+        Requer: scope q360.read.'
       summary: Listar benefit list
       parameters:
       - in: query
@@ -556,9 +572,16 @@ paths:
           description: Sem autorização (AUTH-403 / SEC-403).
     post:
       operationId: postBenefitList
-      description: "Biblioteca de coberturas (R6). `GET` lists (filters: `category`,\n `status` = ACTIVE|INACTIVE|ALL,\
-        \ default ACTIVE, and free-text `q`);\n `POST` creates a COMPLEMENTARY coverage (never BASE). Seeds the\
-        \ market\n catalogue for the tenant on first use.\n\nRequer: scope q360.admin, permissão product:manage."
+      description: 'Biblioteca de coberturas (R6). `GET` lists (filters: `category`,
+
+        `status` = ACTIVE|INACTIVE|ALL, default ACTIVE, and free-text `q`);
+
+        `POST` creates a COMPLEMENTARY coverage (never BASE). Seeds the market
+
+        catalogue for the tenant on first use.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Criar benefit list
       parameters:
       - in: header
@@ -672,8 +695,12 @@ paths:
   /api/v1/benefits/import:
     post:
       operationId: postBenefitImport
-      description: "Multipart upload (`file`, optional `dryRun=true`). Same parser\n override as the member import:\
-        \ every other endpoint is JSON-only.\n\nRequer: scope q360.admin, permissão product:manage."
+      description: 'Multipart upload (`file`, optional `dryRun=true`). Same parser
+
+        override as the member import: every other endpoint is JSON-only.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Criar benefit import
       parameters:
       - in: header
@@ -1637,9 +1664,15 @@ paths:
   /api/v1/claims/import-template:
     get:
       operationId: getClaimsImportTemplate
-      description: "GET /claims/import-template?kind=CLAIMS|PREMIUMS - a CSV with the\n accepted header and one\
-        \ example row.\n\nRequer: scope q360.read, permissão audit:read.\n\nCSV com o cabeçalho aceito e uma linha\
-        \ de exemplo fictícia."
+      description: 'GET /claims/import-template?kind=CLAIMS|PREMIUMS - a CSV with the
+
+        accepted header and one example row.
+
+
+        Requer: scope q360.read, permissão audit:read.
+
+
+        CSV com o cabeçalho aceito e uma linha de exemplo fictícia.'
       summary: Obter claims import template
       parameters:
       - in: query
@@ -1681,9 +1714,16 @@ paths:
   /api/v1/claims/imports:
     get:
       operationId: getClaimsImportListCreate
-      description: "POST (multipart: `file`, `kind`=CLAIMS|PREMIUMS, `proposerId`, optional\n `policyId`, `source`=INTERNAL|OTHER_INSURER,\
-        \ `dryRun`) imports CSV/XLSX;\n invalid rows are reported and skipped. GET lists imports and accepts\n optional\
-        \ `proposerId` and `policyId` filters.\n\nRequer: scope q360.read, permissão audit:read."
+      description: 'POST (multipart: `file`, `kind`=CLAIMS|PREMIUMS, `proposerId`, optional
+
+        `policyId`, `source`=INTERNAL|OTHER_INSURER, `dryRun`) imports CSV/XLSX;
+
+        invalid rows are reported and skipped. GET lists imports and accepts
+
+        optional `proposerId` and `policyId` filters.
+
+
+        Requer: scope q360.read, permissão audit:read.'
       summary: Listar claims import list create
       parameters:
       - in: query
@@ -1722,9 +1762,16 @@ paths:
           description: Sem autorização (AUTH-403 / SEC-403).
     post:
       operationId: postClaimsImportListCreate
-      description: "POST (multipart: `file`, `kind`=CLAIMS|PREMIUMS, `proposerId`, optional\n `policyId`, `source`=INTERNAL|OTHER_INSURER,\
-        \ `dryRun`) imports CSV/XLSX;\n invalid rows are reported and skipped. GET lists imports and accepts\n optional\
-        \ `proposerId` and `policyId` filters.\n\nRequer: scope q360.admin, permissão pricing-config:manage."
+      description: 'POST (multipart: `file`, `kind`=CLAIMS|PREMIUMS, `proposerId`, optional
+
+        `policyId`, `source`=INTERNAL|OTHER_INSURER, `dryRun`) imports CSV/XLSX;
+
+        invalid rows are reported and skipped. GET lists imports and accepts
+
+        optional `proposerId` and `policyId` filters.
+
+
+        Requer: scope q360.admin, permissão pricing-config:manage.'
       summary: Criar claims import list create
       parameters:
       - in: header
@@ -1826,8 +1873,12 @@ paths:
   /api/v1/claims/methodology:
     get:
       operationId: getClaimsMethodology
-      description: "GET /claims/methodology - the projection method in use (labelled\n indicative), its formulas\
-        \ and the accepted import formats.\n\nRequer: scope q360.read, permissão audit:read."
+      description: 'GET /claims/methodology - the projection method in use (labelled
+
+        indicative), its formulas and the accepted import formats.
+
+
+        Requer: scope q360.read, permissão audit:read.'
       summary: Obter claims methodology
       tags:
       - Claims
@@ -1856,9 +1907,16 @@ paths:
   /api/v1/claims/profit-sharing:
     get:
       operationId: getClaimsProfitSharing
-      description: "GET /claims/profit-sharing?proposerId=&thresholdPct=65&sharePct=100 -\n participação nos resultados\
-        \ do grupo (devolução de parte do prémio se a\n sinistralidade ficar abaixo do limite acordado). Override\
-        \ percentages\n must be between 0 and 100, inclusive.\n\nRequer: scope q360.read, permissão audit:read."
+      description: 'GET /claims/profit-sharing?proposerId=&thresholdPct=65&sharePct=100 -
+
+        participação nos resultados do grupo (devolução de parte do prémio se a
+
+        sinistralidade ficar abaixo do limite acordado). Override percentages
+
+        must be between 0 and 100, inclusive.
+
+
+        Requer: scope q360.read, permissão audit:read.'
       summary: Obter claims profit sharing
       parameters:
       - in: query
@@ -1930,8 +1988,12 @@ paths:
   /api/v1/claims/profit-sharing/parameters:
     get:
       operationId: getClaimsProfitSharingParameters
-      description: "GET /claims/profit-sharing/parameters - thresholds from current\n published group.rules, with\
-        \ the documented 65% / 100% fallbacks.\n\nRequer: scope q360.read, permissão audit:read."
+      description: 'GET /claims/profit-sharing/parameters - thresholds from current
+
+        published group.rules, with the documented 65% / 100% fallbacks.
+
+
+        Requer: scope q360.read, permissão audit:read.'
       summary: Obter claims profit sharing parameters
       tags:
       - Claims
@@ -1956,9 +2018,14 @@ paths:
   /api/v1/claims/projections:
     get:
       operationId: getProjectionListCreate
-      description: "POST /claims/projections - OPTIMISTIC/BASE/PESSIMISTIC projection from\n a saved assumption\
-        \ set or inline `assumptions`. GET accepts optional\n `proposerId` and `policyId` filters.\n\nRequer: scope\
-        \ q360.read, permissão audit:read."
+      description: 'POST /claims/projections - OPTIMISTIC/BASE/PESSIMISTIC projection from
+
+        a saved assumption set or inline `assumptions`. GET accepts optional
+
+        `proposerId` and `policyId` filters.
+
+
+        Requer: scope q360.read, permissão audit:read.'
       summary: Listar projection list create
       parameters:
       - in: query
@@ -1997,9 +2064,14 @@ paths:
           description: Sem autorização (AUTH-403 / SEC-403).
     post:
       operationId: postProjectionListCreate
-      description: "POST /claims/projections - OPTIMISTIC/BASE/PESSIMISTIC projection from\n a saved assumption\
-        \ set or inline `assumptions`. GET accepts optional\n `proposerId` and `policyId` filters.\n\nRequer: scope\
-        \ q360.write, permissão quote:review."
+      description: 'POST /claims/projections - OPTIMISTIC/BASE/PESSIMISTIC projection from
+
+        a saved assumption set or inline `assumptions`. GET accepts optional
+
+        `proposerId` and `policyId` filters.
+
+
+        Requer: scope q360.write, permissão quote:review.'
       summary: Criar projection list create
       tags:
       - Claims
@@ -2088,9 +2160,14 @@ paths:
   /api/v1/claims/summary:
     get:
       operationId: getClaimsSummary
-      description: "GET /claims/summary?proposerId=&policyId=&from=&to=&currency= -\n loss ratio, frequency, average\
-        \ cost, by coverage and month, history\n months. Aggregates only.\n\nRequer: scope q360.read, permissão\
-        \ audit:read."
+      description: 'GET /claims/summary?proposerId=&policyId=&from=&to=&currency= -
+
+        loss ratio, frequency, average cost, by coverage and month, history
+
+        months. Aggregates only.
+
+
+        Requer: scope q360.read, permissão audit:read.'
       summary: Obter claims summary
       parameters:
       - in: query
@@ -2152,8 +2229,12 @@ paths:
   /api/v1/configuration/{config_type}/{config_id}/diff:
     get:
       operationId: getConfigurationDiff
-      description: "GET /configuration/{type}/{id}/diff?against=<otherVersionId> - what\n was added/removed/changed\
-        \ between two versions of the same code.\n\nRequer: scope q360.read."
+      description: 'GET /configuration/{type}/{id}/diff?against=<otherVersionId> - what
+
+        was added/removed/changed between two versions of the same code.
+
+
+        Requer: scope q360.read.'
       summary: Obter configuration diff
       parameters:
       - in: query
@@ -2212,9 +2293,14 @@ paths:
   /api/v1/configuration/{config_type}/{config_id}/impact-simulation:
     post:
       operationId: postConfigurationImpactSimulation
-      description: "POST /configuration/{type}/{id}/impact-simulation - reprices the most\n recent quotes with the\
-        \ published configuration and with this version and\n summarises the premium impact, before publishing (nothing\
-        \ is saved).\n\nRequer: scope q360.admin, permissão pricing-config:manage."
+      description: 'POST /configuration/{type}/{id}/impact-simulation - reprices the most
+
+        recent quotes with the published configuration and with this version and
+
+        summarises the premium impact, before publishing (nothing is saved).
+
+
+        Requer: scope q360.admin, permissão pricing-config:manage.'
       summary: Criar configuration impact simulation
       parameters:
       - in: path
@@ -2278,11 +2364,23 @@ paths:
   /api/v1/configuration/{config_type}/{config_id}/publish:
     post:
       operationId: postConfigurationPublish
-      description: "ART-006 `/api/v1/configuration/{configType}/{configId}/publish`:\n `publishConfiguration` (POST).\n\
-        \n Gated by ART-006 scope only (q360.admin): this one endpoint spans\n `pricing-parameter-set` (DOC-001\
-        \ `pricing-config:manage`) and\n `rule-version` (rule_domain can be ELIGIBILITY, not pricing at all —\n\
-        \ no DOC-001 permission fits every config_type uniformly), so no\n `require_permission` is applied here.\n\
-        \nRequer: scope q360.admin."
+      description: 'ART-006 `/api/v1/configuration/{configType}/{configId}/publish`:
+
+        `publishConfiguration` (POST).
+
+
+        Gated by ART-006 scope only (q360.admin): this one endpoint spans
+
+        `pricing-parameter-set` (DOC-001 `pricing-config:manage`) and
+
+        `rule-version` (rule_domain can be ELIGIBILITY, not pricing at all —
+
+        no DOC-001 permission fits every config_type uniformly), so no
+
+        `require_permission` is applied here.
+
+
+        Requer: scope q360.admin.'
       summary: Criar configuration publish
       parameters:
       - in: header
@@ -2347,9 +2445,18 @@ paths:
   /api/v1/configuration/{config_type}/{config_id}/retire:
     post:
       operationId: postConfigurationRetire
-      description: "`/api/v1/configuration/{configType}/{configId}/retire` —\n ROADMAP_ANGOLA_CUSTOMIZATION.md Épico\
-        \ 6 (OD-ANGOLA-006), pragmatic V1\n addition alongside the existing publish dispatcher, same `configType`\n\
-        \ closed set (pricing-parameter-set/rule-version/rating-table), not in\n ART-006.\n\nRequer: scope q360.admin."
+      description: '`/api/v1/configuration/{configType}/{configId}/retire` —
+
+        ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6 (OD-ANGOLA-006), pragmatic V1
+
+        addition alongside the existing publish dispatcher, same `configType`
+
+        closed set (pricing-parameter-set/rule-version/rating-table), not in
+
+        ART-006.
+
+
+        Requer: scope q360.admin.'
       summary: Criar configuration retire
       parameters:
       - in: header
@@ -2414,9 +2521,14 @@ paths:
   /api/v1/configuration/{config_type}/{config_id}/rollback:
     post:
       operationId: postConfigurationRollback
-      description: "POST /configuration/{type}/{id}/rollback - restores a previous version\n of a rating table /\
-        \ parameter set / rule as a NEW published version and\n retires the newer published ones (reason required,\
-        \ audited).\n\nRequer: scope q360.admin, permissão pricing-config:manage."
+      description: 'POST /configuration/{type}/{id}/rollback - restores a previous version
+
+        of a rating table / parameter set / rule as a NEW published version and
+
+        retires the newer published ones (reason required, audited).
+
+
+        Requer: scope q360.admin, permissão pricing-config:manage.'
       summary: Criar configuration rollback
       parameters:
       - in: header
@@ -2486,8 +2598,12 @@ paths:
   /api/v1/configuration/{config_type}/{config_id}/versions:
     get:
       operationId: getConfigurationVersions
-      description: "GET /configuration/{type}/{id}/versions - every version of the same\n code (history) with who\
-        \ published it and when.\n\nRequer: scope q360.read."
+      description: 'GET /configuration/{type}/{id}/versions - every version of the same
+
+        code (history) with who published it and when.
+
+
+        Requer: scope q360.read.'
       summary: Obter configuration versions
       parameters:
       - in: path
@@ -2536,9 +2652,16 @@ paths:
   /api/v1/coverage:
     get:
       operationId: getCoverageLookup
-      description: "`GET /api/v1/coverage?policyNumber=&memberId=&date=&benefitCategory=`\n — the pragmatic lookup-by-number\
-        \ entry point (same posture as\n `GET /quotes?quoteNumber=`), the one an operator/prestador actually\n has\
-        \ in hand instead of a UUID.\n\nRequer: scope q360.read."
+      description: '`GET /api/v1/coverage?policyNumber=&memberId=&date=&benefitCategory=`
+
+        — the pragmatic lookup-by-number entry point (same posture as
+
+        `GET /quotes?quoteNumber=`), the one an operator/prestador actually
+
+        has in hand instead of a UUID.
+
+
+        Requer: scope q360.read.'
       summary: Obter coverage lookup
       parameters:
       - in: query
@@ -2891,8 +3014,11 @@ paths:
   /api/v1/customer-portal/me/quotes:
     get:
       operationId: getCustomerPortalQuotes
-      description: "`GET /customer-portal/me/quotes` — the caller's own quotes with a\n customer-facing status (read-only).\
-        \ Scoped to the proposers linked to the\n authenticated account, never to anything in the request."
+      description: '`GET /customer-portal/me/quotes` — the caller''s own quotes with a
+
+        customer-facing status (read-only). Scoped to the proposers linked to the
+
+        authenticated account, never to anything in the request.'
       summary: Obter customer portal quotes
       tags:
       - Customer Portal
@@ -2959,8 +3085,9 @@ paths:
   /api/v1/customer-portal/members/{member_id}/documents:
     get:
       operationId: getCustomerPortalMemberDocuments
-      description: "Documentos em falta de uma pessoa segura: `GET` lista o que já enviou e o que\n falta; `POST`\
-        \ (multipart) envia um documento novo para análise."
+      description: 'Documentos em falta de uma pessoa segura: `GET` lista o que já enviou e o que
+
+        falta; `POST` (multipart) envia um documento novo para análise.'
       summary: Obter customer portal member documents
       parameters:
       - in: path
@@ -3000,8 +3127,9 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     post:
       operationId: postCustomerPortalMemberDocuments
-      description: "Documentos em falta de uma pessoa segura: `GET` lista o que já enviou e o que\n falta; `POST`\
-        \ (multipart) envia um documento novo para análise."
+      description: 'Documentos em falta de uma pessoa segura: `GET` lista o que já enviou e o que
+
+        falta; `POST` (multipart) envia um documento novo para análise.'
       summary: Criar customer portal member documents
       parameters:
       - in: path
@@ -3282,9 +3410,15 @@ paths:
   /api/v1/customer-portal/plan-benefits:
     get:
       operationId: getCustomerPortalPlanBenefits
-      description: "`GET /customer-portal/plan-benefits?policyNumber=` — the catalogue\n of contracted coverages\
-        \ (what `/coverage` used to return before Fase\n 6 repurposed that path for the actual coverage check).\
-        \ Reaproveita\n `list_plan_benefits` sem alteração nenhuma, tal como na Fase 1\n original."
+      description: '`GET /customer-portal/plan-benefits?policyNumber=` — the catalogue
+
+        of contracted coverages (what `/coverage` used to return before Fase
+
+        6 repurposed that path for the actual coverage check). Reaproveita
+
+        `list_plan_benefits` sem alteração nenhuma, tal como na Fase 1
+
+        original.'
       summary: Obter customer portal plan benefits
       parameters:
       - in: query
@@ -3621,8 +3755,12 @@ paths:
   /api/v1/customer-portal/policies/{policy_number}/statement:
     get:
       operationId: getCustomerPortalPolicyStatement
-      description: "Declaração de cobertura (`kind=COVERAGE`) ou comprovativo de pagamento\n (`kind=PAYMENT`, opcional\
-        \ `installmentNo`), gerados na hora — sem pedido.\n\nGerado na hora; sem pedido ao GTE."
+      description: 'Declaração de cobertura (`kind=COVERAGE`) ou comprovativo de pagamento
+
+        (`kind=PAYMENT`, opcional `installmentNo`), gerados na hora — sem pedido.
+
+
+        Gerado na hora; sem pedido ao GTE.'
       summary: Obter customer portal policy statement
       parameters:
       - in: query
@@ -3906,8 +4044,9 @@ paths:
   /api/v1/customer-portal/{tenant_id}/auth/first-access/request:
     post:
       operationId: postFirstAccessRequest
-      description: "Passo 1 do primeiro acesso: o código vai para o email guardado no registo\n do cliente, nunca\
-        \ para um email escrito no pedido."
+      description: 'Passo 1 do primeiro acesso: o código vai para o email guardado no registo
+
+        do cliente, nunca para um email escrito no pedido.'
       summary: Criar first access request
       parameters:
       - in: path
@@ -4202,11 +4341,22 @@ paths:
   /api/v1/document-templates:
     get:
       operationId: getDocumentTemplateListCreate
-      description: "Pragmatic V1 addition, not in ART-006 (see\n apps/quote/application/document_service.py module\
-        \ docstring) — the\n only way to make `generateQuoteProposal` succeed at all, since OD-006\n has no approved\
-        \ template and ART-006 has no CRUD for this resource.\n `GET` (list) is a further pragmatic addition (same\
-        \ rationale as\n RuleVersionCreateView) so the admin/configurador UI has something to\n render before publishing\
-        \ a new template version.\n\nRequer: scope q360.read."
+      description: 'Pragmatic V1 addition, not in ART-006 (see
+
+        apps/quote/application/document_service.py module docstring) — the
+
+        only way to make `generateQuoteProposal` succeed at all, since OD-006
+
+        has no approved template and ART-006 has no CRUD for this resource.
+
+        `GET` (list) is a further pragmatic addition (same rationale as
+
+        RuleVersionCreateView) so the admin/configurador UI has something to
+
+        render before publishing a new template version.
+
+
+        Requer: scope q360.read.'
       summary: Listar document template list create
       parameters:
       - in: query
@@ -4256,11 +4406,22 @@ paths:
           description: Sem autorização (AUTH-403 / SEC-403).
     post:
       operationId: postDocumentTemplateListCreate
-      description: "Pragmatic V1 addition, not in ART-006 (see\n apps/quote/application/document_service.py module\
-        \ docstring) — the\n only way to make `generateQuoteProposal` succeed at all, since OD-006\n has no approved\
-        \ template and ART-006 has no CRUD for this resource.\n `GET` (list) is a further pragmatic addition (same\
-        \ rationale as\n RuleVersionCreateView) so the admin/configurador UI has something to\n render before publishing\
-        \ a new template version.\n\nRequer: scope q360.admin, permissão product:manage."
+      description: 'Pragmatic V1 addition, not in ART-006 (see
+
+        apps/quote/application/document_service.py module docstring) — the
+
+        only way to make `generateQuoteProposal` succeed at all, since OD-006
+
+        has no approved template and ART-006 has no CRUD for this resource.
+
+        `GET` (list) is a further pragmatic addition (same rationale as
+
+        RuleVersionCreateView) so the admin/configurador UI has something to
+
+        render before publishing a new template version.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Criar document template list create
       parameters:
       - in: header
@@ -4314,8 +4475,12 @@ paths:
   /api/v1/document-templates/schema:
     get:
       operationId: getDocumentTemplateSchema
-      description: "GET /document-templates/schema - what a template body may contain:\n the default body, the allowed\
-        \ sections and the allowed {{variables}}.\n\nRequer: scope q360.read."
+      description: 'GET /document-templates/schema - what a template body may contain:
+
+        the default body, the allowed sections and the allowed {{variables}}.
+
+
+        Requer: scope q360.read.'
       summary: Obter document template schema
       tags:
       - Documents
@@ -4344,8 +4509,12 @@ paths:
   /api/v1/document-templates/{template_id}:
     delete:
       operationId: deleteDocumentTemplateDetail
-      description: "ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not\n in ART-006. `PATCH`/`DELETE`\
-        \ only work while `status=DRAFT`.\n\nRequer: scope q360.admin, permissão product:manage."
+      description: 'ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+
+        in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Remover document template detail
       parameters:
       - in: header
@@ -4394,8 +4563,12 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
     patch:
       operationId: patchDocumentTemplateDetail
-      description: "ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not\n in ART-006. `PATCH`/`DELETE`\
-        \ only work while `status=DRAFT`.\n\nRequer: scope q360.admin, permissão product:manage."
+      description: 'ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+
+        in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Alterar document template detail
       parameters:
       - in: header
@@ -4460,10 +4633,17 @@ paths:
   /api/v1/document-templates/{template_id}/letterhead:
     get:
       operationId: getDocumentTemplateLetterhead
-      description: "`/document-templates/{id}/letterhead` — papel timbrado em PDF (opção A).\n `POST` (multipart)\
-        \ carrega ou substitui, `GET` descarrega, `DELETE` remove;\n só num modelo em rascunho. O conteúdo do documento\
-        \ é escrito por cima do PDF.\n\nRequer: scope q360.admin, permissão product:manage.\n\nO papel timbrado\
-        \ carregado."
+      description: '`/document-templates/{id}/letterhead` — papel timbrado em PDF (opção A).
+
+        `POST` (multipart) carrega ou substitui, `GET` descarrega, `DELETE` remove;
+
+        só num modelo em rascunho. O conteúdo do documento é escrito por cima do PDF.
+
+
+        Requer: scope q360.admin, permissão product:manage.
+
+
+        O papel timbrado carregado.'
       summary: Obter document template letterhead
       parameters:
       - in: path
@@ -4505,9 +4685,14 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     post:
       operationId: postDocumentTemplateLetterhead
-      description: "`/document-templates/{id}/letterhead` — papel timbrado em PDF (opção A).\n `POST` (multipart)\
-        \ carrega ou substitui, `GET` descarrega, `DELETE` remove;\n só num modelo em rascunho. O conteúdo do documento\
-        \ é escrito por cima do PDF.\n\nRequer: scope q360.admin, permissão product:manage."
+      description: '`/document-templates/{id}/letterhead` — papel timbrado em PDF (opção A).
+
+        `POST` (multipart) carrega ou substitui, `GET` descarrega, `DELETE` remove;
+
+        só num modelo em rascunho. O conteúdo do documento é escrito por cima do PDF.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Criar document template letterhead
       parameters:
       - in: path
@@ -4569,9 +4754,14 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
     delete:
       operationId: deleteDocumentTemplateLetterhead
-      description: "`/document-templates/{id}/letterhead` — papel timbrado em PDF (opção A).\n `POST` (multipart)\
-        \ carrega ou substitui, `GET` descarrega, `DELETE` remove;\n só num modelo em rascunho. O conteúdo do documento\
-        \ é escrito por cima do PDF.\n\nRequer: scope q360.admin, permissão product:manage."
+      description: '`/document-templates/{id}/letterhead` — papel timbrado em PDF (opção A).
+
+        `POST` (multipart) carrega ou substitui, `GET` descarrega, `DELETE` remove;
+
+        só num modelo em rascunho. O conteúdo do documento é escrito por cima do PDF.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Remover document template letterhead
       parameters:
       - in: path
@@ -4619,8 +4809,12 @@ paths:
   /api/v1/document-templates/{template_id}/preview:
     get:
       operationId: getDocumentTemplatePreview
-      description: "GET /document-templates/{id}/preview[?fileType=html|pdf|docx] - the\n template laid out with\
-        \ sample data, before publishing.\n\nRequer: scope q360.admin, permissão product:manage."
+      description: 'GET /document-templates/{id}/preview[?fileType=html|pdf|docx] - the
+
+        template laid out with sample data, before publishing.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Obter document template preview
       parameters:
       - in: query
@@ -4740,9 +4934,14 @@ paths:
   /api/v1/document-templates/{template_id}/retire:
     post:
       operationId: postDocumentTemplateRetire
-      description: "OD-ANGOLA-006: the safe way to take a PUBLISHED template out of use\n — marks it RETIRED, never\
-        \ deletes the row (a Document already\n generated from it must keep resolving it).\n\nRequer: scope q360.admin,\
-        \ permissão product:manage."
+      description: 'OD-ANGOLA-006: the safe way to take a PUBLISHED template out of use
+
+        — marks it RETIRED, never deletes the row (a Document already
+
+        generated from it must keep resolving it).
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Criar document template retire
       parameters:
       - in: header
@@ -4802,9 +5001,17 @@ paths:
   /api/v1/document-templates/{template_id}/word:
     get:
       operationId: getDocumentTemplateWord
-      description: "`/document-templates/{id}/word` — modelo Word com marcas {{variável}}\n (opção B). `POST` (multipart)\
-        \ carrega ou substitui e valida as marcas, `GET`\n descarrega, `DELETE` remove; só num modelo em rascunho.\n\
-        \nRequer: scope q360.admin, permissão product:manage.\n\nO modelo Word carregado."
+      description: '`/document-templates/{id}/word` — modelo Word com marcas {{variável}}
+
+        (opção B). `POST` (multipart) carrega ou substitui e valida as marcas, `GET`
+
+        descarrega, `DELETE` remove; só num modelo em rascunho.
+
+
+        Requer: scope q360.admin, permissão product:manage.
+
+
+        O modelo Word carregado.'
       summary: Obter document template word
       parameters:
       - in: path
@@ -4846,9 +5053,14 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     post:
       operationId: postDocumentTemplateWord
-      description: "`/document-templates/{id}/word` — modelo Word com marcas {{variável}}\n (opção B). `POST` (multipart)\
-        \ carrega ou substitui e valida as marcas, `GET`\n descarrega, `DELETE` remove; só num modelo em rascunho.\n\
-        \nRequer: scope q360.admin, permissão product:manage."
+      description: '`/document-templates/{id}/word` — modelo Word com marcas {{variável}}
+
+        (opção B). `POST` (multipart) carrega ou substitui e valida as marcas, `GET`
+
+        descarrega, `DELETE` remove; só num modelo em rascunho.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Criar document template word
       parameters:
       - in: path
@@ -4910,9 +5122,14 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
     delete:
       operationId: deleteDocumentTemplateWord
-      description: "`/document-templates/{id}/word` — modelo Word com marcas {{variável}}\n (opção B). `POST` (multipart)\
-        \ carrega ou substitui e valida as marcas, `GET`\n descarrega, `DELETE` remove; só num modelo em rascunho.\n\
-        \nRequer: scope q360.admin, permissão product:manage."
+      description: '`/document-templates/{id}/word` — modelo Word com marcas {{variável}}
+
+        (opção B). `POST` (multipart) carrega ou substitui e valida as marcas, `GET`
+
+        descarrega, `DELETE` remove; só num modelo em rascunho.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Remover document template word
       parameters:
       - in: path
@@ -5096,8 +5313,12 @@ paths:
   /api/v1/documents/{document_id}/signed-url:
     post:
       operationId: postDocumentSignedUrl
-      description: "POST /documents/{id}/signed-url - a time-limited link anyone can open\n (no sign-in) until it\
-        \ expires.\n\nRequer: scope q360.read."
+      description: 'POST /documents/{id}/signed-url - a time-limited link anyone can open
+
+        (no sign-in) until it expires.
+
+
+        Requer: scope q360.read.'
       summary: Criar document signed url
       parameters:
       - in: header
@@ -5211,8 +5432,13 @@ paths:
   /api/v1/eligibility/evaluations:
     get:
       operationId: getEligibilityExecutionList
-      description: "GET /api/v1/eligibility/evaluations\n\n Lista avaliações de elegibilidade já executadas.\n\n\
-        Requer: scope q360.read."
+      description: 'GET /api/v1/eligibility/evaluations
+
+
+        Lista avaliações de elegibilidade já executadas.
+
+
+        Requer: scope q360.read.'
       summary: Listar eligibility execution list
       parameters:
       - in: query
@@ -5278,8 +5504,13 @@ paths:
   /api/v1/eligibility/evaluations/{evaluation_id}:
     get:
       operationId: getEligibilityExecutionDetail
-      description: "GET /api/v1/eligibility/evaluations/{id}\n\n Devolve uma execução completa, incluindo os motivos\
-        \ da decisão.\n\nRequer: scope q360.read."
+      description: 'GET /api/v1/eligibility/evaluations/{id}
+
+
+        Devolve uma execução completa, incluindo os motivos da decisão.
+
+
+        Requer: scope q360.read.'
       summary: Obter eligibility execution detail
       parameters:
       - in: path
@@ -5355,10 +5586,22 @@ paths:
   /api/v1/installments:
     get:
       operationId: getInstallmentList
-      description: "`GET /api/v1/installments` — cobranças: as prestações de todas as\n apólices, para o GTE ver\
-        \ o que está por pagar e registar pagamentos.\n\n Filtros: `status` (DUE, OVERDUE, PAID), `dueBefore` (AAAA-MM-DD),\n\
-        \ `policyNumber`, `q` (nome do tomador). Atrasadas = por pagar e com\n vencimento já passado.\n\nRequer:\
-        \ scope q360.read.\n\nCobranças: as prestações de todas as apólices, para registar pagamentos."
+      description: '`GET /api/v1/installments` — cobranças: as prestações de todas as
+
+        apólices, para o GTE ver o que está por pagar e registar pagamentos.
+
+
+        Filtros: `status` (DUE, OVERDUE, PAID), `dueBefore` (AAAA-MM-DD),
+
+        `policyNumber`, `q` (nome do tomador). Atrasadas = por pagar e com
+
+        vencimento já passado.
+
+
+        Requer: scope q360.read.
+
+
+        Cobranças: as prestações de todas as apólices, para registar pagamentos.'
       summary: Listar installment list
       parameters:
       - in: query
@@ -5454,8 +5697,15 @@ paths:
   /api/v1/member-documents:
     get:
       operationId: getMemberDocumentQueue
-      description: "`GET /member-documents` — fila de análise do GTE (por omissão, os que\n aguardam análise).\n\
-        \nRequer: scope q360.read.\n\nFila de análise do GTE."
+      description: '`GET /member-documents` — fila de análise do GTE (por omissão, os que
+
+        aguardam análise).
+
+
+        Requer: scope q360.read.
+
+
+        Fila de análise do GTE.'
       summary: Listar member document queue
       parameters:
       - in: query
@@ -5560,9 +5810,14 @@ paths:
   /api/v1/member-documents/{document_id}/review:
     post:
       operationId: postMemberDocumentReview
-      description: "`POST /member-documents/{documentId}/review` — aprova ou recusa. Ao aprovar,\n a pessoa é reavaliada:\
-        \ se já cumpre as regras fica elegível na cotação e\n ativa (coberta) na apólice.\n\nRequer: scope q360.approve,\
-        \ permissão quote:approve."
+      description: '`POST /member-documents/{documentId}/review` — aprova ou recusa. Ao aprovar,
+
+        a pessoa é reavaliada: se já cumpre as regras fica elegível na cotação e
+
+        ativa (coberta) na apólice.
+
+
+        Requer: scope q360.approve, permissão quote:approve.'
       summary: Criar member document review
       parameters:
       - in: path
@@ -6048,8 +6303,12 @@ paths:
   /api/v1/members/{member_id}/documents:
     get:
       operationId: getMemberDocumentListCreate
-      description: "`GET /members/{memberId}/documents` — documentos enviados e o que ainda falta.\n `POST` — o\
-        \ GTE anexa um documento (recebido em papel, por email…).\n\nRequer: scope q360.read."
+      description: '`GET /members/{memberId}/documents` — documentos enviados e o que ainda falta.
+
+        `POST` — o GTE anexa um documento (recebido em papel, por email…).
+
+
+        Requer: scope q360.read.'
       summary: Listar member document list create
       parameters:
       - in: path
@@ -6090,8 +6349,12 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     post:
       operationId: postMemberDocumentListCreate
-      description: "`GET /members/{memberId}/documents` — documentos enviados e o que ainda falta.\n `POST` — o\
-        \ GTE anexa um documento (recebido em papel, por email…).\n\nRequer: scope q360.write, permissão quote:edit."
+      description: '`GET /members/{memberId}/documents` — documentos enviados e o que ainda falta.
+
+        `POST` — o GTE anexa um documento (recebido em papel, por email…).
+
+
+        Requer: scope q360.write, permissão quote:edit.'
       summary: Criar member document list create
       parameters:
       - in: path
@@ -6154,9 +6417,17 @@ paths:
   /api/v1/plans:
     get:
       operationId: getPlanListCreate
-      description: "ART-006 `/api/v1/plans`: `listPlans` (GET), `createPlan` (POST).\n\n DECISIONS_TAKEN.md#S09-POLICY-001\
-        \ (PO-APO-6, 2026-09-26): no more\n `/products/{id}/versions` or `/product-versions/{id}/publish` — a Plan\n\
-        \ is created directly under a Product, filterable by `productId`.\n\nRequer: scope q360.read."
+      description: 'ART-006 `/api/v1/plans`: `listPlans` (GET), `createPlan` (POST).
+
+
+        DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26): no more
+
+        `/products/{id}/versions` or `/product-versions/{id}/publish` — a Plan
+
+        is created directly under a Product, filterable by `productId`.
+
+
+        Requer: scope q360.read.'
       summary: Listar plan list create
       parameters:
       - in: query
@@ -6206,10 +6477,17 @@ paths:
           description: Sem autorização (AUTH-403 / SEC-403).
     post:
       operationId: postPlanListCreate
-      description: "ART-006 `/api/v1/plans`: `listPlans` (GET), `createPlan` (POST).\n\n DECISIONS_TAKEN.md#S09-POLICY-001\
-        \ (PO-APO-6, 2026-09-26): no more\n `/products/{id}/versions` or `/product-versions/{id}/publish` — a Plan\n\
-        \ is created directly under a Product, filterable by `productId`.\n\nRequer: scope q360.admin, permissão\
-        \ product:manage."
+      description: 'ART-006 `/api/v1/plans`: `listPlans` (GET), `createPlan` (POST).
+
+
+        DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26): no more
+
+        `/products/{id}/versions` or `/product-versions/{id}/publish` — a Plan
+
+        is created directly under a Product, filterable by `productId`.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Criar plan list create
       tags:
       - Plans
@@ -6256,10 +6534,20 @@ paths:
   /api/v1/plans/{plan_id}:
     get:
       operationId: getPlanDetail
-      description: "ART-006 `/api/v1/plans/{planId}`: `getPlan` (GET). `PATCH`/`DELETE`\n are a pragmatic V1 addition,\
-        \ not in ART-006. DECISIONS_TAKEN.md#S09-\n POLICY-001 (PO-APO-6): a Plan can be edited/deleted at any time\
-        \ now (no\n more parent-version DRAFT gate) — delete is still blocked with 409 if a\n Quote/PricingRun/eligibility\
-        \ evaluation already references this Plan\n (product_service.delete_plan).\n\nRequer: scope q360.read."
+      description: 'ART-006 `/api/v1/plans/{planId}`: `getPlan` (GET). `PATCH`/`DELETE`
+
+        are a pragmatic V1 addition, not in ART-006. DECISIONS_TAKEN.md#S09-
+
+        POLICY-001 (PO-APO-6): a Plan can be edited/deleted at any time now (no
+
+        more parent-version DRAFT gate) — delete is still blocked with 409 if a
+
+        Quote/PricingRun/eligibility evaluation already references this Plan
+
+        (product_service.delete_plan).
+
+
+        Requer: scope q360.read.'
       summary: Obter plan detail
       parameters:
       - in: path
@@ -6300,11 +6588,20 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     delete:
       operationId: deletePlanDetail
-      description: "ART-006 `/api/v1/plans/{planId}`: `getPlan` (GET). `PATCH`/`DELETE`\n are a pragmatic V1 addition,\
-        \ not in ART-006. DECISIONS_TAKEN.md#S09-\n POLICY-001 (PO-APO-6): a Plan can be edited/deleted at any time\
-        \ now (no\n more parent-version DRAFT gate) — delete is still blocked with 409 if a\n Quote/PricingRun/eligibility\
-        \ evaluation already references this Plan\n (product_service.delete_plan).\n\nRequer: scope q360.admin,\
-        \ permissão product:manage."
+      description: 'ART-006 `/api/v1/plans/{planId}`: `getPlan` (GET). `PATCH`/`DELETE`
+
+        are a pragmatic V1 addition, not in ART-006. DECISIONS_TAKEN.md#S09-
+
+        POLICY-001 (PO-APO-6): a Plan can be edited/deleted at any time now (no
+
+        more parent-version DRAFT gate) — delete is still blocked with 409 if a
+
+        Quote/PricingRun/eligibility evaluation already references this Plan
+
+        (product_service.delete_plan).
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Remover plan detail
       parameters:
       - in: header
@@ -6353,11 +6650,20 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
     patch:
       operationId: patchPlanDetail
-      description: "ART-006 `/api/v1/plans/{planId}`: `getPlan` (GET). `PATCH`/`DELETE`\n are a pragmatic V1 addition,\
-        \ not in ART-006. DECISIONS_TAKEN.md#S09-\n POLICY-001 (PO-APO-6): a Plan can be edited/deleted at any time\
-        \ now (no\n more parent-version DRAFT gate) — delete is still blocked with 409 if a\n Quote/PricingRun/eligibility\
-        \ evaluation already references this Plan\n (product_service.delete_plan).\n\nRequer: scope q360.admin,\
-        \ permissão product:manage."
+      description: 'ART-006 `/api/v1/plans/{planId}`: `getPlan` (GET). `PATCH`/`DELETE`
+
+        are a pragmatic V1 addition, not in ART-006. DECISIONS_TAKEN.md#S09-
+
+        POLICY-001 (PO-APO-6): a Plan can be edited/deleted at any time now (no
+
+        more parent-version DRAFT gate) — delete is still blocked with 409 if a
+
+        Quote/PricingRun/eligibility evaluation already references this Plan
+
+        (product_service.delete_plan).
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Alterar plan detail
       parameters:
       - in: header
@@ -6422,10 +6728,18 @@ paths:
   /api/v1/plans/{plan_id}/benefits:
     get:
       operationId: getPlanBenefitListCreate
-      description: "Pragmatic V1 addition, not in ART-006. `GET` lists the coverages\n currently attached to a Plan\
-        \ (BASE + whichever COMPLEMENTARY ones were\n opted into); `POST` attaches one more COMPLEMENTARY coverage\
-        \ (BASE\n ones are attached automatically by product_service.create_plan and\n never opted into here).\n\
-        \nRequer: scope q360.read."
+      description: 'Pragmatic V1 addition, not in ART-006. `GET` lists the coverages
+
+        currently attached to a Plan (BASE + whichever COMPLEMENTARY ones were
+
+        opted into); `POST` attaches one more COMPLEMENTARY coverage (BASE
+
+        ones are attached automatically by product_service.create_plan and
+
+        never opted into here).
+
+
+        Requer: scope q360.read.'
       summary: Listar plan benefit list create
       parameters:
       - in: path
@@ -6468,10 +6782,18 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     post:
       operationId: postPlanBenefitListCreate
-      description: "Pragmatic V1 addition, not in ART-006. `GET` lists the coverages\n currently attached to a Plan\
-        \ (BASE + whichever COMPLEMENTARY ones were\n opted into); `POST` attaches one more COMPLEMENTARY coverage\
-        \ (BASE\n ones are attached automatically by product_service.create_plan and\n never opted into here).\n\
-        \nRequer: scope q360.admin, permissão product:manage."
+      description: 'Pragmatic V1 addition, not in ART-006. `GET` lists the coverages
+
+        currently attached to a Plan (BASE + whichever COMPLEMENTARY ones were
+
+        opted into); `POST` attaches one more COMPLEMENTARY coverage (BASE
+
+        ones are attached automatically by product_service.create_plan and
+
+        never opted into here).
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Criar plan benefit list create
       parameters:
       - in: header
@@ -6537,9 +6859,16 @@ paths:
   /api/v1/plans/{plan_id}/benefits/{benefit_id}:
     get:
       operationId: getPlanBenefitDetail
-      description: "`PUT` upserts the coverage configuration of a Plan (capitals,\n participation, waiting periods,\
-        \ B/O inclusion, currency) and returns\n non-blocking `warnings`. `DELETE` detaches a COMPLEMENTARY coverage\
-        \ — a\n BASE coverage can never be removed (MissingCoreBenefitsError -> 400).\n\nRequer: scope q360.read."
+      description: '`PUT` upserts the coverage configuration of a Plan (capitals,
+
+        participation, waiting periods, B/O inclusion, currency) and returns
+
+        non-blocking `warnings`. `DELETE` detaches a COMPLEMENTARY coverage — a
+
+        BASE coverage can never be removed (MissingCoreBenefitsError -> 400).
+
+
+        Requer: scope q360.read.'
       summary: Obter plan benefit detail
       parameters:
       - in: path
@@ -6586,10 +6915,16 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     put:
       operationId: putPlanBenefitDetail
-      description: "`PUT` upserts the coverage configuration of a Plan (capitals,\n participation, waiting periods,\
-        \ B/O inclusion, currency) and returns\n non-blocking `warnings`. `DELETE` detaches a COMPLEMENTARY coverage\
-        \ — a\n BASE coverage can never be removed (MissingCoreBenefitsError -> 400).\n\nRequer: scope q360.admin,\
-        \ permissão product:manage."
+      description: '`PUT` upserts the coverage configuration of a Plan (capitals,
+
+        participation, waiting periods, B/O inclusion, currency) and returns
+
+        non-blocking `warnings`. `DELETE` detaches a COMPLEMENTARY coverage — a
+
+        BASE coverage can never be removed (MissingCoreBenefitsError -> 400).
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Substituir plan benefit detail
       parameters:
       - in: path
@@ -6654,10 +6989,16 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
     delete:
       operationId: deletePlanBenefitDetail
-      description: "`PUT` upserts the coverage configuration of a Plan (capitals,\n participation, waiting periods,\
-        \ B/O inclusion, currency) and returns\n non-blocking `warnings`. `DELETE` detaches a COMPLEMENTARY coverage\
-        \ — a\n BASE coverage can never be removed (MissingCoreBenefitsError -> 400).\n\nRequer: scope q360.admin,\
-        \ permissão product:manage."
+      description: '`PUT` upserts the coverage configuration of a Plan (capitals,
+
+        participation, waiting periods, B/O inclusion, currency) and returns
+
+        non-blocking `warnings`. `DELETE` detaches a COMPLEMENTARY coverage — a
+
+        BASE coverage can never be removed (MissingCoreBenefitsError -> 400).
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Remover plan benefit detail
       parameters:
       - in: path
@@ -6707,8 +7048,12 @@ paths:
   /api/v1/plans/{plan_id}/validation:
     get:
       operationId: getPlanValidation
-      description: "`GET /plans/{planId}/validation` — every error/warning of the plan\n (settings, each coverage\
-        \ configuration, completeness) in one answer.\n\nRequer: scope q360.read."
+      description: '`GET /plans/{planId}/validation` — every error/warning of the plan
+
+        (settings, each coverage configuration, completeness) in one answer.
+
+
+        Requer: scope q360.read.'
       summary: Obter plan validation
       parameters:
       - in: path
@@ -7463,9 +7808,16 @@ paths:
   /api/v1/policies:
     get:
       operationId: getPolicyList
-      description: "`GET /api/v1/policies` — pragmatic addition, not backed by any\n artifact (this module postdates\
-        \ ART-006 entirely). `?policyNumber=`\n mirrors the same lookup-by-number pragmatic filter `apps.quote`\n\
-        \ already has for quotes.\n\nRequer: scope q360.read."
+      description: '`GET /api/v1/policies` — pragmatic addition, not backed by any
+
+        artifact (this module postdates ART-006 entirely). `?policyNumber=`
+
+        mirrors the same lookup-by-number pragmatic filter `apps.quote`
+
+        already has for quotes.
+
+
+        Requer: scope q360.read.'
       summary: Listar policy list
       parameters:
       - in: query
@@ -7571,9 +7923,14 @@ paths:
   /api/v1/policies/{policy_id}/coverage:
     get:
       operationId: getPolicyCoverage
-      description: "`GET /api/v1/policies/{policyId}/coverage?memberId=&date=&benefitCategory=`\n — `memberId` omitted\
-        \ checks every member on the policy (same\n \"omit to check all\" posture as `POST /customer-portal/eligibility`).\n\
-        \nRequer: scope q360.read."
+      description: '`GET /api/v1/policies/{policyId}/coverage?memberId=&date=&benefitCategory=`
+
+        — `memberId` omitted checks every member on the policy (same
+
+        "omit to check all" posture as `POST /customer-portal/eligibility`).
+
+
+        Requer: scope q360.read.'
       summary: Obter policy coverage
       parameters:
       - in: query
@@ -7641,8 +7998,15 @@ paths:
   /api/v1/policies/{policy_id}/document:
     get:
       operationId: getPolicyDocument
-      description: "`GET /api/v1/policies/{policyId}/document?fileType=pdf|html|docx` — a\n apólice digital.\n\n\
-        Requer: scope q360.read.\n\nApólice digital. O PDF gravado na emissão é servido tal e qual."
+      description: '`GET /api/v1/policies/{policyId}/document?fileType=pdf|html|docx` — a
+
+        apólice digital.
+
+
+        Requer: scope q360.read.
+
+
+        Apólice digital. O PDF gravado na emissão é servido tal e qual.'
       summary: Obter policy document
       parameters:
       - in: query
@@ -7743,10 +8107,10 @@ paths:
   /api/v1/policies/{policy_id}/installments/{installment_no}/payment:
     post:
       operationId: postRegisterFirstPremiumPayment
-      description: "`POST /api/v1/policies/{policyId}/installments/{n}/payment` — regista o\n pagamento de uma prestação.\n\
-        \n * n = 1: Decreto 2/02 art. 17.º, a 1.ª fração passa `PENDING_FIRST_PREMIUM`\n a `ACTIVE` e começa o risco\
-        \ (exige `rowVersion`).\n * n >= 2: apólice ativa; as prestações pagam-se por ordem.\n\n A suspensão por\
-        \ falta de pagamento (Fase 7) ainda não existe.\n\nRequer: scope q360.approve, permissão quote:approve."
+      description: "`POST /api/v1/policies/{policyId}/installments/{n}/payment` — regista o\npagamento de uma prestação.\n\
+        \n* n = 1: Decreto 2/02 art. 17.º, a 1.ª fração passa `PENDING_FIRST_PREMIUM`\n a `ACTIVE` e começa o risco\
+        \ (exige `rowVersion`).\n* n >= 2: apólice ativa; as prestações pagam-se por ordem.\n\nA suspensão por falta\
+        \ de pagamento (Fase 7) ainda não existe.\n\nRequer: scope q360.approve, permissão quote:approve."
       summary: Criar register first premium payment
       parameters:
       - in: header
@@ -8203,9 +8567,14 @@ paths:
   /api/v1/pricing-parameter-sets:
     get:
       operationId: getPricingParameterSetCreate
-      description: "ART-006 `/api/v1/pricing-parameter-sets`: `createPricingParameterSet`\n (POST). `GET` (list)\
-        \ is a pragmatic V1 addition, not in ART-006 — see\n OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.\n\
-        \nRequer: scope q360.read."
+      description: 'ART-006 `/api/v1/pricing-parameter-sets`: `createPricingParameterSet`
+
+        (POST). `GET` (list) is a pragmatic V1 addition, not in ART-006 — see
+
+        OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
+
+
+        Requer: scope q360.read.'
       summary: Listar pricing parameter set create
       parameters:
       - in: query
@@ -8261,9 +8630,14 @@ paths:
           description: Configuração/cálculo impossível (PRICING-CONFIG, PRICING-FAILED).
     post:
       operationId: postPricingParameterSetCreate
-      description: "ART-006 `/api/v1/pricing-parameter-sets`: `createPricingParameterSet`\n (POST). `GET` (list)\
-        \ is a pragmatic V1 addition, not in ART-006 — see\n OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.\n\
-        \nRequer: scope q360.admin, permissão pricing-config:manage."
+      description: 'ART-006 `/api/v1/pricing-parameter-sets`: `createPricingParameterSet`
+
+        (POST). `GET` (list) is a pragmatic V1 addition, not in ART-006 — see
+
+        OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
+
+
+        Requer: scope q360.admin, permissão pricing-config:manage.'
       summary: Criar pricing parameter set create
       parameters:
       - in: header
@@ -8323,8 +8697,12 @@ paths:
   /api/v1/pricing-parameter-sets/{parameter_set_id}:
     delete:
       operationId: deletePricingParameterSetDetail
-      description: "ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not\n in ART-006. `PATCH`/`DELETE`\
-        \ only work while `status=DRAFT`.\n\nRequer: scope q360.admin, permissão pricing-config:manage."
+      description: 'ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+
+        in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`.
+
+
+        Requer: scope q360.admin, permissão pricing-config:manage.'
       summary: Remover pricing parameter set detail
       parameters:
       - in: header
@@ -8379,8 +8757,12 @@ paths:
           description: Configuração/cálculo impossível (PRICING-CONFIG, PRICING-FAILED).
     patch:
       operationId: patchPricingParameterSetDetail
-      description: "ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not\n in ART-006. `PATCH`/`DELETE`\
-        \ only work while `status=DRAFT`.\n\nRequer: scope q360.admin, permissão pricing-config:manage."
+      description: 'ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+
+        in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`.
+
+
+        Requer: scope q360.admin, permissão pricing-config:manage.'
       summary: Alterar pricing parameter set detail
       parameters:
       - in: header
@@ -8451,9 +8833,16 @@ paths:
   /api/v1/pricing/calculate:
     post:
       operationId: postPricingCalculate
-      description: "ART-006 `/api/v1/pricing/calculate` (Q360-S4-02), security ->\n oauth2: [q360.write]. Gated\
-        \ additionally by DOC-001 s18\n `quote:calculate` — the same permission DOC-001 grants the Subscritor\n\
-        \ persona for \"Calcular prémio determinístico\".\n\nRequer: scope q360.write, permissão quote:calculate."
+      description: 'ART-006 `/api/v1/pricing/calculate` (Q360-S4-02), security ->
+
+        oauth2: [q360.write]. Gated additionally by DOC-001 s18
+
+        `quote:calculate` — the same permission DOC-001 grants the Subscritor
+
+        persona for "Calcular prémio determinístico".
+
+
+        Requer: scope q360.write, permissão quote:calculate.'
       summary: Criar pricing calculate
       parameters:
       - in: header
@@ -8513,10 +8902,16 @@ paths:
   /api/v1/pricing/preview:
     post:
       operationId: postPricingPreview
-      description: "`POST /pricing/preview` — same request/response as `/pricing/calculate`\n but nothing is persisted\
-        \ (no PricingRun, audit or outbox): the GTE\n changes capitals/participation/options and sees the premium\
-        \ immediately.\n The response has `preview: true` and `pricingRunId: null`.\n\nRequer: scope q360.write,\
-        \ permissão quote:calculate."
+      description: '`POST /pricing/preview` — same request/response as `/pricing/calculate`
+
+        but nothing is persisted (no PricingRun, audit or outbox): the GTE
+
+        changes capitals/participation/options and sees the premium immediately.
+
+        The response has `preview: true` and `pricingRunId: null`.
+
+
+        Requer: scope q360.write, permissão quote:calculate.'
       summary: Criar pricing preview
       tags:
       - Pricing
@@ -8569,7 +8964,13 @@ paths:
   /api/v1/pricing/runs:
     get:
       operationId: getPricingExecutionList
-      description: "GET /api/v1/pricing/runs\n\n Lista todas as tarifaçōes executadas.\n\nRequer: scope q360.read."
+      description: 'GET /api/v1/pricing/runs
+
+
+        Lista todas as tarifaçōes executadas.
+
+
+        Requer: scope q360.read.'
       summary: Listar pricing execution list
       parameters:
       - in: query
@@ -8631,8 +9032,13 @@ paths:
   /api/v1/pricing/runs/{pricing_run_id}:
     get:
       operationId: getPricingExecutionDetail
-      description: "GET /api/v1/pricing/runs/{id}\n\n Devolve uma execução completa da tarifação.\n\nRequer: scope\
-        \ q360.read."
+      description: 'GET /api/v1/pricing/runs/{id}
+
+
+        Devolve uma execução completa da tarifação.
+
+
+        Requer: scope q360.read.'
       summary: Obter pricing execution detail
       parameters:
       - in: path
@@ -8680,9 +9086,14 @@ paths:
   /api/v1/pricing/scenarios:
     post:
       operationId: postPricingScenario
-      description: "ART-006 `/api/v1/pricing/scenarios` (Q360-S5-02), security ->\n oauth2: [q360.write]. Gated\
-        \ by DOC-001 s18 `quote:calculate`, same as\n `PricingCalculateView` — a scenario is a variant calculation.\n\
-        \nRequer: scope q360.write, permissão quote:calculate."
+      description: 'ART-006 `/api/v1/pricing/scenarios` (Q360-S5-02), security ->
+
+        oauth2: [q360.write]. Gated by DOC-001 s18 `quote:calculate`, same as
+
+        `PricingCalculateView` — a scenario is a variant calculation.
+
+
+        Requer: scope q360.write, permissão quote:calculate.'
       summary: Criar pricing scenario
       parameters:
       - in: header
@@ -8742,10 +9153,18 @@ paths:
   /api/v1/pricing/{pricing_run_id}/explanation:
     get:
       operationId: getPricingExplanation
-      description: "ART-006 `/api/v1/pricing/{pricingRunId}/explanation` (Q360-S4-04),\n security -> oauth2: [q360.read].\
-        \ No DOC-001 permission cleanly maps to\n this read (actor is \"Subscritor/Auditor\", spanning two personas\
-        \ with\n different DOC-001 grants) — scope-only, same posture as the eligibility\n and client domains where\
-        \ no matrix cell fits.\n\nRequer: scope q360.read."
+      description: 'ART-006 `/api/v1/pricing/{pricingRunId}/explanation` (Q360-S4-04),
+
+        security -> oauth2: [q360.read]. No DOC-001 permission cleanly maps to
+
+        this read (actor is "Subscritor/Auditor", spanning two personas with
+
+        different DOC-001 grants) — scope-only, same posture as the eligibility
+
+        and client domains where no matrix cell fits.
+
+
+        Requer: scope q360.read.'
       summary: Obter pricing explanation
       parameters:
       - in: path
@@ -8793,9 +9212,16 @@ paths:
   /api/v1/product-templates/market:
     post:
       operationId: postMarketTemplates
-      description: "`POST /product-templates/market` — loads the Individual/Familiar and\n Grupo products and plans\
-        \ from the PDF \"Coberturas e Capitais\" for the\n tenant (indicative values, editable). Idempotent: existing\
-        \ products and\n plans are never touched.\n\nRequer: scope q360.admin, permissão product:manage."
+      description: '`POST /product-templates/market` — loads the Individual/Familiar and
+
+        Grupo products and plans from the PDF "Coberturas e Capitais" for the
+
+        tenant (indicative values, editable). Idempotent: existing products and
+
+        plans are never touched.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
       summary: Criar market templates
       parameters:
       - in: header
@@ -8953,9 +9379,16 @@ paths:
   /api/v1/products/{product_id}:
     get:
       operationId: getProductDetail
-      description: "ART-006 `/api/v1/products/{productId}`: `getProduct` (GET),\n `updateProduct` (PUT). `DELETE`\
-        \ is a pragmatic V1 addition, not in\n ART-006 - only works while the product has no ProductVersion yet\
-        \ (409\n CONFLICT otherwise; see product_service.delete_product).\n\nRequer: scope q360.read."
+      description: 'ART-006 `/api/v1/products/{productId}`: `getProduct` (GET),
+
+        `updateProduct` (PUT). `DELETE` is a pragmatic V1 addition, not in
+
+        ART-006 - only works while the product has no ProductVersion yet (409
+
+        CONFLICT otherwise; see product_service.delete_product).
+
+
+        Requer: scope q360.read.'
       summary: Obter product detail
       parameters:
       - in: path
@@ -8996,10 +9429,16 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     put:
       operationId: putProductDetail
-      description: "ART-006 `/api/v1/products/{productId}`: `getProduct` (GET),\n `updateProduct` (PUT). `DELETE`\
-        \ is a pragmatic V1 addition, not in\n ART-006 - only works while the product has no ProductVersion yet\
-        \ (409\n CONFLICT otherwise; see product_service.delete_product).\n\nRequer: scope q360.write, permissão\
-        \ product:manage."
+      description: 'ART-006 `/api/v1/products/{productId}`: `getProduct` (GET),
+
+        `updateProduct` (PUT). `DELETE` is a pragmatic V1 addition, not in
+
+        ART-006 - only works while the product has no ProductVersion yet (409
+
+        CONFLICT otherwise; see product_service.delete_product).
+
+
+        Requer: scope q360.write, permissão product:manage.'
       summary: Substituir product detail
       parameters:
       - in: header
@@ -9064,10 +9503,16 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
     delete:
       operationId: deleteProductDetail
-      description: "ART-006 `/api/v1/products/{productId}`: `getProduct` (GET),\n `updateProduct` (PUT). `DELETE`\
-        \ is a pragmatic V1 addition, not in\n ART-006 - only works while the product has no ProductVersion yet\
-        \ (409\n CONFLICT otherwise; see product_service.delete_product).\n\nRequer: scope q360.write, permissão\
-        \ product:manage."
+      description: 'ART-006 `/api/v1/products/{productId}`: `getProduct` (GET),
+
+        `updateProduct` (PUT). `DELETE` is a pragmatic V1 addition, not in
+
+        ART-006 - only works while the product has no ProductVersion yet (409
+
+        CONFLICT otherwise; see product_service.delete_product).
+
+
+        Requer: scope q360.write, permissão product:manage.'
       summary: Remover product detail
       parameters:
       - in: header
@@ -9512,9 +9957,16 @@ paths:
   /api/v1/quotes/renewals:
     post:
       operationId: postQuoteRenewalCreate
-      description: "POST /quotes/renewals - renewal proposal of an existing policy: the\n policy population (except\
-        \ people above the plan permanence age), the\n selection and pre-existing decisions of the source quote,\
-        \ previous\n premium/period as context.\n\nRequer: scope q360.write, permissão quote:create."
+      description: 'POST /quotes/renewals - renewal proposal of an existing policy: the
+
+        policy population (except people above the plan permanence age), the
+
+        selection and pre-existing decisions of the source quote, previous
+
+        premium/period as context.
+
+
+        Requer: scope q360.write, permissão quote:create.'
       summary: Criar quote renewal create
       parameters:
       - in: header
@@ -9568,10 +10020,16 @@ paths:
   /api/v1/quotes/{quote_id}:
     get:
       operationId: getQuoteDetail
-      description: "ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).\n Pragmatic DELETE\
-        \ extension (see apps/quote/application/quote_service.delete_quote):\n only non-protected statuses (DRAFT\
-        \ / READY / REJECTED / EXPIRED / CANCELLED)\n can actually be deleted; APPROVED/IN_REVIEW/BOUND raise QUOTE-DELETE-BLOCKED.\n\
-        \nRequer: scope q360.read."
+      description: 'ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).
+
+        Pragmatic DELETE extension (see apps/quote/application/quote_service.delete_quote):
+
+        only non-protected statuses (DRAFT / READY / REJECTED / EXPIRED / CANCELLED)
+
+        can actually be deleted; APPROVED/IN_REVIEW/BOUND raise QUOTE-DELETE-BLOCKED.
+
+
+        Requer: scope q360.read.'
       summary: Obter quote detail
       parameters:
       - in: path
@@ -9612,10 +10070,16 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     put:
       operationId: putQuoteDetail
-      description: "ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).\n Pragmatic DELETE\
-        \ extension (see apps/quote/application/quote_service.delete_quote):\n only non-protected statuses (DRAFT\
-        \ / READY / REJECTED / EXPIRED / CANCELLED)\n can actually be deleted; APPROVED/IN_REVIEW/BOUND raise QUOTE-DELETE-BLOCKED.\n\
-        \nRequer: scope q360.write, permissão quote:edit."
+      description: 'ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).
+
+        Pragmatic DELETE extension (see apps/quote/application/quote_service.delete_quote):
+
+        only non-protected statuses (DRAFT / READY / REJECTED / EXPIRED / CANCELLED)
+
+        can actually be deleted; APPROVED/IN_REVIEW/BOUND raise QUOTE-DELETE-BLOCKED.
+
+
+        Requer: scope q360.write, permissão quote:edit.'
       summary: Substituir quote detail
       parameters:
       - in: header
@@ -9680,10 +10144,16 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
     delete:
       operationId: deleteQuoteDetail
-      description: "ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).\n Pragmatic DELETE\
-        \ extension (see apps/quote/application/quote_service.delete_quote):\n only non-protected statuses (DRAFT\
-        \ / READY / REJECTED / EXPIRED / CANCELLED)\n can actually be deleted; APPROVED/IN_REVIEW/BOUND raise QUOTE-DELETE-BLOCKED.\n\
-        \nRequer: scope q360.write, permissão quote:edit."
+      description: 'ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).
+
+        Pragmatic DELETE extension (see apps/quote/application/quote_service.delete_quote):
+
+        only non-protected statuses (DRAFT / READY / REJECTED / EXPIRED / CANCELLED)
+
+        can actually be deleted; APPROVED/IN_REVIEW/BOUND raise QUOTE-DELETE-BLOCKED.
+
+
+        Requer: scope q360.write, permissão quote:edit.'
       summary: Remover quote detail
       parameters:
       - in: header
@@ -9733,8 +10203,14 @@ paths:
   /api/v1/quotes/{quote_id}/adjustments:
     get:
       operationId: getQuoteAdjustmentListCreate
-      description: "`GET` lists the adjustments (agravamentos/descontos). `POST` applies\n one (reason required,\
-        \ re-prices) — or only simulates it with\n `?dryRun=true`.\n\nRequer: scope q360.read."
+      description: '`GET` lists the adjustments (agravamentos/descontos). `POST` applies
+
+        one (reason required, re-prices) — or only simulates it with
+
+        `?dryRun=true`.
+
+
+        Requer: scope q360.read.'
       summary: Listar quote adjustment list create
       parameters:
       - in: path
@@ -9794,9 +10270,17 @@ paths:
           description: Configuração/cálculo impossível (PRICING-CONFIG, PRICING-FAILED).
     post:
       operationId: postQuoteAdjustmentListCreate
-      description: "`GET` lists the adjustments (agravamentos/descontos). `POST` applies\n one (reason required,\
-        \ re-prices) — or only simulates it with\n `?dryRun=true`.\n\nRequer: scope q360.write, permissão quote:calculate.\n\
-        \ndryRun=true devolve AdjustmentDryRun (200); caso contrário 201 com {adjustment, quote, impact}."
+      description: '`GET` lists the adjustments (agravamentos/descontos). `POST` applies
+
+        one (reason required, re-prices) — or only simulates it with
+
+        `?dryRun=true`.
+
+
+        Requer: scope q360.write, permissão quote:calculate.
+
+
+        dryRun=true devolve AdjustmentDryRun (200); caso contrário 201 com {adjustment, quote, impact}.'
       summary: Criar quote adjustment list create
       parameters:
       - in: header
@@ -10014,10 +10498,16 @@ paths:
   /api/v1/quotes/{quote_id}/claims-context:
     get:
       operationId: getQuoteClaimsContext
-      description: "GET /quotes/{id}/claims-context - what the claims history says about\n this quote's client (loss\
-        \ ratio, frequency, months available — the 3\n years asked on transfer from another insurer) and the latest\
-        \ projections.\n Aggregates only; needs audit:read (health data).\n\nRequer: scope q360.read, permissão\
-        \ audit:read."
+      description: 'GET /quotes/{id}/claims-context - what the claims history says about
+
+        this quote''s client (loss ratio, frequency, months available — the 3
+
+        years asked on transfer from another insurer) and the latest projections.
+
+        Aggregates only; needs audit:read (health data).
+
+
+        Requer: scope q360.read, permissão audit:read.'
       summary: Obter quote claims context
       parameters:
       - in: path
@@ -10124,10 +10614,18 @@ paths:
   /api/v1/quotes/{quote_id}/decision:
     post:
       operationId: postQuoteDecision
-      description: "ART-006 `/api/v1/quotes/{quoteId}/decision`: `decideQuote` (POST) —\n handles APPROVE/REJECT/RETURN\
-        \ through one endpoint (`DecisionRequest`),\n gated by scope `q360.approve` uniformly and by a DOC-001 s18\
-        \ permission\n that varies per decision (quote:approve/quote:reject/quote:review —\n see Commands & Authority\
-        \ sheet, ART-009).\n\nRequer: scope q360.approve."
+      description: 'ART-006 `/api/v1/quotes/{quoteId}/decision`: `decideQuote` (POST) —
+
+        handles APPROVE/REJECT/RETURN through one endpoint (`DecisionRequest`),
+
+        gated by scope `q360.approve` uniformly and by a DOC-001 s18 permission
+
+        that varies per decision (quote:approve/quote:reject/quote:review —
+
+        see Commands & Authority sheet, ART-009).
+
+
+        Requer: scope q360.approve.'
       summary: Criar quote decision
       parameters:
       - in: header
@@ -10237,9 +10735,14 @@ paths:
   /api/v1/quotes/{quote_id}/members:
     get:
       operationId: getQuoteMemberListCreate
-      description: "ART-006 `/api/v1/quotes/{quoteId}/members`: `addQuoteMember` (POST).\n `GET` (list) is a pragmatic\
-        \ V1 addition, not in ART-006 — `Quote` has\n no population field at all, see OPEN_DECISIONS.md#S04-LISTING-GAPS-001.\n\
-        \nRequer: scope q360.read."
+      description: 'ART-006 `/api/v1/quotes/{quoteId}/members`: `addQuoteMember` (POST).
+
+        `GET` (list) is a pragmatic V1 addition, not in ART-006 — `Quote` has
+
+        no population field at all, see OPEN_DECISIONS.md#S04-LISTING-GAPS-001.
+
+
+        Requer: scope q360.read.'
       summary: Listar quote member list create
       parameters:
       - in: query
@@ -10290,9 +10793,14 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     post:
       operationId: postQuoteMemberListCreate
-      description: "ART-006 `/api/v1/quotes/{quoteId}/members`: `addQuoteMember` (POST).\n `GET` (list) is a pragmatic\
-        \ V1 addition, not in ART-006 — `Quote` has\n no population field at all, see OPEN_DECISIONS.md#S04-LISTING-GAPS-001.\n\
-        \nRequer: scope q360.write, permissão quote:edit."
+      description: 'ART-006 `/api/v1/quotes/{quoteId}/members`: `addQuoteMember` (POST).
+
+        `GET` (list) is a pragmatic V1 addition, not in ART-006 — `Quote` has
+
+        no population field at all, see OPEN_DECISIONS.md#S04-LISTING-GAPS-001.
+
+
+        Requer: scope q360.write, permissão quote:edit.'
       summary: Criar quote member list create
       parameters:
       - in: header
@@ -10417,9 +10925,14 @@ paths:
   /api/v1/quotes/{quote_id}/members/{member_id}/pre-existing:
     put:
       operationId: putQuoteMemberPreExisting
-      description: "`PUT /quotes/{id}/members/{memberId}/pre-existing` — the underwriting\n decision for a pre-existing\
-        \ condition (6 treatments of the PDF);\n `DELETE` clears it. Both need a reason and re-price the quote.\n\
-        \nRequer: scope q360.write, permissão quote:edit."
+      description: '`PUT /quotes/{id}/members/{memberId}/pre-existing` — the underwriting
+
+        decision for a pre-existing condition (6 treatments of the PDF);
+
+        `DELETE` clears it. Both need a reason and re-price the quote.
+
+
+        Requer: scope q360.write, permissão quote:edit.'
       summary: Substituir quote member pre existing
       parameters:
       - in: header
@@ -10490,9 +11003,14 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
     delete:
       operationId: deleteQuoteMemberPreExisting
-      description: "`PUT /quotes/{id}/members/{memberId}/pre-existing` — the underwriting\n decision for a pre-existing\
-        \ condition (6 treatments of the PDF);\n `DELETE` clears it. Both need a reason and re-price the quote.\n\
-        \nRequer: scope q360.write, permissão quote:edit."
+      description: '`PUT /quotes/{id}/members/{memberId}/pre-existing` — the underwriting
+
+        decision for a pre-existing condition (6 treatments of the PDF);
+
+        `DELETE` clears it. Both need a reason and re-price the quote.
+
+
+        Requer: scope q360.write, permissão quote:edit.'
       summary: Remover quote member pre existing
       parameters:
       - in: header
@@ -10552,8 +11070,12 @@ paths:
   /api/v1/quotes/{quote_id}/policy:
     post:
       operationId: postIssuePolicy
-      description: "`POST /api/v1/quotes/{quoteId}/policy` — PO-APO-1: the moment the\n tomador's signature turns\
-        \ a Quote into a contract.\n\nRequer: scope q360.approve, permissão quote:approve."
+      description: '`POST /api/v1/quotes/{quoteId}/policy` — PO-APO-1: the moment the
+
+        tomador''s signature turns a Quote into a contract.
+
+
+        Requer: scope q360.approve, permissão quote:approve.'
       summary: Criar issue policy
       parameters:
       - in: header
@@ -10619,10 +11141,16 @@ paths:
   /api/v1/quotes/{quote_id}/policy-draft:
     get:
       operationId: getPolicyDraft
-      description: "`GET /api/v1/quotes/{quoteId}/policy-draft` — o ecrã de emissão do GTE:\n todos os termos da\
-        \ apólice já preenchidos a partir da cotação aprovada\n (titular, plano, prémio, prestações, pessoas seguras,\
-        \ coberturas, franquia,\n carências, exclusões) e os valores por omissão de assinatura e pagamento.\n\n\
-        Requer: scope q360.read."
+      description: '`GET /api/v1/quotes/{quoteId}/policy-draft` — o ecrã de emissão do GTE:
+
+        todos os termos da apólice já preenchidos a partir da cotação aprovada
+
+        (titular, plano, prémio, prestações, pessoas seguras, coberturas, franquia,
+
+        carências, exclusões) e os valores por omissão de assinatura e pagamento.
+
+
+        Requer: scope q360.read.'
       summary: Obter policy draft
       parameters:
       - in: path
@@ -10664,9 +11192,16 @@ paths:
   /api/v1/quotes/{quote_id}/policy/emit:
     post:
       operationId: postEmitPolicy
-      description: "`POST /api/v1/quotes/{quoteId}/policy/emit` — emite a apólice num só\n passo: regista a assinatura\
-        \ presencial, (opcionalmente) o pagamento da\n 1.ª prestação e gera a apólice digital. Sem `payment`, a\
-        \ apólice fica a\n aguardar o pagamento.\n\nRequer: scope q360.approve, permissão quote:approve."
+      description: '`POST /api/v1/quotes/{quoteId}/policy/emit` — emite a apólice num só
+
+        passo: regista a assinatura presencial, (opcionalmente) o pagamento da
+
+        1.ª prestação e gera a apólice digital. Sem `payment`, a apólice fica a
+
+        aguardar o pagamento.
+
+
+        Requer: scope q360.approve, permissão quote:approve.'
       summary: Criar emit policy
       parameters:
       - in: header
@@ -10732,9 +11267,16 @@ paths:
   /api/v1/quotes/{quote_id}/preview:
     post:
       operationId: postQuotePreview
-      description: "`POST /quotes/{id}/preview` — recalculates with a different selection\n and/or extra adjustments\
-        \ WITHOUT saving anything (no pricing run, audit\n or outbox); answers with the full calculation, the saved\
-        \ baseline and the\n delta.\n\nRequer: scope q360.write, permissão quote:calculate."
+      description: '`POST /quotes/{id}/preview` — recalculates with a different selection
+
+        and/or extra adjustments WITHOUT saving anything (no pricing run, audit
+
+        or outbox); answers with the full calculation, the saved baseline and the
+
+        delta.
+
+
+        Requer: scope q360.write, permissão quote:calculate.'
       summary: Criar quote preview
       parameters:
       - in: path
@@ -10867,8 +11409,12 @@ paths:
   /api/v1/quotes/{quote_id}/proposal:
     get:
       operationId: getQuoteProposal
-      description: "ART-006 `/api/v1/quotes/{quoteId}/proposal`: `generateQuoteProposal`\n (POST, 202), `getQuoteProposal`\
-        \ (GET).\n\nRequer: scope q360.read."
+      description: 'ART-006 `/api/v1/quotes/{quoteId}/proposal`: `generateQuoteProposal`
+
+        (POST, 202), `getQuoteProposal` (GET).
+
+
+        Requer: scope q360.read.'
       summary: Obter quote proposal
       parameters:
       - in: path
@@ -10909,8 +11455,12 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     post:
       operationId: postQuoteProposal
-      description: "ART-006 `/api/v1/quotes/{quoteId}/proposal`: `generateQuoteProposal`\n (POST, 202), `getQuoteProposal`\
-        \ (GET).\n\nRequer: scope q360.write."
+      description: 'ART-006 `/api/v1/quotes/{quoteId}/proposal`: `generateQuoteProposal`
+
+        (POST, 202), `getQuoteProposal` (GET).
+
+
+        Requer: scope q360.write.'
       summary: Criar quote proposal
       parameters:
       - in: header
@@ -10970,9 +11520,14 @@ paths:
   /api/v1/quotes/{quote_id}/proposals:
     get:
       operationId: getQuoteProposalListCreate
-      description: "R8: POST generates a proposal (PDF/DOCX/HTML) from the selected\n scenario (or an explicit `scenarioId`,\
-        \ or the current quote) using a\n configurable template; GET lists the generated documents (history).\n\n\
-        Requer: scope q360.read."
+      description: 'R8: POST generates a proposal (PDF/DOCX/HTML) from the selected
+
+        scenario (or an explicit `scenarioId`, or the current quote) using a
+
+        configurable template; GET lists the generated documents (history).
+
+
+        Requer: scope q360.read.'
       summary: Listar quote proposal list create
       parameters:
       - in: path
@@ -11015,9 +11570,14 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     post:
       operationId: postQuoteProposalListCreate
-      description: "R8: POST generates a proposal (PDF/DOCX/HTML) from the selected\n scenario (or an explicit `scenarioId`,\
-        \ or the current quote) using a\n configurable template; GET lists the generated documents (history).\n\n\
-        Requer: scope q360.write, permissão quote:calculate."
+      description: 'R8: POST generates a proposal (PDF/DOCX/HTML) from the selected
+
+        scenario (or an explicit `scenarioId`, or the current quote) using a
+
+        configurable template; GET lists the generated documents (history).
+
+
+        Requer: scope q360.write, permissão quote:calculate.'
       summary: Criar quote proposal list create
       parameters:
       - in: header
@@ -11082,8 +11642,12 @@ paths:
   /api/v1/quotes/{quote_id}/proposals/preview:
     get:
       operationId: getQuoteProposalPreview
-      description: "GET /quotes/{id}/proposals/preview?scenarioId=&templateCode= - the\n proposal as HTML, nothing\
-        \ saved.\n\nRequer: scope q360.read."
+      description: 'GET /quotes/{id}/proposals/preview?scenarioId=&templateCode= - the
+
+        proposal as HTML, nothing saved.
+
+
+        Requer: scope q360.read.'
       summary: Obter quote proposal preview
       parameters:
       - in: path
@@ -11148,9 +11712,14 @@ paths:
   /api/v1/quotes/{quote_id}/renewal/indexation:
     post:
       operationId: postQuoteIndexation
-      description: "POST /quotes/{id}/renewal/indexation[?dryRun=true] - indexes the plan\n capitals by the medical\
-        \ inflation (PDF: review capitals on every\n renewal).\n\nRequer: scope q360.write, permissão quote:edit,\
-        \ permissão quote:calculate."
+      description: 'POST /quotes/{id}/renewal/indexation[?dryRun=true] - indexes the plan
+
+        capitals by the medical inflation (PDF: review capitals on every
+
+        renewal).
+
+
+        Requer: scope q360.write, permissão quote:edit, permissão quote:calculate.'
       summary: Criar quote indexation
       parameters:
       - in: header
@@ -11221,9 +11790,16 @@ paths:
   /api/v1/quotes/{quote_id}/requirements:
     get:
       operationId: getQuoteRequirements
-      description: "GET /quotes/{id}/requirements - underwriting requirements and alerts\n (clinical questionnaire,\
-        \ medical exams, age limits, group size, network\n coverage, prior authorization, evacuation terms, waiting\
-        \ periods,\n exclusions...) derived from the plan settings and the population.\n\nRequer: scope q360.read."
+      description: 'GET /quotes/{id}/requirements - underwriting requirements and alerts
+
+        (clinical questionnaire, medical exams, age limits, group size, network
+
+        coverage, prior authorization, evacuation terms, waiting periods,
+
+        exclusions...) derived from the plan settings and the population.
+
+
+        Requer: scope q360.read.'
       summary: Obter quote requirements
       parameters:
       - in: path
@@ -11310,9 +11886,16 @@ paths:
   /api/v1/quotes/{quote_id}/scenarios:
     get:
       operationId: getQuoteScenarioListCreate
-      description: "R5: GET lists the scenarios of a quote (with `stale` when their stored\n result no longer matches\
-        \ the current plan/tariffs/population); POST\n creates one (from the current state of the quote unless `parameters`\
-        \ is\n given) and calculates it.\n\nRequer: scope q360.read."
+      description: 'R5: GET lists the scenarios of a quote (with `stale` when their stored
+
+        result no longer matches the current plan/tariffs/population); POST
+
+        creates one (from the current state of the quote unless `parameters` is
+
+        given) and calculates it.
+
+
+        Requer: scope q360.read.'
       summary: Listar quote scenario list create
       parameters:
       - in: path
@@ -11355,9 +11938,16 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     post:
       operationId: postQuoteScenarioListCreate
-      description: "R5: GET lists the scenarios of a quote (with `stale` when their stored\n result no longer matches\
-        \ the current plan/tariffs/population); POST\n creates one (from the current state of the quote unless `parameters`\
-        \ is\n given) and calculates it.\n\nRequer: scope q360.write, permissão quote:calculate."
+      description: 'R5: GET lists the scenarios of a quote (with `stale` when their stored
+
+        result no longer matches the current plan/tariffs/population); POST
+
+        creates one (from the current state of the quote unless `parameters` is
+
+        given) and calculates it.
+
+
+        Requer: scope q360.write, permissão quote:calculate.'
       summary: Criar quote scenario list create
       parameters:
       - in: header
@@ -11423,9 +12013,14 @@ paths:
   /api/v1/quotes/{quote_id}/scenarios/compare:
     get:
       operationId: getQuoteScenarioCompare
-      description: "GET /quotes/{id}/scenarios/compare?ids=a,b - side by side: total premium\n and delta, coverages\
-        \ (capital, participation, waiting days) with what\n differs, premium components, adjustments and the A-E\
-        \ option.\n\nRequer: scope q360.read."
+      description: 'GET /quotes/{id}/scenarios/compare?ids=a,b - side by side: total premium
+
+        and delta, coverages (capital, participation, waiting days) with what
+
+        differs, premium components, adjustments and the A-E option.
+
+
+        Requer: scope q360.read.'
       summary: Obter quote scenario compare
       parameters:
       - in: query
@@ -11534,9 +12129,14 @@ paths:
   /api/v1/quotes/{quote_id}/selection:
     get:
       operationId: getQuoteSelection
-      description: "`PUT /quotes/{id}/selection` — optional coverages chosen by the\n customer (PDF \"O\"), the\
-        \ A-E participation option and \"what if\" capital\n overrides. Re-prices the quote (it returns to READY\
-        \ when it was ready).\n\nRequer: scope q360.write, permissão quote:edit."
+      description: '`PUT /quotes/{id}/selection` — optional coverages chosen by the
+
+        customer (PDF "O"), the A-E participation option and "what if" capital
+
+        overrides. Re-prices the quote (it returns to READY when it was ready).
+
+
+        Requer: scope q360.write, permissão quote:edit.'
       summary: Obter quote selection
       parameters:
       - in: path
@@ -11577,9 +12177,14 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     put:
       operationId: putQuoteSelection
-      description: "`PUT /quotes/{id}/selection` — optional coverages chosen by the\n customer (PDF \"O\"), the\
-        \ A-E participation option and \"what if\" capital\n overrides. Re-prices the quote (it returns to READY\
-        \ when it was ready).\n\nRequer: scope q360.write, permissão quote:edit."
+      description: '`PUT /quotes/{id}/selection` — optional coverages chosen by the
+
+        customer (PDF "O"), the A-E participation option and "what if" capital
+
+        overrides. Re-prices the quote (it returns to READY when it was ready).
+
+
+        Requer: scope q360.write, permissão quote:edit.'
       summary: Substituir quote selection
       parameters:
       - in: header
@@ -11714,8 +12319,12 @@ paths:
   /api/v1/quotes/{quote_id}/versions:
     get:
       operationId: getQuoteVersionListCreate
-      description: "GET lists the versions of a quote (newest first); POST saves the\n current state as a manual\
-        \ version (reason required).\n\nRequer: scope q360.read."
+      description: 'GET lists the versions of a quote (newest first); POST saves the
+
+        current state as a manual version (reason required).
+
+
+        Requer: scope q360.read.'
       summary: Listar quote version list create
       parameters:
       - in: path
@@ -11758,8 +12367,12 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     post:
       operationId: postQuoteVersionListCreate
-      description: "GET lists the versions of a quote (newest first); POST saves the\n current state as a manual\
-        \ version (reason required).\n\nRequer: scope q360.write, permissão quote:edit."
+      description: 'GET lists the versions of a quote (newest first); POST saves the
+
+        current state as a manual version (reason required).
+
+
+        Requer: scope q360.write, permissão quote:edit.'
       summary: Criar quote version list create
       parameters:
       - in: header
@@ -11871,8 +12484,12 @@ paths:
   /api/v1/quotes/{quote_id}/versions/{version_no}/diff:
     get:
       operationId: getQuoteVersionDiff
-      description: "GET /quotes/{id}/versions/{n}/diff[?against=m] - what changed between\n version n and version\
-        \ m (or the current state).\n\nRequer: scope q360.read."
+      description: 'GET /quotes/{id}/versions/{n}/diff[?against=m] - what changed between
+
+        version n and version m (or the current state).
+
+
+        Requer: scope q360.read.'
       summary: Obter quote version diff
       parameters:
       - in: query
@@ -12000,8 +12617,12 @@ paths:
   /api/v1/rating-tables:
     get:
       operationId: getRatingTableCreate
-      description: "`GET` (list) is a pragmatic V1 addition, not in ART-006 — see\n OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.\n\
-        \nRequer: scope q360.read."
+      description: '`GET` (list) is a pragmatic V1 addition, not in ART-006 — see
+
+        OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
+
+
+        Requer: scope q360.read.'
       summary: Listar rating table create
       parameters:
       - in: query
@@ -12051,8 +12672,12 @@ paths:
           description: Sem autorização (AUTH-403 / SEC-403).
     post:
       operationId: postRatingTableCreate
-      description: "`GET` (list) is a pragmatic V1 addition, not in ART-006 — see\n OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.\n\
-        \nRequer: scope q360.admin, permissão pricing-config:manage."
+      description: '`GET` (list) is a pragmatic V1 addition, not in ART-006 — see
+
+        OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
+
+
+        Requer: scope q360.admin, permissão pricing-config:manage.'
       summary: Criar rating table create
       parameters:
       - in: header
@@ -12106,9 +12731,14 @@ paths:
   /api/v1/rating-tables/{rating_table_id}:
     delete:
       operationId: deleteRatingTableDetail
-      description: "ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not\n in ART-006. `PATCH`/`DELETE`\
-        \ only work while `status=DRAFT` — see\n rating_table_service.update_rating_table/delete_rating_table.\n\
-        \nRequer: scope q360.admin, permissão pricing-config:manage."
+      description: 'ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+
+        in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT` — see
+
+        rating_table_service.update_rating_table/delete_rating_table.
+
+
+        Requer: scope q360.admin, permissão pricing-config:manage.'
       summary: Remover rating table detail
       parameters:
       - in: header
@@ -12157,9 +12787,14 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
     patch:
       operationId: patchRatingTableDetail
-      description: "ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not\n in ART-006. `PATCH`/`DELETE`\
-        \ only work while `status=DRAFT` — see\n rating_table_service.update_rating_table/delete_rating_table.\n\
-        \nRequer: scope q360.admin, permissão pricing-config:manage."
+      description: 'ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+
+        in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT` — see
+
+        rating_table_service.update_rating_table/delete_rating_table.
+
+
+        Requer: scope q360.admin, permissão pricing-config:manage.'
       summary: Alterar rating table detail
       parameters:
       - in: header
@@ -12224,10 +12859,20 @@ paths:
   /api/v1/relationship-codes:
     get:
       operationId: getRelationshipCodeList
-      description: "Pragmatic V1 addition, not in ART-006 — see\n apps/client/application/relationship_service.py\
-        \ module docstring and\n ROADMAP_ANGOLA_CUSTOMIZATION.md OD-003. Lists the real, DB-backed\n catalogue of\
-        \ relationship codes for the current tenant, seeding it on\n first use — the frontend should build its \"\
-        Relação\" dropdown from\n this, never from a hardcoded array.\n\nRequer: scope q360.read."
+      description: 'Pragmatic V1 addition, not in ART-006 — see
+
+        apps/client/application/relationship_service.py module docstring and
+
+        ROADMAP_ANGOLA_CUSTOMIZATION.md OD-003. Lists the real, DB-backed
+
+        catalogue of relationship codes for the current tenant, seeding it on
+
+        first use — the frontend should build its "Relação" dropdown from
+
+        this, never from a hardcoded array.
+
+
+        Requer: scope q360.read.'
       summary: Listar relationship code list
       parameters:
       - in: query
@@ -12267,8 +12912,12 @@ paths:
   /api/v1/reviews:
     get:
       operationId: getReviewQueue
-      description: "ART-006 `/api/v1/reviews`: `listReviews` (GET) — the reviewer/approver\n worklist.\n\nRequer:\
-        \ scope q360.approve, permissão quote:review."
+      description: 'ART-006 `/api/v1/reviews`: `listReviews` (GET) — the reviewer/approver
+
+        worklist.
+
+
+        Requer: scope q360.approve, permissão quote:review.'
       summary: Listar review queue
       parameters:
       - in: query
@@ -12319,8 +12968,12 @@ paths:
   /api/v1/rule-versions:
     get:
       operationId: getRuleVersionCreate
-      description: "`GET` (list, optional `?ruleDomain=`) is a pragmatic V1 addition,\n not in ART-006 — see OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.\n\
-        \nRequer: scope q360.read."
+      description: '`GET` (list, optional `?ruleDomain=`) is a pragmatic V1 addition,
+
+        not in ART-006 — see OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
+
+
+        Requer: scope q360.read.'
       summary: Listar rule version create
       parameters:
       - in: query
@@ -12375,8 +13028,12 @@ paths:
           description: Sem autorização (AUTH-403 / SEC-403).
     post:
       operationId: postRuleVersionCreate
-      description: "`GET` (list, optional `?ruleDomain=`) is a pragmatic V1 addition,\n not in ART-006 — see OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.\n\
-        \nRequer: scope q360.admin."
+      description: '`GET` (list, optional `?ruleDomain=`) is a pragmatic V1 addition,
+
+        not in ART-006 — see OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
+
+
+        Requer: scope q360.admin.'
       summary: Criar rule version create
       parameters:
       - in: header
@@ -12430,8 +13087,12 @@ paths:
   /api/v1/rule-versions/{rule_version_id}:
     delete:
       operationId: deleteRuleVersionDetail
-      description: "ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not\n in ART-006. `PATCH`/`DELETE`\
-        \ only work while `status=DRAFT`.\n\nRequer: scope q360.admin."
+      description: 'ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+
+        in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`.
+
+
+        Requer: scope q360.admin.'
       summary: Remover rule version detail
       parameters:
       - in: header
@@ -12480,8 +13141,12 @@ paths:
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
     patch:
       operationId: patchRuleVersionDetail
-      description: "ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not\n in ART-006. `PATCH`/`DELETE`\
-        \ only work while `status=DRAFT`.\n\nRequer: scope q360.admin."
+      description: 'ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+
+        in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`.
+
+
+        Requer: scope q360.admin.'
       summary: Alterar rule version detail
       parameters:
       - in: header
@@ -12701,9 +13366,12 @@ paths:
   /api/v1/scenarios/{scenario_id}/apply:
     post:
       operationId: postScenarioApply
-      description: "POST /scenarios/{id}/apply - makes the scenario the official state of\n the quote (reason required,\
-        \ authority limits apply, quote is re-priced).\n\nRequer: scope q360.write, permissão quote:calculate, permissão\
-        \ quote:edit."
+      description: 'POST /scenarios/{id}/apply - makes the scenario the official state of
+
+        the quote (reason required, authority limits apply, quote is re-priced).
+
+
+        Requer: scope q360.write, permissão quote:calculate, permissão quote:edit.'
       summary: Criar scenario apply
       parameters:
       - in: header
@@ -12953,9 +13621,14 @@ paths:
   /api/v1/system-parameters:
     get:
       operationId: getSystemParameterList
-      description: "GET lists every parameter with its current value, default, whether the\n GTE may change it (OPERATIONAL)\
-        \ or not (STRUCTURAL) and where it is used.\n Filter: `?category=OPERATIONAL|STRUCTURAL`.\n\nRequer: scope\
-        \ q360.read."
+      description: 'GET lists every parameter with its current value, default, whether the
+
+        GTE may change it (OPERATIONAL) or not (STRUCTURAL) and where it is used.
+
+        Filter: `?category=OPERATIONAL|STRUCTURAL`.
+
+
+        Requer: scope q360.read.'
       summary: Listar system parameter list
       parameters:
       - in: query
