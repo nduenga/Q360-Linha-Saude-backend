@@ -1,8 +1,9 @@
 """Dev-only convenience: mint a Bearer JWT without a running OIDC provider.
 
-Uses the same `OIDC_STATIC_VERIFICATION_KEY` escape hatch already wired
-into `JwtActorAdapter` (apps/foundation/infrastructure/jwt_actor_adapter.py)
-for tests - this command just lets a human get an equivalent token to
+Signs with the same shared secret `JwtActorAdapter`
+(apps/foundation/infrastructure/jwt_actor_adapter.py) verifies with:
+`Q360_JWT_SIGNING_KEY`, else the `OIDC_STATIC_VERIFICATION_KEY` escape hatch
+used by tests - this command just lets a human get an equivalent token to
 paste into curl/Postman/the frontend while manually exercising the API
 locally. `config/settings/production.py` refuses to start at all if this
 key is set, so this command is structurally unusable in production.
@@ -24,7 +25,7 @@ from apps.foundation.infrastructure.models import Tenant
 
 
 class Command(BaseCommand):
-    help = "Mint a local dev Bearer token signed with OIDC_STATIC_VERIFICATION_KEY."
+    help = "Mint a local dev Bearer token signed with Q360_JWT_SIGNING_KEY or OIDC_STATIC_VERIFICATION_KEY."
 
     def add_arguments(self, parser):
         parser.add_argument("--tenant-code", default="dev-tenant")
@@ -42,9 +43,11 @@ class Command(BaseCommand):
         parser.add_argument("--ttl-seconds", type=int, default=3600)
 
     def handle(self, *args, **options):
-        if not settings.OIDC_STATIC_VERIFICATION_KEY:
+        # Same precedence as JwtActorAdapter, otherwise the token fails signature verification.
+        signing_key = settings.Q360_JWT_SIGNING_KEY or settings.OIDC_STATIC_VERIFICATION_KEY
+        if not signing_key:
             raise CommandError(
-                "OIDC_STATIC_VERIFICATION_KEY não está definida. Adicione-a ao seu .env (só para desenvolvimento, ver .env.example) antes de gerar tokens locais."
+                "Nem Q360_JWT_SIGNING_KEY nem OIDC_STATIC_VERIFICATION_KEY estão definidas. Adicione uma delas ao seu .env (só para desenvolvimento, ver .env.example) antes de gerar tokens locais."
             )
         if "HS256" not in settings.OIDC_ALGORITHMS:
             raise CommandError(
@@ -67,5 +70,5 @@ class Command(BaseCommand):
             settings.OIDC_SCOPE_CLAIM: options["scopes"],
             "exp": int(time.time()) + options["ttl_seconds"],
         }
-        token = jwt.encode(claims, settings.OIDC_STATIC_VERIFICATION_KEY, algorithm="HS256")
+        token = jwt.encode(claims, signing_key, algorithm="HS256")
         self.stdout.write(token)

@@ -73,6 +73,20 @@ class Quote(TenantScopedModel):
     updated_at = models.DateTimeField(auto_now=True)
     row_version = models.BigIntegerField(default=0)
 
+    source_quote = models.ForeignKey(
+    "self",
+    null=True,
+    blank=True,
+    on_delete=models.PROTECT,
+    related_name="cloned_quotes",
+    db_column="source_quote_id",
+    )
+
+    clone_reason = models.TextField(
+        blank=True,
+        default="",
+    )
+
     class Meta:
         managed = False
         db_table = "quote"
@@ -104,18 +118,7 @@ class QuoteMember(TenantScopedModel):
         managed = False
         db_table = "quote_member"
     
-    source_quote = models.ForeignKey(
-    "self",
-    null=True,
-    blank=True,
-    on_delete=models.PROTECT,
-    related_name="derived_quotes",
-)
-
-    clone_reason = models.TextField(
-        blank=True,
-        default="",
-    )
+    
 
 
 class QuoteAdjustment(TenantScopedModel):

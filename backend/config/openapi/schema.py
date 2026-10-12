@@ -6,6 +6,7 @@ Idempotency-Key header, OAuth2 scopes/permissions, and the standard
 `application/problem+json` error responses."""
 from __future__ import annotations
 
+import inspect
 import re
 from typing import Any
 
@@ -151,7 +152,7 @@ class Q360AutoSchema(AutoSchema):
         return ["Other"]
 
     def get_summary(self) -> str | None:
-        method_doc = (getattr(self.view, self.method.lower(), None).__doc__ or "").strip()
+        method_doc = inspect.cleandoc(getattr(self.view, self.method.lower(), None).__doc__ or "")
         if method_doc:
             return _first_sentence(method_doc)
         verbs = {"get": "Obter", "post": "Criar", "put": "Substituir", "patch": "Alterar", "delete": "Remover"}
@@ -162,8 +163,9 @@ class Q360AutoSchema(AutoSchema):
         return f"{verb} {name}"
 
     def get_description(self) -> str:
-        method_doc = (getattr(self.view, self.method.lower(), None).__doc__ or "").strip()
-        class_doc = (self.view.__class__.__doc__ or "").strip()
+        # cleandoc: Python 3.13+ already dedents __doc__ at compile time, 3.12 does not.
+        method_doc = inspect.cleandoc(getattr(self.view, self.method.lower(), None).__doc__ or "")
+        class_doc = inspect.cleandoc(self.view.__class__.__doc__ or "")
         parts = [re.sub(r"[ \t]+", " ", p).strip() for p in (class_doc, method_doc) if p]
         extra = self._reg().get("notes")
         scopes, permissions, _ = self._permissions()

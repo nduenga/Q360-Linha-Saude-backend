@@ -123,7 +123,14 @@ MIGRATION_MODULES = {
 }
 
 ROOT_URLCONF = "config.urls"
-TEMPLATES = []
+# Needed by drf-spectacular's Swagger UI at /api/docs.
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "APP_DIRS": True,
+        "OPTIONS": {"context_processors": ["django.template.context_processors.request"]},
+    }
+]
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
