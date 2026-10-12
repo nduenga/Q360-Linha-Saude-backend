@@ -487,7 +487,7 @@ class Command(BaseCommand):
             external_reference="DEMO-EMPRESA-KILAMBA",
             proposer_type="ORGANISATION",
             display_name="Empresa Kilamba, Lda.",
-            registration_number="541000003LA003",
+            registration_number="5410000030",
             email="fabiongila@gmail.com",
             phone="+244 900 000 003",
         )

@@ -1,14 +1,11 @@
-"""Server-side mirror of the frontend's age-band convention
-(`Q360-Linha-Sa-de-frontend/src/domains/pricing/services/ageBand.ts`,
-`backend/DECISIONS_TAKEN.md#age-band-buckets`) — needed here too because
-Quote pricing (Q360-S6-03) has no client-supplied context at all
-(ART-006 `QuotePriceRequest` is just `{recalculate: bool}`), so age bands
-must be computed server-side from each member's real `date_of_birth`.
-Not a business-approved actuarial banding — see DECISIONS_TAKEN.md.
-"""
+"""Cálculo da idade e do escalão etário a partir da data de nascimento."""
+
 from __future__ import annotations
 
 import datetime
+
+from django.utils import timezone
+
 
 _AGE_BAND_BUCKETS: list[tuple[int | None, str]] = [
     (17, "0-17"),
@@ -21,18 +18,32 @@ _AGE_BAND_BUCKETS: list[tuple[int | None, str]] = [
 ]
 
 
-def compute_age(date_of_birth: datetime.date, reference_date: datetime.date) -> int:
-    age = reference_date.year - date_of_birth.year
-    if (reference_date.month, reference_date.day) < (date_of_birth.month, date_of_birth.day):
+def compute_age(date_of_birth: datetime.date) -> int:
+    """Calcula a idade atual com base na data de nascimento."""
+    today = timezone.localdate()
+
+    age = today.year - date_of_birth.year
+
+    if (today.month, today.day) < (
+        date_of_birth.month,
+        date_of_birth.day,
+    ):
         age -= 1
+
     return age
 
 
-def compute_age_band(date_of_birth: datetime.date | None, reference_date: datetime.date) -> str | None:
+def compute_age_band(
+    date_of_birth: datetime.date | None,
+) -> str | None:
+    """Determina o escalão etário sem exigir uma data de referência."""
     if date_of_birth is None:
         return None
-    age = compute_age(date_of_birth, reference_date)
+
+    age = compute_age(date_of_birth)
+
     for max_age, band in _AGE_BAND_BUCKETS:
         if max_age is None or age <= max_age:
             return band
+
     return None

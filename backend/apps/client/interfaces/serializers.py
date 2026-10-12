@@ -6,6 +6,8 @@ from rest_framework import serializers
 
 from apps.client.domain.enums import ImportJobStatus, MemberStatus, ProposerStatus, ProposerType
 from apps.client.domain.nif import NifFormatError, validate_agt_nif
+from apps.client.domain.rules import require_date_of_birth
+from apps.foundation.domain.problem import DomainProblem
 
 
 class ProposerSerializer(serializers.Serializer):
@@ -15,6 +17,7 @@ class ProposerSerializer(serializers.Serializer):
     displayName = serializers.CharField(source="display_name")
     nif = serializers.CharField(allow_null=True)
     registrationNumber = serializers.CharField(source="registration_number", allow_null=True)
+    dateOfBirth = serializers.DateField(source="date_of_birth", allow_null=True)
     email = serializers.CharField(allow_null=True)
     phone = serializers.CharField(allow_null=True)
     address = serializers.CharField(
@@ -30,9 +33,25 @@ class _ProposerNifRequestSerializer(serializers.Serializer):
     """Shared input handling for the canonical NIF and its legacy alias."""
 
     nif = serializers.CharField(min_length=1, max_length=30, required=False)
+    dateOfBirth = serializers.DateField(required=False, allow_null=True, default=None)
     registrationNumber = serializers.CharField(min_length=1, max_length=100, required=False)
 
+    def _proposer_type(self, attrs: dict) -> str | None:
+        """Tipo que decide o formato do NIF: vem no corpo (criar) ou do
+        proponente existente (editar, via `context["proposer_type"]`)."""
+        return attrs.get("proposerType") or self.context.get("proposer_type")
+
+    def _validated_birth_date(self, attrs: dict):
+        """Proponente INDIVIDUAL: data de nascimento obrigatória. Empresa: ignorada."""
+        if self._proposer_type(attrs) != "INDIVIDUAL":
+            return None
+        try:
+            return require_date_of_birth(attrs.get("dateOfBirth"), who="proponente individual")
+        except DomainProblem as exc:
+            raise serializers.ValidationError({"dateOfBirth": str(exc)}) from exc
+
     def _validated_nif(self, attrs: dict) -> tuple[str, str]:
+        proposer_type = self._proposer_type(attrs)
         raw_nif = attrs.get("nif")
         legacy_registration_number = attrs.get("registrationNumber")
 
@@ -40,13 +59,13 @@ class _ProposerNifRequestSerializer(serializers.Serializer):
             raise serializers.ValidationError({"nif": "Indique o NIF."})
 
         try:
-            nif = validate_agt_nif(raw_nif if raw_nif is not None else legacy_registration_number)
+            nif = validate_agt_nif(raw_nif if raw_nif is not None else legacy_registration_number, proposer_type)
         except NifFormatError as exc:
             raise serializers.ValidationError({"nif": str(exc)}) from exc
 
         if raw_nif is not None and legacy_registration_number is not None:
             try:
-                legacy_nif = validate_agt_nif(legacy_registration_number)
+                legacy_nif = validate_agt_nif(legacy_registration_number, proposer_type)
             except NifFormatError as exc:
                 raise serializers.ValidationError({"registrationNumber": str(exc)}) from exc
             if nif != legacy_nif:
@@ -90,6 +109,8 @@ class ProposerCreateRequestSerializer(_ProposerNifRequestSerializer):
             "email": attrs["email"],
             "phone": attrs["phone"],
             "attributes": attrs["attributes"],
+            "date_of_birth": self._validated_birth_date(attrs),
+            "require_birth_date": True,
         }
 
 
@@ -117,6 +138,8 @@ class ProposerUpdateRequestSerializer(_ProposerNifRequestSerializer):
             "phone": attrs["phone"],
             "attributes": attrs["attributes"],
             "row_version": attrs["rowVersion"],
+            "date_of_birth": self._validated_birth_date(attrs),
+            "require_birth_date": True,
         }
 
 
@@ -151,7 +174,9 @@ class MemberCreateRequestSerializer(serializers.Serializer):
     relationshipCode = serializers.CharField(min_length=1, max_length=40)
     firstName = serializers.CharField(allow_null=True, required=False, default=None)
     lastName = serializers.CharField(allow_null=True, required=False, default=None)
-    dateOfBirth = serializers.DateField(allow_null=True, required=False, default=None)
+    # Obrigatória para todo o beneficiário/membro. Email e telefone NÃO existem
+    # aqui: herdam os do titular (campos do proponente).
+    dateOfBirth = serializers.DateField(required=True, allow_null=False)
     sexCode = serializers.CharField(allow_null=True, required=False, default=None)
     attributes = serializers.JSONField(required=False, default=dict)
 
@@ -160,7 +185,7 @@ class MemberUpdateRequestSerializer(serializers.Serializer):
     relationshipCode = serializers.CharField(min_length=1)
     firstName = serializers.CharField(allow_null=True, required=False, default=None)
     lastName = serializers.CharField(allow_null=True, required=False, default=None)
-    dateOfBirth = serializers.DateField(allow_null=True, required=False, default=None)
+    dateOfBirth = serializers.DateField(required=True, allow_null=False)
     sexCode = serializers.CharField(allow_null=True, required=False, default=None)
     attributes = serializers.JSONField(required=False, default=dict)
     rowVersion = serializers.IntegerField(min_value=0)

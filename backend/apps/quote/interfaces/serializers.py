@@ -90,6 +90,8 @@ class _TitularMemberInputSerializer(serializers.Serializer):
     relationshipCode = serializers.CharField(min_length=2, max_length=30, required=False, default="TITULAR")
     firstName = serializers.CharField(max_length=120, allow_null=True, required=False, default=None, allow_blank=True)
     lastName = serializers.CharField(max_length=120, allow_null=True, required=False, default=None, allow_blank=True)
+    # Se vier vazia usa-se a data de nascimento do proponente individual
+    # (o titular é o próprio proponente). Pelo menos uma das duas é obrigatória.
     dateOfBirth = serializers.DateField(allow_null=True, required=False, default=None)
     sexCode = serializers.CharField(max_length=5, allow_null=True, required=False, default=None, allow_blank=True)
     externalReference = serializers.CharField(max_length=120, allow_null=True, required=False, default=None, allow_blank=True)
@@ -105,6 +107,8 @@ class _ProposerInputSerializer(serializers.Serializer):
     externalReference = serializers.CharField(max_length=120, allow_null=True, required=False, default=None, allow_blank=True)
     nif = serializers.CharField(min_length=1, max_length=60)
     registrationNumber = serializers.CharField(min_length=1, max_length=60)
+    # Obrigatória para proponente INDIVIDUAL (validado em `QuoteCreateRequestSerializer`).
+    dateOfBirth = serializers.DateField(required=False, allow_null=True, default=None)
     email = serializers.CharField(max_length=200, required=False, default="", allow_null=True, allow_blank=True)
     phone = serializers.CharField(max_length=60, required=False, default="", allow_null=True, allow_blank=True)
     attributes = serializers.JSONField(required=False, default=None, allow_null=True)
@@ -136,6 +140,26 @@ class QuoteCreateRequestSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 "titularMemberInput só é aceite se também fornecer proposerInput."
             )
+
+        proposer_input = attrs.get("proposerInput")
+        if proposer_input is not None:
+            from apps.client.domain.nif import NifFormatError, validate_agt_nif
+
+            proposer_type = proposer_input.get("proposerType") or "INDIVIDUAL"
+            if proposer_type not in ("INDIVIDUAL", "ORGANISATION"):
+                raise serializers.ValidationError({"proposerInput": {"proposerType": "Tipo inválido."}})
+            # NIF por tipo: individual = 14 caracteres; empresa = 10 dígitos.
+            for field in ("nif", "registrationNumber"):
+                try:
+                    validate_agt_nif(proposer_input[field], proposer_type)
+                except NifFormatError as exc:
+                    raise serializers.ValidationError({"proposerInput": {field: str(exc)}}) from exc
+            if proposer_type == "INDIVIDUAL":
+                titular = attrs.get("titularMemberInput") or {}
+                if proposer_input.get("dateOfBirth") is None and titular.get("dateOfBirth") is None:
+                    raise serializers.ValidationError(
+                        {"proposerInput": {"dateOfBirth": "A data de nascimento é obrigatória para proponentes individuais."}}
+                    )
         return attrs
 
 
@@ -404,6 +428,13 @@ class QuoteRenewalRequestSerializer(serializers.Serializer):
 class QuoteCloneRequestSerializer(serializers.Serializer):
     effectiveDate = serializers.DateField(required=False, allow_null=True, default=None)
     reason = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
+
+
+class QuoteReopenRequestSerializer(serializers.Serializer):
+    """Reabrir uma cotação REJEITADA (volta a DRAFT). `reason` obrigatório."""
+
+    reason = serializers.CharField(min_length=1)
+    rowVersion = serializers.IntegerField(min_value=0)
 
 
 class QuoteVersionSerializer(serializers.Serializer):

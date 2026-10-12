@@ -77,3 +77,55 @@ class MemberDocumentStateError(DomainProblem):
 
     http_status = 409
     problem_code = "CONFLICT"
+
+
+class InvalidNifError(DomainProblem):
+    """NIF fora do formato exigido para o tipo de proponente
+    (INDIVIDUAL: 14 caracteres; ORGANISATION: 10 dígitos)."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+class DateOfBirthRequiredError(DomainProblem):
+    """A data de nascimento é obrigatória para proponentes individuais e
+    para todas as pessoas seguras."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+class TitularRequiredError(DomainProblem):
+    """Tem de existir um titular ativo antes de outras relações."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+class DuplicateTitularError(DomainProblem):
+    """Um proponente individual só pode ter um titular ativo."""
+
+    http_status = 409
+    problem_code = "CONFLICT"
+
+
+class BeneficiaryLimitExceededError(DomainProblem):
+    """Excedido `client.individual_max_beneficiaries`."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+class GenerationGapError(DomainProblem):
+    """Filho/ascendente com diferença de idade inferior a 13 anos."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+class ImportPopulationInvalidError(DomainProblem):
+    """O conjunto de pessoas do ficheiro (mais as já existentes) viola as
+    regras de titular / limite de beneficiários / diferença de idade."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"

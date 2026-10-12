@@ -9,11 +9,40 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
-from apps.client.domain.errors import DuplicateExternalReferenceError, DuplicateNifError, RowVersionMismatchError
+import datetime
+
+from apps.client.domain.enums import ProposerType
+from apps.client.domain.errors import (
+    DuplicateExternalReferenceError,
+    DuplicateNifError,
+    InvalidNifError,
+    RowVersionMismatchError,
+)
+from apps.client.domain.nif import NifFormatError, validate_agt_nif
+from apps.client.domain.rules import require_date_of_birth
 from apps.client.infrastructure.models import Proposer
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
+
+
+def _canonical_nif(nif: str, proposer_type: str) -> str:
+    """NIF por tipo: INDIVIDUAL = 14 caracteres; ORGANISATION = 10 dígitos.
+    Última barreira — vale para a API, para `createQuote` inline, etc."""
+    try:
+        return validate_agt_nif(nif, proposer_type)
+    except NifFormatError as exc:
+        raise InvalidNifError(str(exc)) from exc
+
+
+def _check_date_of_birth(proposer_type: str, date_of_birth: datetime.date | None, *, required: bool):
+    """Proponente individual: data de nascimento obrigatória (quando
+    `required`). Empresa: não tem data de nascimento."""
+    if proposer_type != ProposerType.INDIVIDUAL.value:
+        return None
+    if date_of_birth is None and not required:
+        return None
+    return require_date_of_birth(date_of_birth, who="proponente individual")
 
 
 def create_proposer(
@@ -27,8 +56,15 @@ def create_proposer(
     phone: str,
     address: str | None = None,
     attributes: dict[str, Any] | None,
+    date_of_birth: datetime.date | None = None,
+    require_birth_date: bool = False,
 ) -> Proposer:
+    """`require_birth_date=True` é passado pela API/`createQuote` (obrigatório
+    para INDIVIDUAL); scripts de seed antigos continuam a funcionar sem ele."""
     tenant_id = CurrentTenantProvider.require()
+    nif = _canonical_nif(nif, proposer_type)
+    registration_number = nif
+    date_of_birth = _check_date_of_birth(proposer_type, date_of_birth, required=require_birth_date)
     try:
         with transaction.atomic():
             if Proposer.objects.filter(nif=nif).exists():
@@ -43,6 +79,7 @@ def create_proposer(
                 email=email,
                 phone=phone,
                 address=address,
+                date_of_birth=date_of_birth,
                 attributes_json=attributes or {},
             )
     except IntegrityError as exc:
@@ -78,7 +115,15 @@ def update_proposer(
     address: str | None = None,
     attributes: dict[str, Any] | None,
     row_version: int,
+    date_of_birth: datetime.date | None = None,
+    require_birth_date: bool = False,
 ) -> Proposer:
+    # O tipo de proponente não muda numa edição: é ele que decide o formato do NIF.
+    nif = _canonical_nif(nif, proposer.proposer_type)
+    registration_number = nif
+    date_of_birth = _check_date_of_birth(proposer.proposer_type, date_of_birth, required=require_birth_date)
+    if date_of_birth is None:
+        date_of_birth = proposer.date_of_birth  # não apagar uma data já guardada
     try:
         updated = Proposer.objects.filter(id=proposer.id, row_version=row_version).update(
             display_name=display_name,
@@ -87,6 +132,7 @@ def update_proposer(
             email=email,
             phone=phone,
             address=address,
+            date_of_birth=date_of_birth,
             attributes_json=attributes or {},
             row_version=row_version + 1,
         )

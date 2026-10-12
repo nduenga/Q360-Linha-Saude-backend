@@ -31,6 +31,8 @@ class Proposer(TenantScopedModel):
     external_reference = models.CharField(max_length=100, null=True, blank=True)
     display_name = models.CharField(max_length=250)
     nif = models.CharField(max_length=14, null=True, blank=True)
+    # Obrigatória para proponentes INDIVIDUAL (ver migração 0008); nula nas empresas.
+    date_of_birth = models.DateField(null=True, blank=True)
     registration_number = models.CharField(max_length=100, null=True, blank=True)
     email = models.CharField(max_length=254, null=True, blank=True)
     phone = models.CharField(max_length=30, null=True, blank=True)

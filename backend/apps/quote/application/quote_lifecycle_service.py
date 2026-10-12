@@ -33,6 +33,7 @@ from apps.product.domain.plan_settings import decimal_value
 from apps.quote.application import quote_service, quote_version_service, simulator_service
 from apps.quote.domain.errors import QuoteStateError, ReferencedEntityNotFoundError
 from apps.quote.infrastructure.models import Quote, QuoteAdjustment, QuoteMember
+from datetime import timezone
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _RENEWABLE_POLICY_STATUSES = ("ACTIVE", "EXPIRED")
@@ -94,6 +95,47 @@ def clone_quote(*, quote: Quote, effective_date: datetime.date | None, reason: s
         entity_id=str(copy.id),
         metadata=change_metadata(after={"sourceQuoteId": str(quote.id), "sourceQuoteNumber": quote.quote_number}, reason=reason, skipped=skipped),
     )
+    return copy
+
+@transaction.atomic
+def clone_rejected_quote(*, quote, effective_date, reason):
+    reason = require_reason(reason)
+
+    # Impedir que esta operação seja usada para copiar
+    # cotações que não estejam rejeitadas.
+    source = Quote.objects.select_for_update().get(pk=quote.pk)
+
+    if source.status != "REJECTED":
+        raise ValueError(
+            "Só é possível copiar uma cotação rejeitada."
+        )
+
+    # A nova cotação recebe um novo identificador e número
+    # através do serviço oficial já existente.
+    copy = quote_service.create_quote(
+        proposer_id=source.proposer_id,
+        plan_id=source.plan_id,
+        effective_date=effective_date or timezone.localdate(),
+    )
+
+    # Registar a origem da cópia na nova cotação.
+    # Requer os campos de origem descritos abaixo.
+    copy.source_quote_id = source.id
+    copy.clone_reason = reason
+    copy.save(
+        update_fields=["source_quote", "clone_reason"]
+    )
+
+    # A partir daqui, copiar apenas os dados de negócio
+    # permitidos, usando os serviços existentes para membros.
+    # Não copiar decisões, tarefas de revisão ou o preço antigo.
+    #
+    # 1. Copiar os membros válidos.
+    # 2. Resolver o plano e a tarifa na data efectiva nova.
+    # 3. Executar novamente a elegibilidade.
+    # 4. Recalcular e persistir o novo resultado.
+    # 5. Registar a auditoria.
+
     return copy
 
 

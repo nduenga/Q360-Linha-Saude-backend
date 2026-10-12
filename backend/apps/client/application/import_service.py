@@ -41,8 +41,15 @@ from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.client.application.relationship_service import validate_relationship_code
-from apps.client.domain.enums import ImportJobStatus, ImportType
-from apps.client.domain.errors import ImportCommitNotAllowedError, UnknownRelationshipCodeError
+from apps.client.application.member_service import _category_by_code, _person_label, max_beneficiaries_for_individual
+from apps.client.domain.enums import ImportJobStatus, ImportType, MemberStatus, ProposerType, RelationshipCategory
+from apps.client.domain.errors import (
+    ImportCommitNotAllowedError,
+    ImportPopulationInvalidError,
+    UnknownRelationshipCodeError,
+)
+from apps.client.domain.rules import Person, validate_household
+from apps.foundation.domain.problem import DomainProblem
 from apps.client.infrastructure.models import ImportJob, ImportRowError, InsuredMember, Proposer
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
@@ -159,7 +166,11 @@ def _validate_row(row_number: int, raw: dict[str, str], *, tenant_id) -> _Parsed
                 ("relationshipCode", "VALIDATION-400", f"'{relationship_code}' is not a valid relationshipCode")
             )
 
-    date_of_birth, date_error = _parse_date((raw.get("dateOfBirth") or "").strip())
+    raw_dob = (raw.get("dateOfBirth") or "").strip()
+    if not raw_dob:
+        # Regra de negócio: data de nascimento obrigatória para toda a pessoa segura.
+        parsed.errors.append(("dateOfBirth", "VALIDATION-400", "dateOfBirth is required"))
+    date_of_birth, date_error = _parse_date(raw_dob)
     if date_error:
         parsed.errors.append(("dateOfBirth", "VALIDATION-400", date_error))
     elif date_of_birth is not None:
@@ -169,6 +180,42 @@ def _validate_row(row_number: int, raw: dict[str, str], *, tenant_id) -> _Parsed
         except TypeError:  # pragma: no cover - defensive
             pass
     return parsed
+
+
+def _population_problem(*, proposer: Proposer | None, rows: list[_ParsedRow]) -> str | None:
+    """Aplica titular-primeiro, limite de beneficiários e diferença de 13
+    anos ao conjunto FINAL (membros ativos já existentes + linhas válidas do
+    ficheiro). Devolve a mensagem do problema, ou None se estiver tudo bem."""
+    if proposer is None:
+        return None
+    categories = _category_by_code()
+    people = [
+        Person(
+            categories.get(m.relationship_code, RelationshipCategory.OTHER.value),
+            m.date_of_birth,
+            _person_label(m.first_name, m.last_name),
+        )
+        for m in InsuredMember.objects.filter(proposer=proposer, status=MemberStatus.ACTIVE.value)
+    ]
+    for row in rows:
+        if not row.is_valid:
+            continue
+        dob, _ = _parse_date((row.values.get("dateOfBirth") or "").strip())
+        people.append(
+            Person(
+                categories.get(row.values["relationshipCode"].strip(), RelationshipCategory.OTHER.value),
+                dob,
+                _person_label((row.values.get("firstName") or "").strip(), (row.values.get("lastName") or "").strip()),
+            )
+        )
+    individual = proposer.proposer_type == ProposerType.INDIVIDUAL.value
+    try:
+        validate_household(
+            people, individual=individual, max_beneficiaries=max_beneficiaries_for_individual() if individual else None
+        )
+    except DomainProblem as exc:
+        return str(exc)
+    return None
 
 
 def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFile, actor_id: str) -> ImportJob:
@@ -218,6 +265,17 @@ def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFi
             for field_name, code, message in row.errors
         ]
     )
+    population_problem = _population_problem(proposer=proposer, rows=rows)
+    if population_problem:
+        # Erro ao nível do ficheiro (linha 0): o commit volta a validar e recusa.
+        ImportRowError.objects.create(
+            tenant_id=tenant_id.value,
+            import_job=import_job,
+            row_number=0,
+            field_name="relationshipCode",
+            error_code="VALIDATION-400",
+            error_message=population_problem,
+        )
 
     import_job.total_rows = len(rows)
     import_job.valid_rows = sum(1 for r in rows if r.is_valid)
@@ -255,6 +313,11 @@ def commit_member_import(*, import_job: ImportJob, actor_id: str) -> ImportJob:
         content = fh.read()
     raw_rows = _parse_uploaded_rows(filename=import_job.original_filename, content=content)
     rows = [_validate_row(i, raw, tenant_id=tenant_id.value) for i, raw in enumerate(raw_rows, start=1)]
+
+    population_problem = _population_problem(proposer=import_job.proposer, rows=rows)
+    if population_problem:
+        # Nada foi criado: o processo continua VALIDATED para o utilizador corrigir o ficheiro.
+        raise ImportPopulationInvalidError(population_problem)
 
     import_job.status = ImportJobStatus.COMMITTING.value
     import_job.save(update_fields=["status"])

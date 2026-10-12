@@ -183,6 +183,12 @@ def _record_transition(
     )
 
 
+def _as_date(value: Any) -> datetime.date | None:
+    if isinstance(value, str):
+        return datetime.date.fromisoformat(value)
+    return value
+
+
 def create_quote(
     *,
     proposer_id: uuid.UUID | None = None,
@@ -228,6 +234,12 @@ def create_quote(
                     attributes=(
                         proposer_input.get("attributes") if "attributes" in proposer_input else None
                     ),
+                    # Individual: obrigatória (o titular é o próprio proponente).
+                    date_of_birth=_as_date(
+                        proposer_input.get("dateOfBirth")
+                        or (titular_member_input or {}).get("dateOfBirth")
+                    ),
+                    require_birth_date=True,
                 )
                 proposer_id = created_proposer.id
                 if titular_member_input is not None:
@@ -243,9 +255,9 @@ def create_quote(
                         parts = created_proposer.display_name.split(None, 1)
                         first_name = parts[0] or None
                         last_name = (parts[1] if len(parts) > 1 else None) or last_name
-                    date_of_birth = titular_member_input.get("dateOfBirth")
-                    if isinstance(date_of_birth, str):
-                        date_of_birth = datetime.date.fromisoformat(date_of_birth)
+                    # Beneficiário/titular herda email e telefone do proponente (nunca os pede);
+                    # sem data própria, usa a do proponente individual.
+                    date_of_birth = _as_date(titular_member_input.get("dateOfBirth")) or created_proposer.date_of_birth
                     created_member = create_member(
                         proposer=created_proposer,
                         relationship_code=relationship_code,
@@ -531,7 +543,7 @@ def build_pricing_context(
         "members": {
             str(member_id): (
                 {"ageBand": band}
-                if (band := compute_age_band(members_by_id[member_id].date_of_birth, quote.effective_date))
+                if (band := compute_age_band(members_by_id[member_id].date_of_birth))
                 else {}
             )
             for member_id in priceable_member_ids
@@ -1157,5 +1169,92 @@ def expire_quote(*, quote: Quote) -> Quote | None:
             "validUntil": quote.valid_until.isoformat() if quote.valid_until else None,
             "fromStatus": from_status,
         },
+    )
+    return quote
+
+
+# ---------------------------------------------------------------------------
+# Reutilização de cotações rejeitadas (2026-10): REJECTED -> DRAFT.
+# Uma cotação rejeitada (automaticamente por um membro inelegível, ou numa
+# decisão de revisão) pode ser reaberta para corrigir a população/dados e
+# voltar ao ciclo normal (reprecificar -> READY -> submeter), mantendo o
+# número da cotação, o histórico e a trilha de auditoria. Para criar uma
+# NOVA cotação a partir dela continua a existir `POST /quotes/{id}/clone`.
+# ---------------------------------------------------------------------------
+
+
+def reopen_quote(*, quote: Quote, reason: str | None, row_version: int, correlation_id: str | None) -> Quote:
+    from apps.foundation.application.change_audit import change_metadata, require_reason
+    from apps.quote.infrastructure.models import QuoteMember as _QuoteMember
+
+    reason = require_reason(reason)
+    if quote.status != QuoteStatus.REJECTED.value:
+        raise QuoteStateError(
+            f"A cotação {quote.id} está em {quote.status}; só uma cotação rejeitada (REJECTED) pode ser reaberta"
+        )
+
+    today = datetime.date.today()
+    updates: dict[str, Any] = {
+        "status": QuoteStatus.DRAFT.value,
+        "latest_pricing_run": None,
+        "rejected_by": None,
+        "rejected_at": None,
+        "submitted_by": None,
+        "submitted_at": None,
+        "row_version": row_version + 1,
+    }
+    if quote.valid_until is None or quote.valid_until < today:
+        # A validade caducou entretanto: renova-a (nunca anterior à data de início — ck_quote_dates).
+        updates["valid_until"] = _default_valid_until(max(quote.effective_date, today))
+
+    with transaction.atomic():
+        changed = Quote.objects.filter(
+            id=quote.id, status=QuoteStatus.REJECTED.value, row_version=row_version
+        ).update(**updates)
+        if changed == 0:
+            quote.refresh_from_db()
+            if quote.status != QuoteStatus.REJECTED.value:
+                raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; só uma cotação rejeitada (REJECTED) pode ser reaberta")
+            raise RowVersionMismatchError(
+                f"A versão da cotação {quote.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
+            )
+        quote.refresh_from_db()
+
+        # Os dados das pessoas podem ter sido corrigidos desde a rejeição:
+        # reavalia a elegibilidade de cada uma com os dados atuais.
+        for quote_member in _QuoteMember.objects.filter(quote=quote).select_related("member"):
+            evaluation = EvaluateEligibilityUseCase().execute(
+                proposer_id=quote.proposer_id,
+                member_id=quote_member.member_id,
+                plan_id=quote.plan_id,
+                effective_date=quote.effective_date,
+                context={},
+                correlation_id=correlation_id,
+            )
+            _QuoteMember.objects.filter(id=quote_member.id).update(
+                status=_ELIGIBILITY_TO_MEMBER_STATUS[evaluation.decision], eligibility_evaluation=evaluation
+            )
+
+        _record_transition(
+            quote,
+            from_status=QuoteStatus.REJECTED.value,
+            to_status=QuoteStatus.DRAFT.value,
+            reason_code="REOPENED",
+            reason_text=reason,
+            correlation_id=correlation_id,
+        )
+
+    _audit.record(
+        action="quote.reopened",
+        entity_type="Quote",
+        entity_id=str(quote.id),
+        metadata=change_metadata(after={"status": QuoteStatus.DRAFT.value}, reason=reason),
+    )
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.REOPENED",
+        correlation_id=correlation_id,
+        payload={"quoteId": str(quote.id), "fromStatus": QuoteStatus.REJECTED.value, "reason": reason},
     )
     return quote

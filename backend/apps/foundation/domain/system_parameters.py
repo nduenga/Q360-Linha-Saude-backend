@@ -62,6 +62,20 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
             used_by="Cotações: `valid_until` ao criar/alterar a data de início.",
         ),
         ParameterDefinition(
+            code="client.individual_max_beneficiaries",
+            value_type="INTEGER",
+            category=OPERATIONAL,
+            default=10,
+            minimum=0,
+            maximum=100,
+            unit="beneficiários",
+            description=(
+                "Número máximo de beneficiários (dependentes, sem contar o titular) que um proponente "
+                "individual pode ter."
+            ),
+            used_by="Clientes: POST/PUT /members e importação de pessoas seguras (proponente INDIVIDUAL).",
+        ),
+        ParameterDefinition(
             code="documents.signed_url_ttl_seconds",
             value_type="INTEGER",
             category=OPERATIONAL,

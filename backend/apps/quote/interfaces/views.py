@@ -55,6 +55,7 @@ from apps.quote.interfaces.serializers import (
     ProposalRequestSerializer,
     QuoteAdjustmentSerializer,
     QuoteCloneRequestSerializer,
+    QuoteReopenRequestSerializer,
     QuoteCreateRequestSerializer,
     QuoteIndexationRequestSerializer,
     QuoteRenewalRequestSerializer,
@@ -803,6 +804,26 @@ class QuoteCloneView(APIView):
             quote=quote, effective_date=body.validated_data["effectiveDate"], reason=body.validated_data["reason"]
         )
         return Response(QuoteSerializer(copy).data, status=201)
+
+
+@requires_idempotency
+class QuoteReopenView(APIView):
+    """POST /quotes/{id}/reopen — reutiliza uma cotação REJEITADA: volta a
+    DRAFT (mesmo número e histórico) para corrigir a população e reprecificar."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_EDIT)]
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = QuoteReopenRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        reopened = quote_service.reopen_quote(
+            quote=quote,
+            reason=body.validated_data["reason"],
+            row_version=body.validated_data["rowVersion"],
+            correlation_id=get_correlation_id(),
+        )
+        return Response(QuoteSerializer(reopened).data)
 
 
 @requires_idempotency

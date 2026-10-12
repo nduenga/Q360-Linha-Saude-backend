@@ -103,6 +103,19 @@ class QuoteMember(TenantScopedModel):
     class Meta:
         managed = False
         db_table = "quote_member"
+    
+    source_quote = models.ForeignKey(
+    "self",
+    null=True,
+    blank=True,
+    on_delete=models.PROTECT,
+    related_name="derived_quotes",
+)
+
+    clone_reason = models.TextField(
+        blank=True,
+        default="",
+    )
 
 
 class QuoteAdjustment(TenantScopedModel):

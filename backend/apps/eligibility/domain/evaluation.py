@@ -20,6 +20,9 @@ from typing import Any
 from apps.eligibility.domain.enums import EligibilityDecision
 from apps.eligibility.domain.messages_pt import friendly_text
 
+from django.utils import timezone
+
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class EligibilityMessage:
@@ -187,10 +190,17 @@ class EligibilityRuleConfig:
         return CategoryRule.from_dict(merged)
 
 
-def _age_on(date_of_birth: datetime.date, effective_date: datetime.date) -> int:
-    years = effective_date.year - date_of_birth.year
-    if (effective_date.month, effective_date.day) < (date_of_birth.month, date_of_birth.day):
+def _age_on(date_of_birth: datetime.date) -> int:
+    today = timezone.localdate()
+
+    years = today.year - date_of_birth.year
+
+    if (today.month, today.day) < (
+        date_of_birth.month,
+        date_of_birth.day,
+    ):
         years -= 1
+
     return years
 
 
@@ -389,8 +399,7 @@ def evaluate(
 
     age: int | None = None
     if data.date_of_birth is not None:
-        age = _age_on(data.date_of_birth, data.effective_date)
-
+        age = _age_on(data.date_of_birth)
     age_rule_configured = config.min_entry_age is not None or config.max_entry_age is not None
     # ELIG-002 — Age can be calculated (only relevant when an age rule is
     # actually configured; an unconfigured threshold must not force every
