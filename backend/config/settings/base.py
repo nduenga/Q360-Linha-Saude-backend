@@ -48,6 +48,8 @@ INSTALLED_APPS = [
     "apps.platform_admin",
     "apps.business_config",
     "drf_spectacular",
+    'apps.search',
+
 ]
 
 MIDDLEWARE = [

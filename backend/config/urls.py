@@ -15,6 +15,7 @@ urlpatterns = [
     path("api/v1/", include("apps.staff_accounts.interfaces.urls")),
     path("api/v1/", include("apps.platform_admin.interfaces.urls")),
     path("api/v1/", include("apps.business_config.interfaces.urls")),
+    path("api/v1/", include('apps.search.urls')),
     path("api/v1/schema", SpectacularAPIView.as_view(), name="openapi-schema"),
     # Debug-only, as-implemented schema browser — NOT the contract (see
     # SPECTACULAR_SETTINGS in config/settings/base.py). ART-006 remains
