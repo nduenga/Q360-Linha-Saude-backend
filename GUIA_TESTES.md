@@ -96,15 +96,15 @@ Entrada: http://localhost:5173/login (utilizador ou email + palavra-passe).
 
 | Cliente | Email | O que tem |
 |---|---|---|
-| Ana Silva | `helibrando@gmail.com` | apólice activa, prestação em atraso e outra a vencer, cotação aprovada por aceitar, 2 pedidos, 1 mensagem |
+| Ana Silva | `fabiongila@gmail.com` | apólice activa, prestação em atraso e outra a vencer, cotação aprovada por aceitar, 2 pedidos, 1 mensagem |
 | Diana Lopes | `diana.lopes@demo.q360.local` | só cotações (em análise e recusada; o rascunho não aparece) |
 
 **Teste de primeiro acesso por email** — use o número exato da apólice (`APO-n`) impresso pelo seeder e o documento correspondente:
 
 | Cliente | Referência | Documento | Cenário |
 |---|---|---|---|
-| Ana Silva | apólice impressa pelo seeder | `000000001LA001` | apólice activa e cenário completo do Portal; código para `helibrando@gmail.com` |
-| Empresa Kilamba | apólice impressa pelo seeder | `541000003LA003` | apólice a terminar em 45 dias; código para `fabiongila@gmail.com` |
+| Ana Silva | apólice impressa pelo seeder | `000000001LA001` | apólice activa e cenário completo do Portal; código para `fabiongila@gmail.com` |
+| Empresa Kilamba | apólice impressa pelo seeder | `541000003LA003` | apólice a terminar em 45 dias; código para `empresa.kilamba@demo.q360.local` (endereço de demonstração, não entregue; ver o e-mail na consola) |
 | Carlos Mendes | apólice impressa pelo seeder | `000000002LA002` | apólice a aguardar o 1.º pagamento; código para `sethlussueki@gmail.com` |
 | Mariana Costa | cotação impressa pelo seeder | `000000005LA005` | sem email no registo → erro esperado |
 
@@ -115,7 +115,7 @@ Portal: abra-o a partir do mesmo frontend em http://localhost:5173. O Portal Cli
 Cada teste diz o que fazer e o que deve acontecer.
 
 ### 4.1 Entrar e primeiro acesso
-1. **Entrar com conta.** `/portal-cliente/acesso` → `helibrando@gmail.com` + `Cliente!Demo2026` → entra no **Resumo**.
+1. **Entrar com conta.** `/portal-cliente/acesso` → `fabiongila@gmail.com` + `Cliente!Demo2026` → entra no **Resumo**.
 2. **Palavra-passe errada.** Escreva uma errada → «Email ou palavra-passe incorretos». À 5.ª tentativa → conta bloqueada 30 minutos.
 3. **Primeiro acesso.** No login, clique em «Criar palavra-passe» (ou abra `/portal-cliente/primeiro`). Use a referência impressa pelo seeder e o documento da Ana, Carlos ou Empresa Kilamba conforme a tabela acima. Confirme o email mascarado, copie o código do terminal do backend (email de consola) ou da caixa de correio (SMTP), introduza o código e escolha uma palavra-passe com 10+ caracteres. «Guardar e entrar» deve abrir o Resumo. Saia e volte a entrar com o email e a nova palavra-passe.
 4. **Palavra-passe fraca.** No passo anterior, tente `1234567890` → recusada com explicação, e o código **continua válido**.

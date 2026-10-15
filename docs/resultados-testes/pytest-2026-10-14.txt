@@ -1,0 +1,14 @@
+........................................................................ [  9%]
+........................................................................ [ 19%]
+........................................................................ [ 29%]
+........................................................................ [ 38%]
+........................................................................ [ 48%]
+........................................................................ [ 58%]
+........................................................................ [ 67%]
+........................................................................ [ 77%]
+........................................s............................... [ 87%]
+........................................................................ [ 96%]
+.......................                                                  [100%]
+--------- generated xml file: /private/tmp/claude-501/full-suite-3.xml ---------
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_golden_tests.py:65: DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26) retired ProductVersion entirely, and with it ELIG-006 ('product version not effective on quote date') — folded into ELIG-007 ('plan inactive'), see apps.eligibility.domain.evaluation.evaluate() docstring. GT-ELIG-002's exact scenario (a bounded product effective range) can no longer occur in the domain at all, so unlike the Épico 3 change (which only narrowed how the case could be *constructed* and was still exercisable by calling evaluate() directly), there is no equivalent case left to run — retiring the case outright is the correct move this time, per the golden-test README's own rule. GT-ELIG-002.json is kept on disk (docs/artifacts/ART-013 is not this session's to edit) and in the tripwire's `known` set below, with this skip as the explanation.
