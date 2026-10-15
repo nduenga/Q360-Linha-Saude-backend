@@ -25,7 +25,7 @@ from apps.foundation.domain.actor import Actor
 from apps.foundation.domain.tenant import TenantId
 from apps.policy.application.issuance_service import installment_amount
 from apps.quote.infrastructure.models import Quote
-from tests.quote.conftest import make_client, set_quote_created_on
+from tests.quote.conftest import make_client, pin_pricing_day
 from tests.quote.test_actuarial_excel_reference import EFFECTIVE_DATE, PEOPLE
 from tests.quote.test_business_config_e2e import SCOPE, _publish, _values
 
@@ -42,7 +42,7 @@ def approver(tenant):
 
 
 @pytest.mark.django_db
-def test_backend_reproduces_the_excel_calculador_for_sag(admin_client, approver, tenant):
+def test_backend_reproduces_the_excel_calculador_for_sag(admin_client, approver, tenant, monkeypatch):
     assert EXPECTED["C7"] == "Quadros Médios"
     market = admin_client.post("/api/v1/product-templates/market", {}, format="json")
     assert market.status_code == 200, market.data
@@ -76,8 +76,8 @@ def test_backend_reproduces_the_excel_calculador_for_sag(admin_client, approver,
         "/api/v1/quotes", {"proposerId": proposer.data["id"], "planId": plan["id"]},
         format="json",
     ).data
-    # Idades do Excel calculadas em EFFECTIVE_DATE: a referência da cotação é o dia de criação.
-    set_quote_created_on(quote["id"], datetime.date.fromisoformat(EFFECTIVE_DATE))
+    # Idades do Excel calculadas em EFFECTIVE_DATE: fixa-se o dia do cálculo da cotação.
+    pin_pricing_day(monkeypatch, datetime.date.fromisoformat(EFFECTIVE_DATE))
     member_cells = {}
     for relationship, sex, birth, cell in PEOPLE:
         member = admin_client.post(

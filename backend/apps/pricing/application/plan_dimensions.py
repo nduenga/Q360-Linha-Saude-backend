@@ -159,6 +159,10 @@ def resolve_plan_pricing_context(
         normalised_selection["optionalBenefitCodes"] = list(chosen_codes)
     if option_code:
         normalised_selection["participationOption"] = option_code
+    # Grupos de opções e campos do produto (configuração por produto): validados
+    # contra a versão publicada; os obrigatórios só se exigem no cálculo.
+    if selection.get("productOptions") or selection.get("productFields"):
+        normalised_selection.update(_product_selection(plan, selection, effective_date))
     return PlanPricingContext(
         dimensions=dims,
         participation_option=option,
@@ -167,3 +171,25 @@ def resolve_plan_pricing_context(
         warnings=tuple(override_warnings),
         coverages=details,
     )
+
+
+def _product_selection(plan: Plan, selection: dict[str, Any], effective_date: datetime.date | None) -> dict[str, Any]:
+    from apps.business_config.application.product_setup_service import load_for_pricing
+    from apps.business_config.domain.errors import ProductSetupInputError
+    from apps.business_config.domain.product_setup import normalise_inputs
+
+    loaded = load_for_pricing(plan.product_id, effective_date or datetime.date.today())
+    if loaded is None:
+        raise ReferencedEntityNotFoundError(
+            "selection.productOptions/productFields: o produto não tem grupos de opções nem campos publicados"
+        )
+    try:
+        chosen, fields = normalise_inputs(loaded[1], selection.get("productOptions"), selection.get("productFields"), require=False)
+    except ProductSetupInputError as exc:
+        raise ReferencedEntityNotFoundError(f"selection: {exc}") from exc
+    out: dict[str, Any] = {}
+    if chosen:
+        out["productOptions"] = {k: list(v) for k, v in chosen.items()}
+    if fields:
+        out["productFields"] = fields
+    return out

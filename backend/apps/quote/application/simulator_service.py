@@ -28,6 +28,7 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.change_audit import change_metadata, require_reason
 from apps.foundation.application.context import CurrentActorProvider
 from apps.foundation.domain.permissions import Permission
+from apps.business_config.domain.errors import ProductSetupInputError
 from apps.foundation.domain.problem import DomainProblem
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.pricing.application.plan_dimensions import resolve_plan_pricing_context
@@ -122,8 +123,15 @@ def set_selection(*, quote: Quote, selection: dict[str, Any], row_version: int) 
         entity_id=str(quote.id),
         metadata=change_metadata(before=before, after=quote.selection_json),
     )
-    quote = _reprice(quote)
-    return quote, list(plan_context.warnings)
+    warnings = list(plan_context.warnings)
+    try:
+        quote = _reprice(quote)
+    except ProductSetupInputError as exc:
+        # Formulário do produto ainda incompleto: a escolha fica gravada e a
+        # cotação em rascunho; o cálculo pede o que falta quando se fizer.
+        quote.refresh_from_db()
+        warnings.append({"code": "PRODUCT_INPUT_INCOMPLETE", "message": str(exc)})
+    return quote, warnings
 
 
 # -------------------------------------------------------------------- preview

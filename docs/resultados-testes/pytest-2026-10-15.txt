@@ -1,15 +1,15 @@
 ........................................................................ [  9%]
 ........................................................................ [ 18%]
-........................................................................ [ 28%]
-........................................................................ [ 37%]
-........................................................................ [ 47%]
-........................................................................ [ 56%]
-........................................................................ [ 66%]
-........................................................................ [ 75%]
-.......................................................s................ [ 84%]
-........................................................................ [ 94%]
-...........................................                              [100%]
+........................................................................ [ 27%]
+........................................................................ [ 36%]
+........................................................................ [ 46%]
+........................................................................ [ 55%]
+........................................................................ [ 64%]
+........................................................................ [ 73%]
+..............................................................s......... [ 83%]
+........................................................................ [ 92%]
+...........................................................              [100%]
 - generated xml file: /Users/fabioaderiogomesngila/Documents/Projectos/Q360-Linha-Saude-backend/docs/resultados-testes/junit-2026-10-15.xml -
 =========================== short test summary info ============================
 SKIPPED [1] tests/integration/test_golden_tests.py:65: DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6, 2026-09-26) retired ProductVersion entirely, and with it ELIG-006 ('product version not effective on quote date') — folded into ELIG-007 ('plan inactive'), see apps.eligibility.domain.evaluation.evaluate() docstring. GT-ELIG-002's exact scenario (a bounded product effective range) can no longer occur in the domain at all, so unlike the Épico 3 change (which only narrowed how the case could be *constructed* and was still exercisable by calling evaluate() directly), there is no equivalent case left to run — retiring the case outright is the correct move this time, per the golden-test README's own rule. GT-ELIG-002.json is kept on disk (docs/artifacts/ART-013 is not this session's to edit) and in the tripwire's `known` set below, with this skip as the explanation.
-762 passed, 1 skipped in 265.80s (0:04:25)
+778 passed, 1 skipped in 377.35s (0:06:17)

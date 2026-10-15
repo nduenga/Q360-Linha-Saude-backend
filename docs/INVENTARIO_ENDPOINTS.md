@@ -49,9 +49,13 @@ Alterações de 2026-10-15 (cotação sem data de efeito):
 
 - A cotação deixa de ter `effectiveDate`: tem `createdAt` e `validUntil`
   (dia de criação + `quote.validity_days`, configurável em
-  `/system-parameters`). A data de referência do cálculo (idades,
-  configurações e tarifas em vigor) é o dia de criação. O início da vigência
+  `/system-parameters`). Uma cotação aberta calcula com o que está em vigor no
+  dia do cálculo (configurações publicadas na interface valem no próximo
+  cálculo); submetida, fica no dia do último cálculo. O início da vigência
   escolhe-se na emissão (`requestedStartDate`).
+- `POST /quotes/{id}/price` sem `recalculate`: reaproveita o último cálculo
+  só se nada do que entrou nele mudou (configurações em vigor, plano e
+  coberturas, pessoas, escolhas, ajustes, dia).
 - `POST /api/v1/quotes`, `POST /quotes/renewals` e `POST /quotes/{id}/clone`
   deixam de aceitar `effectiveDate` (é ignorado se for enviado).
 - `PUT /api/v1/quotes/{quote_id}` removido (só alterava a data de efeito);
@@ -67,12 +71,20 @@ Alterações de 2026-10-15 (cotação sem data de efeito):
   de modelo `{{quote.effectiveDate}}` → `{{quote.date}}`.
 - Mantêm `effectiveDate` (é a data da avaliação, não da cotação):
   `/eligibility/evaluate`, `/pricing/calculate`, `/pricing/preview`.
+- Configuração de tarifação **por produto** (como os separadores «Grupo de
+  opções», «Campos», «Formulário», «Valores» e «Fórmulas» do produto): 7 rotas
+  novas (`/products/{id}/pricing-setup…` e `/business-config/product-setup/catalog`).
+  `PUT /quotes/{id}/selection` aceita `productOptions` {grupo: [opções]} e
+  `productFields` {campo: valor}; com o formulário incompleto grava e devolve o
+  aviso `PRODUCT_INPUT_INCOMPLETE`. O cálculo devolve os componentes
+  `PRODUCT_FORMULA:<código>` (fórmula de prémio) e `PRODUCT_FORMULAS` (todos os
+  resultados); dados obrigatórios em falta → 422 `PRODUCT-SETUP-INPUT`.
 - Nova rota `GET /api/v1/search?q=` (pesquisa global, enviada por um colega
   em 2026-10-14): passou a exigir o scope `q360.read` e ficou no contrato.
 
 ## Lista completa
 
-Total: **281 operações**. Corrigido (devolve variáveis; agora no contrato): 1 · Implementado: 260 · Já implementado; faltava no contrato: 1 · Novo (código + contrato): 15 · Novo (2026-10-15): 3 · Novo (2026-10-14, pesquisa global): 1. Removida: `PUT /api/v1/quotes/{quote_id}` (só alterava a data de efeito)
+Total: **288 operações**. Corrigido (devolve variáveis; agora no contrato): 1 · Implementado: 260 · Já implementado; faltava no contrato: 1 · Novo (código + contrato): 15 · Novo (2026-10-15): 3 + 7 (configuração por produto) · Novo (2026-10-14, pesquisa global): 1. Removida: `PUT /api/v1/quotes/{quote_id}` (só alterava a data de efeito)
 
 | Área | Método | Rota | operationId | Resumo | Estado |
 |---|---|---|---|---|---|
@@ -170,6 +182,13 @@ Total: **281 operações**. Corrigido (devolve variáveis; agora no contrato): 1
 | Configuration | PUT | `/api/v1/system-parameters/{code}` | putSystemParameterDetail | Substituir system parameter detail | Implementado |
 | Configuration | GET | `/api/v1/system-parameters/{code}/revisions` | getSystemParameterRevisions | Obter system parameter revisions | Implementado |
 | Configuration | POST | `/api/v1/system-parameters/{code}/rollback` | postSystemParameterRollback | Criar system parameter rollback | Implementado |
+| Configuration | GET | `/api/v1/business-config/product-setup/catalog` | getProductPricingSetupCatalog | Opções do editor (tipos de lista/campo/valor, unidades, indicadores) | Novo (2026-10-15) |
+| Configuration | GET | `/api/v1/products/{product_id}/pricing-setup` | getProductPricingSetup | Configuração do produto: publicada, rascunho, blocos do editor, formulário | Novo (2026-10-15) |
+| Configuration | PUT | `/api/v1/products/{product_id}/pricing-setup` | saveProductPricingSetupDraft | Gravar rascunho (grupos de opções, campos, valores, fórmulas) | Novo (2026-10-15) |
+| Configuration | GET | `/api/v1/products/{product_id}/pricing-setup/form` | getProductPricingSetupForm | Formulário da cotação do produto | Novo (2026-10-15) |
+| Configuration | GET | `/api/v1/products/{product_id}/pricing-setup/history` | listProductPricingSetupHistory | Histórico de versões | Novo (2026-10-15) |
+| Configuration | POST | `/api/v1/products/{product_id}/pricing-setup/test` | testProductPricingSetup | Testar fórmulas com valores de exemplo | Novo (2026-10-15) |
+| Configuration | POST | `/api/v1/products/{product_id}/pricing-setup/validate` | validateProductPricingSetup | Validar sem guardar | Novo (2026-10-15) |
 | Customer Portal | GET | `/api/v1/customer-portal/beneficiaries` | getCustomerPortalBeneficiaries | Obter customer portal beneficiaries | Implementado |
 | Customer Portal | GET | `/api/v1/customer-portal/conversations` | getCustomerPortalConversations | Obter customer portal conversations | Implementado |
 | Customer Portal | GET | `/api/v1/customer-portal/coverage` | getCustomerPortalCoverage | Obter customer portal coverage | Implementado |

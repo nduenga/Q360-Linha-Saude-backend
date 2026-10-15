@@ -37,6 +37,7 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
+from apps.pricing.infrastructure.models import PricingComponent
 from apps.policy.domain.enums import PolicyMemberStatus, PolicyStatus, PolicyType, SignatureMethod
 from apps.policy.domain.errors import (
     DuplicatePolicyError,
@@ -98,7 +99,21 @@ def _loading_for(rows: list, payment_frequency: str) -> Decimal:
     return Decimal(str(row["loading"])) if row and row.get("loading") not in (None, "") else Decimal("0")
 
 
+def product_formula_installment(quote: Quote, payment_frequency: str) -> Decimal | None:
+    """Prestação calculada por uma fórmula de fracionamento do produto
+    (ex.: «Prémio semestral = Prémio anual ÷ 2»), no cálculo da cotação."""
+    run = quote.latest_pricing_run
+    if run is None:
+        return None
+    component = PricingComponent.objects.filter(pricing_run=run, component_code="PRODUCT_FORMULAS").first()
+    value = ((component.metadata_json or {}).get("installments") or {}).get(payment_frequency) if component else None
+    return Decimal(str(value)) if value not in (None, "") else None
+
+
 def installment_amount(quote: Quote, total_amount: Decimal, payment_frequency: str) -> Decimal:
+    from_formula = product_formula_installment(quote, payment_frequency)
+    if from_formula is not None:
+        return _round2(from_formula)
     count = _INSTALLMENT_COUNT[payment_frequency]
     return _round2(total_amount * (Decimal("1") + fractionation_loading(quote, payment_frequency)) / count)
 

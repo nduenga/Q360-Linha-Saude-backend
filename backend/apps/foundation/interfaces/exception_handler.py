@@ -56,6 +56,9 @@ _TITLES: dict[str, str] = {
     # apps.staff_accounts — self-hosted staff identity (replaces the
     # external Auth0 IdP), same posture: a new contract, not a CR.
     "STAFF-LOCKED": "Conta temporariamente bloqueada",
+    # apps.business_config — configuração de tarifação por produto (grupos de
+    # opções, campos e fórmulas): dados da cotação em falta ou que não batem.
+    "PRODUCT-SETUP-INPUT": "Dados do produto em falta ou inválidos",
 }
 
 _CODE_BY_EXCEPTION: dict[type[Exception], str] = {

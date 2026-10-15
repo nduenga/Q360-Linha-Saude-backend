@@ -12,6 +12,7 @@ from django.utils import timezone
 from apps.business_config.application import role_permissions
 from apps.business_config.application.readers import BusinessSnapshot
 from apps.business_config.domain.catalog import CATALOG_BY_KEY
+from apps.business_config.domain.product_setup import is_product_setup_key, validate_product_setup
 from apps.business_config.domain.errors import (
     ConfigurationStateError,
     ConfigurationVersionConflict,
@@ -53,12 +54,17 @@ def audit(action, c, extra=None):
 
 
 def validate(key, value, effective_from=None, effective_to=None):
-    if key not in CATALOG_BY_KEY:
+    product_setup = is_product_setup_key(key)
+    if key not in CATALOG_BY_KEY and not product_setup:
         raise InvalidConfiguration("Configuração não suportada.")
     if not isinstance(value, dict):
         raise InvalidConfiguration("A configuração deve ser um objeto.")
     if effective_from and effective_to and effective_to < effective_from:
         raise InvalidConfiguration("effectiveTo não pode ser anterior a effectiveFrom.")
+    if product_setup:
+        # Grupos de opções, campos, valores e fórmulas de um produto.
+        validate_product_setup(value)
+        return
     validate_structure(key, value)
 
 
@@ -119,7 +125,10 @@ def submit_configuration(request, c, change_reason=None):
     if c.status not in EDITABLE_STATUSES:
         raise ConfigurationStateError("Apenas DRAFT ou REJECTED pode ser enviado para aprovação.")
     _require_role("editable_roles")
-    validate_structure(c.config_key, c.value_json)
+    if is_product_setup_key(c.config_key):
+        validate_product_setup(c.value_json)
+    else:
+        validate_structure(c.config_key, c.value_json)
     validate_for_publication(c.config_key, c.value_json)
     c.status = "PENDING_APPROVAL"
     c.submitted_at = timezone.now()

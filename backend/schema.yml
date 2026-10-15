@@ -2089,6 +2089,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/product-setup/catalog:
+    get:
+      operationId: getProductPricingSetupCatalog
+      description: 'Opções do editor: tipos de lista, de campo e de valor, agregações,
+
+        unidades, frequências, indicadores das fórmulas e variáveis do sistema.
+
+
+        Requer: scope q360.read.'
+      summary: Obter product pricing setup catalog
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
   /api/v1/business-config/rules/custom:
     get:
       operationId: listCustomRules
@@ -10251,6 +10274,246 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/products/{product_id}/pricing-setup:
+    get:
+      operationId: getProductPricingSetup
+      description: 'Configuração de tarifação do produto (separadores Grupo de opções,
+
+        Campos, Formulário, Valores e Fórmulas). GET devolve a versão em vigor, o
+
+        rascunho, a versão à espera de aprovação, os blocos do editor de fórmulas
+
+        e o formulário da cotação. PUT grava o rascunho (cria uma versão DRAFT ou
+
+        edita a aberta); depois submete-se e aprova-se em
+
+        `/business-config/configurations/{id}` e `/approve`.
+
+
+        Valor: `optionGroups[]` {code, name, listType RADIO|SELECT|CHECKBOX|TOGGLE|AUTOCOMPLETE,
+
+        required, maxSelected, showInForm, order, options[{code,label}]}; `fields[]` {code, label,
+
+        type NUMBER|INTEGER|TEXT|DATE|BOOLEAN, required, min, max, default, unit, order};
+
+        `values[]` {group, type SIMPLE|MULTIPLE|FIXED|AGE_INTERVAL|FIELD_VALUE|OPTION_CONDITIONAL,
+
+        aggregate SUM|PRODUCT|MAX|MIN, unit, value, field, conditionGroup, rows[]}; `formulas[]`
+
+        {code, name, expression, flags{premium,capital,hidden,fractionation,conversion},
+
+        frequency, unit, minResult, order, active, scope{categories,plans,policyTypes}}.
+
+
+        Requer: scope q360.read.'
+      summary: Obter product pricing setup
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPricingSetupState'
+          description: ''
+    put:
+      operationId: saveProductPricingSetupDraft
+      description: 'Configuração de tarifação do produto (separadores Grupo de opções,
+
+        Campos, Formulário, Valores e Fórmulas). GET devolve a versão em vigor, o
+
+        rascunho, a versão à espera de aprovação, os blocos do editor de fórmulas
+
+        e o formulário da cotação. PUT grava o rascunho (cria uma versão DRAFT ou
+
+        edita a aberta); depois submete-se e aprova-se em
+
+        `/business-config/configurations/{id}` e `/approve`.
+
+
+        Valor: `optionGroups[]` {code, name, listType RADIO|SELECT|CHECKBOX|TOGGLE|AUTOCOMPLETE,
+
+        required, maxSelected, showInForm, order, options[{code,label}]}; `fields[]` {code, label,
+
+        type NUMBER|INTEGER|TEXT|DATE|BOOLEAN, required, min, max, default, unit, order};
+
+        `values[]` {group, type SIMPLE|MULTIPLE|FIXED|AGE_INTERVAL|FIELD_VALUE|OPTION_CONDITIONAL,
+
+        aggregate SUM|PRODUCT|MAX|MIN, unit, value, field, conditionGroup, rows[]}; `formulas[]`
+
+        {code, name, expression, flags{premium,capital,hidden,fractionation,conversion},
+
+        frequency, unit, minResult, order, active, scope{categories,plans,policyTypes}}.
+
+
+        Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Substituir product pricing setup
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductSetupSave'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfiguration'
+          description: ''
+  /api/v1/products/{product_id}/pricing-setup/form:
+    get:
+      operationId: getProductPricingSetupForm
+      description: 'Formulário da cotação para o produto (versão publicada): grupos de
+
+        opções e campos visíveis, por ordem. As escolhas vão em
+
+        `PUT /quotes/{id}/selection` como `productOptions` e `productFields`.
+
+
+        Requer: scope q360.read.'
+      summary: Obter product pricing setup form
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPricingSetupForm'
+          description: ''
+  /api/v1/products/{product_id}/pricing-setup/history:
+    get:
+      operationId: listProductPricingSetupHistory
+      description: 'Histórico das versões da configuração do produto (mais recente primeiro).
+
+
+        Requer: scope q360.read.'
+      summary: Obter product pricing setup history
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPricingSetupHistory'
+          description: ''
+  /api/v1/products/{product_id}/pricing-setup/test:
+    post:
+      operationId: testProductPricingSetup
+      description: '«Testar fórmula»: calcula as fórmulas com valores de exemplo (opções,
+
+        campos, idades, prémio técnico) sem guardar nada. Com `expression`,
+
+        calcula também essa expressão avulsa.
+
+
+        Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Criar product pricing setup test
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductSetupTest'
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPricingSetupTestResult'
+          description: ''
+  /api/v1/products/{product_id}/pricing-setup/validate:
+    post:
+      operationId: validateProductPricingSetup
+      description: 'Valida uma configuração sem a guardar (sintaxe das fórmulas, nomes
+
+        usados, dependências circulares, opções e valores). Devolve os blocos
+
+        do editor e a ordem de cálculo.
+
+
+        Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Criar product pricing setup validate
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductSetupValidate'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPricingSetupValidation'
+          description: ''
   /api/v1/proposers:
     get:
       operationId: getProposerListCreate
@@ -17540,6 +17803,8 @@ components:
       - dateOfBirth
       - relationshipCode
       - rowVersion
+    NullEnum:
+      type: 'null'
     PageMeta:
       type: object
       properties:
@@ -19762,6 +20027,201 @@ components:
       required:
       - items
       - page
+    ProductPricingSetupForm:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - items
+    ProductPricingSetupHistory:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - items
+    ProductPricingSetupState:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        productCode:
+          type: string
+        configKey:
+          type: string
+        published:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          description: Versão em vigor (id, versionNo, value, …).
+        draft:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          description: Rascunho aberto (DRAFT ou REJECTED).
+        pendingApproval:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+        tokens:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: Grupos, opções, campos, fórmulas e variáveis do sistema que o editor pode usar.
+        form:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          description: Formulário da cotação (versão publicada).
+      required:
+      - configKey
+      - draft
+      - form
+      - pendingApproval
+      - productCode
+      - productId
+      - published
+      - tokens
+    ProductPricingSetupTestResult:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: 'Uma linha por fórmula: code, name, value, unit, flags, frequency, applies.'
+        groupValues:
+          type: object
+          additionalProperties: {}
+        premium:
+          type:
+          - string
+          - 'null'
+        premiumFormula:
+          type:
+          - string
+          - 'null'
+        installments:
+          type: object
+          additionalProperties: {}
+          description: Prestação por frequência (fórmulas de fracionamento).
+        selection:
+          type: object
+          additionalProperties: {}
+        expressionValue:
+          type: string
+      required:
+      - groupValues
+      - installments
+      - premium
+      - premiumFormula
+      - results
+      - selection
+    ProductPricingSetupValidation:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        evaluationOrder:
+          type: array
+          items:
+            type: string
+        tokens:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - evaluationOrder
+      - tokens
+      - valid
+    ProductSetupSave:
+      type: object
+      properties:
+        value:
+          description: '{optionGroups, fields, values, formulas} — ver a descrição da rota.'
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date
+        rowVersion:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+      required:
+      - value
+    ProductSetupTest:
+      type: object
+      properties:
+        value:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Configuração a testar; por omissão o rascunho, senão a publicada.
+        expression:
+          type:
+          - string
+          - 'null'
+          description: Expressão avulsa a testar (como no editor), sem a guardar.
+        productOptions:
+          description: '{grupo: [opções]}'
+        productFields:
+          description: '{campo: valor}'
+        ages:
+          type: array
+          items:
+            type: integer
+            maximum: 150
+            minimum: 0
+        technicalPremium:
+          type:
+          - string
+          - 'null'
+          format: decimal
+          pattern: ^-?\d{0,18}(?:\.\d{0,2})?$
+        members:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        category:
+          type:
+          - string
+          - 'null'
+        planCode:
+          type:
+          - string
+          - 'null'
+        policyType:
+          oneOf:
+          - $ref: '#/components/schemas/PolicyTypeEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        requireAll:
+          type: boolean
+          default: false
+          description: Exigir os grupos/campos obrigatórios (como numa cotação).
+    ProductSetupValidate:
+      type: object
+      properties:
+        value: {}
+      required:
+      - value
     ProductStatusEnum:
       enum:
       - DRAFT

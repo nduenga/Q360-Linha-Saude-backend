@@ -221,3 +221,44 @@ todas as apólices; sem ela usa-se a tabela do modelo usado no cálculo.
 Agravamento clínico (A5): percentagem decidida pelo subscritor, com valor
 por omissão por gravidade em `underwriting.pre_existing_conditions`
 (`LOW` 15 %, `MODERATE` 30 %, `MODERATE_HIGH` 50 %, `HIGH` exclusão).
+
+## 8. Configuração por produto (grupos de opções, campos, valores e fórmulas)
+
+Pedido de 2026-10-15, a partir dos ecrãs de referência do produto
+(«Grupo de opções», «Campos», «Formulário», «Valores», «Fórmulas»). Cada
+produto tem a sua configuração, guardada como configuração de negócio com a
+chave `product.pricing_setup:<id do produto>`: tem rascunho, aprovação por
+outra pessoa (quatro olhos), histórico, comparação, reversão e documentos
+anexos como as restantes. Código: `apps/business_config/domain/product_setup.py`.
+
+| Separador | Na configuração | Notas |
+|---|---|---|
+| Grupo de opções | `optionGroups[]` {code, name, listType RADIO/SELECT/CHECKBOX/TOGGLE/AUTOCOMPLETE, required, maxSelected, options[]} | Escolhas da cotação em `selection.productOptions` |
+| Campos | `fields[]` {code, label, type NUMBER/INTEGER/TEXT/DATE/BOOLEAN, required, min, max, default, unit} | Valores em `selection.productFields` |
+| Formulário | `showInForm`, `order` | `GET /products/{id}/pricing-setup/form` |
+| Valores (Taxas e Valores) | `values[]`: Simples, Múltiplas opções, Fixo, Por intervalo de idade, Pelo valor do campo, Condicional de opção | Agregação de várias opções/pessoas: SUM (Somar), PRODUCT, MAX, MIN |
+| Fórmulas | `formulas[]` {code, name, expression, flags, frequency, unit, minResult, order, active, scope} | Editor por blocos: grupos, `<grupo>__<opção>` (1/0), campos numéricos, outras fórmulas, `premio_tecnico`, `pessoas`; operadores + − × ÷ ( ) e min/max/abs/round |
+
+Indicadores das fórmulas: **Prémio** (o resultado passa a ser o prémio anual
+da cotação; no máximo uma por cotação), **Capital** (registado, não altera o
+prémio), **Ocultar** (não se mostra ao cliente), **Fracionamento** (valor da
+prestação na frequência indicada, usado na emissão em vez do encargo de
+`pricing.fractionation`), **Conversão** (guardado; ver lacuna abaixo).
+`minResult` é o resultado mínimo. Âmbito (`scope`): categorias do plano,
+planos (subprodutos) e tipos de apólice (INDIVIDUAL/GROUP); vazio = todos.
+
+No cálculo, as fórmulas do produto correm no fim, depois das fórmulas gerais
+(`pricing.formulas`), com o prémio do motor como `premio_tecnico`. Uma fórmula
+de prémio que se aplique substitui o total. A versão usada fica em
+`businessConfigurationVersions` e os resultados no componente
+`PRODUCT_FORMULAS` e no passo `PRODUCT_FORMULAS_EVALUATED` da explicação.
+
+Lacunas (não inventadas): o indicador **Conversão** não tem regra definida
+(moeda/unidade de conversão) e não altera o cálculo; o campo **Upload** do
+ecrã não tem semântica descrita — os ficheiros anexam-se à versão da
+configuração (documentos da configuração de negócio). Os separadores PDFs,
+Regras de Subscrição, Regras por Produto, Limites Operacionais e Workflow
+aparecem nas imagens sem detalhe; o backend já tem modelos de documentos,
+regras «Quando… então…», limites de autoridade e fluxo de aprovação, mas
+não por produto.
+

@@ -1,5 +1,13 @@
 from django.urls import path
 
+from .product_setup_views import (
+    ProductPricingSetupCatalogView,
+    ProductPricingSetupFormView,
+    ProductPricingSetupHistoryView,
+    ProductPricingSetupTestView,
+    ProductPricingSetupValidateView,
+    ProductPricingSetupView,
+)
 from .actuarial_views import ActuarialModelCatalogView, ActuarialModelImportView, ActuarialModelTemplateView
 from .views import (
     CatalogView,
@@ -33,6 +41,12 @@ from .formula_views import (
 )
 
 urlpatterns = [
+    path("business-config/product-setup/catalog", ProductPricingSetupCatalogView.as_view()),
+    path("products/<uuid:product_id>/pricing-setup", ProductPricingSetupView.as_view()),
+    path("products/<uuid:product_id>/pricing-setup/validate", ProductPricingSetupValidateView.as_view()),
+    path("products/<uuid:product_id>/pricing-setup/test", ProductPricingSetupTestView.as_view()),
+    path("products/<uuid:product_id>/pricing-setup/history", ProductPricingSetupHistoryView.as_view()),
+    path("products/<uuid:product_id>/pricing-setup/form", ProductPricingSetupFormView.as_view()),
     path("business-config/catalog", CatalogView.as_view()),
     path("business-config/configurations", ConfigurationListCreateView.as_view()),
     path("business-config/configurations/<uuid:configuration_id>", ConfigurationDetailView.as_view()),

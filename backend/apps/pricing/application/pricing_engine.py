@@ -88,6 +88,9 @@ from apps.pricing.infrastructure.rule_repository import parse_pricing_config, re
 from apps.pricing.application.plan_dimensions import PlanPricingContext, resolve_plan_pricing_context
 from apps.pricing.application.rating_table_service import resolve_factor, resolve_rating_table
 from apps.product.infrastructure.models import Plan
+from apps.business_config.application.overlays import effective_plan_settings
+from apps.business_config.application.product_setup_service import load_for_pricing as load_product_setup
+from apps.business_config.domain.product_setup import ProductSetup, applies_to, evaluate_product_setup, normalise_inputs
 from apps.business_config.application.formula_pricing import (
     apply_person_formulas,
     apply_quote_formulas,
@@ -314,6 +317,19 @@ def _execute(
     config_snapshot = dict(business_pricing.versions) if business_pricing else {}
     if custom_rules.version is not None:
         config_snapshot["rules.custom"] = custom_rules.version
+    # Grupos de opções, campos, valores e fórmulas do produto (por produto).
+    product_setup = load_product_setup(plan.product_id, effective_date)
+    if product_setup is not None:
+        setup_row, setup = product_setup
+        # Grupos e campos obrigatórios em falta: recusa antes de criar o cálculo.
+        scope = {"category": effective_plan_settings(plan, effective_date).get("category"), "plan_code": plan.code,
+                 "policy_type": context.get("policyType")}
+        if any(f.active and applies_to(f, **scope) for f in setup.formulas.values()):
+            normalise_inputs(setup, plan_context.selection.get("productOptions"),
+                             plan_context.selection.get("productFields"), require=True)
+        config_snapshot[setup_row.config_key] = {
+            "configurationId": str(setup_row.id), "versionNo": setup_row.version_no, "checksum": setup_row.checksum,
+        }
 
     pricing_run = PricingRun.objects.create(
         tenant_id=tenant_id.value,
@@ -352,6 +368,7 @@ def _execute(
                 pre_existing=pre_existing,
                 custom_rules=custom_rules,
                 context=context,
+                product_setup=product_setup,
             )
             PricingRun.objects.filter(id=pricing_run.id).update(
                 status=PricingRunStatus.CALCULATED.value,
@@ -425,6 +442,7 @@ def _run_calculation(
     pre_existing: dict[str, dict[str, Any]],
     custom_rules: PublishedRules | None = None,
     context: dict[str, Any] | None = None,
+    product_setup: tuple[Any, ProductSetup] | None = None,
 ) -> Decimal:
     context = context or {}
     custom_rules = custom_rules or PublishedRules()
@@ -1230,6 +1248,48 @@ def _run_calculation(
             order += 1
         for item in outcome["skipped"]:
             trace("FORMULA_SKIPPED", rule_code=item["code"], output_data={"reason": item["reason"]})
+
+    # Fórmulas do produto (separador «Fórmulas»): correm no fim, com o prémio
+    # técnico já calculado como `premio_tecnico`. A fórmula de prémio, se se
+    # aplicar, passa a ser o prémio anual; as restantes (capital, prestações,
+    # taxas auxiliares) ficam registadas no componente PRODUCT_FORMULAS.
+    if product_setup is not None:
+        setup_row, setup = product_setup
+        settings = effective_plan_settings(plan, pricing_run.effective_date)
+        scope = {"category": settings.get("category"), "plan_code": plan.code, "policy_type": context.get("policyType")}
+        if any(f.active and applies_to(f, **scope) for f in setup.formulas.values()):
+            selection = plan_context.selection
+            before_total = total_amount
+            outcome = evaluate_product_setup(
+                setup, options=selection.get("productOptions"), fields=selection.get("productFields"),
+                ages=[_member_age(m, pricing_run.effective_date) for m in members], technical_premium=total_amount,
+                members_count=len(member_ids), require=True, **scope,
+            )
+            source = f"BUSINESS_CONFIG:{setup_row.config_key}"
+            if outcome["premium"] is not None:
+                total_amount = Decimal(outcome["premium"])
+                _guard_amount(total_amount)
+                PricingComponent.objects.create(
+                    tenant_id=tenant_id, pricing_run=pricing_run, member=None, component_order=order,
+                    component_code=f"PRODUCT_FORMULA:{outcome['premiumFormula']}",
+                    component_type=PricingComponentType.ADJUSTMENT.value,
+                    adjustment_amount=round_amount(total_amount - before_total), result_amount=total_amount,
+                    source_code=f"{source}:{outcome['premiumFormula']}", source_version=str(setup_row.version_no),
+                    metadata_json={"technicalPremium": str(before_total), "formula": outcome["premiumFormula"]},
+                )
+                order += 1
+            PricingComponent.objects.create(
+                tenant_id=tenant_id, pricing_run=pricing_run, member=None, component_order=order,
+                component_code="PRODUCT_FORMULAS", component_type=PricingComponentType.OTHER.value,
+                result_amount=total_amount, source_code=source, source_version=str(setup_row.version_no),
+                metadata_json=outcome,
+            )
+            order += 1
+            trace("PRODUCT_FORMULAS_EVALUATED", rule_code=setup_row.config_key,
+                  input_data={"technicalPremium": str(before_total), **outcome["selection"]},
+                  output_data={"results": outcome["results"], "groupValues": outcome["groupValues"],
+                               "premium": outcome["premium"], "installments": outcome["installments"],
+                               "totalAmount": str(total_amount), "configurationVersion": setup_row.version_no})
 
     # O componente TOTAL deve existir mesmo quando não há fórmulas.
     PricingComponent.objects.create(

@@ -36,6 +36,12 @@ from apps.quote.domain.enums import (
 )
 
 
+def pricing_today() -> datetime.date:
+    """Dia do cálculo de uma cotação aberta. Função à parte para os casos de
+    referência do Excel poderem fixar o dia sem mexer no relógio do sistema."""
+    return timezone.localdate()
+
+
 class Quote(TenantScopedModel):
     STATUS_CHOICES = [(s.value, s.value) for s in QuoteStatus]
 
@@ -97,9 +103,17 @@ class Quote(TenantScopedModel):
 
     @property
     def reference_date(self) -> datetime.date:
-        """Data de referência do cálculo (idades, configurações e tarifas em
-        vigor, disponibilidade do plano): o dia de criação da cotação."""
-        return timezone.localdate(self.created_at) if self.created_at else timezone.localdate()
+        """Data de referência do cálculo: idades, configurações, tarifas e
+        regras em vigor, disponibilidade do plano.
+
+        Cotação aberta (DRAFT/READY, ou ainda sem cálculo): o dia de hoje — o
+        que for publicado na interface passa a valer no próximo cálculo.
+        Depois de submetida o prémio fica congelado: vale o dia do último
+        cálculo, para documentos, emissão e reavaliações baterem com ele.
+        (A cotação não tem data de efeito; a validade conta da criação.)"""
+        if self.status in ("DRAFT", "READY") or self.latest_pricing_run_id is None:
+            return pricing_today()
+        return self.latest_pricing_run.effective_date
 
     def __str__(self) -> str:  # pragma: no cover - debug helper
         return f"Quote({self.id}, {self.status})"

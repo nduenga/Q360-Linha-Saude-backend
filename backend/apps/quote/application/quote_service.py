@@ -550,6 +550,8 @@ def build_pricing_context(
     # Perfil actuarial do tomador (região, participação nos custos, venda
     # cruzada, renovação sem sinistralidade; e, em grupo, sector/adesão).
     # Vale para SAU e SAG: o Calculador do modelo aplica-o aos dois.
+    # Tipo de apólice (âmbito das fórmulas do produto: «Tipos de Apólice»).
+    context["policyType"] = "GROUP" if quote.proposer.proposer_type == "ORGANISATION" else "INDIVIDUAL"
     proposer_attributes = quote.proposer.attributes_json or {}
     actuarial_profile = proposer_attributes.get("actuarialProfile")
     if actuarial_profile is not None:
@@ -581,6 +583,51 @@ def build_pricing_context(
     return context, priceable_member_ids
 
 
+def _pricing_inputs_fingerprint(quote: Quote, context: dict, member_ids: list) -> str:
+    """Impressão digital de tudo o que entra no cálculo da cotação, para saber
+    se o último cálculo ainda vale. Inclui todas as configurações de negócio
+    publicadas em vigor no dia de referência (tarifas, fórmulas, factores,
+    regras, modelo actuarial, subscrição…), as tabelas/parâmetros/regras
+    legados resolvidos, o conteúdo do plano (definições e coberturas) e os
+    dados das pessoas."""
+    from django.db.models import Q as _Q
+
+    from apps.business_config.infrastructure.models import BusinessConfiguration
+    from apps.pricing.application.rating_table_service import resolve_rating_table
+    from apps.pricing.infrastructure.parameter_repository import resolve_pricing_parameter_set
+
+    day = quote.reference_date
+    configurations = sorted(
+        [key, str(cid), version, checksum]
+        for key, cid, version, checksum in BusinessConfiguration.objects.filter(
+            tenant_id=quote.tenant_id, status="PUBLISHED", effective_from__lte=day
+        )
+        .filter(_Q(effective_to__isnull=True) | _Q(effective_to__gte=day))
+        .values_list("config_key", "id", "version_no", "checksum")
+    )
+    legacy: dict[str, Any] = {}
+    if context.get("ratingTableCode"):
+        table = resolve_rating_table(code=context["ratingTableCode"], effective_date=day)
+        legacy["ratingTable"] = [str(table.id), table.row_version] if table else None
+    if context.get("parameterSetCode"):
+        params = resolve_pricing_parameter_set(code=context["parameterSetCode"], effective_date=day)
+        legacy["parameterSet"] = [str(params.id), params.row_version] if params else None
+    people = sorted(
+        [str(m.id), m.date_of_birth.isoformat() if m.date_of_birth else None, m.relationship_code, m.sex_code]
+        for m in InsuredMember.objects.filter(id__in=member_ids)
+    )
+    payload = {
+        "referenceDate": day.isoformat(),
+        "configurations": configurations,
+        "legacy": legacy,
+        "plan": _plan_content_snapshot(quote.plan, quote.selection_json, day),
+        "planRowVersion": quote.plan.row_version,
+        "people": people,
+        "context": context,
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
 def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
     if quote.status not in (QuoteStatus.DRAFT.value, QuoteStatus.READY.value):
         extra = ""
@@ -600,56 +647,21 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
             f"A cotação {quote.id} está em {quote.status}; o cálculo do prémio só pode correr em rascunho (DRAFT) ou pronta (READY).{extra}"
         )
 
-    if not recalculate and quote.latest_pricing_run_id and quote.latest_pricing_run.status == "CALCULATED":
-        latest = quote.latest_pricing_run
-        snapshot = latest.business_configuration_snapshot_json or {}
-        current_reference = BusinessConfigurationResolver.get(
-            "pricing.reference_premiums", effective_date=quote.reference_date
-        )
-        if current_reference is None and not snapshot:
-            return latest
-        if current_reference is not None:
-            current_keys = (
-                "pricing.reference_premiums",
-                "pricing.factors",
-                "pricing.adjustments",
-                "pricing.taxes_fees",
-            )
-            current_snapshot = {}
-            for key in current_keys:
-                current = BusinessConfigurationResolver.get(key, effective_date=quote.reference_date)
-                if current is None:
-                    current_snapshot = {}
-                    break
-                current_snapshot[key] = {
-                    "configurationId": str(current.id),
-                    "versionNo": current.version_no,
-                    "checksum": current.checksum,
-                }
-            stored_snapshot = {
-                key: {
-                    "configurationId": value.get("configurationId"),
-                    "versionNo": value.get("versionNo"),
-                    "checksum": value.get("checksum"),
-                }
-                for key, value in snapshot.items()
-            }
-            # Chaves opcionais que, quando publicadas, também entram no cálculo
-            # (e por isso no snapshot gravado em cada PricingRun).
-            for key in ("pricing.actuarial_model", "pricing.formulas", "rules.custom"):
-                current = BusinessConfigurationResolver.get(key, effective_date=quote.reference_date)
-                if current_snapshot and current is not None:
-                    current_snapshot[key] = {
-                        "configurationId": str(current.id),
-                        "versionNo": current.version_no,
-                        "checksum": current.checksum,
-                    }
-            if current_snapshot and stored_snapshot == current_snapshot:
-                return latest
-        elif not current_reference and snapshot:
-            return latest
-
     context, priceable_member_ids = build_pricing_context(quote)
+    fingerprint = _pricing_inputs_fingerprint(quote, context, priceable_member_ids)
+    if not recalculate and quote.latest_pricing_run_id and quote.latest_pricing_run.status == "CALCULATED":
+        # Reaproveita o último cálculo só se nada do que entra nele mudou:
+        # configurações publicadas em vigor, plano e coberturas, pessoas,
+        # escolhas e ajustes da cotação, e o dia de referência.
+        last = (
+            QuoteSnapshot.objects.filter(
+                quote=quote, pricing_run_id=quote.latest_pricing_run_id, snapshot_type=QuoteSnapshotType.PRICING.value
+            )
+            .order_by("-snapshot_no")
+            .first()
+        )
+        if last is not None and (last.snapshot_json or {}).get("inputsFingerprint") == fingerprint:
+            return quote.latest_pricing_run
 
     pricing_run = calculate_pricing(
         plan_id=quote.plan_id,
@@ -668,6 +680,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
         "pricingRunId": str(pricing_run.id),
         "totalAmount": str(pricing_run.total_amount),
         "currencyCode": pricing_run.currency_code,
+        "inputsFingerprint": fingerprint,
     }
     checksum = hashlib.sha256(json.dumps(snapshot_json, sort_keys=True).encode("utf-8")).hexdigest()
     next_snapshot_no = (

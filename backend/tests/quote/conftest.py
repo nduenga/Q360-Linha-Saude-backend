@@ -19,10 +19,17 @@ def _oidc_static_key(settings):
     settings.OIDC_ALGORITHMS = ["HS256"]
 
 
+def pin_pricing_day(monkeypatch, day: datetime.date) -> None:
+    """A cotação não tem data de efeito (2026-10-15): uma cotação aberta
+    calcula no dia do cálculo (idades, configurações em vigor). Os casos de
+    referência do Excel fixam esse dia no dia de referência do livro."""
+    import apps.quote.infrastructure.models as quote_models
+
+    monkeypatch.setattr(quote_models, "pricing_today", lambda: day)
+
+
 def set_quote_created_on(quote_id, day: datetime.date) -> None:
-    """A cotação não tem data de efeito (2026-10-15): a data de referência do
-    cálculo (idades, configurações em vigor) é o dia de criação. Os casos de
-    referência do Excel fixam-no no dia de referência do livro."""
+    """Simula uma cotação criada noutro dia (a validade conta da criação)."""
     from apps.quote.infrastructure.models import Quote
 
     moment = datetime.datetime.combine(day, datetime.time(12), tzinfo=datetime.timezone.utc)
