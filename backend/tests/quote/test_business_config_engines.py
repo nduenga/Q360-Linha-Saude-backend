@@ -82,7 +82,7 @@ def test_deactivated_plan_cannot_start_a_quote(admin_client, approver):
     publish(admin_client, approver, "product.plans", {"plans": [{"code": "SIM-PLAN", "name": "SIM", "active": False}]})
     response = admin_client.post(
         "/api/v1/quotes",
-        {"proposerId": scope["proposerId"], "planId": scope["planId"], "effectiveDate": "2026-06-01"},
+        {"proposerId": scope["proposerId"], "planId": scope["planId"]},
         format="json",
     )
     assert response.status_code in (400, 404, 422)

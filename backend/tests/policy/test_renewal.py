@@ -50,7 +50,9 @@ def test_renewal_quote_from_an_active_policy(admin_client, tenant):
     body = renewal.data
     end = datetime.date.fromisoformat(policy["endDate"])
     assert body["quoteType"] == "RENEWAL" and body["sourcePolicyId"] == policy["id"]
-    assert body["effectiveDate"] == (end + datetime.timedelta(days=1)).isoformat()
+    # A cotação de renovação não tem data de efeito; o novo período proposto começa a seguir ao fim do actual.
+    assert "effectiveDate" not in body
+    assert body["renewal"]["proposedStartDate"] == (end + datetime.timedelta(days=1)).isoformat()
     assert body["status"] == "READY"  # população carregada e preço calculado
     context = body["renewal"]
     assert context["sourcePolicyNumber"] == policy["policyNumber"]
@@ -98,12 +100,18 @@ def test_a_policy_still_awaiting_its_first_premium_cannot_be_renewed(admin_clien
 
 
 @pytest.mark.django_db
-def test_renewal_cannot_start_before_the_end_of_the_period(admin_client, tenant):
+def test_the_emission_form_proposes_the_day_after_the_current_period(admin_client, tenant):
+    """Antes, a renovação recebia uma data de efeito que não podia ser anterior
+    ao fim do período. A cotação deixou de ter essa data (2026-10-15): o
+    início é escolhido na emissão e o formulário propõe o dia seguinte ao fim
+    do período actual."""
     active = _activate(admin_client, tenant, suffix="R4")
-    early = admin_client.post("/api/v1/quotes/renewals", {"sourcePolicyId": active["id"], "effectiveDate": "2026-12-01"}, format="json")
-    assert early.status_code == 409
-    later = admin_client.post("/api/v1/quotes/renewals", {"sourcePolicyId": active["id"], "effectiveDate": "2027-07-01"}, format="json")
-    assert later.status_code == 201 and later.data["effectiveDate"] == "2027-07-01"
+    renewal = admin_client.post("/api/v1/quotes/renewals", {"sourcePolicyId": active["id"]}, format="json")
+    assert renewal.status_code == 201, renewal.data
+    draft = admin_client.get(f"/api/v1/quotes/{renewal.data['id']}/policy-draft")
+    assert draft.status_code == 200, draft.data
+    expected = (datetime.date.fromisoformat(active["endDate"]) + datetime.timedelta(days=1)).isoformat()
+    assert str(draft.data["defaults"]["requestedStartDate"]) == expected
 
 
 @pytest.mark.django_db

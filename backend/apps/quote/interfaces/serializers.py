@@ -28,8 +28,7 @@ class QuoteSerializer(serializers.Serializer):
     proposerId = serializers.UUIDField(source="proposer_id")
     planId = serializers.UUIDField(source="plan_id")
     status = serializers.ChoiceField(choices=[s.value for s in QuoteStatus])
-    
-    effectiveDate = serializers.DateField(source="effective_date")
+    # Sem data de efeito (decisão de 2026-10-15): data de criação e validade.
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
     validUntil = serializers.DateField(source="valid_until", allow_null=True)
@@ -124,16 +123,18 @@ class _ProposerInputSerializer(serializers.Serializer):
 
 class QuoteCreateRequestSerializer(serializers.Serializer):
     """Aceita dois caminhos:
-    - Modo "referência": `proposerId` (UUID) + `planId` + `effectiveDate`.
+    - Modo "referência": `proposerId` (UUID) + `planId`.
     - Modo "inline":    `proposerInput` (e opcionalmente `titularMemberInput`)
-                         + `planId` + `effectiveDate`. Cria tudo no mesmo request.
+                         + `planId`. Cria tudo no mesmo request.
+
+    A cotação não tem data de efeito: fica com a data de criação e a validade
+    (`quote.validity_days`); o início da vigência escolhe-se na emissão.
     """
 
     proposerId = serializers.UUIDField(required=False, default=None, allow_null=True)
     proposerInput = _ProposerInputSerializer(required=False, default=None, allow_null=True)
     titularMemberInput = _TitularMemberInputSerializer(required=False, default=None, allow_null=True)
     planId = serializers.UUIDField()
-    effectiveDate = serializers.DateField()
 
     def validate(self, attrs: dict) -> dict:
         if attrs.get("proposerId") is None and attrs.get("proposerInput") is None:
@@ -169,11 +170,6 @@ class QuoteCreateRequestSerializer(serializers.Serializer):
                         {"proposerInput": {"dateOfBirth": "A data de nascimento é obrigatória para proponentes individuais."}}
                     )
         return attrs
-
-
-class QuoteUpdateRequestSerializer(serializers.Serializer):
-    effectiveDate = serializers.DateField()
-    rowVersion = serializers.IntegerField(min_value=0)
 
 
 class QuoteMemberRequestSerializer(serializers.Serializer):
@@ -429,12 +425,10 @@ class ScenarioApplyRequestSerializer(serializers.Serializer):
 
 class QuoteRenewalRequestSerializer(serializers.Serializer):
     sourcePolicyId = serializers.UUIDField()
-    effectiveDate = serializers.DateField(required=False, allow_null=True, default=None)
     planId = serializers.UUIDField(required=False, allow_null=True, default=None)
 
 
 class QuoteCloneRequestSerializer(serializers.Serializer):
-    effectiveDate = serializers.DateField(required=False, allow_null=True, default=None)
     reason = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
 
 

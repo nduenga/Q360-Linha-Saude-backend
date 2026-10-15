@@ -50,7 +50,7 @@ def _setup(admin_client, suffix: str) -> dict:
         {"proposerId": proposer, "relationshipCode": "ASCENDENTE", "firstName": "Rosa", "lastName": "Silva", "dateOfBirth": "1960-01-01"},
     ).data["id"]
     quote = admin_client.post(
-        "/api/v1/quotes", {**plan_ref, "proposerId": proposer, "effectiveDate": "2026-06-01"}, format="json"
+        "/api/v1/quotes", {**plan_ref, "proposerId": proposer}, format="json"
     ).data
     admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": holder}, format="json")
     return {"quoteId": quote["id"], "proposerId": proposer, "holderId": holder, "parentId": parent, "planId": plan_ref["planId"]}

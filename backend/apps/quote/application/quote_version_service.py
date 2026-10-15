@@ -86,7 +86,6 @@ def capture_state(quote: Quote) -> dict[str, Any]:
         "quoteType": quote.quote_type,
         "sourcePolicyId": str(quote.source_policy_id) if quote.source_policy_id else None,
         "planId": str(quote.plan_id),
-        "effectiveDate": quote.effective_date.isoformat(),
         "selection": quote.selection_json or {},
         "adjustments": adjustments,
         "members": members,
@@ -158,7 +157,8 @@ def diff_states(before: dict[str, Any], after: dict[str, Any]) -> list[dict[str,
         if was != now:
             changes.append({"field": field, "before": was, "after": now})
 
-    add("effectiveDate", before["effectiveDate"], after["effectiveDate"])
+    # Versões gravadas antes de 2026-10-15 ainda trazem `effectiveDate`; a
+    # cotação deixou de o ter e não entra na comparação.
     add("planId", before["planId"], after["planId"])
     for key in sorted(set(before["selection"]) | set(after["selection"])):
         add(f"selection.{key}", before["selection"].get(key), after["selection"].get(key))
@@ -219,15 +219,13 @@ def restore_version(*, quote: Quote, version_no: int, reason: str | None) -> tup
 
     # Validate before touching anything: the plan/coverage configuration may
     # have changed since the version was saved.
-    resolve_plan_pricing_context(plan=quote.plan, selection=state["selection"], effective_date=quote.effective_date)
+    resolve_plan_pricing_context(plan=quote.plan, selection=state["selection"], effective_date=quote.reference_date)
     for spec in state["adjustments"]:
         simulator_service._enforce_authority(quote, {"kind": spec["kind"], "value": Decimal(spec["value"])})
 
     actor = CurrentActorProvider.get()
     before = capture_state(quote)
     report: dict[str, list[str]] = {"addedMembers": [], "removedMembers": [], "skippedMembers": []}
-    import datetime
-
     with transaction.atomic():
         wanted = {m["memberId"]: m for m in state["members"] if m.get("memberId")}
         current = {str(qm.member_id): qm for qm in quote.members.all()}
@@ -247,8 +245,6 @@ def restore_version(*, quote: Quote, version_no: int, reason: str | None) -> tup
         quote.refresh_from_db()
 
         Quote.objects.filter(id=quote.id).update(
-            effective_date=datetime.date.fromisoformat(state["effectiveDate"]),
-            valid_until=quote_service._default_valid_until(datetime.date.fromisoformat(state["effectiveDate"])),
             selection_json=state["selection"],
             row_version=quote.row_version + 1,
         )

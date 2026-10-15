@@ -82,13 +82,14 @@ def build_draft(quote: Quote) -> dict[str, Any]:
         },
         "plan": {"product": quote.plan.product.name if quote.plan.product else None, "name": quote.plan.name},
         "currencyCode": currency,
-        "effectiveDate": quote.effective_date,
+        "quoteCreatedAt": quote.created_at,
         "validUntil": quote.valid_until,
         "premium": {"total": str(issuance_service._round2(total)) if total is not None else None, "currencyCode": currency},
         "defaults": {
             "termMonths": DEFAULT_TERM_MONTHS,
             "paymentFrequency": DEFAULT_FREQUENCY,
-            "requestedStartDate": None,
+            # Renovação: o novo período começa, por omissão, a seguir ao fim do actual.
+            "requestedStartDate": (quote.renewal_json or {}).get("proposedStartDate"),
             "signedAt": timezone.now(),
             "signatureMethod": "PRESENCIAL",
             "signatory": {

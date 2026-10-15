@@ -3,8 +3,8 @@ pricing + immutable snapshot, and the DRAFT<->READY side effects ART-009's
 "Quote Machine" sheet assigns to QT-001/QT-002 (there is no separate manual
 "mark ready" command in ART-006 — becoming READY is an automatic side
 effect of a successful `priceQuote` whose population has no HARD_STOP/
-CONFIG_ERROR eligibility member; any material edit — effectiveDate change,
-member added/removed — demotes back to DRAFT and invalidates the pricing
+CONFIG_ERROR eligibility member; any material edit — member added/removed
+— demotes back to DRAFT and invalidates the pricing
 reference, per QT-002's "Atomic Side Effects").
 
 OPEN DECISION — see DECISIONS_TAKEN.md#S06-QUOTE-001 for the judgment
@@ -21,6 +21,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.utils.timezone import localdate as timezone_localdate
 from django.utils.timezone import now as timezone_now
 
 from apps.client.application.member_service import create_member
@@ -152,7 +153,9 @@ def _plan_content_snapshot(plan: Plan, selection: dict | None = None, effective_
     }
 
 
-def _default_valid_until(effective_date: datetime.date) -> datetime.date:
+def _default_valid_until(start: datetime.date) -> datetime.date:
+    """Validade da cotação: `start` (o dia de criação, ou o de reabertura)
+    mais `quote.validity_days` dias."""
     # OPEN DECISION: no approved document fixes the default quote validity
     # period. Configurable via QUOTE_DEFAULT_VALIDITY_DAYS (settings/env),
     # never hardcoded in business logic — see DECISIONS_TAKEN.md#S06-QUOTE-001.
@@ -163,7 +166,7 @@ def _default_valid_until(effective_date: datetime.date) -> datetime.date:
     days = system_parameter_service.get_stored_value("quote.validity_days")
     if days is None:
         days = getattr(settings, "QUOTE_DEFAULT_VALIDITY_DAYS", 30)
-    return effective_date + datetime.timedelta(days=days)
+    return start + datetime.timedelta(days=days)
 
 
 def _record_transition(
@@ -193,7 +196,6 @@ def create_quote(
     *,
     proposer_id: uuid.UUID | None = None,
     plan_id: uuid.UUID,
-    effective_date: datetime.date,
     # Atalho para o formulário "nova cotação" que ainda não tem um Proposer
     # persistido. Passar `proposerInput` cria o Proposer atomáticamente e,
     # opcionalmente, passar `titularMemberInput` cria o membro titular (TITULAR)
@@ -292,7 +294,9 @@ def create_quote(
                     f"O plano {plan_id} está em {plan.status}; só um plano ativo (ACTIVE) pode iniciar uma nova cotação"
                 )
 
-            available, why = plan_availability(plan, effective_date)
+            # Sem data de efeito (decisão de 2026-10-15): a referência é o dia de criação.
+            today = timezone_localdate()
+            available, why = plan_availability(plan, today)
             if not available:
                 raise ReferencedEntityNotFoundError(why)
 
@@ -314,8 +318,7 @@ def create_quote(
                 plan=plan,
                 status=QuoteStatus.DRAFT.value,
                 quote_number=quote_number,
-                effective_date=effective_date,
-                valid_until=_default_valid_until(effective_date),
+                valid_until=_default_valid_until(today),
                 created_by=actor.actor_id if actor else "unknown",
             )
             _record_transition(quote, from_status=None, to_status=QuoteStatus.DRAFT.value)
@@ -329,7 +332,7 @@ def create_quote(
                     "proposerId": str(proposer_id),
                     "productId": str(plan.product_id),
                     "planId": str(plan_id),
-                    "effectiveDate": effective_date.isoformat(),
+                    "validUntil": quote.valid_until.isoformat(),
                     "status": QuoteStatus.DRAFT.value,
                 },
             )
@@ -404,7 +407,7 @@ def add_quote_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str 
         proposer_id=quote.proposer_id,
         member_id=member.id,
         plan_id=quote.plan_id,
-        effective_date=quote.effective_date,
+        effective_date=quote.reference_date,
         context={},
         correlation_id=correlation_id,
     )
@@ -466,36 +469,6 @@ def remove_quote_member(*, quote: Quote, member_id: uuid.UUID) -> None:
             "memberId": str(member_id),
         },
     )
-
-
-def update_quote(*, quote: Quote, effective_date: datetime.date, row_version: int) -> Quote:
-    was_ready = quote.status == QuoteStatus.READY.value
-    new_status = QuoteStatus.DRAFT.value if was_ready else quote.status
-    updated = Quote.objects.filter(id=quote.id, row_version=row_version).update(
-        effective_date=effective_date,
-        valid_until=_default_valid_until(effective_date),
-        status=new_status,
-        latest_pricing_run=None if was_ready else quote.latest_pricing_run_id,
-        row_version=row_version + 1,
-    )
-    if updated == 0:
-        raise RowVersionMismatchError(f"A versão da cotação {quote.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
-    quote.refresh_from_db()
-    if was_ready:
-        _record_transition(quote, from_status=QuoteStatus.READY.value, to_status=QuoteStatus.DRAFT.value, reason_code="MATERIAL_EDIT")
-    _audit.record(action="quote.updated", entity_type="Quote", entity_id=str(quote.id), metadata={"rowVersion": quote.row_version})
-    _outbox.append(
-        aggregate_type="Quote",
-        aggregate_id=str(quote.id),
-        event_type="QUOTE.POPULATION.UPDATED",
-        payload={
-            "quoteId": str(quote.id),
-            "changeType": "EFFECTIVE_DATE_UPDATED",
-            "effectiveDate": effective_date.isoformat(),
-            "rowVersion": quote.row_version,
-        },
-    )
-    return quote
 
 
 def active_adjustments_for_context(quote: Quote) -> list[dict]:
@@ -590,10 +563,10 @@ def build_pricing_context(
             context["members"][str(member_id)]["entryAge"] = entry_age
     # A configuração de negócio publicada (pricing.*) tem prioridade; sem ela,
     # mantém-se a resolução legada RatingTable/PricingParameterSet.
-    if BusinessConfigurationResolver.get("pricing.reference_premiums", effective_date=quote.effective_date) is None:
-        context["ratingTableCode"] = resolve_default_rating_table_code(effective_date=quote.effective_date)
-        context["parameterSetCode"] = resolve_default_parameter_set_code(effective_date=quote.effective_date)
-    rule_version = resolve_pricing_rule_version_optional(effective_date=quote.effective_date)
+    if BusinessConfigurationResolver.get("pricing.reference_premiums", effective_date=quote.reference_date) is None:
+        context["ratingTableCode"] = resolve_default_rating_table_code(effective_date=quote.reference_date)
+        context["parameterSetCode"] = resolve_default_parameter_set_code(effective_date=quote.reference_date)
+    rule_version = resolve_pricing_rule_version_optional(effective_date=quote.reference_date)
     if rule_version:
         context["ruleVersionCode"] = rule_version
     chosen_selection = quote.selection_json if selection is None else selection
@@ -631,7 +604,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
         latest = quote.latest_pricing_run
         snapshot = latest.business_configuration_snapshot_json or {}
         current_reference = BusinessConfigurationResolver.get(
-            "pricing.reference_premiums", effective_date=quote.effective_date
+            "pricing.reference_premiums", effective_date=quote.reference_date
         )
         if current_reference is None and not snapshot:
             return latest
@@ -644,7 +617,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
             )
             current_snapshot = {}
             for key in current_keys:
-                current = BusinessConfigurationResolver.get(key, effective_date=quote.effective_date)
+                current = BusinessConfigurationResolver.get(key, effective_date=quote.reference_date)
                 if current is None:
                     current_snapshot = {}
                     break
@@ -664,7 +637,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
             # Chaves opcionais que, quando publicadas, também entram no cálculo
             # (e por isso no snapshot gravado em cada PricingRun).
             for key in ("pricing.actuarial_model", "pricing.formulas", "rules.custom"):
-                current = BusinessConfigurationResolver.get(key, effective_date=quote.effective_date)
+                current = BusinessConfigurationResolver.get(key, effective_date=quote.reference_date)
                 if current_snapshot and current is not None:
                     current_snapshot[key] = {
                         "configurationId": str(current.id),
@@ -680,7 +653,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
 
     pricing_run = calculate_pricing(
         plan_id=quote.plan_id,
-        effective_date=quote.effective_date,
+        effective_date=quote.reference_date,
         member_ids=priceable_member_ids,
         context=context,
         correlation_id=correlation_id,
@@ -688,8 +661,8 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
 
     actor = CurrentActorProvider.get()
     snapshot_json = {
-        "plan": _plan_content_snapshot(quote.plan, quote.selection_json, quote.effective_date),
-        "effectiveDate": quote.effective_date.isoformat(),
+        "plan": _plan_content_snapshot(quote.plan, quote.selection_json, quote.reference_date),
+        "referenceDate": quote.reference_date.isoformat(),
         "memberIds": [str(m) for m in priceable_member_ids],
         "context": context,
         "pricingRunId": str(pricing_run.id),
@@ -891,8 +864,8 @@ def _create_snapshot(*, quote: Quote, snapshot_type: str) -> QuoteSnapshot:
     actor = CurrentActorProvider.get()
     snapshot_json = {
         "status": quote.status,
-        "plan": _plan_content_snapshot(quote.plan, quote.selection_json, quote.effective_date),
-        "effectiveDate": quote.effective_date.isoformat(),
+        "plan": _plan_content_snapshot(quote.plan, quote.selection_json, quote.reference_date),
+        "referenceDate": quote.reference_date.isoformat(),
         "latestPricingRunId": str(quote.latest_pricing_run_id) if quote.latest_pricing_run_id else None,
     }
     checksum = hashlib.sha256(json.dumps(snapshot_json, sort_keys=True).encode("utf-8")).hexdigest()
@@ -1018,7 +991,7 @@ def decide_quote(
 
     authority_policy = None
     if decision == QuoteDecisionType.APPROVE.value:
-        authority_policy, max_amount = _resolve_authority_limit(effective_date=quote.effective_date)
+        authority_policy, max_amount = _resolve_authority_limit(effective_date=quote.reference_date)
         if max_amount is not None and quote.latest_pricing_run and quote.latest_pricing_run.total_amount is not None:
             from decimal import Decimal
 
@@ -1238,8 +1211,8 @@ def reopen_quote(*, quote: Quote, reason: str | None, row_version: int, correlat
         "row_version": row_version + 1,
     }
     if quote.valid_until is None or quote.valid_until < today:
-        # A validade caducou entretanto: renova-a (nunca anterior à data de início — ck_quote_dates).
-        updates["valid_until"] = _default_valid_until(max(quote.effective_date, today))
+        # A validade caducou entretanto: renova-a a partir do dia da reabertura.
+        updates["valid_until"] = _default_valid_until(today)
 
     with transaction.atomic():
         changed = Quote.objects.filter(
@@ -1261,7 +1234,7 @@ def reopen_quote(*, quote: Quote, reason: str | None, row_version: int, correlat
                 proposer_id=quote.proposer_id,
                 member_id=quote_member.member_id,
                 plan_id=quote.plan_id,
-                effective_date=quote.effective_date,
+                effective_date=quote.reference_date,
                 context={},
                 correlation_id=correlation_id,
             )

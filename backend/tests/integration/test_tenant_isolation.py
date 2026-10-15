@@ -372,7 +372,7 @@ class TestQuotePricingEligibilityTenantIsolation:
         proposer, member = self._make_proposer_and_principal_member(owner)
         quote = owner.post(
             "/api/v1/quotes",
-            {"proposerId": str(proposer.id), "planId": "placeholder", "effectiveDate": "2026-06-01"},
+            {"proposerId": str(proposer.id), "planId": "placeholder"},
         )
         # We don't need a successful quote creation — as long as we have a quote ID,
         # we can test cross-tenant visibility. Let's bypass the request and create directly.
@@ -382,7 +382,6 @@ class TestQuotePricingEligibilityTenantIsolation:
             tenant_id=t1.id,
             proposer=proposer,
             plan=plan,
-            effective_date="2026-06-01",
             status="DRAFT",
         )
 
@@ -403,7 +402,6 @@ class TestQuotePricingEligibilityTenantIsolation:
             tenant_id=t1.id,
             proposer=proposer,
             plan=plan,
-            effective_date="2026-06-01",
             status="DRAFT",
         )
 
@@ -489,7 +487,6 @@ class TestQuotePricingEligibilityTenantIsolation:
             tenant_id=tenant.id,
             proposer=proposer,
             plan=plan,
-            effective_date="2026-06-01",
             status="APPROVED",
         )
         snapshot = QuoteSnapshot.all_tenants.create(
@@ -564,7 +561,6 @@ class TestQuotePricingEligibilityTenantIsolation:
             tenant_id=t1.id,
             proposer=proposer,
             plan=plan,
-            effective_date="2026-06-01",
             status=QuoteStatus.IN_REVIEW.value,
         )
         ReviewTask.all_tenants.create(tenant_id=t1.id, quote=quote, created_by="actor-1")

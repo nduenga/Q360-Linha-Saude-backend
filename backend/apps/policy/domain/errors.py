@@ -41,8 +41,8 @@ class DuplicatePolicyError(DomainProblem):
 
 
 class InvalidStartDateError(DomainProblem):
-    """`requestedStartDate` violates OD-APO-003 (before the Quote's
-    `effectiveDate`) or is not strictly after the signature date."""
+    """`requestedStartDate` violates OD-APO-003: it is not strictly after
+    the signature date."""
 
     http_status = 400
     problem_code = "VALIDATION-400"

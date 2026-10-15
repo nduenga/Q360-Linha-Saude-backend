@@ -22,6 +22,7 @@ from config.openapi.registry import REGISTRY
 
 _TAGS = [
     ("/api/v1/customer-portal", "Customer Portal"),
+    ("/api/v1/search", "Search"),
     ("/api/v1/portal-requests", "Customer Portal Support"),
     ("/api/v1/portal-conversations", "Customer Portal Support"),
     ("/api/v1/portal-messages", "Customer Portal Support"),

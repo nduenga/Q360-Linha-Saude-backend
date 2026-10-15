@@ -12,9 +12,11 @@ as apps.eligibility/apps.pricing, see OPEN_DECISIONS.md#S04-CROSS-MODULE-001.
 """
 from __future__ import annotations
 
+import datetime
 import uuid
 
 from django.db import models
+from django.utils import timezone
 
 from apps.client.infrastructure.models import InsuredMember, Proposer
 from apps.eligibility.infrastructure.models import EligibilityEvaluation
@@ -50,7 +52,9 @@ class Quote(TenantScopedModel):
     )
     plan = models.ForeignKey(Plan, on_delete=models.DO_NOTHING, db_column="plan_id")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=QuoteStatus.DRAFT.value)
-    effective_date = models.DateField()
+    # Decisão de 2026-10-15: a cotação não tem data de efeito (ainda não se
+    # sabe se vai ser apólice; o início da vigência decide-se na emissão).
+    # Tem data de criação e validade (`quote.validity_days`, configurável).
     valid_until = models.DateField(null=True, blank=True)
     currency_code = models.CharField(max_length=3, null=True, blank=True)
     latest_pricing_run = models.ForeignKey(
@@ -90,6 +94,12 @@ class Quote(TenantScopedModel):
     class Meta:
         managed = False
         db_table = "quote"
+
+    @property
+    def reference_date(self) -> datetime.date:
+        """Data de referência do cálculo (idades, configurações e tarifas em
+        vigor, disponibilidade do plano): o dia de criação da cotação."""
+        return timezone.localdate(self.created_at) if self.created_at else timezone.localdate()
 
     def __str__(self) -> str:  # pragma: no cover - debug helper
         return f"Quote({self.id}, {self.status})"

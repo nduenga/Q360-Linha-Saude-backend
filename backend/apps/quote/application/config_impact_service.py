@@ -65,12 +65,12 @@ def simulate_impact(*, config_type: str, config_id: uuid.UUID, limit: int = 50) 
             continue
         try:
             baseline = preview_pricing(
-                plan_id=quote.plan_id, effective_date=quote.effective_date, member_ids=member_ids,
+                plan_id=quote.plan_id, effective_date=quote.reference_date, member_ids=member_ids,
                 context=context, correlation_id=None, render=_total,
             )
             candidate_context = {**context, "configOverrides": {override_key: str(candidate.id)}}
             changed = preview_pricing(
-                plan_id=quote.plan_id, effective_date=quote.effective_date, member_ids=member_ids,
+                plan_id=quote.plan_id, effective_date=quote.reference_date, member_ids=member_ids,
                 context=candidate_context, correlation_id=None, render=_total, allow_config_overrides=True,
             )
         except DomainProblem as exc:

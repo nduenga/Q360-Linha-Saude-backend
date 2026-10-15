@@ -61,6 +61,7 @@ Migrações novas neste trabalho:
 | `client/0009_member_nif` | Coluna opcional `insured_member.nif` |
 | `client/0010_nif_unique_required` | NIF do proponente obrigatório no formato do tipo (CHECK `NOT VALID`) e único por tenant; NIF da pessoa segura único por tenant. Pára, sem alterar dados, se já houver NIF repetidos |
 | `client/0011_member_nif_unique_per_proposer` | NIF da pessoa segura passa a ser único por tomador (a mesma pessoa pode ter o NIF em fichas de tomadores diferentes) |
+| `quote/0013_drop_quote_effective_date` | Remove a data de efeito da cotação (e a CHECK `ck_quote_dates`). O reverso recria-a com o dia de criação de cada cotação |
 | `business_config/0003_rejected_status` | Estado `REJECTED` na CHECK `ck_business_configuration_status` |
 
 Dados:

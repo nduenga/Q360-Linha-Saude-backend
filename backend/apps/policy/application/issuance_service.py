@@ -81,7 +81,7 @@ def fractionation_loading(quote: Quote, payment_frequency: str) -> Decimal:
       2. senão, a tabela do modelo actuarial registado no cálculo do prémio
          (a versão usada nesse cálculo, não a publicada hoje);
       3. senão, sem encargo (partes iguais)."""
-    config = BusinessConfigurationResolver.get("pricing.fractionation", effective_date=quote.effective_date)
+    config = BusinessConfigurationResolver.get("pricing.fractionation", effective_date=quote.reference_date)
     if config is not None:
         rows = flatten("pricing.fractionation", config.value_json).get("installments") or []
         return _loading_for(rows, payment_frequency)
@@ -124,15 +124,17 @@ def issue_policy(
         raise PolicyStateError(f"A cotação {quote.id} expirou em {quote.valid_until}; é necessária uma nova cotação")
 
     if requested_start_date is not None:
-        # OD-APO-003: never before the quote's effectiveDate (the tarifa
-        # was calculated for that date), and never on/before the
-        # signature date itself (fraud-proofing — see module docstring).
+        # OD-APO-003: never on/before the signature date itself
+        # (fraud-proofing — see module docstring). The quote has no
+        # effective date any more (2026-10-15): the start of cover is
+        # chosen here, and the signature is always after the quote's
+        # creation, so this also keeps it after the pricing reference date.
         # The other half of the rule (never before the *payment* date) can
         # only be enforced once payment happens — see
         # register_first_premium_payment().
-        if requested_start_date < quote.effective_date or requested_start_date <= signed_at.date():
+        if requested_start_date <= signed_at.date():
             raise InvalidStartDateError(
-                f"A data de início pedida ({requested_start_date}) tem de ser igual ou posterior à data de início da cotação ({quote.effective_date}) e posterior à data de assinatura ({signed_at.date()})"
+                f"A data de início pedida ({requested_start_date}) tem de ser posterior à data de assinatura ({signed_at.date()})"
             )
 
     snapshot = (

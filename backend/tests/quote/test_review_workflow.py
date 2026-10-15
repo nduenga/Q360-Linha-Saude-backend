@@ -72,7 +72,7 @@ def _ready_quote(client, *, code_suffix: str) -> dict:
     ).data["id"]
     quote = client.post(
         "/api/v1/quotes",
-        {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"},
+        {**plan_ref, "proposerId": proposer_id},
         format="json",
     ).data
     client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")
@@ -110,7 +110,7 @@ def test_submit_non_ready_quote_is_quote_state_error(admin_client):
     assert proposer_response.status_code == 201, proposer_response.data
     proposer_id = proposer_response.data["id"]
     quote = admin_client.post(
-        "/api/v1/quotes", {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"}, format="json"
+        "/api/v1/quotes", {**plan_ref, "proposerId": proposer_id}, format="json"
     ).data
     response = admin_client.post(f"/api/v1/quotes/{quote['id']}/submit", {"rowVersion": 0}, format="json")
     assert response.status_code == 409

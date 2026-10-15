@@ -158,7 +158,7 @@ class Command(BaseCommand):
         holder = InsuredMember.objects.get(proposer=proposer, external_reference="DEMO-ANA-TITULAR")
         demo._bind(tenant, staff["subscriber"], Role.SUBSCRIBER)  # noqa: SLF001
         quote = demo._create_quote_with_evaluations(  # noqa: SLF001
-            proposer=proposer, plan=policy.plan, effective_date=datetime.date.today() + datetime.timedelta(days=10),
+            proposer=proposer, plan=policy.plan,
             members=[(holder, {"angola": {}})],
         )
         quote = demo._price_and_submit(quote, "portal-approved")  # noqa: SLF001
@@ -189,7 +189,7 @@ class Command(BaseCommand):
             demo._bind(tenant, staff["subscriber"], Role.SUBSCRIBER)  # noqa: SLF001
             quote = demo._create_quote_with_evaluations(  # noqa: SLF001
                 proposer=proposer, plan=ana_policy.plan,
-                effective_date=datetime.date.today() + datetime.timedelta(days=12), members=[(member, {"angola": {}})],
+                members=[(member, {"angola": {}})],
             )
             demo._price_and_submit(quote, "mariana")  # noqa: SLF001
             demo._bind(tenant, staff["admin"], Role.ADMIN)  # noqa: SLF001

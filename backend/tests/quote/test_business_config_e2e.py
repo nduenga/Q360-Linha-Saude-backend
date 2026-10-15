@@ -99,7 +99,7 @@ def test_tariff_change_reprices_quote_and_records_versions(admin_client, approve
     # Sem configuração publicada nem tabelas legadas: falha explícita, sem valores inventados.
     quote = admin_client.post(
         "/api/v1/quotes",
-        {"proposerId": proposer_id, "planId": plan_ref["planId"], "effectiveDate": "2026-06-01"},
+        {"proposerId": proposer_id, "planId": plan_ref["planId"]},
         format="json",
     ).data
     admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")
@@ -157,7 +157,7 @@ def test_custom_rules_change_price_and_requirements_without_code(admin_client, a
 
     quote = admin_client.post(
         "/api/v1/quotes",
-        {"proposerId": proposer_id, "planId": plan_ref["planId"], "effectiveDate": "2026-06-01"},
+        {"proposerId": proposer_id, "planId": plan_ref["planId"]},
         format="json",
     ).data
     admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")

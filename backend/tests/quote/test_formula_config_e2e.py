@@ -45,7 +45,7 @@ def _priced_quote(client, approver):
     client.post(f"/api/v1/configuration/rule-version/{rule['id']}/publish")
     _publish_all(client, approver, "100000", "2026-01-01")
     quote = client.post(
-        "/api/v1/quotes", {"proposerId": proposer_id, "planId": plan_ref["planId"], "effectiveDate": "2026-06-01"},
+        "/api/v1/quotes", {"proposerId": proposer_id, "planId": plan_ref["planId"]},
         format="json",
     ).data
     client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")

@@ -74,7 +74,6 @@ from apps.quote.interfaces.serializers import (
     ScenarioSerializer,
     ScenarioUpdateRequestSerializer,
     QuoteSubmitRequestSerializer,
-    QuoteUpdateRequestSerializer,
     ReviewTaskSerializer,
     StateHistoryItemSerializer,
 )
@@ -133,21 +132,20 @@ class QuoteListCreateView(APIView):
             proposer_input=data.get("proposerInput"),
             titular_member_input=data.get("titularMemberInput"),
             plan_id=data["planId"],
-            effective_date=data["effectiveDate"],
         )
         return Response(QuoteSerializer(quote).data, status=201)
 
 
 @requires_idempotency
 class QuoteDetailView(APIView):
-    """ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET), `updateQuote` (PUT).
+    """ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET). O `updateQuote`
+    (PUT) só alterava a data de efeito, que a cotação deixou de ter
+    (decisão de 2026-10-15) — removido.
     Pragmatic DELETE extension (see apps/quote/application/quote_service.delete_quote):
     only non-protected statuses (DRAFT / READY / REJECTED / EXPIRED / CANCELLED)
     can actually be deleted; APPROVED/IN_REVIEW/BOUND raise QUOTE-DELETE-BLOCKED."""
 
     def get_permissions(self):
-        if self.request.method == "PUT":
-            return [require_scope(Scope.WRITE)(), require_permission(Permission.QUOTE_EDIT)()]
         if self.request.method == "DELETE":
             return [require_scope(Scope.WRITE)(), require_permission(Permission.QUOTE_EDIT)()]
         return [require_scope(Scope.READ)()]
@@ -157,14 +155,6 @@ class QuoteDetailView(APIView):
             Quote.objects.select_related("latest_pricing_run", "proposer", "plan__product"), id=quote_id
         )
         return Response(QuoteSerializer(quote).data)
-
-    def put(self, request, quote_id):
-        quote = get_object_or_404(Quote, id=quote_id)
-        body = QuoteUpdateRequestSerializer(data=request.data)
-        body.is_valid(raise_exception=True)
-        data = body.validated_data
-        updated = quote_service.update_quote(quote=quote, effective_date=data["effectiveDate"], row_version=data["rowVersion"])
-        return Response(QuoteSerializer(updated).data)
 
     def delete(self, request, quote_id):
         quote = get_object_or_404(Quote, id=quote_id)
@@ -787,7 +777,7 @@ class QuoteRenewalCreateView(APIView):
         body.is_valid(raise_exception=True)
         data = body.validated_data
         renewal = quote_lifecycle_service.create_renewal(
-            source_policy_id=data["sourcePolicyId"], effective_date=data["effectiveDate"], plan_id=data["planId"]
+            source_policy_id=data["sourcePolicyId"], plan_id=data["planId"]
         )
         return Response(QuoteSerializer(renewal).data, status=201)
 
@@ -801,7 +791,7 @@ class QuoteCloneView(APIView):
         body = QuoteCloneRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         copy = quote_lifecycle_service.clone_quote(
-            quote=quote, effective_date=body.validated_data["effectiveDate"], reason=body.validated_data["reason"]
+            quote=quote, reason=body.validated_data["reason"]
         )
         return Response(QuoteSerializer(copy).data, status=201)
 

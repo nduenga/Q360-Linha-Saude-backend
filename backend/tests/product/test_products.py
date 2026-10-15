@@ -183,7 +183,6 @@ def test_cannot_delete_product_once_a_quote_references_it(admin_client):
         {
             "planId": plan["id"],
             "proposerId": proposer["id"],
-            "effectiveDate": "2026-06-01",
         },
         format="json",
     )

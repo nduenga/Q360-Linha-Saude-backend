@@ -12,6 +12,7 @@ colaboradores (C87), e o backend soma as pessoas reais (decisão A3).
 """
 from __future__ import annotations
 
+import datetime
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -24,7 +25,7 @@ from apps.foundation.domain.actor import Actor
 from apps.foundation.domain.tenant import TenantId
 from apps.policy.application.issuance_service import installment_amount
 from apps.quote.infrastructure.models import Quote
-from tests.quote.conftest import make_client
+from tests.quote.conftest import make_client, set_quote_created_on
 from tests.quote.test_actuarial_excel_reference import EFFECTIVE_DATE, PEOPLE
 from tests.quote.test_business_config_e2e import SCOPE, _publish, _values
 
@@ -72,9 +73,11 @@ def test_backend_reproduces_the_excel_calculador_for_sag(admin_client, approver,
     )
     assert proposer.status_code == 201, proposer.data
     quote = admin_client.post(
-        "/api/v1/quotes", {"proposerId": proposer.data["id"], "planId": plan["id"], "effectiveDate": EFFECTIVE_DATE},
+        "/api/v1/quotes", {"proposerId": proposer.data["id"], "planId": plan["id"]},
         format="json",
     ).data
+    # Idades do Excel calculadas em EFFECTIVE_DATE: a referência da cotação é o dia de criação.
+    set_quote_created_on(quote["id"], datetime.date.fromisoformat(EFFECTIVE_DATE))
     member_cells = {}
     for relationship, sex, birth, cell in PEOPLE:
         member = admin_client.post(

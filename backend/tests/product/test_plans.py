@@ -244,7 +244,7 @@ def test_cannot_delete_plan_once_a_quote_references_it(admin_client):
     ).data
     admin_client.post(
         "/api/v1/quotes",
-        {"planId": plan["id"], "proposerId": proposer["id"], "effectiveDate": "2026-06-01"},
+        {"planId": plan["id"], "proposerId": proposer["id"]},
         format="json",
     )
 

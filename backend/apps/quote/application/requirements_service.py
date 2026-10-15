@@ -122,14 +122,14 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
     if claims_months_available is None:
         claims_months_available = history_months(proposer_id=quote.proposer_id)
     plan = quote.plan
-    snapshot = BusinessSnapshot.load(quote.effective_date)
+    snapshot = BusinessSnapshot.load(quote.reference_date)
     raw_settings = plan.settings_json or {}
-    settings = effective_plan_settings(plan, quote.effective_date, snapshot)
+    settings = effective_plan_settings(plan, quote.reference_date, snapshot)
     segment = settings.get("segment")
     group = settings.get("group") or {}
     questionnaire = settings.get("clinicalQuestionnaire") or {}
     household = settings.get("household") or {}
-    effective = quote.effective_date
+    effective = quote.reference_date
     is_renewal = quote.quote_type == "RENEWAL"
 
     try:
@@ -375,7 +375,7 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
         members_report[member_id] = {
         "memberId": member_id,
         "memberName": member_name,
-        "ageAtEffectiveDate": age,
+        "ageAtQuoteDate": age,  # idade na data de referência (criação) da cotação
         "relationshipCategory": category,
         "clinicalQuestionnaireRequired": bool(questionnaire_required),
         "medicalExamRequired": bool(exam_reasons),
@@ -402,7 +402,7 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
             )
     exclusions = [
         {"code": e["code"], "text": e["text"], "productDependent": bool(e.get("productDependent"))}
-        for e in effective_exclusions(plan, STANDARD_EXCLUSIONS, quote.effective_date, snapshot)
+        for e in effective_exclusions(plan, STANDARD_EXCLUSIONS, quote.reference_date, snapshot)
     ]
     for coverage in coverages:
         for excluded in coverage["configuration"].get("excludedItems") or []:

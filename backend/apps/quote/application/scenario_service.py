@@ -99,7 +99,7 @@ def normalise_parameters(quote: Quote, raw: Any) -> dict[str, Any]:
         raise ReferencedEntityNotFoundError(
             "parameters tem de ser um objeto com 'selection', 'adjustments' e/ou 'projection'"
         )
-    plan_context = resolve_plan_pricing_context(plan=quote.plan, selection=raw.get("selection") or {}, effective_date=quote.effective_date)
+    plan_context = resolve_plan_pricing_context(plan=quote.plan, selection=raw.get("selection") or {}, effective_date=quote.reference_date)
     adjustments = raw.get("adjustments") or []
     if not isinstance(adjustments, list):
         raise ReferencedEntityNotFoundError("parameters.adjustments tem de ser uma lista")
@@ -150,8 +150,8 @@ def _context_for(quote: Quote, parameters: dict[str, Any]) -> tuple[dict, list[u
 
 
 def _inputs_hash(quote: Quote, context: dict, member_ids: list[uuid.UUID]) -> str:
-    rating = resolve_rating_table(code=context["ratingTableCode"], effective_date=quote.effective_date)
-    params = resolve_pricing_parameter_set(code=context["parameterSetCode"], effective_date=quote.effective_date)
+    rating = resolve_rating_table(code=context["ratingTableCode"], effective_date=quote.reference_date)
+    params = resolve_pricing_parameter_set(code=context["parameterSetCode"], effective_date=quote.reference_date)
     plan_configs = {
         pb.benefit.code: pb.configuration_json
         for pb in PlanBenefit.objects.filter(plan=quote.plan).select_related("benefit")
@@ -160,7 +160,7 @@ def _inputs_hash(quote: Quote, context: dict, member_ids: list[uuid.UUID]) -> st
         "context": context,
         "members": sorted(str(m) for m in member_ids),
         "plan": {"settings": quote.plan.settings_json, "coverages": plan_configs},
-        "effectiveDate": quote.effective_date.isoformat(),
+        "effectiveDate": quote.reference_date.isoformat(),
         "ratingTable": [str(rating.id), rating.version_no] if rating else None,
         "parameterSet": [str(params.id), params.version_no] if params else None,
     }
@@ -171,7 +171,7 @@ def _calculate(quote: Quote, parameters: dict[str, Any], render: Callable) -> tu
     context, member_ids = _context_for(quote, parameters)
     rendered = preview_pricing(
         plan_id=quote.plan_id,
-        effective_date=quote.effective_date,
+        effective_date=quote.reference_date,
         member_ids=member_ids,
         context=context,
         correlation_id=None,
@@ -445,7 +445,7 @@ def compare_scenarios(*, quote: Quote, scenario_ids: list[uuid.UUID] | None) -> 
     if len(scenarios) < 2:
         raise ReferencedEntityNotFoundError("São necessários pelo menos dois cenários para comparar")
 
-    contexts = {s.id: resolve_plan_pricing_context(plan=quote.plan, selection=s.parameters_json.get("selection") or {}, effective_date=quote.effective_date) for s in scenarios}
+    contexts = {s.id: resolve_plan_pricing_context(plan=quote.plan, selection=s.parameters_json.get("selection") or {}, effective_date=quote.reference_date) for s in scenarios}
     totals = {s.id: Decimal(s.result_json["totalAmount"]) for s in scenarios}
     first = scenarios[0]
     currency = first.result_json.get("currencyCode")

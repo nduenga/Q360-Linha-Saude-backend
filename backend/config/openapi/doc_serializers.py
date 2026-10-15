@@ -309,10 +309,13 @@ class RequirementItem(s.Serializer):
     message = s.CharField()
     scope = s.ChoiceField(choices=["QUOTE", "MEMBER"])
     memberId = s.UUIDField(required=False)
+    memberName = s.CharField(required=False, help_text="Nome da pessoa segura, quando o requisito é de uma pessoa.")
 
 
 class RequirementsMember(s.Serializer):
-    ageAtEffectiveDate = s.IntegerField(allow_null=True)
+    memberId = s.UUIDField()
+    memberName = s.CharField(allow_null=True)
+    ageAtQuoteDate = s.IntegerField(allow_null=True, help_text="Idade na data de criação da cotação (a cotação não tem data de efeito).")
     relationshipCategory = s.CharField(allow_null=True)
     clinicalQuestionnaireRequired = s.BooleanField()
     medicalExamRequired = s.BooleanField()
@@ -497,7 +500,6 @@ class PortalQuote(s.Serializer):
                   "ou CANCELLED. Rascunhos nunca são devolvidos; uma cotação aprovada cuja validade passou "
                   "aparece como EXPIRED.",
     )
-    effectiveDate = s.DateField()
     validUntil = s.DateField(allow_null=True)
     product = PortalQuoteNamed(allow_null=True)
     plan = PortalQuoteNamed()
@@ -770,7 +772,7 @@ class PolicyDraft(s.Serializer):
     holder = PolicyDraftHolder()
     plan = s.DictField(child=s.CharField(allow_null=True))
     currencyCode = s.CharField()
-    effectiveDate = s.DateField()
+    quoteCreatedAt = s.DateTimeField(help_text="Data de criação da cotação (a cotação não tem data de efeito).")
     validUntil = s.DateField(allow_null=True)
     premium = s.DictField(child=s.CharField(allow_null=True))
     defaults = s.DictField(help_text="termMonths, paymentFrequency, requestedStartDate, signedAt, signatureMethod, signatory{name,documentType,documentNumber,capacity}.")
@@ -881,3 +883,21 @@ class MemberDocumentReviewResult(s.Serializer):
         help_text="Só ao aprovar: {quoteMembers[], policyMembers[]} com o antes/depois de cada vínculo "
         "(policyMembers[].to = ACTIVE e endorsementNo quando a pessoa ficou coberta).",
     )
+
+
+class GlobalSearchItem(s.Serializer):
+    id = s.CharField()
+    title = s.CharField()
+    subtitle = s.CharField()
+    href = s.CharField(help_text="Rota do back-office (ex.: /clientes/{id}, /cotacoes/{id}/resumo).")
+
+
+class GlobalSearchGroup(s.Serializer):
+    kind = s.ChoiceField(choices=["proposer", "quote", "product", "policy"])
+    label = s.CharField()
+    items = GlobalSearchItem(many=True)
+
+
+class GlobalSearchResult(s.Serializer):
+    total = s.IntegerField()
+    groups = GlobalSearchGroup(many=True, help_text="Só os grupos com resultados.")

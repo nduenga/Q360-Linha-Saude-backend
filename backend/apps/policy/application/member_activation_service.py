@@ -101,7 +101,7 @@ def reevaluate_member(*, member: InsuredMember, correlation_id: str | None) -> d
             proposer_id=qm.quote.proposer_id,
             member_id=member.id,
             plan_id=qm.quote.plan_id,
-            effective_date=qm.quote.effective_date,
+            effective_date=qm.quote.reference_date,
             context={},
             correlation_id=correlation_id,
         )
@@ -123,7 +123,7 @@ def reevaluate_member(*, member: InsuredMember, correlation_id: str | None) -> d
             proposer_id=policy.proposer_id,
             member_id=member.id,
             plan_id=policy.plan_id,
-            effective_date=policy.start_date or policy.source_quote.effective_date,
+            effective_date=policy.start_date or policy.source_quote.reference_date,
             context={},
             correlation_id=correlation_id,
         )

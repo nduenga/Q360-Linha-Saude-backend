@@ -107,7 +107,7 @@ def test_full_lifecycle_from_market_templates_to_portal_and_renewal(admin_client
     holder = admin_client.post("/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1985-03-10", "firstName": "Titular"}).data
     spouse = admin_client.post("/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "CONJUGE", "dateOfBirth": "1988-07-21", "firstName": "Conjuge"}).data
     quote = admin_client.post(
-        "/api/v1/quotes", {"proposerId": proposer["id"], "planId": medio["id"], "effectiveDate": "2026-06-01"}, format="json"
+        "/api/v1/quotes", {"proposerId": proposer["id"], "planId": medio["id"]}, format="json"
     ).data
     for member in (holder, spouse):
         assert admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member["id"]}, format="json").status_code == 200
@@ -226,7 +226,7 @@ def test_full_lifecycle_from_market_templates_to_portal_and_renewal(admin_client
     renewal = admin_client.post("/api/v1/quotes/renewals", {"sourcePolicyId": policy["id"]}, format="json")
     assert renewal.status_code == 201, renewal.data
     renewed = renewal.data
-    assert renewed["quoteType"] == "RENEWAL" and renewed["effectiveDate"] == "2027-06-11"
+    assert renewed["quoteType"] == "RENEWAL" and renewed["renewal"]["proposedStartDate"] == "2027-06-11"
     assert renewed["renewal"]["previousPremium"]["amount"] == "2745.96"
     assert renewed["selection"]["optionalBenefitCodes"] == ["DENTAL"] and renewed["selection"]["participationOption"] == "C"
     assert len(renewed["renewal"]["carriedMembers"]) == 2 and renewed["renewal"]["skippedMembers"] == []
@@ -291,9 +291,10 @@ def test_full_lifecycle_from_market_templates_to_portal_and_renewal(admin_client
     assert back.status_code == 200 and back.data["current"]["id"] == first["id"]
     admin_client.put("/api/v1/system-parameters/quote.validity_days", {"value": 15, "rowVersion": 0, "reason": "Prazo comercial de quinze dias"}, format="json")
     short = admin_client.post(
-        "/api/v1/quotes", {"proposerId": proposer["id"], "planId": medio["id"], "effectiveDate": "2026-07-01"}, format="json"
+        "/api/v1/quotes", {"proposerId": proposer["id"], "planId": medio["id"]}, format="json"
     ).data
-    assert short["validUntil"] == "2026-07-16"
+    # Validade a contar do dia de criação (a cotação não tem data de efeito).
+    assert short["validUntil"] == (datetime.date.today() + datetime.timedelta(days=15)).isoformat()
 
     # ----------------------------------------------------------------- 12. auditoria
     events = auditor.get("/api/v1/audit-events?size=200").data["items"]

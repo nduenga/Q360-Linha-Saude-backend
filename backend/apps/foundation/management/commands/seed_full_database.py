@@ -404,10 +404,9 @@ class Command(BaseCommand):
                         proposer=prop, relationship_code="TITULAR", first_name="Smoke", last_name="Test",
                         date_of_birth=datetime.date(1990, 1, 1), sex_code="M", external_reference=None, attributes={},
                     )
-                    eff = timezone.localdate() + datetime.timedelta(days=5)
-                    quote = create_quote(proposer_id=prop.id, plan_id=plan.id, effective_date=eff)
+                    quote = create_quote(proposer_id=prop.id, plan_id=plan.id)
                     ev = EvaluateEligibilityUseCase().execute(
-                        proposer_id=prop.id, member_id=member.id, plan_id=plan.id, effective_date=eff,
+                        proposer_id=prop.id, member_id=member.id, plan_id=plan.id, effective_date=quote.reference_date,
                         context={"angola": {}}, correlation_id="smoke",
                     )
                     QuoteMember.objects.create(tenant_id=quote.tenant_id, quote=quote, member=member,
@@ -558,17 +557,11 @@ class Command(BaseCommand):
         )
         members = self._members(proposer, ref, corporate, name)
 
-        days_back = self.rng.randint(1, 20)
-        if outcome in ("DRAFT", "IN_REVIEW", "REJECTED", "APPROVED"):
-            effective = timezone.localdate() + datetime.timedelta(days=self.rng.randint(5, 25))
-        else:
-            effective = timezone.localdate() - datetime.timedelta(days=days_back)
-
         subscriber_key = self.rng.choice(["subscriber", "subscriber2", "subscriber3"])
         manager_key = self.rng.choice(["manager", "manager2"])
         self.demo._bind(self.tenant, self.staff[subscriber_key], Role.SUBSCRIBER)  # noqa: SLF001
         quote = self.demo._create_quote_with_evaluations(  # noqa: SLF001
-            proposer=proposer, plan=plan, effective_date=effective, members=members
+            proposer=proposer, plan=plan, members=members
         )
 
         if outcome == "DRAFT":

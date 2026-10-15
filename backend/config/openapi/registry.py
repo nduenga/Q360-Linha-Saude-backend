@@ -171,6 +171,10 @@ REGISTRY: dict[str, dict] = {
         "response": d.PortalPlanBenefits, "queries": {"policyNumber": ("string", True, "Número da apólice do cliente.")},
     },
     "CustomerPortalQuotesView.get": {"response": d.PortalQuotes},
+    "GlobalSearchView.get": {
+        "response": d.GlobalSearchResult,
+        "queries": {"q": ("string", False, "Texto a pesquisar (mínimo 2 caracteres).")},
+    },
     "FirstAccessRequestView.post": {"response": d.PortalMaskedEmail, "status": 202, "public": True},
     "FirstAccessConfirmView.post": {"response": d.PortalToken, "public": True},
     "PasswordLoginView.post": {"response": d.PortalToken, "public": True},
@@ -342,6 +346,12 @@ REGISTRY.update(
         },
     }
 )
+
+# Approved ART-006 component schemas whose operation no longer exists: the
+# merge keeps untouched approved schemas, so these are dropped explicitly.
+# `QuoteUpdateRequest` only changed the quote's effective date, which quotes
+# no longer have (decision of 2026-10-15; `PUT /quotes/{id}` removed).
+RETIRED_SCHEMAS = {"QuoteUpdateRequest"}
 
 # Operations documented by the approved ART-006 contract with a richer schema
 # than the code exposes through a serializer: keep the contract's version.

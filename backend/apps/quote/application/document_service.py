@@ -216,10 +216,10 @@ def generate_quote_proposal(*, quote: Quote) -> Document:
     if approval_snapshot is None:
         raise QuoteStateError(f"A cotação {quote.id} não tem registo de aprovação (snapshot) para gerar a proposta")
 
-    template = resolve_template_for(template_code=DEFAULT_TEMPLATE_CODE, effective_date=quote.effective_date)
+    template = resolve_template_for(template_code=DEFAULT_TEMPLATE_CODE, effective_date=quote.reference_date)
     if template is None:
         raise TemplateNotFoundError(
-template_not_found_message(template_code=DEFAULT_TEMPLATE_CODE, effective_date=quote.effective_date)
+template_not_found_message(template_code=DEFAULT_TEMPLATE_CODE, effective_date=quote.reference_date)
         )
 
     actor = CurrentActorProvider.get()

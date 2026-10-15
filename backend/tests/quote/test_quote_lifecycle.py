@@ -3,6 +3,8 @@ de subscrição do PDF (idades, agregado, dimensão do grupo, questionário
 clínico, exames, pré-autorização, carências, exclusões)."""
 from __future__ import annotations
 
+import datetime
+
 import json
 from decimal import Decimal
 
@@ -49,7 +51,7 @@ def test_manual_version_needs_a_reason_and_is_always_saved(admin_client):
     assert saved.status_code == 201
     assert saved.data["versionNo"] == 2 and saved.data["source"] == "MANUAL" and saved.data["reason"] == "Antes de falar com o cliente"
     detail = admin_client.get(f"{url}/2").data
-    assert detail["snapshot"]["effectiveDate"] == "2026-06-01"
+    assert "effectiveDate" not in detail["snapshot"]
     assert len(detail["snapshot"]["members"]) == 2 and len(detail["checksum"]) == 64
     assert admin_client.get(f"{url}/99").status_code == 404
 
@@ -162,7 +164,7 @@ def test_clone_copies_population_selection_adjustments_and_pre_existing(admin_cl
     copy = cloned.data
     assert copy["id"] != original["id"] and copy["quoteNumber"] != original["quoteNumber"]
     assert copy["status"] == "READY" and copy["selection"] == original["selection"]
-    assert copy["effectiveDate"] == original["effectiveDate"]
+    assert "effectiveDate" not in copy
 
     copy_scope = {"quoteId": copy["id"]}
     assert _total(admin_client, copy_scope) == _total(admin_client, scope) == Decimal("195.70")  # ((100 * 0.93) + 10) * 0.95 * 2
@@ -178,12 +180,17 @@ def test_clone_copies_population_selection_adjustments_and_pre_existing(admin_cl
 
 
 @pytest.mark.django_db
-def test_clone_with_a_different_effective_date(admin_client):
+def test_a_clone_gets_its_own_creation_date_and_validity(admin_client):
+    """A cópia é uma cotação nova: validade a contar do dia da cópia, mesmo que
+    a original já esteja perto do fim (substitui o teste da cópia com outra
+    data de efeito — a cotação deixou de ter essa data, 2026-10-15)."""
+    from apps.quote.infrastructure.models import Quote
+
     scope = _scope(admin_client)
-    cloned = admin_client.post(
-        f"/api/v1/quotes/{scope['quoteId']}/clone", {"reason": "Mesma proposta para o mês seguinte", "effectiveDate": "2026-07-01"}, format="json"
-    )
-    assert cloned.status_code == 201 and cloned.data["effectiveDate"] == "2026-07-01" and cloned.data["validUntil"] == "2026-07-31"
+    Quote.all_tenants.filter(id=scope["quoteId"]).update(valid_until=datetime.date.today() + datetime.timedelta(days=2))
+    cloned = admin_client.post(f"/api/v1/quotes/{scope['quoteId']}/clone", {"reason": "Mesma proposta, nova validade"}, format="json")
+    assert cloned.status_code == 201, cloned.data
+    assert cloned.data["validUntil"] == (datetime.date.today() + datetime.timedelta(days=30)).isoformat()
 
 
 # --------------------------------------------------------------- requirements
@@ -379,7 +386,7 @@ def test_quote_numbers_stay_unique_across_effective_years(admin_client):
     numbers = {first}
     for effective in ("2027-01-15", "2027-02-01", "2026-09-01", "2028-01-01"):
         created = admin_client.post(
-            "/api/v1/quotes", {"proposerId": scope["proposerId"], "planId": scope["planId"], "effectiveDate": effective}, format="json"
+            "/api/v1/quotes", {"proposerId": scope["proposerId"], "planId": scope["planId"]}, format="json"
         )
         assert created.status_code == 201, created.data
         numbers.add(created.data["quoteNumber"])

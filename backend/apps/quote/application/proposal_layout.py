@@ -19,7 +19,7 @@ def variables_for(content: dict[str, Any], *, document_number: str | None, gener
     meta, client, plan, premium = content["meta"], content["client"], content["plan"], content["premium"]
     return {
         "quote.number": meta["quoteNumber"],
-        "quote.effectiveDate": meta["effectiveDate"],
+        "quote.date": meta["quoteDate"],
         "quote.validUntil": meta["validUntil"],
         "quote.type": meta["quoteType"],
         "document.number": document_number or "(a atribuir)",
@@ -88,7 +88,7 @@ def _summary(content, blocks):
         rows.append(("Categoria", plan["category"]))
     if plan["accessSystem"]:
         rows.append(("Sistema de acesso", plan["accessSystem"]))
-    rows += [("Início de vigência", meta["effectiveDate"]), ("Proposta válida até", meta["validUntil"] or "—")]
+    rows += [("Data da cotação", meta["quoteDate"]), ("Proposta válida até", meta["validUntil"] or "—")]
     if meta["scenario"]:
         rows.append(("Cenário", meta["scenario"]["name"]))
     blocks += [("heading", SECTIONS["summary"].split(" (")[0]), ("kv", rows)]

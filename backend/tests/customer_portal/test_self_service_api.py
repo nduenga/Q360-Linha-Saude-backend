@@ -36,7 +36,7 @@ def _setup_active_policy_with_member(admin_client, tenant, *, policy_number: str
     ).data
     quote = admin_client.post(
         "/api/v1/quotes",
-        {"proposerId": proposer["id"], "planId": plan["id"], "effectiveDate": "2026-06-01"},
+        {"proposerId": proposer["id"], "planId": plan["id"]},
         format="json",
     ).data
 
@@ -298,7 +298,7 @@ def test_my_quotes_lists_only_own_quotes_with_translated_status(admin_client, te
     assert quotes[0]["status"] == "CONTRACTED"
     assert quotes[0]["plan"]["name"] == "Plan A"
     assert set(quotes[0]) == {
-        "quoteNumber", "status", "effectiveDate", "validUntil", "product", "plan",
+        "quoteNumber", "status", "validUntil", "product", "plan",
         "totalAmount", "currencyCode", "policyNumber", "createdAt",
     }
 

@@ -82,7 +82,7 @@ def _scope(client, *, members=2, settings=SETTINGS):
     proposer = proposer_response.data["id"]
 
     quote = client.post(
-        "/api/v1/quotes", {"proposerId": proposer, "planId": plan["id"], "effectiveDate": "2026-06-01"}, format="json"
+        "/api/v1/quotes", {"proposerId": proposer, "planId": plan["id"]}, format="json"
     ).data
     
     member_ids = []

@@ -23,7 +23,7 @@ from typing import Any
 import yaml
 from drf_spectacular.generators import SchemaGenerator
 
-from config.openapi.registry import KEEP_CONTRACT
+from config.openapi.registry import KEEP_CONTRACT, RETIRED_SCHEMAS
 
 REPO = Path(__file__).resolve().parents[3]
 GENERATED = REPO / "backend" / "schema.yml"
@@ -90,6 +90,8 @@ def merge(generated: dict[str, Any], contract: dict[str, Any]) -> dict[str, Any]
     schemas = out.setdefault("components", {}).setdefault("schemas", {})
     for name, schema in generated["components"].get("schemas", {}).items():
         schemas[name] = schema
+    for name in RETIRED_SCHEMAS:
+        schemas.pop(name, None)
     sec = out["components"].setdefault("securitySchemes", {})
     sec.update({k: v for k, v in generated["components"].get("securitySchemes", {}).items() if k not in sec})
     for key in ("parameters", "responses"):

@@ -5,6 +5,8 @@ guardadas • Recalculation cria novo run" (S6-03), "Validade segundo
 parâmetro • Totais reconciliam" (S6-04)."""
 from __future__ import annotations
 
+import datetime
+
 import json
 
 import pytest
@@ -93,7 +95,6 @@ def test_create_quote_starts_as_draft(admin_client):
         {
             "proposerId": scope["proposerId"],
             "planId": scope["planId"],
-            "effectiveDate": "2026-06-01",
         },
         format="json",
     )
@@ -102,8 +103,10 @@ def test_create_quote_starts_as_draft(admin_client):
     assert body["status"] == "DRAFT"
     assert body["rowVersion"] == 0
     assert body["latestPricingRunId"] is None
-    # Validade por omissão (QUOTE_DEFAULT_VALIDITY_DAYS=30 em teste) foi calculada, não pedida ao cliente.
-    assert body["validUntil"] == "2026-07-01"
+    # Sem data de efeito (2026-10-15): data de criação e validade por omissão
+    # (QUOTE_DEFAULT_VALIDITY_DAYS=30 em teste) a contar do dia de criação.
+    assert "effectiveDate" not in body
+    assert body["createdAt"] and body["validUntil"] == (datetime.date.today() + datetime.timedelta(days=30)).isoformat()
     # Nomes legíveis para a UI, além dos ids (regressão).
     assert body["proposerName"] and body["planName"] and body["productName"]
     listed = admin_client.get("/api/v1/quotes").data["items"]
@@ -119,7 +122,6 @@ def test_create_quote_unknown_references_is_validation_400(admin_client):
         {
             "proposerId": str(uuid.uuid4()),
             "planId": str(uuid.uuid4()),
-            "effectiveDate": "2026-06-01",
         },
         format="json",
     )
@@ -132,7 +134,7 @@ def test_add_eligible_member_is_included(admin_client):
     scope = _quote_scope(admin_client, code_suffix="2")
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}},
         format="json",
     ).data
     member_id = _member(admin_client, proposer_id=scope["proposerId"])
@@ -151,7 +153,7 @@ def test_add_member_from_another_proposer_is_validation_error(admin_client):
     scope = _quote_scope(admin_client, code_suffix="member-proposer-match")
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}},
         format="json",
     ).data
     other_proposer_id = _proposer(
@@ -175,7 +177,7 @@ def test_add_inactive_member_is_validation_error(admin_client):
     scope = _quote_scope(admin_client, code_suffix="inactive-member")
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}},
         format="json",
     ).data
     member_id = _member(admin_client, proposer_id=scope["proposerId"])
@@ -195,7 +197,7 @@ def test_add_duplicate_member_is_conflict(admin_client):
     scope = _quote_scope(admin_client, code_suffix="3")
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}},
         format="json",
     ).data
     member_id = _member(admin_client, proposer_id=scope["proposerId"])
@@ -211,7 +213,7 @@ def test_price_quote_promotes_to_ready_and_creates_snapshot(admin_client):
     scope = _quote_scope(admin_client, code_suffix="4")
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}},
         format="json",
     ).data
     member_id = _member(admin_client, proposer_id=scope["proposerId"])
@@ -253,59 +255,20 @@ def test_price_quote_promotes_to_ready_and_creates_snapshot(admin_client):
 
 
 @pytest.mark.django_db
-def test_editing_ready_quote_demotes_to_draft(admin_client):
+def test_a_quote_has_no_effective_date_to_edit(admin_client):
+    """Decisão de 2026-10-15: a cotação não tem data de efeito (ainda não se
+    sabe se será apólice). O `PUT /quotes/{id}` só alterava essa data e foi
+    removido; os testes que o exercitavam (QT-002 por mudança de data e
+    conflito de versão no PUT) deixaram de ter objecto."""
     scope = _quote_scope(admin_client, code_suffix="5")
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
-        format="json",
-    ).data
-    member_id = _member(admin_client, proposer_id=scope["proposerId"])
-    rule = admin_client.post(
-        "/api/v1/rule-versions",
-        {
-            "code": f"ELIG-{quote['id']}",
-            "name": "Eligibility",
-            "ruleDomain": "ELIGIBILITY",
-            "effectiveFrom": "2026-01-01",
-            "artifactType": "JSON",
-            "artifactRef": json.dumps({}),
-        },
-        format="json",
-    ).data
-    admin_client.post(f"/api/v1/configuration/rule-version/{rule['id']}/publish")
-    admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")
-    admin_client.post(f"/api/v1/quotes/{quote['id']}/price")
-
-    ready = admin_client.get(f"/api/v1/quotes/{quote['id']}").data
-    assert ready["status"] == "READY"
-
-    # QT-002: editing effectiveDate on a READY quote demotes it back to DRAFT
-    # and invalidates the pricing reference.
-    edited = admin_client.put(
-        f"/api/v1/quotes/{quote['id']}",
-        {"effectiveDate": "2026-07-01", "rowVersion": ready["rowVersion"]},
+        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-07-01"},
         format="json",
     )
-    assert edited.status_code == 200
-    assert edited.data["status"] == "DRAFT"
-    assert edited.data["latestPricingRunId"] is None
-
-
-@pytest.mark.django_db
-def test_update_quote_stale_row_version_is_version_conflict(admin_client):
-    scope = _quote_scope(admin_client, code_suffix="6")
-    quote = admin_client.post(
-        "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
-        format="json",
-    ).data
-
-    response = admin_client.put(
-        f"/api/v1/quotes/{quote['id']}", {"effectiveDate": "2026-07-01", "rowVersion": 99}, format="json"
-    )
-    assert response.status_code == 409
-    assert response.data["code"] == "VERSION-CONFLICT"
+    assert quote.status_code == 201 and "effectiveDate" not in quote.data  # campo antigo ignorado
+    response = admin_client.put(f"/api/v1/quotes/{quote.data['id']}", {"rowVersion": 0}, format="json")
+    assert response.status_code == 405
 
 
 @pytest.mark.django_db
@@ -314,7 +277,7 @@ def test_price_quote_without_published_config_is_pricing_config_error(admin_clie
     proposer_id = _proposer(admin_client)
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"},
+        {**plan_ref, "proposerId": proposer_id},
         format="json",
     ).data
     member_id = _member(admin_client, proposer_id=proposer_id)
@@ -330,7 +293,7 @@ def test_list_quotes_filters_by_status(admin_client):
     scope = _quote_scope(admin_client, code_suffix="8")
     admin_client.post(
         "/api/v1/quotes",
-        {**{k: scope[k] for k in ("proposerId", "planId")}, "effectiveDate": "2026-06-01"},
+        {**{k: scope[k] for k in ("proposerId", "planId")}},
         format="json",
     )
     response = admin_client.get("/api/v1/quotes?status=DRAFT")

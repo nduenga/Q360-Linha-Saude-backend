@@ -56,7 +56,7 @@ def _quote_with_snapshot(client, *, tenant, suffix: str) -> tuple[Quote, QuoteSn
     proposer_id = _proposer(client, registration_number=_nif_for_suffix(suffix))
     quote_data = client.post(
         "/api/v1/quotes",
-        {"proposerId": proposer_id, "planId": plan_ref["planId"], "effectiveDate": "2026-06-01"},
+        {"proposerId": proposer_id, "planId": plan_ref["planId"]},
         format="json",
     ).data
     quote = Quote.all_tenants.get(id=quote_data["id"])

@@ -81,7 +81,7 @@ def _approved_quote(admin_client, tenant, *, suffix: str, min_entry_age: int | N
     ).data["id"]
     quote = admin_client.post(
         "/api/v1/quotes",
-        {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"},
+        {**plan_ref, "proposerId": proposer_id},
         format="json",
     ).data
     admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")
@@ -320,7 +320,7 @@ def test_only_an_approved_quote_can_be_signed(admin_client, tenant):
          "email": "h@example.com", "phone": "+244900000000"},
     ).data["id"]
     draft_quote = admin_client.post(
-        "/api/v1/quotes", {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"}, format="json"
+        "/api/v1/quotes", {**plan_ref, "proposerId": proposer_id}, format="json"
     ).data
 
     response = _approver(tenant).post(

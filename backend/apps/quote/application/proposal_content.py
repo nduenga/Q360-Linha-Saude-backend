@@ -153,8 +153,8 @@ def build_content(
     """`calculation` is a rendered pricing response (`render_preview` /
     `scenario.result_json`): `totalAmount`, `currencyCode`, `components`."""
     plan = quote.plan
-    snapshot = BusinessSnapshot.load(quote.effective_date)
-    settings = effective_plan_settings(plan, quote.effective_date, snapshot)
+    snapshot = BusinessSnapshot.load(quote.reference_date)
+    settings = effective_plan_settings(plan, quote.reference_date, snapshot)
     segment = settings.get("segment")
     currency = calculation.get("currencyCode") or quote.currency_code or "AOA"
 
@@ -163,7 +163,7 @@ def build_content(
         {k: v for k, v in item.items() if k != "id"}
         for item in quote_service.active_adjustments_for_context(quote)
     ]
-    plan_context = resolve_plan_pricing_context(plan=plan, selection=selection, effective_date=quote.effective_date)
+    plan_context = resolve_plan_pricing_context(plan=plan, selection=selection, effective_date=quote.reference_date)
 
     quote_members = list(quote.members.select_related("member").order_by("created_at", "id"))
     names = {str(qm.member_id): _member_name(qm.member) for qm in quote_members}
@@ -181,7 +181,7 @@ def build_content(
                 "memberId": str(member.id),
                 "name": names[str(member.id)],
                 "relationship": categories.get(member.relationship_code, member.relationship_code),
-                "age": _age(member.date_of_birth, quote.effective_date),
+                "age": _age(member.date_of_birth, quote.reference_date),
                 "status": qm.status,
                 "clinicalQuestionnaireRequired": info.get("clinicalQuestionnaireRequired", False),
                 "medicalExamRequired": info.get("medicalExamRequired", False),
@@ -314,7 +314,7 @@ def build_content(
         "Não há regra de rateio: esgotado o capital anual, a seguradora deixa de pagar até à anuidade seguinte."
     )
 
-    exclusions = [e["text"] for e in effective_exclusions(plan, STANDARD_EXCLUSIONS, quote.effective_date, snapshot)]
+    exclusions = [e["text"] for e in effective_exclusions(plan, STANDARD_EXCLUSIONS, quote.reference_date, snapshot)]
     for coverage in coverages:
         for item in coverage["excludedItems"]:
             exclusions.append(f"{coverage['name']}: {item}")
@@ -330,7 +330,7 @@ def build_content(
             "quoteId": str(quote.id),
             "quoteNumber": quote.quote_number,
             "quoteType": QUOTE_TYPE_TEXT.get(quote.quote_type, quote.quote_type),
-            "effectiveDate": quote.effective_date.isoformat(),
+            "quoteDate": quote.reference_date.isoformat(),
             "validUntil": quote.valid_until.isoformat() if quote.valid_until else None,
             "generatedOn": generated_on.isoformat(),
             "currency": currency,

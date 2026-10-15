@@ -86,7 +86,7 @@ def test_lookup_by_quote_number_resolves_full_context(admin_client, tenant):
     assert resolved["id"] == quote["id"]
     assert resolved["planId"] == quote["planId"]
     assert resolved["proposerId"] == quote["proposerId"]
-    assert resolved["effectiveDate"] == quote["effectiveDate"]
+    assert resolved["validUntil"] == quote["validUntil"] and "effectiveDate" not in resolved
 
 
 @pytest.mark.django_db

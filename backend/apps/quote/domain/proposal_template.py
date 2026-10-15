@@ -40,7 +40,7 @@ SECTIONS: dict[str, str] = {
 
 VARIABLES: dict[str, str] = {
     "quote.number": "Número da cotação",
-    "quote.effectiveDate": "Data de início",
+    "quote.date": "Data da cotação",
     "quote.validUntil": "Válida até",
     "quote.type": "Tipo (Novo negócio / Renovação)",
     "document.number": "Número do documento",

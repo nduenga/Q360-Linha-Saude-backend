@@ -142,7 +142,7 @@ def test_waiting_period_for_maternity(admin_client, tenant):
         "/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data["id"]
     quote = admin_client.post(
-        "/api/v1/quotes", {"planId": plan["id"], "proposerId": proposer_id, "effectiveDate": "2026-06-01"}, format="json"
+        "/api/v1/quotes", {"planId": plan["id"], "proposerId": proposer_id}, format="json"
     ).data
     admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")
     admin_client.post(f"/api/v1/quotes/{quote['id']}/price")

@@ -78,7 +78,6 @@ def portal_quote_item(quote: Quote, *, policy_number: str | None, today: datetim
     return {
         "quoteNumber": quote.quote_number,
         "status": status,
-        "effectiveDate": quote.effective_date,
         "validUntil": quote.valid_until,
         "product": {"name": quote.plan.product.name} if quote.plan.product else None,
         "plan": {"name": quote.plan.name},

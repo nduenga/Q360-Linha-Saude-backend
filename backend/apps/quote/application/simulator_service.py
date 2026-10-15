@@ -70,7 +70,7 @@ def _total_render(run) -> dict[str, Any]:
 def _preview_total(quote: Quote, context: dict, member_ids: list[uuid.UUID], render: Callable = _total_render) -> dict:
     return preview_pricing(
         plan_id=quote.plan_id,
-        effective_date=quote.effective_date,
+        effective_date=quote.reference_date,
         member_ids=member_ids,
         context=context,
         correlation_id=None,
@@ -105,7 +105,7 @@ def set_selection(*, quote: Quote, selection: dict[str, Any], row_version: int) 
     """Coberturas opcionais escolhidas, opção de participação A–E e
     alterações de capitais/participação ("e se...") da cotação."""
     _require_editable(quote)
-    plan_context = resolve_plan_pricing_context(plan=quote.plan, selection=selection, effective_date=quote.effective_date)
+    plan_context = resolve_plan_pricing_context(plan=quote.plan, selection=selection, effective_date=quote.reference_date)
     before = quote.selection_json
     with transaction.atomic():
         updated = Quote.objects.filter(id=quote.id, row_version=row_version).update(
@@ -183,8 +183,8 @@ def _authority_limits(quote: Quote) -> dict[str, Any]:
     from django.db.models import Q
 
     policy = (
-        AuthorityPolicy.objects.filter(status="PUBLISHED", effective_from__lte=quote.effective_date)
-        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=quote.effective_date))
+        AuthorityPolicy.objects.filter(status="PUBLISHED", effective_from__lte=quote.reference_date)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=quote.reference_date))
         .order_by("-effective_from", "-version_no")
         .first()
     )
@@ -327,7 +327,7 @@ def set_member_pre_existing(
     quote_member = QuoteMember.objects.filter(quote=quote, member_id=member_id).first()
     if quote_member is None:
         raise ReferencedEntityNotFoundError(f"A pessoa segura {member_id} não está associada à cotação {quote.id}")
-    clean, warnings = validate_pre_existing_decision(decision, plan_settings=effective_plan_settings(quote.plan, quote.effective_date))
+    clean, warnings = validate_pre_existing_decision(decision, plan_settings=effective_plan_settings(quote.plan, quote.reference_date))
     actor = CurrentActorProvider.get()
     stored = {
         **clean,

@@ -51,7 +51,7 @@ def _rejected_quote(client) -> dict:
     ).data
     quote = client.post(
         "/api/v1/quotes",
-        {"proposerId": proposer["id"], "planId": plan_ref["planId"], "effectiveDate": "2026-11-01"},
+        {"proposerId": proposer["id"], "planId": plan_ref["planId"]},
     ).data
     _update_quote_as_tenant(
         quote["id"],

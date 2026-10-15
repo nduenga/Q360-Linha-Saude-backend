@@ -183,7 +183,7 @@ def test_GT_PRICE_005_base_plus_adjustment_reconciles_exactly(admin_client):
     ).data["id"]
     quote = admin_client.post(
         "/api/v1/quotes",
-        {"planId": plan["id"], "proposerId": proposer_id, "effectiveDate": "2026-06-01"},
+        {"planId": plan["id"], "proposerId": proposer_id},
         format="json",
     ).data
     admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")

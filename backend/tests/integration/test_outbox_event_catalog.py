@@ -82,7 +82,7 @@ def test_outbox_event_catalog_end_to_end():
 
     quote = owner.post(
         "/api/v1/quotes",
-        {"planId": plan["id"], "proposerId": proposer["id"], "effectiveDate": "2026-06-01"},
+        {"planId": plan["id"], "proposerId": proposer["id"]},
         format="json",
     ).data
     owner.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member["id"]}, format="json")

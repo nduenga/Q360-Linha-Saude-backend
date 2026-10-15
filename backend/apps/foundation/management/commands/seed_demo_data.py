@@ -349,7 +349,6 @@ class Command(BaseCommand):
         quote = self._create_quote_with_evaluations(
             proposer=proposer,
             plan=plan,
-            effective_date=effective_date,
             members=[
                 (members["holder"], {"angola": {"previousPolicyNumber": "APO-ANTERIOR-001", "previousPolicyContinuous": True}}),
                 (members["spouse"], {"angola": {"unionBondType": "UNIAO_DE_FACTO"}}),
@@ -470,7 +469,6 @@ class Command(BaseCommand):
         quote = self._create_quote_with_evaluations(
             proposer=proposer,
             plan=plan,
-            effective_date=timezone.localdate() - datetime.timedelta(days=3),
             members=[(holder, {"angola": {}})],
         )
         return self._approve_and_issue_pending(
@@ -500,7 +498,6 @@ class Command(BaseCommand):
         quote = self._create_quote_with_evaluations(
             proposer=proposer,
             plan=plan,
-            effective_date=timezone.localdate() - datetime.timedelta(days=6),
             members=[
                 (holder, {"angola": {"previousPolicyNumber": "APO-GRUPO-ANTERIOR", "previousPolicyContinuous": True}}),
                 (spouse, {"angola": {}}),
@@ -535,14 +532,11 @@ class Command(BaseCommand):
         member = self._ensure_member(
             proposer, "DEMO-DIANA-TITULAR", "TITULAR", "Diana", "Lopes", "1992-02-22"
         )
-        effective_date = timezone.localdate() + datetime.timedelta(days=10)
-
         if not Quote.objects.filter(proposer=proposer, status="DRAFT").exists():
             self._bind(tenant, staff["subscriber"], Role.SUBSCRIBER)
             self._create_quote_with_evaluations(
                 proposer=proposer,
                 plan=plan,
-                effective_date=effective_date,
                 members=[(member, {"angola": {}})],
             )
 
@@ -551,7 +545,6 @@ class Command(BaseCommand):
             quote = self._create_quote_with_evaluations(
                 proposer=proposer,
                 plan=plan,
-                effective_date=effective_date + datetime.timedelta(days=1),
                 members=[(member, {"angola": {}})],
             )
             quote = self._price_and_submit(quote, "review")
@@ -561,7 +554,6 @@ class Command(BaseCommand):
             quote = self._create_quote_with_evaluations(
                 proposer=proposer,
                 plan=plan,
-                effective_date=effective_date + datetime.timedelta(days=2),
                 members=[(member, {"angola": {}})],
             )
             quote = self._price_and_submit(quote, "reject")
@@ -627,14 +619,14 @@ class Command(BaseCommand):
             attributes={"seed": "demo"},
         )
 
-    def _create_quote_with_evaluations(self, *, proposer: Proposer, plan: Plan, effective_date: datetime.date, members):
-        quote = create_quote(proposer_id=proposer.id, plan_id=plan.id, effective_date=effective_date)
+    def _create_quote_with_evaluations(self, *, proposer: Proposer, plan: Plan, members):
+        quote = create_quote(proposer_id=proposer.id, plan_id=plan.id)
         for member, context in members:
             evaluation = EvaluateEligibilityUseCase().execute(
                 proposer_id=proposer.id,
                 member_id=member.id,
                 plan_id=plan.id,
-                effective_date=effective_date,
+                effective_date=quote.reference_date,
                 context=context,
                 correlation_id=f"demo-eligibility-{member.external_reference}",
             )

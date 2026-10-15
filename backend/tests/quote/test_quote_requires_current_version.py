@@ -44,7 +44,6 @@ def test_creating_a_quote_against_an_inactive_plan_is_rejected(admin_client):
         {
             "proposerId": _proposer(admin_client),
             "planId": plan["id"],
-            "effectiveDate": "2026-06-01",
         },
         format="json",
     )
@@ -66,7 +65,6 @@ def test_a_quote_created_before_plan_goes_inactive_still_works_after(admin_clien
         {
             "proposerId": _proposer(admin_client),
             "planId": plan["id"],
-            "effectiveDate": "2026-06-01",
         },
         format="json",
     ).data

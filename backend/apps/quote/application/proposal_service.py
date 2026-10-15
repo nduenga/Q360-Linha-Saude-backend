@@ -106,7 +106,7 @@ def _content_for(quote: Quote, scenario: QuoteScenario | None, render: Callable)
 def preview(*, quote: Quote, scenario_id, template_code: str | None, fmt: str, render: Callable) -> tuple[bytes, str]:
     scenario = _scenario_for(quote, scenario_id)
     content = _content_for(quote, scenario, render)
-    template = resolve_template(code=template_code or document_service.DEFAULT_TEMPLATE_CODE, effective_date=quote.effective_date)
+    template = resolve_template(code=template_code or document_service.DEFAULT_TEMPLATE_CODE, effective_date=quote.reference_date)
     return _render(content, template, fmt, document_number=None)
 
 
@@ -149,7 +149,7 @@ def generate(
         raise ProposalRequestError(f"O formato tem de ser um de {list(FORMATS)}")
     scenario = _scenario_for(quote, scenario_id)
     content = _content_for(quote, scenario, render)
-    template = resolve_template(code=template_code or document_service.DEFAULT_TEMPLATE_CODE, effective_date=quote.effective_date)
+    template = resolve_template(code=template_code or document_service.DEFAULT_TEMPLATE_CODE, effective_date=quote.reference_date)
 
     actor = CurrentActorProvider.get()
     actor_id = actor.actor_id if actor else "unknown"
@@ -243,7 +243,7 @@ def sample_content() -> dict[str, Any]:
     """Synthetic content to preview a template layout before publishing."""
     return {
         "meta": {"quoteId": "00000000-0000-0000-0000-000000000000", "quoteNumber": "COT-EXEMPLO", "quoteType": "Novo negócio",
-                 "effectiveDate": "2026-01-01", "validUntil": "2026-01-31", "generatedOn": "2026-01-01", "currency": "AOA", "scenario": None},
+                 "quoteDate": "2026-01-01", "validUntil": "2026-01-31", "generatedOn": "2026-01-01", "currency": "AOA", "scenario": None},
         "client": {"name": "Cliente de Exemplo, Lda.", "nif": "5417000000", "email": None, "phone": None},
         "plan": {"product": "Saúde Grupo (Empresas)", "name": "Grupo — Quadros", "segment": "Grupo (Empresas)", "tier": "À medida",
                  "category": "Quadros", "accessSystem": "Misto: rede em Angola; reembolso fora da rede ou no estrangeiro"},

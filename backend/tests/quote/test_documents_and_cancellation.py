@@ -55,7 +55,7 @@ def _approved_quote(client, *, code_suffix: str, tenant) -> dict:
         },
     ).data["id"]
     member_id = client.post("/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}).data["id"]
-    quote = client.post("/api/v1/quotes", {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"}, format="json").data
+    quote = client.post("/api/v1/quotes", {**plan_ref, "proposerId": proposer_id}, format="json").data
     client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")
     client.post(f"/api/v1/quotes/{quote['id']}/price")
     ready = client.get(f"/api/v1/quotes/{quote['id']}").data
@@ -102,7 +102,7 @@ def test_generate_proposal_before_approved_is_quote_state_error(admin_client):
             "phone": "+244900000000",
         },
     ).data["id"]
-    quote = admin_client.post("/api/v1/quotes", {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"}, format="json").data
+    quote = admin_client.post("/api/v1/quotes", {**plan_ref, "proposerId": proposer_id}, format="json").data
     response = admin_client.post(f"/api/v1/quotes/{quote['id']}/proposal")
     assert response.status_code == 409
     assert response.data["code"] == "QUOTE-STATE"
@@ -152,7 +152,7 @@ def test_cancel_draft_quote_requires_reason(admin_client):
             "phone": "+244900000000",
         },
     ).data["id"]
-    quote = admin_client.post("/api/v1/quotes", {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"}, format="json").data
+    quote = admin_client.post("/api/v1/quotes", {**plan_ref, "proposerId": proposer_id}, format="json").data
 
     missing_reason = admin_client.post(f"/api/v1/quotes/{quote['id']}/cancel", {"rowVersion": 0}, format="json")
     assert missing_reason.status_code == 400

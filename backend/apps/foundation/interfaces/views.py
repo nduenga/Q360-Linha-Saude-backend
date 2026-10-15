@@ -218,8 +218,6 @@ class DashboardView(APIView):
 
                     "status": quote.status,
 
-                    "effectiveDate": quote.effective_date,
-
                     "validUntil": quote.valid_until,
 
                     "currencyCode": quote.currency_code,

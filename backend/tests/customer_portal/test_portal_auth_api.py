@@ -36,7 +36,7 @@ def _setup_active_policy(admin_client, tenant) -> dict:
     plan = admin_client.post("/api/v1/plans", {"productId": product["id"], "code": "PLAN-A", "name": "Plan A"}).data
     quote = admin_client.post(
         "/api/v1/quotes",
-        {"proposerId": proposer["id"], "planId": plan["id"], "effectiveDate": "2026-06-01"},
+        {"proposerId": proposer["id"], "planId": plan["id"]},
         format="json",
     ).data
 

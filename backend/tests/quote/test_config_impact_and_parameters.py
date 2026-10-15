@@ -2,6 +2,8 @@
 globais do sistema (operacionais editáveis pelo GTE vs estruturais)."""
 from __future__ import annotations
 
+import datetime
+
 import json
 from decimal import Decimal
 
@@ -173,10 +175,11 @@ def test_parameter_revisions_and_rollback(admin_client):
 @pytest.mark.django_db
 def test_validity_days_parameter_drives_new_quotes(admin_client):
     scope = _scope(admin_client)
-    assert _quote(admin_client, scope)["validUntil"] == "2026-07-01"  # 30 dias (env) até o GTE alterar
+    assert _quote(admin_client, scope)["validUntil"] == (datetime.date.today() + datetime.timedelta(days=30)).isoformat()  # 30 dias (env) até o GTE alterar
     admin_client.put("/api/v1/system-parameters/quote.validity_days", {"value": 10, "rowVersion": 0, "reason": REASON}, format="json")
     created = admin_client.post(
-        "/api/v1/quotes", {"proposerId": scope["proposerId"], "planId": scope["planId"], "effectiveDate": "2026-06-01"}, format="json"
+        "/api/v1/quotes", {"proposerId": scope["proposerId"], "planId": scope["planId"]}, format="json"
     )
-    assert created.data["validUntil"] == "2026-06-11"
+    # A validade conta a partir do dia de criação (a cotação não tem data de efeito).
+    assert created.data["validUntil"] == (datetime.date.today() + datetime.timedelta(days=10)).isoformat()
 

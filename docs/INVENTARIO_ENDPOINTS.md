@@ -45,9 +45,34 @@ Alterações de 2026-10-15 (decisões A1–A9, R1–R2):
   `MODERATE_HIGH` em `underwriting.pre_existing_conditions`.
 - Novas rotas do modelo actuarial (abaixo).
 
+Alterações de 2026-10-15 (cotação sem data de efeito):
+
+- A cotação deixa de ter `effectiveDate`: tem `createdAt` e `validUntil`
+  (dia de criação + `quote.validity_days`, configurável em
+  `/system-parameters`). A data de referência do cálculo (idades,
+  configurações e tarifas em vigor) é o dia de criação. O início da vigência
+  escolhe-se na emissão (`requestedStartDate`).
+- `POST /api/v1/quotes`, `POST /quotes/renewals` e `POST /quotes/{id}/clone`
+  deixam de aceitar `effectiveDate` (é ignorado se for enviado).
+- `PUT /api/v1/quotes/{quote_id}` removido (só alterava a data de efeito);
+  esquema `QuoteUpdateRequest` retirado do contrato.
+- Renovação: `renewal.proposedStartDate` (dia a seguir ao fim do período
+  actual), que o formulário de emissão propõe em `defaults.requestedStartDate`.
+- `GET /quotes/{id}/policy-draft`: `effectiveDate` → `quoteCreatedAt`.
+- Portal (`/customer-portal/me/quotes`) e pesquisa por número: sem
+  `effectiveDate` (já tinham `createdAt`).
+- `GET /quotes/{id}/requirements`: `members.*.ageAtEffectiveDate` →
+  `ageAtQuoteDate`; o contrato passa a declarar `memberName` (já era enviado).
+- Proposta (documento): «Início de vigência» → «Data da cotação»; variável
+  de modelo `{{quote.effectiveDate}}` → `{{quote.date}}`.
+- Mantêm `effectiveDate` (é a data da avaliação, não da cotação):
+  `/eligibility/evaluate`, `/pricing/calculate`, `/pricing/preview`.
+- Nova rota `GET /api/v1/search?q=` (pesquisa global, enviada por um colega
+  em 2026-10-14): passou a exigir o scope `q360.read` e ficou no contrato.
+
 ## Lista completa
 
-Total: **281 operações**. Corrigido (devolve variáveis; agora no contrato): 1 · Implementado: 261 · Já implementado; faltava no contrato: 1 · Novo (código + contrato): 15 · Novo (2026-10-15): 3
+Total: **281 operações**. Corrigido (devolve variáveis; agora no contrato): 1 · Implementado: 260 · Já implementado; faltava no contrato: 1 · Novo (código + contrato): 15 · Novo (2026-10-15): 3 · Novo (2026-10-14, pesquisa global): 1. Removida: `PUT /api/v1/quotes/{quote_id}` (só alterava a data de efeito)
 
 | Área | Método | Rota | operationId | Resumo | Estado |
 |---|---|---|---|---|---|
@@ -289,7 +314,6 @@ Total: **281 operações**. Corrigido (devolve variáveis; agora no contrato): 1
 | Quotes | POST | `/api/v1/quotes/renewals` | postQuoteRenewalCreate | Criar quote renewal create | Implementado |
 | Quotes | DELETE | `/api/v1/quotes/{quote_id}` | deleteQuoteDetail | Remover quote detail | Implementado |
 | Quotes | GET | `/api/v1/quotes/{quote_id}` | getQuoteDetail | Obter quote detail | Implementado |
-| Quotes | PUT | `/api/v1/quotes/{quote_id}` | putQuoteDetail | Substituir quote detail | Implementado |
 | Quotes | GET | `/api/v1/quotes/{quote_id}/adjustments` | getQuoteAdjustmentListCreate | Listar quote adjustment list create | Implementado |
 | Quotes | POST | `/api/v1/quotes/{quote_id}/adjustments` | postQuoteAdjustmentListCreate | Criar quote adjustment list create | Implementado |
 | Quotes | DELETE | `/api/v1/quotes/{quote_id}/adjustments/{adjustment_id}` | deleteQuoteAdjustmentDetail | Remover quote adjustment detail | Implementado |
@@ -329,6 +353,7 @@ Total: **281 operações**. Corrigido (devolve variáveis; agora no contrato): 1
 | Scenarios | POST | `/api/v1/scenarios/{scenario_id}/clone` | postScenarioClone | Criar scenario clone | Implementado |
 | Scenarios | POST | `/api/v1/scenarios/{scenario_id}/recalculate` | postScenarioRecalculate | Criar scenario recalculate | Implementado |
 | Scenarios | POST | `/api/v1/scenarios/{scenario_id}/select` | postScenarioSelect | Criar scenario select | Implementado |
+| Search | GET | `/api/v1/search` | getGlobalSearch | Pesquisa global (clientes, cotações, produtos, apólices) | Novo (2026-10-14) |
 | Underwriting | POST | `/api/v1/quotes/{quote_id}/decision` | postQuoteDecision | Criar quote decision | Implementado |
 | Underwriting | GET | `/api/v1/quotes/{quote_id}/review` | getQuoteReview | Obter quote review | Implementado |
 | Underwriting | GET | `/api/v1/reviews` | getReviewQueue | Listar review queue | Implementado |
