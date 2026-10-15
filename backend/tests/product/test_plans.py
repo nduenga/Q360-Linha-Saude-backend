@@ -236,7 +236,7 @@ def test_cannot_delete_plan_once_a_quote_references_it(admin_client):
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
-            "displayName": "Holder",
+            "dateOfBirth": "1985-04-12", "displayName": "Holder",
             "registrationNumber": "123456789LA043",
             "email": "holder2@example.com",
             "phone": "+244900000001",

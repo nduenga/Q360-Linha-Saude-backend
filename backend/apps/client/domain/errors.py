@@ -25,6 +25,15 @@ class DuplicateNifError(DomainProblem):
     problem_code = "CONFLICT"
 
 
+class DuplicateMemberNifError(DomainProblem):
+    """Decisão R1 (2026-10-14, revista 2026-10-15): o NIF de uma pessoa segura,
+    quando indicado, identifica no máximo uma pessoa segura em cada tomador
+    (a mesma pessoa pode ter ficha, com NIF, em tomadores diferentes)."""
+
+    http_status = 409
+    problem_code = "CONFLICT"
+
+
 class RowVersionMismatchError(DomainProblem):
     """Optimistic-locking `rowVersion` supplied by the client does not
     match the current persisted value."""

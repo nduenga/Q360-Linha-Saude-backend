@@ -7,6 +7,35 @@ import pytest
 
 from apps.quote.infrastructure.models import Quote
 from tests.quote.test_quotes import _parameter_set, _plan, _rating_table
+from apps.foundation.application.context import CurrentActorProvider
+from apps.foundation.domain.actor import Actor
+from apps.foundation.domain.tenant import TenantId
+from apps.foundation.domain.permissions import Role
+from apps.foundation.infrastructure.models import Tenant
+
+
+
+
+def _update_quote_as_tenant(quote_id, **fields):
+    # Usa o gestor base apenas para descobrir o tenant da cotação.
+    tenant_id = (
+        Quote._base_manager
+        .filter(id=quote_id)
+        .values_list("tenant_id", flat=True)
+        .get()
+    )
+
+    actor = Actor(
+        actor_id="tester",
+        tenant_id=TenantId(tenant_id),
+        roles=frozenset({Role.ADMIN}),
+    )
+
+    token = CurrentActorProvider.bind(actor)
+    try:
+        return Quote.objects.filter(id=quote_id).update(**fields)
+    finally:
+        CurrentActorProvider.reset(token)
 
 
 def _rejected_quote(client) -> dict:
@@ -24,8 +53,11 @@ def _rejected_quote(client) -> dict:
         "/api/v1/quotes",
         {"proposerId": proposer["id"], "planId": plan_ref["planId"], "effectiveDate": "2026-11-01"},
     ).data
-    Quote.objects.filter(id=quote["id"]).update(
-        status="REJECTED", rejected_by="system:auto", rejected_at=datetime.datetime.now(datetime.timezone.utc)
+    _update_quote_as_tenant(
+        quote["id"],
+        status="REJECTED",
+        rejected_by="system:auto",
+        rejected_at=datetime.datetime.now(datetime.timezone.utc),
     )
     return client.get(f"/api/v1/quotes/{quote['id']}").data
 
@@ -45,7 +77,7 @@ def test_rejected_quote_can_be_reopened_as_draft(admin_client):
 @pytest.mark.django_db
 def test_only_rejected_quotes_can_be_reopened(admin_client):
     quote = _rejected_quote(admin_client)
-    Quote.objects.filter(id=quote["id"]).update(status="CANCELLED")
+    _update_quote_as_tenant(quote["id"], status="CANCELLED")
     response = admin_client.post(
         f"/api/v1/quotes/{quote['id']}/reopen", {"reason": "Tentativa inválida", "rowVersion": quote["rowVersion"]}
     )
@@ -57,3 +89,5 @@ def test_reopen_requires_a_reason(admin_client):
     quote = _rejected_quote(admin_client)
     response = admin_client.post(f"/api/v1/quotes/{quote['id']}/reopen", {"rowVersion": quote["rowVersion"]})
     assert response.status_code == 400
+
+

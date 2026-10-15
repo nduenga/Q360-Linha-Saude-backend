@@ -16,7 +16,6 @@ from apps.quote.domain.enums import QuoteStatus
 from apps.quote.infrastructure.models import Quote
 
 TEST_EMAILS = (
-    "helibrando@gmail.com",
     "fabiongila@gmail.com",
     "sethlussueki@gmail.com",
 )

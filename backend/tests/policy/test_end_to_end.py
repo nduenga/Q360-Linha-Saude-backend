@@ -101,7 +101,7 @@ def test_full_lifecycle_from_market_templates_to_portal_and_renewal(admin_client
     # ----------------------------------------------------------- 2. cliente + cotação
     proposer = admin_client.post(
         "/api/v1/proposers",
-        {"proposerType": "INDIVIDUAL", "displayName": "Cliente E2E", "registrationNumber": REGISTRATION,
+        {"proposerType": "INDIVIDUAL", "dateOfBirth": "1985-04-12", "displayName": "Cliente E2E", "registrationNumber": REGISTRATION,
          "email": EMAIL, "phone": "+244900000099"},
     ).data
     holder = admin_client.post("/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1985-03-10", "firstName": "Titular"}).data

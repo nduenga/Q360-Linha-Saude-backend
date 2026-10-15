@@ -1,70 +1,116 @@
-"""ROADMAP_ANGOLA_CUSTOMIZATION.md OD-003 (OPEN_DECISIONS.md
-#S03-RELATIONSHIP-001, Product Owner decision 2026-09-21): a real,
-DB-backed relationship-code catalogue including ascendants (pais e
-avós), enforced when creating/updating a Member."""
+
+"""Testes do catálogo de relações familiares por tenant."""
 from __future__ import annotations
 
 import pytest
 
 
 def _proposer(client) -> str:
-    return client.post(
+    response = client.post(
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
             "displayName": "Holder",
             "registrationNumber": "123456789LA042",
-            "email": "holder@example.com",
+            "dateOfBirth": "1990-05-14",
+            "email": "monteiroui8@gmail.com",
             "phone": "+244900000000",
         },
-    ).data["id"]
+    )
+    assert response.status_code == 201, response.data
+    return response.data["id"]
+
+
+def _create_titular(client, proposer_id: str) -> dict:
+    response = client.post(
+        "/api/v1/members",
+        {
+            "proposerId": proposer_id,
+            "relationshipCode": "TITULAR",
+            "firstName": "Titular",
+            "dateOfBirth": "1985-01-01",
+        },
+    )
+    assert response.status_code == 201, response.data
+    return response.data
 
 
 @pytest.mark.django_db
-def test_relationship_catalog_has_5_codes_including_ascendant(admin_client):
+def test_relationship_catalog_hides_titular_and_has_4_public_codes(
+    admin_client,
+):
     response = admin_client.get("/api/v1/relationship-codes")
-    assert response.status_code == 200
-    codes = {item["code"]: item["category"] for item in response.data["items"]}
+
+    assert response.status_code == 200, response.data
+
+    codes = {
+        item["code"]: item["category"]
+        for item in response.data["items"]
+    }
+
     assert codes == {
-        "TITULAR": "TITULAR",
         "CONJUGE": "SPOUSE",
         "FILHO": "CHILD",
         "ASCENDENTE": "ASCENDANT",
         "OUTRO": "OTHER",
     }
+    assert "TITULAR" not in codes
 
 
 @pytest.mark.django_db
 def test_create_member_with_ascendant_relationship_succeeds(admin_client):
     proposer_id = _proposer(admin_client)
+    _create_titular(admin_client, proposer_id)
+
     response = admin_client.post(
         "/api/v1/members",
-        {"proposerId": proposer_id, "relationshipCode": "ASCENDENTE", "firstName": "Mae"},
+        {
+            "proposerId": proposer_id,
+            "relationshipCode": "ASCENDENTE",
+            "firstName": "Mae",
+            "dateOfBirth": "1960-05-14",
+        },
     )
-    assert response.status_code == 201
+
+    assert response.status_code == 201, response.data
     assert response.data["relationshipCode"] == "ASCENDENTE"
 
 
 @pytest.mark.django_db
-def test_create_member_with_unknown_relationship_code_is_rejected(admin_client):
+def test_create_member_with_unknown_relationship_code_is_rejected(
+    admin_client,
+):
     proposer_id = _proposer(admin_client)
+    _create_titular(admin_client, proposer_id)
+
     response = admin_client.post(
         "/api/v1/members",
-        {"proposerId": proposer_id, "relationshipCode": "SOBRINHO", "firstName": "X"},
+        {
+            "proposerId": proposer_id,
+            "relationshipCode": "SOBRINHO",
+            "firstName": "X",
+            "dateOfBirth": "1990-05-14",
+        },
     )
+
     assert response.status_code == 400
     assert response.data["code"] == "VALIDATION-400"
 
 
 @pytest.mark.django_db
-def test_update_member_with_unknown_relationship_code_is_rejected(admin_client):
+def test_update_member_with_unknown_relationship_code_is_rejected(
+    admin_client,
+):
     proposer_id = _proposer(admin_client)
-    member = admin_client.post(
-        "/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR"}
-    ).data
+    member = _create_titular(admin_client, proposer_id)
 
     response = admin_client.put(
-        f"/api/v1/members/{member['id']}", {"relationshipCode": "SOBRINHO", "rowVersion": 0}
+        f"/api/v1/members/{member['id']}",
+        {
+            "relationshipCode": "SOBRINHO",
+            "rowVersion": member.get("rowVersion", 0),
+        },
     )
+
     assert response.status_code == 400
     assert response.data["code"] == "VALIDATION-400"

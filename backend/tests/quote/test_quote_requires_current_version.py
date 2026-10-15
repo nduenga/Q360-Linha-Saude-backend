@@ -16,7 +16,7 @@ def _proposer(client) -> str:
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
-            "displayName": "Holder",
+            "dateOfBirth": "1985-04-12", "displayName": "Holder",
             "registrationNumber": "123456789LA042",
             "email": "holder@example.com",
             "phone": "+244900000000",

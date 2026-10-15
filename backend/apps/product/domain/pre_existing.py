@@ -71,7 +71,7 @@ def validate_pre_existing_decision(
     policy = [r for r in (settings.get("preExistingPolicy") or []) if isinstance(r, dict)]
     if policy:
         if severity is None:
-            raise _err("severity (LOW, MODERATE ou HIGH) é obrigatória: o negócio definiu tratamentos por gravidade")
+            raise _err("severity (LOW, MODERATE, MODERATE_HIGH ou HIGH) é obrigatória: o negócio definiu tratamentos por gravidade")
         rules = [r for r in policy if r.get("severity") == severity]
         if not rules:
             raise _err(f"O negócio não definiu tratamento para a gravidade '{severity}'")

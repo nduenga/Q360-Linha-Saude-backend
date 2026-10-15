@@ -181,6 +181,7 @@ class MemberListCreateView(APIView):
             sex_code=data["sexCode"],
             external_reference=data["externalReference"],
             attributes=data["attributes"],
+            nif=data["nif"],
         )
         return Response(MemberSerializer(member).data, status=201)
 
@@ -209,6 +210,8 @@ class MemberDetailView(APIView):
             sex_code=data["sexCode"],
             attributes=data["attributes"],
             row_version=data["rowVersion"],
+            nif=data.get("nif"),
+            keep_nif="nif" not in data,
         )
         return Response(MemberSerializer(updated).data)
 

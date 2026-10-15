@@ -42,7 +42,7 @@ def test_demo_seeders_create_every_portal_scenario():
     tenant = Tenant.objects.get(code="demo-saude")
 
     # --- Ana: conta com palavra-passe, apólice, atraso, cotação aprovada, pedidos, mensagens
-    ana_client = _login(tenant, "helibrando@gmail.com")
+    ana_client = _login(tenant, "fabiongila@gmail.com")
     policies = ana_client.get(f"{BASE}/policies").data["policies"]
     assert [p["status"] for p in policies] == ["ACTIVE"]
 
@@ -79,14 +79,14 @@ def test_demo_seeders_create_every_portal_scenario():
     ana_policy = Policy.all_tenants.get(proposer=ana_proposer, status="ACTIVE")
     ana_first_access = _first_access(tenant, ana_policy.policy_number, ana_proposer.registration_number)
     assert ana_first_access.status_code == 202, ana_first_access.data
-    assert mail.outbox[-1].to == ["helibrando@gmail.com"]
+    assert mail.outbox[-1].to == ["fabiongila@gmail.com"]
 
     empresa = Proposer.all_tenants.get(external_reference="DEMO-EMPRESA-KILAMBA")
     empresa_policy = Policy.all_tenants.get(proposer=empresa, status="ACTIVE")
     company_first_access = _first_access(tenant, empresa_policy.policy_number, empresa.registration_number)
     assert company_first_access.status_code == 202, company_first_access.data
-    assert mail.outbox[-1].to == ["fabiongila@gmail.com"]
-    assert {carlos.email, ana_proposer.email, empresa.email} == set(TEST_EMAILS)
+    assert mail.outbox[-1].to == ["empresa.kilamba@demo.q360.local"]
+    assert {carlos.email, ana_proposer.email} == set(TEST_EMAILS)
 
     # --- Mariana: sem email no registo
     mariana = Proposer.all_tenants.get(external_reference="DEMO-MARIANA-SEM-EMAIL")
@@ -112,7 +112,7 @@ def test_demo_seeders_create_every_portal_scenario():
     # --- idempotência: voltar a correr repõe o estado sem duplicar nada
     call_command("seed_portal_demo")
     assert len(ana_client.get(f"{BASE}/requests").data["requests"]) == 2
-    assert _login(tenant, "helibrando@gmail.com")  # a palavra-passe continua válida
+    assert _login(tenant, "fabiongila@gmail.com")  # a palavra-passe continua válida
     # o seeder repõe a Empresa sem conta, para repetir o primeiro acesso
     assert _first_access(tenant, empresa_policy.policy_number, empresa.registration_number).status_code == 202
 

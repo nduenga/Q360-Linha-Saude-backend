@@ -1,0 +1,65 @@
+"""Reutilização de cotações rejeitadas: REJECTED -> DRAFT (POST /quotes/{id}/reopen)."""
+from __future__ import annotations
+
+import datetime
+
+import pytest
+
+from apps.quote.infrastructure.models import Quote
+from tests.quote.test_quotes import _parameter_set, _plan, _rating_table
+from apps.foundation.application.context import CurrentActorProvider
+from apps.foundation.domain.actor import Actor
+from apps.foundation.domain.tenant import TenantId
+from apps.foundation.domain.permissions import Role
+from apps.foundation.infrastructure.models import Tenant
+
+
+def _rejected_quote(client) -> dict:
+    plan_ref = _plan(client, product_code="REOPEN-PROD")
+    _parameter_set(client, code="REOPEN-PARAMS")
+    _rating_table(client, code="REOPEN-TABLE")
+    proposer = client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "INDIVIDUAL", "displayName": "Holder", "nif": "123456789LA042",
+            "dateOfBirth": "1985-03-10", "email": "h@example.com", "phone": "+244900000000",
+        },
+    ).data
+    quote = client.post(
+        "/api/v1/quotes",
+        {"proposerId": proposer["id"], "planId": plan_ref["planId"], "effectiveDate": "2026-11-01"},
+    ).data
+    Quote.objects.filter(id=quote["id"]).update(
+        status="REJECTED", rejected_by="system:auto", rejected_at=datetime.datetime.now(datetime.timezone.utc)
+    )
+    return client.get(f"/api/v1/quotes/{quote['id']}").data
+
+
+@pytest.mark.django_db
+def test_rejected_quote_can_be_reopened_as_draft(admin_client):
+    quote = _rejected_quote(admin_client)
+    response = admin_client.post(
+        f"/api/v1/quotes/{quote['id']}/reopen",
+        {"reason": "Membro corrigido após rejeição", "rowVersion": quote["rowVersion"]},
+    )
+    assert response.status_code == 200, response.data
+    assert response.data["status"] == "DRAFT"
+    assert response.data["quoteNumber"] == quote["quoteNumber"]  # mesmo número
+
+
+@pytest.mark.django_db
+
+def test_only_rejected_quotes_can_be_reopened(admin_client):
+    quote = _rejected_quote(admin_client)
+    Quote.objects.filter(id=quote["id"]).update(status="CANCELLED")
+    response = admin_client.post(
+        f"/api/v1/quotes/{quote['id']}/reopen", {"reason": "Tentativa inválida", "rowVersion": quote["rowVersion"]}
+    )
+    assert response.status_code == 409
+
+
+@pytest.mark.django_db
+def test_reopen_requires_a_reason(admin_client):
+    quote = _rejected_quote(admin_client)
+    response = admin_client.post(f"/api/v1/quotes/{quote['id']}/reopen", {"rowVersion": quote["rowVersion"]})
+    assert response.status_code == 400

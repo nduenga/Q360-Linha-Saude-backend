@@ -327,7 +327,7 @@ class Command(BaseCommand):
             proposer_type="INDIVIDUAL",
             display_name="Ana Paula Silva",
             registration_number="000000001LA001",
-            email="helibrando@gmail.com",
+            email="fabiongila@gmail.com",
             phone="+244 900 000 001",
         )
         members = {
@@ -335,7 +335,7 @@ class Command(BaseCommand):
             "spouse": self._ensure_member(proposer, "DEMO-ANA-CONJUGE", "CONJUGE", "Miguel", "Silva", "1988-03-02"),
             "child": self._ensure_member(proposer, "DEMO-ANA-FILHO", "FILHO", "Inês", "Silva", "2006-08-20"),
             "senior": self._ensure_member(proposer, "DEMO-ANA-ASCENDENTE", "ASCENDENTE", "Rosa", "Silva", "1961-01-10"),
-            "over-age": self._ensure_member(proposer, "DEMO-ANA-IDADE-LIMITE", "TITULAR", "António", "Silva", "1940-01-10"),
+            "over-age": self._ensure_member(proposer, "DEMO-ANA-IDADE-LIMITE", "ASCENDENTE", "António", "Silva", "1940-01-10"),
         }
         existing = Policy.objects.filter(proposer=proposer, status="ACTIVE", plan=plan).order_by("created_at").first()
         if existing:
@@ -488,7 +488,7 @@ class Command(BaseCommand):
             proposer_type="ORGANISATION",
             display_name="Empresa Kilamba, Lda.",
             registration_number="5410000030",
-            email="fabiongila@gmail.com",
+            email="empresa.kilamba@demo.q360.local",
             phone="+244 900 000 003",
         )
         holder = self._ensure_member(proposer, "DEMO-EMPRESA-TITULAR", "TITULAR", "João", "Domingos", "1993-06-08")

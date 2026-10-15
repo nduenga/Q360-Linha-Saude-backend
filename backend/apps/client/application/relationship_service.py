@@ -1,53 +1,70 @@
-"""Catálogo real de relações familiares (ROADMAP_ANGOLA_CUSTOMIZATION.md
-OD-003 / OPEN_DECISIONS.md#S03-RELATIONSHIP-001, decisão do Product Owner
-2026-09-21).
 
-Mirrors apps/product/application/benefit_service.py's pattern exactly:
-`RelationshipCode` is `TenantScopedModel` (no cross-tenant catalog table
-exists in this schema), so the fixed catalogue is seeded per-tenant,
-idempotently, the first time it is needed.
+"""Catálogo de relações familiares por tenant.
 
-The 5 values are the Product Owner's own list (cônjuge/equiparado,
-descendentes directos, ascendentes directos — pais e avós) plus the two
-already in use by every test/demo tenant (TITULAR, OUTRO) — nothing here
-invents a value the Product Owner did not name.
+O código TITULAR é mantido no catálogo interno para permitir a criação
+do primeiro membro e validar as regras de parentesco, mas não é
+disponibilizado como opção no endpoint público GET /api/v1/relationship-codes.
 """
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.client.domain.enums import RelationshipCategory
 from apps.client.domain.errors import UnknownRelationshipCodeError
 from apps.client.infrastructure.models import RelationshipCode
 
+
+# Catálogo interno: TITULAR é necessário para as regras de negócio,
+# mas deve ser ocultado na listagem pública.
 MARKET_CATALOG: list[dict[str, str]] = [
-    {"code": "CONJUGE", "label": "Cônjuge ou Equiparado(a)", "category": RelationshipCategory.SPOUSE.value},
-    {"code": "FILHO", "label": "Filho(a)", "category": RelationshipCategory.CHILD.value},
+    {
+        "code": "TITULAR",
+        "label": "Titular",
+        "category": RelationshipCategory.TITULAR.value,
+    },
+    {
+        "code": "CONJUGE",
+        "label": "Cônjuge ou Equiparado(a)",
+        "category": RelationshipCategory.SPOUSE.value,
+    },
+    {
+        "code": "FILHO",
+        "label": "Filho(a)",
+        "category": RelationshipCategory.CHILD.value,
+    },
     {
         "code": "ASCENDENTE",
         "label": "Pai / Mãe / Avô / Avó (Ascendente Directo)",
         "category": RelationshipCategory.ASCENDANT.value,
     },
-    {"code": "OUTRO", "label": "Outro", "category": RelationshipCategory.OTHER.value},
+    {
+        "code": "OUTRO",
+        "label": "Outro",
+        "category": RelationshipCategory.OTHER.value,
+    },
 ]
 
 
 def ensure_relationship_catalog(tenant_id: uuid.UUID) -> None:
-    """Idempotent: creates the 5 fixed relationship codes for a tenant if
-    any are missing. Never touches a row that already exists (a tenant may
-    have edited the label; this must not clobber that)."""
+    """Cria idempotentemente os códigos internos de parentesco do tenant.
+
+    Os registos existentes não são alterados, para preservar eventuais
+    alterações de etiquetas feitas pelo tenant.
+    """
     for entry in MARKET_CATALOG:
         RelationshipCode.objects.get_or_create(
             tenant_id=tenant_id,
             code=entry["code"],
-            defaults={"label": entry["label"], "category": entry["category"]},
+            defaults={
+                "label": entry["label"],
+                "category": entry["category"],
+            },
         )
 
 
-
-def list_relationship_codes() -> Any:
+def list_relationship_codes():
+    """Devolve apenas as relações que podem ser escolhidas na interface."""
     tenant_id = CurrentTenantProvider.require().value
     ensure_relationship_catalog(tenant_id)
 
@@ -59,17 +76,24 @@ def list_relationship_codes() -> Any:
     )
 
 
-
-def validate_relationship_code(*, tenant_id: uuid.UUID, code: str) -> RelationshipCode:
-    """Raises UnknownRelationshipCodeError (400 VALIDATION-400) when `code`
-    is not one of this tenant's catalogue values — the enforcement point
-    apps/client/application/member_service.py calls before persisting a
-    Member, replacing the previous "any non-empty string is accepted"
-    behaviour."""
+def validate_relationship_code(
+    *,
+    tenant_id: uuid.UUID,
+    code: str,
+) -> RelationshipCode:
+    """Valida um código no catálogo do tenant, incluindo TITULAR."""
     ensure_relationship_catalog(tenant_id)
-    relationship_code = RelationshipCode.objects.filter(code=code).first()
+
+    relationship_code = RelationshipCode.objects.filter(
+        tenant_id=tenant_id,
+        code=code,
+    ).first()
+
     if relationship_code is None:
         raise UnknownRelationshipCodeError(
-            f"'{code}' não é um código de parentesco válido neste tenant (consulte GET /api/v1/relationship-codes para ver os valores permitidos)"
+            f"'{code}' não é um código de parentesco válido neste tenant "
+            "(consulte GET /api/v1/relationship-codes para ver os valores "
+            "permitidos para seleção)"
         )
+
     return relationship_code

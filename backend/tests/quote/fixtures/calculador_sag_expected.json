@@ -1,0 +1,38 @@
+{
+  "_provenance": {
+    "workbook": "apps/business_config/seed/Modelo_Actuarial_Saude_SAU_SAG_Angola.xlsx",
+    "workbookSha256": "0e6b2142ed8c48eca6deea14320266ba5bd90e806b4dae084402fd8a0a511d1c",
+    "change": "Calculador!C5 = SAG (restantes entradas como no ficheiro: Conforto->Quadros Médios, Luanda, co-pagamento 5000, comparticipação 0.8, franquias 0, 40 colaboradores, adesão Obrigatória, Comércio e Serviços, mesmas 4 pessoas e opcionais)",
+    "method": "Fórmulas do próprio Excel recalculadas com pycel 1.0b30 (tools/recalc_calculador.py). Validação do método: o mesmo recálculo com C5 = SAU reproduz os valores guardados pelo Excel com diferença máxima de 4.7e-09."
+  },
+  "cells": {
+    "C7": "Quadros Médios",
+    "K25": 557793.7891690551,
+    "K26": 606227.7175785912,
+    "K27": 345407.50368607574,
+    "K28": 337561.36434851633,
+    "C59": -0.08427585953098526,
+    "C60": 1,
+    "C61": 0.05,
+    "C62": -0.021500000000000075,
+    "C63": 1,
+    "C64": 0.9408378750213775,
+    "C65": 0.075,
+    "C66": 0.21000000000000002,
+    "C70": 0,
+    "C71": 0.01,
+    "C75": 1846990.3747822384,
+    "C76": 1737718.4993950587,
+    "C77": 130328.8874546294,
+    "C78": 1868047.3868496881,
+    "C79": 2364616.9453793517,
+    "C84": 2364616.9453793517,
+    "C85": 23646.16945379352,
+    "C86": 2388263.1148331454,
+    "C87": 95530524.59332582,
+    "E91": 2388263.1148331454,
+    "E92": 1212043.530777821,
+    "E93": 611992.4231759935,
+    "E94": 206982.80328553927
+  }
+}

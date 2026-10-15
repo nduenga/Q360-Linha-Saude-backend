@@ -70,7 +70,7 @@ def _approved_quote(admin_client, tenant, *, suffix: str, min_entry_age: int | N
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
-            "displayName": "Holder",
+            "dateOfBirth": "1985-04-12", "displayName": "Holder",
             "registrationNumber": _nif_for_suffix(suffix),
             "email": "holder@example.com",
             "phone": "+244900000000",
@@ -316,7 +316,7 @@ def test_only_an_approved_quote_can_be_signed(admin_client, tenant):
     plan_ref = _plan(admin_client, product_code="POL-DRAFT")
     proposer_id = admin_client.post(
         "/api/v1/proposers",
-        {"proposerType": "INDIVIDUAL", "displayName": "H", "registrationNumber": "999999999LA999",
+        {"proposerType": "INDIVIDUAL", "dateOfBirth": "1985-04-12", "displayName": "H", "registrationNumber": "999999999LA999",
          "email": "h@example.com", "phone": "+244900000000"},
     ).data["id"]
     draft_quote = admin_client.post(

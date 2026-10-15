@@ -21,6 +21,7 @@ def _proposer(client) -> dict:
             "proposerType": "INDIVIDUAL",
             "displayName": "Holder",
             "registrationNumber": f"{next(_COUNTER)}LA042",
+            "dateOfBirth": "1985-04-12",
             "email": "holder@example.com",
             "phone": "+244900000000",
         },
@@ -55,29 +56,64 @@ def test_future_date_of_birth_is_rejected(admin_client):
     assert response.data["code"] == "VALIDATION-400"
 
 
+
 @pytest.mark.django_db
 def test_update_member_optimistic_lock(admin_client):
     proposer = _proposer(admin_client)
+
+    titular = admin_client.post(
+        "/api/v1/members",
+        {
+            "proposerId": proposer["id"],
+            "relationshipCode": "TITULAR",
+            "dateOfBirth": "1990-05-20",
+        },
+    )
+    assert titular.status_code == 201, titular.data
+
     member = admin_client.post(
-        "/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR"}
-    ).data
+        "/api/v1/members",
+        {
+            "proposerId": proposer["id"],
+            "relationshipCode": "OUTRO",
+            "dateOfBirth": "1992-06-15",
+        },
+    )
+    assert member.status_code == 201, member.data
+    member = member.data
+
     ok = admin_client.put(
-        f"/api/v1/members/{member['id']}", {"relationshipCode": "CONJUGE", "rowVersion": 0}
+        f"/api/v1/members/{member['id']}",
+        {
+            "relationshipCode": "CONJUGE",
+            "dateOfBirth": "1992-06-15",
+            "rowVersion": 0,
+        },
     )
-    assert ok.status_code == 200
+    assert ok.status_code == 200, ok.data
+
     stale = admin_client.put(
-        f"/api/v1/members/{member['id']}", {"relationshipCode": "FILHO", "rowVersion": 0}
+        f"/api/v1/members/{member['id']}",
+        {
+            # válido em tudo exceto na versão: FILHO nascido em 1992 violaria a
+            # regra de idade face ao titular (400) e esconderia o conflito.
+            "relationshipCode": "OUTRO",
+            "dateOfBirth": "1992-06-15",
+            "rowVersion": 0,
+        },
     )
-    assert stale.status_code == 409
+    assert stale.status_code == 409, stale.data
     assert stale.data["code"] == "VERSION-CONFLICT"
+
+
 
 
 @pytest.mark.django_db
 def test_list_members_filtered_by_proposer(admin_client):
     proposer_a = _proposer(admin_client)
     proposer_b = _proposer(admin_client)
-    admin_client.post("/api/v1/members", {"proposerId": proposer_a["id"], "relationshipCode": "TITULAR"})
-    admin_client.post("/api/v1/members", {"proposerId": proposer_b["id"], "relationshipCode": "TITULAR"})
+    admin_client.post("/api/v1/members", {"proposerId": proposer_a["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1990-05-20"})
+    admin_client.post("/api/v1/members", {"proposerId": proposer_b["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1990-05-20"})
 
     response = admin_client.get(f"/api/v1/members?proposerId={proposer_a['id']}")
     assert response.status_code == 200
@@ -89,7 +125,7 @@ def test_list_members_filtered_by_proposer(admin_client):
 def test_delete_member_deactivates_it_with_optimistic_lock(admin_client):
     proposer = _proposer(admin_client)
     member = admin_client.post(
-        "/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR"}
+        "/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1990-05-20"}
     ).data
 
     response = admin_client.delete(f"/api/v1/members/{member['id']}", {"rowVersion": 0}, format="json")

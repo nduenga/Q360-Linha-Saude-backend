@@ -1094,6 +1094,78 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/actuarial-model/catalog:
+    get:
+      operationId: getActuarialModelCatalog
+      description: 'Requer: scope q360.read.'
+      summary: Secções editáveis e opções de cálculo do modelo actuarial
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/business-config/actuarial-model/import:
+    post:
+      operationId: importActuarialModelWorkbook
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Importar o modelo actuarial de um Excel (cria uma versão DRAFT para aprovação)
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ActuarialImport'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActuarialImportPreview'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfiguration'
+          description: ''
+  /api/v1/business-config/actuarial-model/template:
+    get:
+      operationId: downloadActuarialModelTemplate
+      description: 'Requer: scope q360.read.'
+      summary: Descarregar o Excel de referência do modelo actuarial (modelo para importação)
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
   /api/v1/business-config/catalog:
     get:
       operationId: getBusinessConfigurationCatalog
@@ -1267,6 +1339,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/BusinessConfiguration'
           description: ''
+  /api/v1/business-config/configurations/{configuration_id}/compare:
+    get:
+      operationId: compareBusinessConfigurations
+      description: 'Requer: scope q360.read.'
+      summary: Comparar duas versões da mesma configuração
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: with
+        schema:
+          type: string
+          format: uuid
+        description: Id da outra versão
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/business-config/configurations/{configuration_id}/documents:
     get:
       operationId: listBusinessConfigurationDocuments
@@ -1321,6 +1444,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/BusinessConfigurationDocument'
           description: ''
+  /api/v1/business-config/configurations/{configuration_id}/history:
+    get:
+      operationId: getBusinessConfigurationHistory
+      description: 'Requer: scope q360.read.'
+      summary: Histórico de uma versão de configuração
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfigurationHistory'
+          description: ''
+  /api/v1/business-config/configurations/{configuration_id}/reject:
+    post:
+      operationId: rejectBusinessConfiguration
+      description: 'Requer: scope q360.approve, permissão pricing-config:manage.'
+      summary: Rejeitar configuração pendente (fica REJECTED com o motivo registado)
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessConfigurationReject'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfiguration'
+          description: ''
   /api/v1/business-config/documents/{document_id}/download:
     get:
       operationId: downloadBusinessConfigurationDocument
@@ -1349,6 +1526,569 @@ paths:
                 type: string
                 format: binary
           description: ''
+  /api/v1/business-config/formulas:
+    get:
+      operationId: listFormulaSets
+      description: 'Requer: scope q360.read.'
+      summary: Listar versões do conjunto de fórmulas
+      parameters:
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: Filtro.
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BusinessConfiguration'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    post:
+      operationId: createFormulaSet
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Criar nova versão (DRAFT) do conjunto de fórmulas
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FormulaCreate'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfiguration'
+          description: ''
+  /api/v1/business-config/formulas/{configuration_id}:
+    get:
+      operationId: getFormulaSet
+      description: 'Requer: scope q360.read.'
+      summary: Consultar versão do conjunto de fórmulas (com dependências)
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    put:
+      operationId: updateFormulaSet
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Editar conjunto de fórmulas em DRAFT ou REJECTED
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessConfigurationUpdate'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/formulas/{configuration_id}/approve:
+    post:
+      operationId: approveFormulaSet
+      description: 'Requer: scope q360.approve, permissão pricing-config:manage.'
+      summary: Aprovar e publicar conjunto de fórmulas
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/formulas/{configuration_id}/history:
+    get:
+      operationId: getFormulaSetHistory
+      description: 'Requer: scope q360.read.'
+      summary: Histórico de uma versão do conjunto de fórmulas
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessConfigurationHistory'
+          description: ''
+  /api/v1/business-config/formulas/{configuration_id}/reject:
+    post:
+      operationId: rejectFormulaSet
+      description: 'Requer: scope q360.approve, permissão pricing-config:manage.'
+      summary: Rejeitar conjunto de fórmulas pendente
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessConfigurationReject'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/formulas/{configuration_id}/retire:
+    post:
+      operationId: retireFormulaSet
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Retirar (desativar) conjunto de fórmulas publicado
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/formulas/{configuration_id}/simulate:
+    post:
+      operationId: simulateFormulaSet
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Simular uma versão (qualquer estado) com valores de entrada, sem gravar nada
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FormulaSimulate'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/formulas/{configuration_id}/submit:
+    post:
+      operationId: submitFormulaSet
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Submeter conjunto de fórmulas para aprovação
+      parameters:
+      - in: path
+        name: configuration_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FormulaSubmit'
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/formulas/catalog:
+    get:
+      operationId: getFormulaCatalog
+      description: 'Requer: scope q360.read.'
+      summary: Variáveis, funções e operadores do editor de fórmulas
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/business-config/formulas/test:
+    post:
+      operationId: testPricingFormula
+      description: 'Testa uma expressão isolada sem guardar nem publicar alterações.
+
+
+        Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Validar e testar uma expressão
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FormulaTest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/formulas/validate:
+    post:
+      operationId: validateFormulaSet
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Validar um conjunto de fórmulas sem o gravar
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FormulaValidate'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/business-config/rules/custom:
     get:
       operationId: listCustomRules
@@ -11676,6 +12416,77 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/quotes/{quote_id}/reopen:
+    post:
+      operationId: postQuoteReopen
+      description: 'POST /quotes/{id}/reopen — reutiliza uma cotação REJEITADA: volta a
+
+        DRAFT (mesmo número e histórico) para corrigir a população e reprecificar.
+
+
+        Requer: scope q360.write, permissão quote:edit.'
+      summary: Criar quote reopen
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteReopenRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/quotes/{quote_id}/requirements:
     get:
       operationId: getQuoteRequirements
@@ -13851,6 +14662,42 @@ components:
       description: '* `submit` - submit
 
         * `retire` - retire'
+    ActuarialImport:
+      type: object
+      properties:
+        file:
+          type: string
+          format: uri
+          description: Excel .xlsx com a estrutura do modelo (máx. 10 MB)
+        effectiveFrom:
+          type: string
+          format: date
+        keepPublishedSettings:
+          type: boolean
+          default: true
+          description: 'Mantém da versão publicada: calculation_settings, plan_code_mapping, coverage_code_mapping
+            (não vêm do Excel)'
+        dryRun:
+          type: boolean
+          default: false
+          description: Só valida e mostra o resumo; não grava nada
+      required:
+      - effectiveFrom
+      - file
+    ActuarialImportPreview:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        keptFromPublished:
+          type: array
+          items:
+            type: string
+        summary: {}
+      required:
+      - keptFromPublished
+      - summary
+      - valid
     AddPlanBenefitRequest:
       type: object
       properties:
@@ -14396,6 +15243,51 @@ components:
           type: string
       required:
       - file
+    BusinessConfigurationHistory:
+      type: object
+      properties:
+        configurationId:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessConfigurationHistoryEntry'
+      required:
+      - configurationId
+      - items
+    BusinessConfigurationHistoryEntry:
+      type: object
+      properties:
+        action:
+          type: string
+        actorId:
+          type:
+          - string
+          - 'null'
+        occurredAt:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+        checksum:
+          type:
+          - string
+          - 'null'
+        reason:
+          type:
+          - string
+          - 'null'
+      required:
+      - action
+      - actorId
+      - checksum
+      - occurredAt
+      - reason
+      - status
     BusinessConfigurationList:
       type: object
       properties:
@@ -14405,16 +15297,28 @@ components:
             $ref: '#/components/schemas/BusinessConfiguration'
       required:
       - items
+    BusinessConfigurationReject:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+          minLength: 5
+      required:
+      - reason
     BusinessConfigurationStatusEnum:
       enum:
       - DRAFT
       - PENDING_APPROVAL
+      - REJECTED
       - PUBLISHED
       - RETIRED
       type: string
       description: '* `DRAFT` - DRAFT
 
         * `PENDING_APPROVAL` - PENDING_APPROVAL
+
+        * `REJECTED` - REJECTED
 
         * `PUBLISHED` - PUBLISHED
 
@@ -14805,6 +15709,8 @@ components:
       - security.role_permissions
       - rules.custom
       - proposal.branding
+      - pricing.formulas
+      - pricing.fractionation
       type: string
       description: '* `product.plans` - product.plans
 
@@ -14856,7 +15762,11 @@ components:
 
         * `rules.custom` - rules.custom
 
-        * `proposal.branding` - proposal.branding'
+        * `proposal.branding` - proposal.branding
+
+        * `pricing.formulas` - pricing.formulas
+
+        * `pricing.fractionation` - pricing.fractionation'
     ConfigurationChange:
       type: object
       properties:
@@ -15714,6 +16624,71 @@ components:
       required:
       - reference
       - registrationNumber
+    FormulaCreate:
+      type: object
+      properties:
+        value: {}
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type:
+          - string
+          - 'null'
+          format: date
+        metadata: {}
+      required:
+      - effectiveFrom
+      - value
+    FormulaSimulate:
+      type: object
+      properties:
+        totalAmount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,2})?$
+          description: 'Valor de partida: total da cotação (QUOTE) ou prémio da pessoa (PERSON)'
+        membersCount:
+          type: integer
+          maximum: 100000
+          minimum: 0
+        stage:
+          allOf:
+          - $ref: '#/components/schemas/StageEnum'
+          default: QUOTE
+        age:
+          type:
+          - integer
+          - 'null'
+          maximum: 130
+          minimum: 0
+          description: Obrigatória na fase PERSON
+      required:
+      - membersCount
+      - totalAmount
+    FormulaSubmit:
+      type: object
+      properties:
+        changeReason:
+          type: string
+          maxLength: 1000
+    FormulaTest:
+      type: object
+      properties:
+        expression:
+          type: string
+          maxLength: 500
+        variables:
+          type: object
+          additionalProperties: {}
+      required:
+      - expression
+    FormulaValidate:
+      type: object
+      properties:
+        value: {}
+      required:
+      - value
     GeneratedPassword:
       type: object
       properties:
@@ -16147,6 +17122,10 @@ components:
           type:
           - string
           - 'null'
+        nif:
+          type:
+          - string
+          - 'null'
         attributes: {}
         status:
           $ref: '#/components/schemas/PlanStatusEnum'
@@ -16159,6 +17138,7 @@ components:
       - firstName
       - id
       - lastName
+      - nif
       - proposerId
       - relationshipCode
       - rowVersion
@@ -16187,16 +17167,20 @@ components:
           - string
           - 'null'
         dateOfBirth:
-          type:
-          - string
-          - 'null'
+          type: string
           format: date
         sexCode:
           type:
           - string
           - 'null'
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 30
         attributes: {}
       required:
+      - dateOfBirth
       - proposerId
       - relationshipCode
     MemberDocumentItem:
@@ -16496,19 +17480,23 @@ components:
           - string
           - 'null'
         dateOfBirth:
-          type:
-          - string
-          - 'null'
+          type: string
           format: date
         sexCode:
           type:
           - string
           - 'null'
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 30
         attributes: {}
         rowVersion:
           type: integer
           minimum: 0
       required:
+      - dateOfBirth
       - relationshipCode
       - rowVersion
     PageMeta:
@@ -17085,15 +18073,27 @@ components:
           - 'null'
         rowVersion:
           type: integer
+        proposerName:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        planName:
+          type:
+          - string
+          - 'null'
+          readOnly: true
       required:
       - currencyCode
       - endDate
       - id
       - paymentFrequency
       - planId
+      - planName
       - policyNumber
       - policyType
       - proposerId
+      - proposerName
       - rowVersion
       - sourceQuoteId
       - startDate
@@ -18995,6 +19995,11 @@ components:
           type:
           - string
           - 'null'
+        dateOfBirth:
+          type:
+          - string
+          - 'null'
+          format: date
         email:
           type:
           - string
@@ -19015,6 +20020,7 @@ components:
       required:
       - address
       - attributes
+      - dateOfBirth
       - displayName
       - email
       - externalReference
@@ -19039,6 +20045,11 @@ components:
           type: string
           maxLength: 30
           minLength: 1
+        dateOfBirth:
+          type:
+          - string
+          - 'null'
+          format: date
         registrationNumber:
           type: string
           maxLength: 100
@@ -19101,6 +20112,11 @@ components:
           type: string
           maxLength: 30
           minLength: 1
+        dateOfBirth:
+          type:
+          - string
+          - 'null'
+          format: date
         registrationNumber:
           type: string
           maxLength: 100
@@ -19155,6 +20171,14 @@ components:
         effectiveDate:
           type: string
           format: date
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
         validUntil:
           type:
           - string
@@ -19196,16 +20220,35 @@ components:
           - 'null'
           additionalProperties: {}
           readOnly: true
+        planName:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        productName:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        proposerName:
+          type:
+          - string
+          - 'null'
+          readOnly: true
       required:
+      - createdAt
       - currencyCode
       - effectiveDate
       - id
       - latestPricingRun
       - latestPricingRunId
       - planId
+      - planName
       - premiumAnnualAmount
       - premiumAnnualCurrency
+      - productName
       - proposerId
+      - proposerName
       - quoteNumber
       - quoteType
       - renewal
@@ -19213,6 +20256,7 @@ components:
       - selection
       - sourcePolicyId
       - status
+      - updatedAt
       - validUntil
     QuoteAdjustment:
       type: object
@@ -19479,6 +20523,19 @@ components:
           format: uuid
       required:
       - sourcePolicyId
+    QuoteReopenRequest:
+      type: object
+      description: Reabrir uma cotação REJEITADA (volta a DRAFT). `reason` obrigatório.
+      properties:
+        reason:
+          type: string
+          minLength: 1
+        rowVersion:
+          type: integer
+          minimum: 0
+      required:
+      - reason
+      - rowVersion
     QuoteSelectionRead:
       type: object
       properties:
@@ -19649,6 +20706,14 @@ components:
         effectiveDate:
           type: string
           format: date
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
         validUntil:
           type:
           - string
@@ -19690,20 +20755,39 @@ components:
           - 'null'
           additionalProperties: {}
           readOnly: true
+        planName:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        productName:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        proposerName:
+          type:
+          - string
+          - 'null'
+          readOnly: true
         warnings:
           type: array
           items:
             $ref: '#/components/schemas/Warning'
       required:
+      - createdAt
       - currencyCode
       - effectiveDate
       - id
       - latestPricingRun
       - latestPricingRunId
       - planId
+      - planName
       - premiumAnnualAmount
       - premiumAnnualCurrency
+      - productName
       - proposerId
+      - proposerName
       - quoteNumber
       - quoteType
       - renewal
@@ -19711,6 +20795,7 @@ components:
       - selection
       - sourcePolicyId
       - status
+      - updatedAt
       - validUntil
       - warnings
     RatingFactor:
@@ -20610,6 +21695,14 @@ components:
           description: Obrigatória para REJECTED e AWAITING_CUSTOMER; o cliente vê-a.
       required:
       - toStatus
+    StageEnum:
+      enum:
+      - QUOTE
+      - PERSON
+      type: string
+      description: '* `QUOTE` - QUOTE
+
+        * `PERSON` - PERSON'
     StateHistoryItem:
       type: object
       properties:
@@ -21255,6 +22348,11 @@ components:
           type: string
           maxLength: 60
           minLength: 1
+        dateOfBirth:
+          type:
+          - string
+          - 'null'
+          format: date
         email:
           type:
           - string

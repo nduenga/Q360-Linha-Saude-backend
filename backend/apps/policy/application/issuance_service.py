@@ -26,6 +26,9 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.db import transaction
 from django.utils.timezone import now as timezone_now
 
+from apps.business_config.application.resolver import BusinessConfigurationResolver
+from apps.business_config.domain.shape import flatten
+from apps.business_config.infrastructure.models import BusinessConfiguration
 from apps.client.domain.enums import ProposerType
 from apps.eligibility.domain.enums import EligibilityDecision
 from apps.eligibility.domain.evaluation import AngolaEvidence
@@ -67,6 +70,37 @@ _ELIGIBILITY_TO_POLICY_MEMBER_STATUS = {
 
 def _round2(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def fractionation_loading(quote: Quote, payment_frequency: str) -> Decimal:
+    """Encargo de fracionamento (Dashboard_Premissas!D61:D64 / Calculador!E91:E94).
+
+    Decisão A8 (2026-10-14): aplica-se a todas as apólices.
+      1. `pricing.fractionation` publicada e vigente na data de efeito da
+         cotação (editável pela interface);
+      2. senão, a tabela do modelo actuarial registado no cálculo do prémio
+         (a versão usada nesse cálculo, não a publicada hoje);
+      3. senão, sem encargo (partes iguais)."""
+    config = BusinessConfigurationResolver.get("pricing.fractionation", effective_date=quote.effective_date)
+    if config is not None:
+        rows = flatten("pricing.fractionation", config.value_json).get("installments") or []
+        return _loading_for(rows, payment_frequency)
+    run = quote.latest_pricing_run
+    used = (run.business_configuration_snapshot_json or {}).get("pricing.actuarial_model") if run else None
+    if not used:
+        return Decimal("0")
+    model = BusinessConfiguration.objects.filter(id=used.get("configurationId")).values_list("value_json", flat=True).first()
+    return _loading_for(((model or {}).get("assumptions") or {}).get("payment_installments") or [], payment_frequency)
+
+
+def _loading_for(rows: list, payment_frequency: str) -> Decimal:
+    row = next((r for r in rows if str(r.get("frequency", "")).strip().upper() == payment_frequency), None)
+    return Decimal(str(row["loading"])) if row and row.get("loading") not in (None, "") else Decimal("0")
+
+
+def installment_amount(quote: Quote, total_amount: Decimal, payment_frequency: str) -> Decimal:
+    count = _INSTALLMENT_COUNT[payment_frequency]
+    return _round2(total_amount * (Decimal("1") + fractionation_loading(quote, payment_frequency)) / count)
 
 
 def issue_policy(
@@ -189,8 +223,7 @@ def issue_policy(
                 )
 
             if total_amount is not None:
-                count = _INSTALLMENT_COUNT[payment_frequency]
-                first_amount = _round2(total_amount / count)
+                first_amount = installment_amount(quote, total_amount, payment_frequency)
                 today = timezone_now().date()
                 PremiumInstallment.objects.create(
                     tenant_id=tenant_id.value,

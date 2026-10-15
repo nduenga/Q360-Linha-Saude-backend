@@ -10,7 +10,9 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from apps.business_config.domain.actuarial_model import CONFIG_KEY as ACTUARIAL_KEY, validate_actuarial_model
 from apps.business_config.domain.custom_rules import validate_rules
+from apps.business_config.domain.formulas import CONFIG_KEY as FORMULAS_KEY, validate_formulas
 from apps.business_config.domain.errors import InvalidConfiguration
 from apps.business_config.domain.form_schemas import get_form_schema
 from apps.business_config.domain.shape import flatten
@@ -74,6 +76,16 @@ def _check_object(fields: list[dict[str, Any]], row: Any, path: str) -> None:
 
 
 def validate_structure(key: str, value: dict[str, Any]) -> None:
+    if key == FORMULAS_KEY:
+        # Sintaxe, variáveis declaradas, dependências e ciclos: uma fórmula
+        # inválida nunca chega a ser guardada, muito menos publicada.
+        validate_formulas(value)
+        return
+    if key == ACTUARIAL_KEY:
+        # Modelo editável pela interface/importado do Excel: tabelas e taxas
+        # inválidas são recusadas ao gravar, nunca no cálculo.
+        validate_actuarial_model(value)
+        return
     schema = get_form_schema(key)
     sections = schema["sections"]
     if len(sections) == 1 and sections[0]["fields"][0]["type"] == "json":
@@ -116,6 +128,13 @@ def _check_rules(key: str, value: dict[str, Any]) -> None:
                 raise InvalidConfiguration("age_limits: a idade máxima de renovação não pode ser inferior à de entrada")
     if key == "rules.custom":
         validate_rules(value)
+    if key == "pricing.fractionation":
+        frequencies = [row.get("frequency") for row in value.get("installments") or []]
+        if len(frequencies) != len(set(frequencies)):
+            raise InvalidConfiguration("installments: cada periodicidade só pode aparecer uma vez")
+        for row in value.get("installments") or []:
+            if _decimal(row.get("loading"), "installments.loading") >= 1:
+                raise InvalidConfiguration("installments.loading: use uma fração inferior a 1 (ex.: 0.04 = 4 %)")
     if key == "pricing.factors":
         for row in value.get("factors") or []:
             if _decimal(row.get("factor"), "factors.factor") == 0:

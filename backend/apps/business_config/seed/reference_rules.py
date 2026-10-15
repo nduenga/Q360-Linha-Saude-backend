@@ -59,11 +59,21 @@ STATIC_CONFIGS: dict[str, dict[str, Any]] = {
         {"code": "STAMP-DUTY", "description": "Imposto do selo (0% no modelo actuarial)",
          "category": "TAX", "type": "PERCENTAGE", "value": "0", "included_in_premium": False},
     ]},
-    # Regras_Ajustes §2: gravidade da pré-existência -> tratamento.
+    # Regras_Ajustes §2 (B58:D62): gravidade da pré-existência -> tratamento.
+    # Moderada-Elevada: +50 % (com sublimite/parecer do Médico Assessor no Excel).
     "underwriting.pre_existing_conditions": {"rules": [
         {"severity": "LOW", "treatment": "SURCHARGE", "surcharge_percent": "15"},
         {"severity": "MODERATE", "treatment": "SURCHARGE", "surcharge_percent": "30", "waiting_days": 180},
+        {"severity": "MODERATE_HIGH", "treatment": "SURCHARGE", "surcharge_percent": "50"},
+        {"severity": "MODERATE_HIGH", "treatment": "SUBLIMIT"},
         {"severity": "HIGH", "treatment": "EXCLUSION_SPECIFIC"},
+    ]},
+    # Dashboard_Premissas!B61:D64 (decisão A8): encargo de fracionamento para todas as apólices.
+    "pricing.fractionation": {"installments": [
+        {"frequency": "ANUAL", "loading": "0"},
+        {"frequency": "SEMESTRAL", "loading": "0.015"},
+        {"frequency": "TRIMESTRAL", "loading": "0.025"},
+        {"frequency": "MENSAL", "loading": "0.04"},
     ]},
     # Regras_Ajustes §2: idade na 1.ª adesão.
     "underwriting.acceptance_rules": {"rules": [

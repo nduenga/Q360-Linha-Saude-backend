@@ -76,10 +76,10 @@ def _rating_table(client, *, code="TABLE", factors=()):
 def _member(client):
     proposer = client.post(
         "/api/v1/proposers",
-        {"proposerType": "INDIVIDUAL", "displayName": "Holder", "registrationNumber": "123456789LA042",
+        {"proposerType": "INDIVIDUAL", "dateOfBirth": "1985-04-12", "displayName": "Holder", "registrationNumber": "123456789LA042",
          "email": "holder@example.com", "phone": "+244900000000"},
     ).data
-    return client.post("/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR"}).data["id"]
+    return client.post("/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1985-04-12"}).data["id"]
 
 
 def _body(plan_id, member_id, *, selection=None, table="TABLE", params="PARAMS"):

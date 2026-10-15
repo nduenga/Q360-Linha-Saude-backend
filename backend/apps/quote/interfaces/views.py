@@ -99,7 +99,7 @@ class QuoteListCreateView(APIView):
         return [require_scope(Scope.READ)()]
 
     def get(self, request):
-        queryset = Quote.objects.select_related("latest_pricing_run").order_by("-created_at")
+        queryset = Quote.objects.select_related("latest_pricing_run", "proposer", "plan__product").order_by("-created_at")
         status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
@@ -154,7 +154,7 @@ class QuoteDetailView(APIView):
 
     def get(self, request, quote_id):
         quote = get_object_or_404(
-            Quote.objects.select_related("latest_pricing_run"), id=quote_id
+            Quote.objects.select_related("latest_pricing_run", "proposer", "plan__product"), id=quote_id
         )
         return Response(QuoteSerializer(quote).data)
 

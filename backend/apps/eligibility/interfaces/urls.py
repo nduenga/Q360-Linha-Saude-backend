@@ -1,6 +1,5 @@
 from django.urls import path
 
-from apps.eligibility.interfaces.views import EligibilityEvaluateView
 from apps.eligibility.interfaces.views import (
     EligibilityEvaluateView,
     EligibilityExecutionDetailView,

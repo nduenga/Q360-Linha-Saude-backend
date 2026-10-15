@@ -27,13 +27,15 @@ class PublishedBusinessPricing:
     taxes_fees: dict[str, Any]
     versions: dict[str, dict[str, Any]]
     actuarial_model: dict[str, Any] | None = None
+    formulas: dict[str, Any] | None = None
 
     @property
     def currency_code(self) -> str:
         value = self.reference_premiums.get("currency_code")
         if not value:
             raise PricingConfigError(
-                "A configuração publicada 'pricing.reference_premiums' deve definir currency_code."
+                "A configuração publicada 'pricing.reference_premiums' "
+                "deve definir currency_code."
             )
         return str(value).upper()
 
@@ -78,6 +80,36 @@ def resolve_published_business_pricing(*, effective_date: date) -> PublishedBusi
             "checksum": actuarial_config.checksum,
         }
 
+    
+    formulas = {}
+    formulas_config = BusinessConfigurationResolver.get(
+        "pricing.formulas",
+        effective_date=effective_date,
+    )
+
+    if formulas_config is not None:
+        if not isinstance(formulas_config.value_json, dict):
+            raise PricingConfigError(
+                "A configuração 'pricing.formulas' deve ser um objecto JSON."
+            )
+
+        formulas = formulas_config.value_json
+
+        versions["pricing.formulas"] = {
+            "configurationId": str(formulas_config.id),
+            "configKey": formulas_config.config_key,
+            "versionNo": formulas_config.version_no,
+            "effectiveFrom": formulas_config.effective_from.isoformat(),
+            "effectiveTo": (
+                formulas_config.effective_to.isoformat()
+                if formulas_config.effective_to
+                else None
+            ),
+            "checksum": formulas_config.checksum,
+        }
+
+
+    
     return PublishedBusinessPricing(
         reference_premiums=configs["pricing.reference_premiums"],
         factors=configs["pricing.factors"],
@@ -85,7 +117,9 @@ def resolve_published_business_pricing(*, effective_date: date) -> PublishedBusi
         taxes_fees=configs["pricing.taxes_fees"],
         versions=versions,
         actuarial_model=actuarial_model,
+        formulas=formulas,
     )
+
 
 
 def resolve_reference_premium(*, pricing: PublishedBusinessPricing, plan, age: int) -> Decimal:
@@ -353,8 +387,21 @@ def resolve_actuarial_group_adjustment(
     loadings = loadings_by_segment.get(segment)
     if not isinstance(loadings, dict):
         raise PricingConfigError(f"O modelo actuarial não define carregamentos para o segmento '{segment}'.")
+    cost_sharing = _cost_sharing_adjustment(model, profile)
     if segment != "SAG":
-        return {"segment": segment, "factor": Decimal("1"), "volatility": Decimal(str(loadings["volatility"])), "details": {}}
+        # Calculador!C64 para SAU: (1 + participação nos custos) × factor regional.
+        # Ambos só entram quando o perfil os indica (sem valores por omissão).
+        factor = Decimal("1")
+        details: dict[str, Any] = {}
+        region = str(profile.get("region", "")).strip()
+        if region:
+            region_factor = _regional_factor(model, region)
+            factor *= region_factor
+            details.update({"region": region, "regionFactor": str(region_factor)})
+        if cost_sharing is not None:
+            factor *= Decimal("1") + cost_sharing["adjustment"]
+            details["costSharing"] = cost_sharing["details"]
+        return {"segment": segment, "factor": factor, "volatility": Decimal(str(loadings["volatility"])), "details": details}
 
     if isinstance(headcount, bool) or not isinstance(headcount, int) or headcount < 1:
         raise PricingConfigError("O modelo SAG exige pelo menos um colaborador titular para calcular a tarifa.")
@@ -371,10 +418,8 @@ def resolve_actuarial_group_adjustment(
         if row.get("headcount_from") <= headcount <= row.get("headcount_to")
     ), None)
     industry_row = next((row for row in model.get("industry_factors", []) if row.get("industry") == industry), None)
-    regional_rows = model.get("adjustment_assumptions", {}).get("regional_factors", [])
-    region_row = next((row for row in regional_rows if row.get("region") == region), None)
-    if size_row is None or industry_row is None or region_row is None:
-        raise PricingConfigError("Headcount, sector ou região não correspondem às tabelas do modelo actuarial.")
+    if size_row is None or industry_row is None:
+        raise PricingConfigError("Headcount ou sector não correspondem às tabelas do modelo actuarial.")
 
     if adhesion == "MANDATORY":
         adhesion_rows = [row for row in model.get("group_participation_factors", []) if "Obrigatória" in str(row.get("rule", ""))]
@@ -404,8 +449,10 @@ def resolve_actuarial_group_adjustment(
 
     size_adjustment = Decimal(str(size_row["premium_adjustment"]))
     industry_factor = Decimal(str(industry_row["factor"]))
-    region_factor = Decimal(str(region_row["factor"]))
+    region_factor = _regional_factor(model, region)
     factor = (Decimal("1") + size_adjustment) * adhesion_factor * industry_factor * region_factor
+    if cost_sharing is not None:
+        factor *= Decimal("1") + cost_sharing["adjustment"]
     volatility = Decimal(str(size_row["volatility"]))
     return {
         "segment": segment,
@@ -420,5 +467,116 @@ def resolve_actuarial_group_adjustment(
             "industryFactor": str(industry_factor),
             "region": region,
             "regionFactor": str(region_factor),
+            **({"costSharing": cost_sharing["details"]} if cost_sharing is not None else {}),
+        },
+    }
+
+
+def _regional_factor(model: dict[str, Any], region: str) -> Decimal:
+    """Regras_Ajustes!B104:C108 (Calculador!C60)."""
+    rows = model.get("adjustment_assumptions", {}).get("regional_factors", [])
+    row = next((r for r in rows if r.get("region") == region), None)
+    if row is None:
+        allowed = [r.get("region") for r in rows]
+        raise PricingConfigError(f"A região '{region}' não existe no modelo actuarial (permitidas: {allowed}).")
+    return Decimal(str(row["factor"]))
+
+
+_COST_SHARING_INPUTS = (
+    ("copaymentAoa", "copayment_per_visit_aoa", "Calculador!C55"),
+    ("reimbursementShare", "reimbursement_share", "Calculador!C56"),
+    ("outpatientDeductibleAoa", "outpatient_annual_deductible_aoa", "Calculador!C57"),
+    ("inpatientDeductibleAoa", "inpatient_deductible_aoa", "Calculador!C58"),
+)
+
+
+def _cost_sharing_adjustment(model: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any] | None:
+    """Calculador!C59 = (1+co-pag.)×(1+comparticipação)×(1+franquia amb.)×(1+franquia int.) − 1.
+
+    Só quando `actuarialProfile.costSharing` é enviado; cada valor tem de
+    existir na tabela do modelo (o Excel usa MATCH exacto)."""
+    raw = profile.get("costSharing")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise PricingConfigError("actuarialProfile.costSharing deve ser um objecto.")
+    tables = model.get("adjustment_assumptions", {}).get("cost_sharing")
+    if not isinstance(tables, dict):
+        raise PricingConfigError(
+            "O modelo actuarial publicado não contém as tabelas de participação nos custos; "
+            "publique uma versão gerada pelo seed actual (publish_actuarial_model)."
+        )
+    combined = Decimal("1")
+    details: dict[str, Any] = {}
+    for field, table_key, cell in _COST_SHARING_INPUTS:
+        if raw.get(field) is None:
+            raise PricingConfigError(f"actuarialProfile.costSharing.{field} é obrigatório.")
+        try:
+            value = Decimal(str(raw[field]))
+        except InvalidOperation as exc:
+            raise PricingConfigError(f"actuarialProfile.costSharing.{field} deve ser numérico.") from exc
+        rows = tables.get(table_key) or []
+        row = next((r for r in rows if Decimal(str(r["value"])) == value), None)
+        if row is None:
+            raise PricingConfigError(
+                f"actuarialProfile.costSharing.{field}={value} não existe no modelo "
+                f"(valores permitidos: {[r['value'] for r in rows]})."
+            )
+        adjustment = Decimal(str(row["adjustment"]))
+        combined *= Decimal("1") + adjustment
+        details[field] = {"value": str(value), "adjustment": str(adjustment), "sourceCell": row.get("source_cell"), "excel": cell}
+    return {"adjustment": combined - Decimal("1"), "details": details}
+
+
+def resolve_actuarial_entry_age_surcharge(*, model: dict[str, Any], age: int) -> dict[str, Any]:
+    """Regras_Ajustes!B79:D83 (Calculador!J25): agravamento pela idade na 1.ª adesão (SAU)."""
+    rows = sorted(
+        (r for r in model.get("adjustment_assumptions", {}).get("entry_age_adjustments", []) if r.get("age_from") is not None),
+        key=lambda r: r["age_from"],
+    )
+    row = None
+    for candidate in rows:
+        if candidate["age_from"] <= age:
+            row = candidate
+    if row is None:
+        return {"surcharge": Decimal("0"), "decision": None, "ageFrom": None}
+    return {"surcharge": Decimal(str(row["surcharge"])), "decision": row.get("decision"), "ageFrom": row["age_from"]}
+
+
+def resolve_actuarial_commercial_discount(
+    *, model: dict[str, Any], segment: str, members_count: int, profile: dict[str, Any]
+) -> dict[str, Any]:
+    """Calculador!C67:C70 — desconto comercial total, limitado a desc_max:
+    MAX(desc_max, (1+agregado)×(1+venda cruzada)×(1+renovação) − 1).
+
+    Agregado só em SAU (n.º de pessoas); venda cruzada e renovação sem
+    sinistralidade só quando o perfil as indica."""
+    assumptions = model.get("adjustment_assumptions", {})
+    family = Decimal("0")
+    if segment == "SAU":
+        for row in sorted(assumptions.get("family_size_discounts", []), key=lambda r: r["minimum_members"]):
+            if row["minimum_members"] <= members_count:
+                family = Decimal(str(row["discount"]))
+    cross_sell_name = str(profile.get("crossSell") or "").strip()
+    cross = Decimal("0")
+    if cross_sell_name:
+        row = next((r for r in assumptions.get("cross_sell_discounts", []) if r.get("product") == cross_sell_name), None)
+        if row is None:
+            allowed = [r.get("product") for r in assumptions.get("cross_sell_discounts", [])]
+            raise PricingConfigError(f"Venda cruzada '{cross_sell_name}' não existe no modelo (permitidas: {allowed}).")
+        cross = Decimal(str(row["discount"]))
+    renewal = Decimal("0")
+    if profile.get("noClaimsRenewal") is True:
+        renewal = Decimal(str(assumptions["no_claims_renewal_discount"]))
+    cap = Decimal(str(assumptions.get("maximum_cumulative_discount", "-1")))
+    combined = (Decimal("1") + family) * (Decimal("1") + cross) * (Decimal("1") + renewal) - Decimal("1")
+    applied = max(cap, combined)
+    return {
+        "discount": applied,
+        "details": {
+            "familySizeDiscount": str(family), "membersCount": members_count,
+            "crossSell": cross_sell_name or None, "crossSellDiscount": str(cross),
+            "noClaimsRenewalDiscount": str(renewal),
+            "uncappedDiscount": str(combined), "maximumDiscount": str(cap), "capped": applied != combined,
         },
     }

@@ -523,6 +523,31 @@ def pre_existing_for_context(quote: Quote) -> dict[str, dict]:
     }
 
 
+def _age_on(date_of_birth: datetime.date, day: datetime.date) -> int:
+    return day.year - date_of_birth.year - ((day.month, day.day) < (date_of_birth.month, date_of_birth.day))
+
+
+def _first_adhesion_ages(members_by_id: dict) -> dict:
+    """Idade de cada pessoa na sua 1.ª adesão: a data de inclusão mais antiga
+    numa apólice (ou o início dessa apólice). Pessoas sem histórico ficam de
+    fora — o motor regista que a idade de adesão não é conhecida."""
+    from apps.policy.infrastructure.models import PolicyMember  # evita import circular quote <-> policy
+
+    first: dict = {}
+    rows = PolicyMember.objects.filter(member_id__in=list(members_by_id)).values_list(
+        "member_id", "inclusion_date", "policy__start_date"
+    )
+    for member_id, inclusion_date, start_date in rows:
+        day = inclusion_date or start_date
+        if day is not None and (member_id not in first or day < first[member_id]):
+            first[member_id] = day
+    return {
+        member_id: _age_on(members_by_id[member_id].date_of_birth, day)
+        for member_id, day in first.items()
+        if members_by_id[member_id].date_of_birth is not None
+    }
+
+
 def build_pricing_context(
     quote: Quote,
     *,
@@ -549,14 +574,20 @@ def build_pricing_context(
             for member_id in priceable_member_ids
         },
     }
-    plan_settings = quote.plan.settings_json or {}
-    if plan_settings.get("segment") == "GROUP":
-        proposer_attributes = quote.proposer.attributes_json or {}
-        actuarial_profile = proposer_attributes.get("actuarialProfile")
-        if actuarial_profile is not None:
-            if not isinstance(actuarial_profile, dict):
-                raise ReferencedEntityNotFoundError("proposer.attributes.actuarialProfile tem de ser um objeto")
-            context["actuarialProfile"] = actuarial_profile
+    # Perfil actuarial do tomador (região, participação nos custos, venda
+    # cruzada, renovação sem sinistralidade; e, em grupo, sector/adesão).
+    # Vale para SAU e SAG: o Calculador do modelo aplica-o aos dois.
+    proposer_attributes = quote.proposer.attributes_json or {}
+    actuarial_profile = proposer_attributes.get("actuarialProfile")
+    if actuarial_profile is not None:
+        if not isinstance(actuarial_profile, dict):
+            raise ReferencedEntityNotFoundError("proposer.attributes.actuarialProfile tem de ser um objeto")
+        context["actuarialProfile"] = actuarial_profile
+    if quote.quote_type == "RENEWAL":
+        context["quoteType"] = "RENEWAL"
+        # A6: idade na 1.ª adesão (agravamento de adesão do modelo actuarial).
+        for member_id, entry_age in _first_adhesion_ages(members_by_id).items():
+            context["members"][str(member_id)]["entryAge"] = entry_age
     # A configuração de negócio publicada (pricing.*) tem prioridade; sem ela,
     # mantém-se a resolução legada RatingTable/PricingParameterSet.
     if BusinessConfigurationResolver.get("pricing.reference_premiums", effective_date=quote.effective_date) is None:
@@ -630,13 +661,16 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
                 }
                 for key, value in snapshot.items()
             }
-            current_rules = BusinessConfigurationResolver.get("rules.custom", effective_date=quote.effective_date)
-            if current_snapshot and current_rules is not None:
-                current_snapshot["rules.custom"] = {
-                    "configurationId": str(current_rules.id),
-                    "versionNo": current_rules.version_no,
-                    "checksum": current_rules.checksum,
-                }
+            # Chaves opcionais que, quando publicadas, também entram no cálculo
+            # (e por isso no snapshot gravado em cada PricingRun).
+            for key in ("pricing.actuarial_model", "pricing.formulas", "rules.custom"):
+                current = BusinessConfigurationResolver.get(key, effective_date=quote.effective_date)
+                if current_snapshot and current is not None:
+                    current_snapshot[key] = {
+                        "configurationId": str(current.id),
+                        "versionNo": current.version_no,
+                        "checksum": current.checksum,
+                    }
             if current_snapshot and stored_snapshot == current_snapshot:
                 return latest
         elif not current_reference and snapshot:

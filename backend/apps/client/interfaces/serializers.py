@@ -154,6 +154,15 @@ class RelationshipCodeSerializer(serializers.Serializer):
     category = serializers.CharField()
 
 
+def _optional_member_nif(value):
+    if value is None or not str(value).strip():
+        return None
+    try:
+        return validate_agt_nif(value, "INDIVIDUAL")
+    except NifFormatError as exc:
+        raise serializers.ValidationError(str(exc)) from exc
+
+
 class MemberSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     proposerId = serializers.UUIDField(source="proposer_id")
@@ -163,6 +172,7 @@ class MemberSerializer(serializers.Serializer):
     lastName = serializers.CharField(source="last_name", allow_null=True)
     dateOfBirth = serializers.DateField(source="date_of_birth", allow_null=True)
     sexCode = serializers.CharField(source="sex_code", allow_null=True)
+    nif = serializers.CharField(allow_null=True)
     attributes = serializers.JSONField(source="attributes_json")
     status = serializers.ChoiceField(choices=[s.value for s in MemberStatus])
     rowVersion = serializers.IntegerField(source="row_version")
@@ -178,7 +188,12 @@ class MemberCreateRequestSerializer(serializers.Serializer):
     # aqui: herdam os do titular (campos do proponente).
     dateOfBirth = serializers.DateField(required=True, allow_null=False)
     sexCode = serializers.CharField(allow_null=True, required=False, default=None)
+    # NIF do beneficiário: opcional; quando enviado segue o formato AGT de pessoa singular.
+    nif = serializers.CharField(allow_null=True, allow_blank=True, required=False, default=None, max_length=30)
     attributes = serializers.JSONField(required=False, default=dict)
+
+    def validate_nif(self, value):
+        return _optional_member_nif(value)
 
 
 class MemberUpdateRequestSerializer(serializers.Serializer):
@@ -187,8 +202,13 @@ class MemberUpdateRequestSerializer(serializers.Serializer):
     lastName = serializers.CharField(allow_null=True, required=False, default=None)
     dateOfBirth = serializers.DateField(required=True, allow_null=False)
     sexCode = serializers.CharField(allow_null=True, required=False, default=None)
+    # Omitido = mantém o NIF guardado; null/"" = remove-o.
+    nif = serializers.CharField(allow_null=True, allow_blank=True, required=False, max_length=30)
     attributes = serializers.JSONField(required=False, default=dict)
     rowVersion = serializers.IntegerField(min_value=0)
+
+    def validate_nif(self, value):
+        return _optional_member_nif(value)
 
 
 class MemberDeleteRequestSerializer(serializers.Serializer):

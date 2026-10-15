@@ -65,22 +65,49 @@ def _scope(client, *, members=2, settings=SETTINGS):
         format="json",
     ).data
     client.post(f"/api/v1/configuration/rule-version/{rule['id']}/publish")
-    proposer = client.post(
+    
+    proposer_response = client.post(
         "/api/v1/proposers",
-        {"proposerType": "INDIVIDUAL", "displayName": "Holder", "registrationNumber": "123456789LA042",
-         "email": "holder@example.com", "phone": "+244900000000"},
-    ).data["id"]
+        {
+            "proposerType": "INDIVIDUAL",
+            "displayName": "Holder",
+            "registrationNumber": "123456789LA042",
+            "dateOfBirth": "1990-01-01",
+            "email": "holder@example.com",
+            "phone": "+244900000000",
+        },
+        format="json",
+    )
+    assert proposer_response.status_code in (200, 201), proposer_response.data
+    proposer = proposer_response.data["id"]
+
     quote = client.post(
         "/api/v1/quotes", {"proposerId": proposer, "planId": plan["id"], "effectiveDate": "2026-06-01"}, format="json"
     ).data
+    
     member_ids = []
-    for _ in range(members):
-        member_id = client.post(
+    for index in range(members):
+        relationship_code = "TITULAR" if index == 0 else "CONJUGE"
+
+        member_response = client.post(
             "/api/v1/members",
-            {"proposerId": proposer, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"},
-        ).data["id"]
-        client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")
+            {
+                "proposerId": proposer,
+                "relationshipCode": relationship_code,
+                "dateOfBirth": "1990-01-01",
+            },
+            format="json",
+        )
+        assert member_response.status_code in (200, 201), member_response.data
+        member_id = member_response.data["id"]
+        attach_response = client.post(
+            f"/api/v1/quotes/{quote['id']}/members",
+            {"memberId": member_id},
+            format="json",
+        )
+        assert attach_response.status_code in (200, 201), attach_response.data
         member_ids.append(member_id)
+
     priced = client.post(f"/api/v1/quotes/{quote['id']}/price")
     assert priced.status_code == 200, priced.data
     return {"quoteId": quote["id"], "memberIds": member_ids, "planId": plan["id"], "proposerId": proposer}

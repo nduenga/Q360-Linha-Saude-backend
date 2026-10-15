@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from django.db import transaction
@@ -69,6 +69,7 @@ from apps.business_config.application.custom_rules import (
     quote_facts,
 )
 from apps.business_config.application.resolver import BusinessConfigurationResolver
+from apps.business_config.domain.actuarial_model import calculation_settings, profile_with_defaults
 from apps.business_config.domain.custom_rules import apply_pricing_action, describe as describe_rule
 from apps.business_config.application.pricing import (
     PublishedBusinessPricing,
@@ -77,6 +78,8 @@ from apps.business_config.application.pricing import (
     resolve_published_business_pricing,
     resolve_reference_premium,
     resolve_actuarial_coverage_premiums,
+    resolve_actuarial_commercial_discount,
+    resolve_actuarial_entry_age_surcharge,
     resolve_actuarial_group_adjustment,
     resolve_taxes_and_fees,
 )
@@ -85,6 +88,11 @@ from apps.pricing.infrastructure.rule_repository import parse_pricing_config, re
 from apps.pricing.application.plan_dimensions import PlanPricingContext, resolve_plan_pricing_context
 from apps.pricing.application.rating_table_service import resolve_factor, resolve_rating_table
 from apps.product.infrastructure.models import Plan
+from apps.business_config.application.formula_pricing import (
+    apply_person_formulas,
+    apply_quote_formulas,
+    load_formula_set,
+)
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
@@ -456,6 +464,12 @@ def _run_calculation(
             raise PricingConfigError("context.actuarialProfile deve ser um objecto.")
         plan_mapping = actuarial_model.get("plan_code_mapping", {}).get(str(plan.code), {})
         segment = plan_mapping.get("segment")
+        # A4: campos do perfil em falta vêm dos valores por omissão configurados no modelo.
+        profile, defaults_used = profile_with_defaults(actuarial_model, str(segment), profile)
+        trace("ACTUARIAL_PROFILE_RESOLVED",
+              input_data={"segment": segment, "supplied": _jsonable_facts(context.get("actuarialProfile") or {})},
+              output_data={"profile": _jsonable_facts(profile), "defaultsApplied": defaults_used})
+        actuarial_settings = calculation_settings(actuarial_model)
         if segment == "SAG":
             supplied_headcount = profile.get("groupHeadcount")
             if supplied_headcount is not None:
@@ -479,6 +493,10 @@ def _run_calculation(
             headcount=group_headcount,
             profile=profile,
         )
+        actuarial_commercial_discount = resolve_actuarial_commercial_discount(
+            model=actuarial_model, segment=actuarial_group_adjustment["segment"],
+            members_count=len(member_ids), profile=profile,
+        )
 
     for note in plan_context.warnings:
         trace("WARNING", rule_code=note.get("code"), message=f"{note.get('scope')}: {note.get('message')}")
@@ -492,6 +510,13 @@ def _run_calculation(
                 message=f"Ajuste {adjustment.code} refere um membro que não faz parte do cálculo: ignorado.",
             )
 
+    formulas = business_pricing.formulas if business_pricing is not None else None
+    formula_version_no = (
+        business_pricing.versions.get("pricing.formulas", {}).get("versionNo") if formulas else None
+    )
+    person_formula_set = load_formula_set(formulas) if formulas else None
+    if person_formula_set is not None and not person_formula_set.steps_for("PERSON"):
+        person_formula_set = None
     person_rules = custom_rules.pricing("PERSON")
     quote_rules = custom_rules.pricing("QUOTE")
     rule_version_no = str(custom_rules.version["versionNo"]) if custom_rules.version else None
@@ -562,6 +587,38 @@ def _run_calculation(
                     output_data={"purePremium": str(coverage_premium), "runningAmount": str(running_amount)},
                 )
                 order += 1
+            if actuarial_group_adjustment["segment"] == "SAU":
+                # Calculador!J25: idade na 1.ª adesão. Numa renovação, conforme
+                # `calculation_settings.entry_age_on_renewal` (A6).
+                adhesion_age, skip_reason = _entry_age_for(
+                    context=context, member_context=member_context, mode=actuarial_settings["entry_age_on_renewal"]
+                )
+                if adhesion_age is None:
+                    trace("ACTUARIAL_FACTOR_NOT_APPLIED", rule_code="ACTUARIAL_ENTRY_AGE_LOADING",
+                          input_data={"memberId": str(member_id)}, output_data={"reason": skip_reason})
+                else:
+                    entry_age = resolve_actuarial_entry_age_surcharge(model=actuarial_model, age=adhesion_age)
+                    if entry_age["surcharge"] != 0:
+                        before_entry_age = running_amount
+                        running_amount = round_amount(running_amount * (Decimal("1") + entry_age["surcharge"]))
+                        _guard_amount(running_amount)
+                        PricingComponent.objects.create(
+                            tenant_id=tenant_id, pricing_run=pricing_run, member=member,
+                            component_order=order, component_code="ACTUARIAL_ENTRY_AGE_LOADING",
+                            component_type=PricingComponentType.FACTOR.value,
+                            factor_value=Decimal("1") + entry_age["surcharge"],
+                            adjustment_amount=round_amount(running_amount - before_entry_age), result_amount=running_amount,
+                            source_code="BUSINESS_CONFIG:pricing.actuarial_model:Regras_Ajustes!C79:C83",
+                            source_version=str(business_pricing.versions["pricing.actuarial_model"]["versionNo"]),
+                            metadata_json={"age": member_context["age"], "entryAge": adhesion_age,
+                                           "ageFrom": entry_age["ageFrom"], "decision": entry_age["decision"]},
+                        )
+                        trace("ACTUARIAL_ENTRY_AGE_LOADING_APPLIED", rule_code="ACTUARIAL_ENTRY_AGE_LOADING",
+                              message=entry_age["decision"],
+                              input_data={"memberId": str(member_id), "age": member_context["age"],
+                                          "entryAge": adhesion_age, "surcharge": str(entry_age["surcharge"])},
+                              output_data={"resultAmount": str(running_amount)})
+                        order += 1
             group_factor = actuarial_group_adjustment["factor"]
             if group_factor != Decimal("1"):
                 before_group_factor = running_amount
@@ -569,7 +626,7 @@ def _run_calculation(
                 _guard_amount(running_amount)
                 PricingComponent.objects.create(
                     tenant_id=tenant_id, pricing_run=pricing_run, member=member,
-                    component_order=order, component_code="ACTUARIAL_GROUP_ADJUSTMENT",
+                    component_order=order, component_code="ACTUARIAL_RISK_FACTOR",
                     component_type=PricingComponentType.FACTOR.value,
                     factor_value=group_factor, adjustment_amount=round_amount(running_amount - before_group_factor),
                     result_amount=running_amount,
@@ -578,8 +635,8 @@ def _run_calculation(
                     metadata_json=actuarial_group_adjustment["details"],
                 )
                 trace(
-                    "ACTUARIAL_GROUP_ADJUSTMENT_APPLIED",
-                    rule_code="ACTUARIAL_GROUP_ADJUSTMENT",
+                    "ACTUARIAL_RISK_FACTOR_APPLIED",  # Calculador!C64
+                    rule_code="ACTUARIAL_RISK_FACTOR",
                     input_data={"memberId": str(member_id), **actuarial_group_adjustment["details"]},
                     output_data={"factor": str(group_factor), "resultAmount": str(running_amount)},
                 )
@@ -766,6 +823,9 @@ def _run_calculation(
             )
             for custom in person_rules:
                 if not custom.matches(facts):
+                    trace("CUSTOM_RULE_SKIPPED", rule_code=custom.code, message=describe_rule(custom),
+                          input_data={"memberId": str(member_id), "facts": _jsonable_facts(facts)},
+                          output_data={"reason": "CONDITION_NOT_MET"})
                     continue
                 before = running_amount
                 new_amount, factor = apply_pricing_action(custom, running_amount)
@@ -838,6 +898,38 @@ def _run_calculation(
                 output_data={"resultAmount": str(running_amount)},
             )
             order += 1
+
+        if person_formula_set is not None:
+            # Fórmulas por pessoa (fase PERSON): depois das regras de risco,
+            # antes dos ajustes comerciais e dos carregamentos.
+            outcome = apply_person_formulas(
+                formula_set=person_formula_set, person_amount=running_amount,
+                age=member_context.get("age", _member_age(member, pricing_run.effective_date)),
+                members_count=len(member_ids),
+            )
+            for item in outcome["steps"]:
+                before = running_amount
+                running_amount = item["result"]
+                _guard_amount(running_amount)
+                PricingComponent.objects.create(
+                    tenant_id=tenant_id, pricing_run=pricing_run, member=member, component_order=order,
+                    component_code=item["code"], component_type=PricingComponentType.ADJUSTMENT.value,
+                    adjustment_amount=item["adjustment"], result_amount=running_amount,
+                    source_code=f"BUSINESS_CONFIG:pricing.formulas:{item['code']}",
+                    source_version=str(formula_version_no) if formula_version_no is not None else None,
+                    metadata_json={"stage": "PERSON", "name": item["name"], "expression": item["expression"],
+                                   "variables": item["variables"], "auxiliaryValues": item["auxiliaryValues"]},
+                )
+                trace("FORMULA_APPLIED", rule_code=item["code"], message=item["name"],
+                      input_data={"memberId": str(member_id), "stage": "PERSON", "personAmountBefore": str(before),
+                                  "expression": item["expression"], "variables": item["variables"],
+                                  "auxiliaryValues": item["auxiliaryValues"]},
+                      output_data={"rawResult": str(item["rawResult"]), "adjustment": str(item["adjustment"]),
+                                   "resultAmount": str(running_amount), "configurationVersion": formula_version_no})
+                order += 1
+            for item in outcome["skipped"]:
+                trace("FORMULA_SKIPPED", rule_code=item["code"],
+                      input_data={"memberId": str(member_id), "stage": "PERSON"}, output_data={"reason": item["reason"]})
 
         for adjustment in commercial_adjustments:
             if adjustment.scope == "MEMBER" and adjustment.member_id != str(member_id):
@@ -931,6 +1023,26 @@ def _run_calculation(
             running_amount = commercial_premium
             order += 1
 
+            discount = actuarial_commercial_discount["discount"]
+            if discount != 0:
+                before_discount = running_amount
+                running_amount = round_amount(running_amount * (Decimal("1") + discount))
+                _guard_amount(running_amount)
+                PricingComponent.objects.create(
+                    tenant_id=tenant_id, pricing_run=pricing_run, member=member,
+                    component_order=order, component_code="ACTUARIAL_COMMERCIAL_DISCOUNT",
+                    component_type=PricingComponentType.ADJUSTMENT.value,
+                    factor_value=Decimal("1") + discount,
+                    adjustment_amount=round_amount(running_amount - before_discount), result_amount=running_amount,
+                    source_code="BUSINESS_CONFIG:pricing.actuarial_model:Regras_Ajustes!C88:C101",
+                    source_version=str(business_pricing.versions["pricing.actuarial_model"]["versionNo"]),
+                    metadata_json=actuarial_commercial_discount["details"],
+                )
+                trace("ACTUARIAL_COMMERCIAL_DISCOUNT_APPLIED", rule_code="ACTUARIAL_COMMERCIAL_DISCOUNT",
+                      input_data={"memberId": str(member_id), **actuarial_commercial_discount["details"]},
+                      output_data={"discount": str(discount), "resultAmount": str(running_amount)})
+                order += 1
+
         total_amount += running_amount
 
     total_amount = round_amount(total_amount)
@@ -942,6 +1054,9 @@ def _run_calculation(
         )
         for custom in quote_rules:
             if not custom.matches(facts):
+                trace("CUSTOM_RULE_SKIPPED", rule_code=custom.code, message=describe_rule(custom),
+                      input_data={"scope": "QUOTE", "facts": _jsonable_facts(facts)},
+                      output_data={"reason": "CONDITION_NOT_MET"})
                 continue
             before_total = total_amount
             new_total, factor = apply_pricing_action(custom, total_amount)
@@ -1037,6 +1152,9 @@ def _run_calculation(
         segment = actuarial_group_adjustment["segment"]
         loading_data = actuarial_model.get("assumptions", {}).get("loadings", {}).get(segment, {})
         model_tax_codes = {"STAMP_DUTY", "IMPOSTO_SELO", "ARSEG", "ARSEG_LEVY"}
+        # Calculador!C85 = C84 × (imposto do selo + ARSEG): as taxas somam-se
+        # sobre o prémio comercial líquido, não se aplicam em cascata.
+        net_commercial_premium = total_amount
         for code, field in (("STAMP_DUTY", "stamp_duty"), ("ARSEG_LEVY", "arseg_levy")):
             try:
                 rate = Decimal(str(loading_data[field]))
@@ -1047,7 +1165,7 @@ def _run_calculation(
             if rate == 0:
                 continue
             before_tax = total_amount
-            tax_amount = round_amount(total_amount * rate)
+            tax_amount = round_amount(net_commercial_premium * rate)
             total_amount = round_amount(total_amount + tax_amount)
             _guard_amount(total_amount)
             PricingComponent.objects.create(
@@ -1086,6 +1204,34 @@ def _run_calculation(
                   input_data={"type": charge["type"], "value": str(charge["value"])},
                   output_data={"totalAmount": str(total_amount)})
             order += 1
+
+    # Fórmulas publicadas (`pricing.formulas`), fase QUOTE: correm por último,
+    # sobre o total já com taxas/encargos, pela ordem configurada.
+    if formulas:
+        outcome = apply_quote_formulas(formulas=formulas, total_amount=total_amount, members_count=len(member_ids))
+        for item in outcome["steps"]:
+            before_total = total_amount
+            total_amount = item["result"]
+            _guard_amount(total_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id, pricing_run=pricing_run, member=None, component_order=order,
+                component_code=item["code"], component_type=PricingComponentType.ADJUSTMENT.value,
+                adjustment_amount=item["adjustment"], result_amount=total_amount,
+                source_code=f"BUSINESS_CONFIG:pricing.formulas:{item['code']}",
+                source_version=str(formula_version_no) if formula_version_no is not None else None,
+                metadata_json={"stage": "QUOTE", "name": item["name"], "expression": item["expression"],
+                               "variables": item["variables"], "auxiliaryValues": item["auxiliaryValues"]},
+            )
+            trace("FORMULA_APPLIED", rule_code=item["code"], message=item["name"],
+                  input_data={"totalBefore": str(before_total), "expression": item["expression"],
+                              "variables": item["variables"], "auxiliaryValues": item["auxiliaryValues"]},
+                  output_data={"rawResult": str(item["rawResult"]), "adjustment": str(item["adjustment"]),
+                               "totalAmount": str(total_amount), "configurationVersion": formula_version_no})
+            order += 1
+        for item in outcome["skipped"]:
+            trace("FORMULA_SKIPPED", rule_code=item["code"], output_data={"reason": item["reason"]})
+
+    # O componente TOTAL deve existir mesmo quando não há fórmulas.
     PricingComponent.objects.create(
         tenant_id=tenant_id,
         pricing_run=pricing_run,
@@ -1095,8 +1241,41 @@ def _run_calculation(
         component_type=PricingComponentType.TOTAL.value,
         result_amount=total_amount,
     )
-    trace("TOTAL_COMPUTED", output_data={"totalAmount": str(total_amount)})
+
+    trace(
+        "TOTAL_COMPUTED",
+        output_data={"totalAmount": str(total_amount)},
+    )
     return total_amount
+
+
+
+def _jsonable_facts(facts: dict[str, Any]) -> dict[str, Any]:
+    """Factos avaliados por uma regra, prontos para o trace (JSON)."""
+    return {
+        key: list(value) if isinstance(value, tuple) else str(value) if isinstance(value, Decimal) else value
+        for key, value in facts.items()
+    }
+
+
+def _entry_age_for(*, context: dict[str, Any], member_context: dict[str, Any], mode: str) -> tuple[int | None, str | None]:
+    """Idade usada no agravamento de adesão (Calculador!J25).
+
+    Numa cotação nova a adesão é agora: idade atual. Numa renovação depende de
+    `entry_age_on_renewal`: ORIGINAL_ENTRY_AGE usa a idade na 1.ª adesão
+    (`members[id].entryAge`, calculada a partir da apólice mais antiga da
+    pessoa) e não aplica nada se não for conhecida; CURRENT_AGE usa a idade
+    atual; NOT_APPLIED não aplica."""
+    if context.get("quoteType") != "RENEWAL":
+        return member_context["age"], None
+    if mode == "CURRENT_AGE":
+        return member_context["age"], None
+    if mode == "ORIGINAL_ENTRY_AGE":
+        entry_age = member_context.get("entryAge")
+        if entry_age is None:
+            return None, "ENTRY_AGE_UNKNOWN"
+        return int(entry_age), None
+    return None, "RENEWAL"
 
 
 def _member_age(member: InsuredMember, reference_date: datetime.date) -> int:

@@ -107,6 +107,7 @@ class TestClientTenantIsolation:
                 "registrationNumber": f"{uuid.uuid4().int % 1_000_000_000:09d}LA042",
                 "email": "maria@example.com",
                 "phone": "+244900000000",
+                "dateOfBirth": "1990-05-14",
                 "attributes": {},
             },
         ).data
@@ -138,6 +139,31 @@ class TestClientTenantIsolation:
         t2 = _make_tenant(suffix="B")
         owner = make_client(tenant_id=t1.id, roles=["ADMIN"], scope="q360.read q360.write")
         proposer = self._make_proposer(owner)
+        titular_response = owner.post(
+            "/api/v1/members",
+            {
+                "firstName": "João",
+                "lastName": "Silva",
+                "relationshipCode": "TITULAR",
+                "dateOfBirth": "1981-03-03",
+                "proposerId": proposer["id"],
+                "attributes": {"smoker": False},
+            },
+        )
+        assert titular_response.status_code == 201, titular_response.data
+        member_response = owner.post(
+            "/api/v1/members",
+            {
+                "firstName": "Maria",
+                "lastName": "Silva",
+                "relationshipCode": "CONJUGE",
+                "dateOfBirth": "1981-03-03",
+                "proposerId": proposer["id"],
+                "attributes": {"smoker": False},
+            },
+        )
+        assert member_response.status_code == 201, member_response.data
+        member = member_response.data
         member = owner.post(
             "/api/v1/members",
             {
@@ -313,6 +339,7 @@ class TestQuotePricingEligibilityTenantIsolation:
             external_reference=f"prp-{uuid.uuid4().hex[:8]}",
             display_name="Ana Costa",
             registration_number="12345678900",
+            nif=f"{uuid.uuid4().int % 10**9:09d}LA001",  # R1: NIF obrigatório e único por tenant
             attributes_json={
                 "email": "ana@example.com",
                 "phoneCountry": "55",

@@ -7,7 +7,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from apps.business_config.domain.catalog import CONFIG_CATALOG
 from apps.business_config.domain.form_schemas import get_form_schema
 from apps.business_config.infrastructure.models import BusinessConfiguration,BusinessConfigurationDocument
@@ -18,7 +18,6 @@ from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.business_config.domain.custom_rules import field_catalog
-
 
 class _ConfigPermissions:
     """Ler exige o scope de leitura; escrever exige o scope de escrita e a
@@ -69,6 +68,29 @@ class ConfigurationApproveView(_ConfigPermissions, APIView):
     approve = True
     @extend_schema(operation_id="approveBusinessConfiguration", summary="Aprovar configuração de negócio", tags=["Configuration"], request=None, responses=BusinessConfigurationSerializer)
     def post(self,request,configuration_id):return Response(BusinessConfigurationSerializer(approve_configuration(request,get_object_or_404(BusinessConfiguration,id=configuration_id))).data)
+class ConfigurationRejectView(_ConfigPermissions, APIView):
+    approve = True
+    @extend_schema(operation_id="rejectBusinessConfiguration", summary="Rejeitar configuração pendente (fica REJECTED com o motivo registado)", tags=["Configuration"], request=BusinessConfigurationRejectSerializer, responses=BusinessConfigurationSerializer)
+    def post(self,request,configuration_id):
+        s=BusinessConfigurationRejectSerializer(data=request.data);s.is_valid(raise_exception=True)
+        c=reject_configuration(request,get_object_or_404(BusinessConfiguration,id=configuration_id),s.validated_data["reason"])
+        return Response(BusinessConfigurationSerializer(c).data)
+class ConfigurationHistoryView(_ConfigPermissions, APIView):
+    @extend_schema(operation_id="getBusinessConfigurationHistory", summary="Histórico de uma versão de configuração", tags=["Configuration"], responses=BusinessConfigurationHistorySerializer)
+    def get(self,request,configuration_id):
+        c=get_object_or_404(BusinessConfiguration,id=configuration_id)
+        return Response({"configurationId":str(c.id),"items":configuration_history(c)})
+class ConfigurationCompareView(_ConfigPermissions, APIView):
+    @extend_schema(operation_id="compareBusinessConfigurations", summary="Comparar duas versões da mesma configuração", tags=["Configuration"],
+                   parameters=[OpenApiParameter("with", OpenApiTypes.UUID, required=True, description="Id da outra versão")])
+    def get(self,request,configuration_id):
+        base=get_object_or_404(BusinessConfiguration,id=configuration_id)
+        other_id=request.query_params.get("with")
+        try:
+            other=get_object_or_404(BusinessConfiguration,id=uuid.UUID(str(other_id)))
+        except ValueError:
+            return Response({"detail":"Indique em 'with' o id da versão a comparar."},status=400)
+        return Response(compare_configurations(base,other))
 class DocumentListView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="listBusinessConfigurationDocuments", summary="Listar documentos da configuração", tags=["Configuration"], responses=BusinessConfigurationDocumentListSerializer)
     def get(self,request,configuration_id):
@@ -79,7 +101,7 @@ class DocumentUploadView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="uploadBusinessConfigurationDocument", summary="Anexar documento à configuração", tags=["Configuration"], request=BusinessConfigurationDocumentUploadSerializer, responses={201:BusinessConfigurationDocumentSerializer})
     def post(self,request,configuration_id):
         c=get_object_or_404(BusinessConfiguration,id=configuration_id)
-        if c.status!="DRAFT":return Response({"detail":"Só DRAFT aceita documentos."},status=409)
+        if c.status not in ("DRAFT","REJECTED"):return Response({"detail":"Só DRAFT ou REJECTED aceita documentos."},status=409)
         f=request.FILES.get("file")
         if not f:return Response({"detail":"file é obrigatório."},status=400)
         tid=str(CurrentTenantProvider.require().value);did=uuid.uuid4();rel=Path("business-config")/tid/str(c.id)/str(did);path=Path(settings.MEDIA_ROOT)/rel;path.parent.mkdir(parents=True,exist_ok=True);sha=hashlib.sha256()

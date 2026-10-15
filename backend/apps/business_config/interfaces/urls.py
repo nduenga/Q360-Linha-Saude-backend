@@ -1,10 +1,14 @@
 from django.urls import path
 
+from .actuarial_views import ActuarialModelCatalogView, ActuarialModelImportView, ActuarialModelTemplateView
 from .views import (
     CatalogView,
     ConfigurationApproveView,
+    ConfigurationCompareView,
     ConfigurationDetailView,
+    ConfigurationHistoryView,
     ConfigurationListCreateView,
+    ConfigurationRejectView,
     CustomRulesApproveView,
     CustomRulesCatalogView,
     CustomRulesDetailView,
@@ -13,6 +17,19 @@ from .views import (
     DocumentDownloadView,
     DocumentListView,
     DocumentUploadView,
+)
+from .formula_views import (
+    FormulaApproveView,
+    FormulaCatalogView,
+    FormulaDetailView,
+    FormulaHistoryView,
+    FormulaListCreateView,
+    FormulaRejectView,
+    FormulaRetireView,
+    FormulaSimulateView,
+    FormulaSubmitView,
+    FormulaTestView,
+    FormulaValidateView,
 )
 
 urlpatterns = [
@@ -28,4 +45,21 @@ urlpatterns = [
     path("business-config/rules/custom/<uuid:configuration_id>", CustomRulesDetailView.as_view()),
     path("business-config/rules/custom/<uuid:configuration_id>/submit", CustomRulesSubmitView.as_view()),
     path("business-config/rules/custom/<uuid:configuration_id>/approve", CustomRulesApproveView.as_view()),
+    path("business-config/configurations/<uuid:configuration_id>/reject", ConfigurationRejectView.as_view()),
+    path("business-config/configurations/<uuid:configuration_id>/history", ConfigurationHistoryView.as_view()),
+    path("business-config/configurations/<uuid:configuration_id>/compare", ConfigurationCompareView.as_view()),
+    path("business-config/actuarial-model/catalog", ActuarialModelCatalogView.as_view()),
+    path("business-config/actuarial-model/import", ActuarialModelImportView.as_view()),
+    path("business-config/actuarial-model/template", ActuarialModelTemplateView.as_view()),
+    path("business-config/formulas/catalog", FormulaCatalogView.as_view()),
+    path("business-config/formulas/test", FormulaTestView.as_view()),
+    path("business-config/formulas/validate", FormulaValidateView.as_view()),
+    path("business-config/formulas", FormulaListCreateView.as_view()),
+    path("business-config/formulas/<uuid:configuration_id>", FormulaDetailView.as_view()),
+    path("business-config/formulas/<uuid:configuration_id>/submit", FormulaSubmitView.as_view()),
+    path("business-config/formulas/<uuid:configuration_id>/approve", FormulaApproveView.as_view()),
+    path("business-config/formulas/<uuid:configuration_id>/reject", FormulaRejectView.as_view()),
+    path("business-config/formulas/<uuid:configuration_id>/retire", FormulaRetireView.as_view()),
+    path("business-config/formulas/<uuid:configuration_id>/simulate", FormulaSimulateView.as_view()),
+    path("business-config/formulas/<uuid:configuration_id>/history", FormulaHistoryView.as_view()),
 ]

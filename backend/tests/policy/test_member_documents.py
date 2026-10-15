@@ -39,7 +39,7 @@ def _setup(admin_client, suffix: str) -> dict:
     _eligibility_rule(admin_client, code=f"MD-ELIG-{suffix}", config=_RULE)
     proposer = admin_client.post(
         "/api/v1/proposers",
-        {"proposerType": "INDIVIDUAL", "displayName": "Holder", "registrationNumber": _nif_for_suffix(suffix),
+        {"proposerType": "INDIVIDUAL", "dateOfBirth": "1985-04-12", "displayName": "Holder", "registrationNumber": _nif_for_suffix(suffix),
          "email": "holder@example.com", "phone": "+244900000000"},
     ).data["id"]
     holder = admin_client.post(
@@ -217,7 +217,7 @@ def test_customer_uploads_from_the_portal_and_is_notified_of_the_decision(admin_
     # a pessoa segura de outro cliente nunca é acessível
     other_proposer = admin_client.post(
         "/api/v1/proposers",
-        {"proposerType": "INDIVIDUAL", "displayName": "Outro", "registrationNumber": _nif_for_suffix("Q5X"),
+        {"proposerType": "INDIVIDUAL", "dateOfBirth": "1985-04-12", "displayName": "Outro", "registrationNumber": _nif_for_suffix("Q5X"),
          "email": "outro@example.com", "phone": "+244900000001"},
     ).data["id"]
     other_member = admin_client.post(

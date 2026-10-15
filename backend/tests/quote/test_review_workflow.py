@@ -52,7 +52,8 @@ def _ready_quote(client, *, code_suffix: str) -> dict:
     _parameter_set(client, code=f"REVIEW-PARAMS-{code_suffix}")
     _rating_table(client, code=f"REVIEW-TABLE-{code_suffix}")
     _eligibility_rule(client, code=f"REVIEW-ELIG-{code_suffix}")
-    proposer_id = client.post(
+    
+    proposer_response = client.post(
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
@@ -60,8 +61,12 @@ def _ready_quote(client, *, code_suffix: str) -> dict:
             "registrationNumber": "123456789LA042",
             "email": "holder@example.com",
             "phone": "+244900000000",
+            "dateOfBirth": "1990-05-14",
         },
-    ).data["id"]
+    )
+    assert proposer_response.status_code == 201, proposer_response.data
+    proposer_id = proposer_response.data["id"]
+
     member_id = client.post(
         "/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data["id"]
@@ -91,16 +96,19 @@ def test_submit_ready_quote_moves_to_in_review_and_creates_task(admin_client, te
 @pytest.mark.django_db
 def test_submit_non_ready_quote_is_quote_state_error(admin_client):
     plan_ref = _plan(admin_client, product_code="REVIEW-PROD-2")
-    proposer_id = admin_client.post(
-        "/api/v1/proposers",
-        {
-            "proposerType": "INDIVIDUAL",
-            "displayName": "H",
-            "registrationNumber": "123456789LA042",
-            "email": "h@example.com",
-            "phone": "+244900000000",
+    proposer_response = admin_client.post(
+    "/api/v1/proposers",
+    {
+        "proposerType": "INDIVIDUAL",
+        "displayName": "H",
+        "registrationNumber": "123456789LA042",
+        "email": "h@example.com",
+        "phone": "+244900000000",
+        "dateOfBirth": "1990-05-14",
         },
-    ).data["id"]
+    )
+    assert proposer_response.status_code == 201, proposer_response.data
+    proposer_id = proposer_response.data["id"]
     quote = admin_client.post(
         "/api/v1/quotes", {**plan_ref, "proposerId": proposer_id, "effectiveDate": "2026-06-01"}, format="json"
     ).data

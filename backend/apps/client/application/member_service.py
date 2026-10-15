@@ -33,6 +33,7 @@ from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositor
 from apps.client.application.relationship_service import validate_relationship_code
 from apps.client.domain.errors import (
     DuplicateExternalReferenceError,
+    DuplicateMemberNifError,
     RowVersionMismatchError,
 )
 from apps.client.domain.enums import MemberStatus, ProposerType, RelationshipCategory
@@ -93,6 +94,20 @@ def _validate_population(
     )
 
 
+def _raise_if_nif_taken(
+    nif: str | None, *, proposer_id, exclude_member_id=None, exc: Exception | None = None
+) -> None:
+    """R1: o NIF da pessoa segura é opcional, mas único no tomador; a mesma
+    pessoa pode ter ficha com o NIF noutro tomador."""
+    if not nif:
+        return
+    taken = InsuredMember.objects.filter(proposer_id=proposer_id, nif=nif)
+    if exclude_member_id is not None:
+        taken = taken.exclude(id=exclude_member_id)
+    if taken.exists():
+        raise DuplicateMemberNifError(f"Já existe uma pessoa segura com o NIF '{nif}' neste cliente.") from exc
+
+
 def create_member(
     *,
     proposer: Proposer,
@@ -103,10 +118,12 @@ def create_member(
     sex_code: str | None,
     external_reference: str | None,
     attributes: dict[str, Any] | None,
+    nif: str | None = None,
 ) -> InsuredMember:
     date_of_birth = require_date_of_birth(date_of_birth)
     tenant_id = CurrentTenantProvider.require()
     rel = validate_relationship_code(tenant_id=tenant_id.value, code=relationship_code)
+    _raise_if_nif_taken(nif, proposer_id=proposer.id)
     try:
         with transaction.atomic():
             # Bloqueia o proponente para duas criações em paralelo não furarem o limite.
@@ -123,10 +140,12 @@ def create_member(
                 last_name=last_name,
                 date_of_birth=date_of_birth,
                 sex_code=sex_code,
+                nif=nif,
                 external_reference=external_reference,
                 attributes_json=attributes or {},
             )
     except IntegrityError as exc:
+        _raise_if_nif_taken(nif, proposer_id=proposer.id, exc=exc)
         raise DuplicateExternalReferenceError(
             f"A referência externa '{external_reference}' já existe para o cliente {proposer.id}"
         ) from exc
@@ -158,26 +177,35 @@ def update_member(
     sex_code: str | None,
     attributes: dict[str, Any] | None,
     row_version: int,
+    nif: str | None = None,
+    keep_nif: bool = True,
 ) -> InsuredMember:
+    """`keep_nif=True` (omitido no pedido) preserva o NIF guardado."""
     date_of_birth = require_date_of_birth(date_of_birth)
     rel = validate_relationship_code(tenant_id=member.tenant_id, code=relationship_code)
-    with transaction.atomic():
-        proposer = Proposer.objects.select_for_update().get(id=member.proposer_id)
-        if member.status == MemberStatus.ACTIVE.value:
-            _validate_population(
-                proposer=proposer,
-                candidate=Person(rel.category, date_of_birth, _person_label(first_name, last_name)),
-                exclude_member_id=member.id,
+    if not keep_nif:
+        _raise_if_nif_taken(nif, proposer_id=member.proposer_id, exclude_member_id=member.id)
+    try:
+        with transaction.atomic():
+            proposer = Proposer.objects.select_for_update().get(id=member.proposer_id)
+            if member.status == MemberStatus.ACTIVE.value:
+                _validate_population(
+                    proposer=proposer,
+                    candidate=Person(rel.category, date_of_birth, _person_label(first_name, last_name)),
+                    exclude_member_id=member.id,
+                )
+            updated = InsuredMember.objects.filter(id=member.id, row_version=row_version).update(
+                relationship_code=relationship_code,
+                first_name=first_name,
+                last_name=last_name,
+                date_of_birth=date_of_birth,
+                sex_code=sex_code,
+                nif=member.nif if keep_nif else nif,
+                attributes_json=attributes or {},
+                row_version=row_version + 1,
             )
-        updated = InsuredMember.objects.filter(id=member.id, row_version=row_version).update(
-            relationship_code=relationship_code,
-            first_name=first_name,
-            last_name=last_name,
-            date_of_birth=date_of_birth,
-            sex_code=sex_code,
-            attributes_json=attributes or {},
-            row_version=row_version + 1,
-        )
+    except IntegrityError as exc:  # corrida perdida com outra pessoa segura com o mesmo NIF
+        raise DuplicateMemberNifError(f"Já existe uma pessoa segura com o NIF '{nif}' neste cliente.") from exc
     if updated == 0:
         raise RowVersionMismatchError(
             f"A versão da pessoa segura {member.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"

@@ -124,18 +124,21 @@ def update_proposer(
     date_of_birth = _check_date_of_birth(proposer.proposer_type, date_of_birth, required=require_birth_date)
     if date_of_birth is None:
         date_of_birth = proposer.date_of_birth  # não apagar uma data já guardada
+    if Proposer.objects.filter(nif=nif).exclude(id=proposer.id).exists():
+        raise DuplicateNifError(f"Já existe um proponente com o NIF '{nif}' neste tenant.")
     try:
-        updated = Proposer.objects.filter(id=proposer.id, row_version=row_version).update(
-            display_name=display_name,
-            registration_number=registration_number,
-            nif=nif,
-            email=email,
-            phone=phone,
-            address=address,
-            date_of_birth=date_of_birth,
-            attributes_json=attributes or {},
-            row_version=row_version + 1,
-        )
+        with transaction.atomic():  # savepoint: a corrida perdida não estraga a transação do pedido
+            updated = Proposer.objects.filter(id=proposer.id, row_version=row_version).update(
+                display_name=display_name,
+                registration_number=registration_number,
+                nif=nif,
+                email=email,
+                phone=phone,
+                address=address,
+                date_of_birth=date_of_birth,
+                attributes_json=attributes or {},
+                row_version=row_version + 1,
+            )
     except IntegrityError as exc:
         raise DuplicateNifError(f"Já existe um proponente com o NIF '{nif}' neste tenant.") from exc
     if updated == 0:

@@ -17,8 +17,14 @@ def _setup_product_plan(client) -> dict:
     return {"productId": product["id"], "planId": plan["id"]}
 
 
-def _setup_member(client, *, date_of_birth: str, relationship_code: str = "TITULAR") -> dict:
-    proposer = client.post(
+
+def _setup_member(
+    client,
+    *,
+    date_of_birth: str,
+    relationship_code: str = "TITULAR",
+) -> dict:
+    proposer_response = client.post(
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
@@ -26,13 +32,39 @@ def _setup_member(client, *, date_of_birth: str, relationship_code: str = "TITUL
             "registrationNumber": "123456789LA042",
             "email": "p@example.com",
             "phone": "+244900000000",
+            "dateOfBirth": "1990-05-14",
         },
-    ).data
-    member = client.post(
+    )
+    assert proposer_response.status_code == 201, proposer_response.data
+    proposer = proposer_response.data
+
+    if relationship_code != "TITULAR":
+        titular_response = client.post(
+            "/api/v1/members",
+            {
+                "proposerId": proposer["id"],
+                "relationshipCode": "TITULAR",
+                "dateOfBirth": "1990-05-14",
+            },
+        )
+        assert titular_response.status_code == 201, titular_response.data
+
+    member_response = client.post(
         "/api/v1/members",
-        {"proposerId": proposer["id"], "relationshipCode": relationship_code, "dateOfBirth": date_of_birth},
-    ).data
-    return {"proposerId": proposer["id"], "memberId": member["id"]}
+        {
+        "proposerId": proposer["id"],
+        "relationshipCode": relationship_code,
+        "dateOfBirth": date_of_birth,
+        },
+    )
+    assert member_response.status_code == 201, member_response.data
+
+    return {
+        "proposerId": proposer["id"],
+        "memberId": member_response.data["id"],
+    }
+    
+
 
 
 def _publish_eligibility_rules(client, config: dict) -> None:
@@ -224,16 +256,19 @@ def test_list_rule_versions_filters_by_domain(admin_client):
 def test_member_from_another_proposer_is_400(admin_client):
     scope = _setup_product_plan(admin_client)
     who = _setup_member(admin_client, date_of_birth="1990-01-01")
-    other = admin_client.post(
+    other_response = admin_client.post(
         "/api/v1/proposers",
         {
-            "proposerType": "INDIVIDUAL",
-            "displayName": "Other",
-            "registrationNumber": "123456789LA043",
-            "email": "other@example.com",
-            "phone": "+244900000001",
+        "proposerType": "INDIVIDUAL",
+        "displayName": "Other",
+        "registrationNumber": "123456789LA043",
+        "email": "other@example.com",
+        "phone": "+244900000001",
+        "dateOfBirth": "1990-05-14",
         },
-    ).data
+    )
+    assert other_response.status_code == 201, other_response.data
+    other = other_response.data
 
     response = admin_client.post(
         "/api/v1/eligibility/evaluate",

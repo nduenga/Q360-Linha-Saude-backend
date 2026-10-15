@@ -24,6 +24,7 @@ def _setup_active_policy_with_member(admin_client, tenant, *, policy_number: str
             "proposerType": "INDIVIDUAL",
             "displayName": "Cliente Teste",
             "registrationNumber": registration_number,
+            "dateOfBirth": "1990-01-01",
             "email": _EMAIL,
             "phone": "+244900000000",
         },

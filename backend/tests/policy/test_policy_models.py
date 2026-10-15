@@ -34,7 +34,7 @@ def _proposer(client, *, registration_number: str = "123456789LA042") -> str:
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
-            "displayName": "Holder",
+            "dateOfBirth": "1985-04-12", "displayName": "Holder",
             "registrationNumber": registration_number,
             "email": "holder@example.com",
             "phone": "+244900000000",

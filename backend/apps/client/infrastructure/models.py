@@ -69,6 +69,7 @@ class InsuredMember(TenantScopedModel):
     last_name = models.CharField(max_length=120, null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     sex_code = models.CharField(max_length=20, null=True, blank=True)
+    nif = models.CharField(max_length=14, null=True, blank=True)  # opcional (migração 0009)
     attributes_json = models.JSONField(default=dict)
     status = models.CharField(
         max_length=20, choices=[(s.value, s.value) for s in MemberStatus], default=MemberStatus.ACTIVE.value

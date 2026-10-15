@@ -48,7 +48,7 @@ def _approved_quote(client, *, code_suffix: str, tenant) -> dict:
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
-            "displayName": "Holder",
+            "dateOfBirth": "1985-04-12", "displayName": "Holder",
             "registrationNumber": "123456789LA042",
             "email": "holder@example.com",
             "phone": "+244900000000",
@@ -96,7 +96,7 @@ def test_generate_proposal_before_approved_is_quote_state_error(admin_client):
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
-            "displayName": "H",
+            "dateOfBirth": "1985-04-12", "displayName": "H",
             "registrationNumber": "123456789LA042",
             "email": "h@example.com",
             "phone": "+244900000000",
@@ -146,7 +146,7 @@ def test_cancel_draft_quote_requires_reason(admin_client):
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
-            "displayName": "H",
+            "dateOfBirth": "1985-04-12", "displayName": "H",
             "registrationNumber": "123456789LA042",
             "email": "h@example.com",
             "phone": "+244900000000",

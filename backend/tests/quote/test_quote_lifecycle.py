@@ -200,7 +200,8 @@ INDIVIDUAL = {
 }
 
 
-def _member(client, scope, *, date_of_birth, relationship="TITULAR"):
+def _member(client, scope, *, date_of_birth, relationship="OUTRO"):
+    # O _scope já cria o titular; um proponente individual só pode ter um titular ativo.
     member_id = client.post(
         "/api/v1/members",
         {"proposerId": scope["proposerId"], "relationshipCode": relationship, "dateOfBirth": date_of_birth},
@@ -272,11 +273,14 @@ def test_age_outside_entry_range_blocks_submission(admin_client):
 
 @pytest.mark.django_db
 def test_household_rules_spouse_and_dependent_child_age(admin_client):
-    settings = {**INDIVIDUAL, "household": {"spouse": False, "dependentChildMaxAge": 25}}
+    # O titular do _scope nasceu em 1990 e um filho tem de ser >= 13 anos mais
+    # novo (apps/client/domain/rules.py), por isso o limite de idade do
+    # dependente é 15 aqui em vez de 25 - a regra testada é a mesma.
+    settings = {**INDIVIDUAL, "household": {"spouse": False, "dependentChildMaxAge": 15}}
     scope = _scope(admin_client, settings=settings)
     spouse = _member(admin_client, scope, date_of_birth="1992-01-01", relationship="CONJUGE")
-    old_child = _member(admin_client, scope, date_of_birth="1999-01-01", relationship="FILHO")  # 27 anos
-    young_child = _member(admin_client, scope, date_of_birth="2008-01-01", relationship="FILHO")  # 18 anos
+    old_child = _member(admin_client, scope, date_of_birth="2008-01-01", relationship="FILHO")  # 18 anos
+    young_child = _member(admin_client, scope, date_of_birth="2015-01-01", relationship="FILHO")  # 11 anos
     errors = {(e["code"], e["memberId"]) for e in _requirements(admin_client, scope)["errors"]}
     assert ("SPOUSE_NOT_ALLOWED", spouse) in errors
     assert ("CHILD_AGE_LIMIT", old_child) in errors

@@ -1,13 +1,31 @@
+"""Importação do modelo actuarial a partir do Excel.
+
+Lê o ficheiro de referência (`WORKBOOK_PATH`) ou um ficheiro enviado pela
+interface com a mesma estrutura. Os valores calculados (prémios puros,
+ajustes adoptados) vêm da cache de valores do próprio Excel: o ficheiro tem
+de ter sido guardado pelo Excel depois de recalculado.
+"""
 from __future__ import annotations
 
+import copy
+import io
+import zipfile
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
+
+from apps.business_config.domain.actuarial_model import RECOMMENDED_CALCULATION_SETTINGS
 
 
 WORKBOOK_PATH = Path(__file__).with_name("Modelo_Actuarial_Saude_SAU_SAG_Angola.xlsx")
+REQUIRED_SHEETS = ("Dashboard_Premissas", "Matriz_SAU", "Matriz_SAG", "Regras_Ajustes")
+
+
+class ActuarialWorkbookError(ValueError):
+    """O ficheiro não é um Excel com a estrutura do modelo actuarial."""
 AGE_GENDER_KEYS = ("M|0-17", "F|0-17", "M|18-35", "F|18-35", "M|36-50", "F|36-50", "M|51-65", "F|51-65", "M|>65", "F|>65")
 PLAN_CODES = {
     "IND-BASE": ("SAU", "Base"),
@@ -52,14 +70,47 @@ def _table(sheet, rows: range, columns: dict[str, int]) -> list[dict[str, Any]]:
     return result
 
 
-def build_actuarial_model() -> dict[str, Any]:
-    workbook = load_workbook(WORKBOOK_PATH, data_only=False, read_only=True)
-    cached_workbook = load_workbook(WORKBOOK_PATH, data_only=True, read_only=True)
+def _adopted(sheet, rows: range, *, value_column: int, adopted_column: int) -> list[dict[str, Any]]:
+    """Linhas `valor -> ajuste adoptado` lidas dos valores calculados pelo Excel."""
+    letter = "ABCDEFGHIJ"[adopted_column - 1]
+    return [
+        {
+            "value": sheet.cell(row, value_column).value,
+            "adjustment": sheet.cell(row, adopted_column).value,
+            "source_cell": f"{sheet.title}!{letter}{row}",
+        }
+        for row in rows
+    ]
+
+
+def _open(source: Path | bytes | BinaryIO):
+    """Duas vistas do mesmo ficheiro: fórmulas e valores calculados em cache."""
+    content = source.read_bytes() if isinstance(source, Path) else source if isinstance(source, bytes) else source.read()
+    try:
+        # acesso aleatório: read_only seria O(n) por célula
+        workbook = load_workbook(io.BytesIO(content), data_only=False)
+        cached_workbook = load_workbook(io.BytesIO(content), data_only=True)
+    except (InvalidFileException, zipfile.BadZipFile, KeyError, OSError, ValueError) as exc:
+        raise ActuarialWorkbookError("O ficheiro não é um livro Excel (.xlsx) válido.") from exc
+    missing = [name for name in REQUIRED_SHEETS if name not in workbook.sheetnames]
+    if missing:
+        raise ActuarialWorkbookError(f"Faltam as folhas do modelo actuarial: {', '.join(missing)}.")
+    if cached_workbook["Matriz_SAU"].cell(6, 19).value is None:
+        raise ActuarialWorkbookError(
+            "O ficheiro não tem os valores calculados (Matriz_SAU!S6 está vazio). Abra-o no Excel, "
+            "deixe recalcular e guarde-o antes de o importar."
+        )
+    return workbook, cached_workbook
+
+
+def build_actuarial_model(source: Path | bytes | BinaryIO = WORKBOOK_PATH, *, source_name: str | None = None) -> dict[str, Any]:
+    workbook, cached_workbook = _open(source)
     dashboard = workbook["Dashboard_Premissas"]
     sau = workbook["Matriz_SAU"]
     sag = workbook["Matriz_SAG"]
     group_rules = workbook["Matriz_SAG"]
     adjustments = workbook["Regras_Ajustes"]
+    cached_adjustments = cached_workbook["Regras_Ajustes"]
 
     coverage_assumptions = _table(
         dashboard,
@@ -144,8 +195,9 @@ def build_actuarial_model() -> dict[str, Any]:
     )
 
     return {
+        "calculation_settings": copy.deepcopy(RECOMMENDED_CALCULATION_SETTINGS),
         "model_status": "DRAFT_REQUIRES_ACTUARIAL_APPROVAL",
-        "source_file": WORKBOOK_PATH.name,
+        "source_file": source_name or (source.name if isinstance(source, Path) else "upload.xlsx"),
         "source_sheets": ["Dashboard_Premissas", "Matriz_SAU", "Matriz_SAG", "Regras_Ajustes"],
         "plan_code_mapping": {code: {"segment": segment, "actuarial_plan": actuarial_plan} for code, (segment, actuarial_plan) in PLAN_CODES.items()},
         "coverage_code_mapping": COVERAGE_CODE_MAPPING,
@@ -223,5 +275,14 @@ def build_actuarial_model() -> dict[str, Any]:
             "copayment_demand_elasticity": _value(adjustments["C15"]),
             "reimbursement_behavioral_elasticity": _value(adjustments["C16"]),
             "annual_outpatient_utilization_probability": _value(adjustments["C18"]),
+            # Calculador!C55:C58 — ajuste ADOPTADO (com override aprovado, se houver)
+            # por valor escolhido; o Calculador usa MATCH exacto, por isso só os
+            # valores da tabela são aceites.
+            "cost_sharing": {
+                "copayment_per_visit_aoa": _adopted(cached_adjustments, range(24, 28), value_column=2, adopted_column=8),
+                "reimbursement_share": _adopted(cached_adjustments, range(30, 34), value_column=2, adopted_column=6),
+                "outpatient_annual_deductible_aoa": _adopted(cached_adjustments, range(36, 40), value_column=2, adopted_column=6),
+                "inpatient_deductible_aoa": _adopted(cached_adjustments, range(42, 46), value_column=2, adopted_column=6),
+            },
         },
     }

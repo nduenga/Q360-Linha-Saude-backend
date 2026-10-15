@@ -3,7 +3,7 @@ import uuid
 from apps.foundation.infrastructure.models import Tenant
 from apps.foundation.infrastructure.tenant_scoping import TenantScopedModel
 class BusinessConfiguration(TenantScopedModel):
-    STATUS_CHOICES=(("DRAFT","DRAFT"),("PENDING_APPROVAL","PENDING_APPROVAL"),("PUBLISHED","PUBLISHED"),("RETIRED","RETIRED"))
+    STATUS_CHOICES=(("DRAFT","DRAFT"),("PENDING_APPROVAL","PENDING_APPROVAL"),("REJECTED","REJECTED"),("PUBLISHED","PUBLISHED"),("RETIRED","RETIRED"))
     id=models.UUIDField(primary_key=True,default=uuid.uuid4,editable=False)
     tenant=models.ForeignKey(Tenant,on_delete=models.DO_NOTHING,db_column="tenant_id")
     config_key=models.CharField(max_length=120); version_no=models.IntegerField()

@@ -24,6 +24,8 @@ CONFIG_CATALOG=[
 {"key":"security.approval_rules","category":"SECURITY","label":"Aprovação e autonomia","priority":"HIGH","value_type":"object"},
 {"key":"security.role_permissions","category":"SECURITY","label":"Permissões por perfil","priority":"HIGH","value_type":"object"},
 {"key":"rules.custom","category":"RULES","label":"Regras personalizadas (Quando… então…)","priority":"HIGH","value_type":"object"},
-{"key":"proposal.branding","category":"PROPOSAL","label":"Identidade visual dos documentos","priority":"MEDIUM","value_type":"object"}
+{"key":"proposal.branding","category":"PROPOSAL","label":"Identidade visual dos documentos","priority":"MEDIUM","value_type":"object"},
+{"key": "pricing.formulas", "category": "PRICING","label": "Fórmulas de tarifação","priority": "HIGH","value_type":"object",},
+{"key":"pricing.fractionation","category":"PRICING","label":"Encargos de fracionamento do prémio","priority":"MEDIUM","value_type":"object"},
 ]
 CATALOG_BY_KEY={x["key"]:x for x in CONFIG_CATALOG}

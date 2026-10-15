@@ -72,6 +72,8 @@ def test_outbox_event_catalog_end_to_end():
             "registrationNumber": "123456789LA042",
             "email": "holder@example.com",
             "phone": "+244900000000",
+            "dateOfBirth": "1990-05-14",
+
         },
     ).data
     member = owner.post(

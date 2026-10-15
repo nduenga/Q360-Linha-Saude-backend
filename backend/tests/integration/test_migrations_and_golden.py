@@ -172,6 +172,7 @@ def test_MIG_003_eligibility_rule_produces_deterministic_decision():
             proposer_type="INDIVIDUAL",
             display_name="A B",
             registration_number="doc-mig3-1",
+            nif="123456789LA301",  # R1: NIF obrigatório (CHECK ck_proposer_nif_by_type)
             attributes_json={"email": "a@example.com"},
         )
         member = InsuredMember.objects.create(

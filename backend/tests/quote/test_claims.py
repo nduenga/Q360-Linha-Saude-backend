@@ -167,7 +167,7 @@ def test_claims_are_isolated_per_client(admin_client):
     scope = _scope(admin_client)
     other = admin_client.post(
         "/api/v1/proposers",
-        {"proposerType": "INDIVIDUAL", "displayName": "Outro", "registrationNumber": "987654321LA042", "email": "o@example.com", "phone": "+244900000001"},
+        {"proposerType": "INDIVIDUAL", "dateOfBirth": "1985-04-12", "displayName": "Outro", "registrationNumber": "987654321LA042", "email": "o@example.com", "phone": "+244900000001"},
     ).data["id"]
     _load(admin_client, scope)
     assert _summary(admin_client, {"proposerId": other}).status_code == 400
@@ -288,7 +288,7 @@ def test_projection_assumption_validation(admin_client):
     # sem prémio importado não há projeção
     other = admin_client.post(
         "/api/v1/proposers",
-        {"proposerType": "INDIVIDUAL", "displayName": "Sem prémio", "registrationNumber": "111222333LA042", "email": "s@example.com", "phone": "+244900000002"},
+        {"proposerType": "INDIVIDUAL", "dateOfBirth": "1985-04-12", "displayName": "Sem prémio", "registrationNumber": "111222333LA042", "email": "s@example.com", "phone": "+244900000002"},
     ).data["id"]
     _upload(admin_client, {"proposerId": other}, "occurrence_date,benefit_code,paid_amount\n2025-01-01,DENTAL,1\n", kind="CLAIMS")
     resp = admin_client.post("/api/v1/claims/projections", {"proposerId": other, "assumptions": ASSUMPTIONS}, format="json")

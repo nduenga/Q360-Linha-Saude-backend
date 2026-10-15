@@ -26,7 +26,7 @@ def _setup_active_policy(admin_client, tenant) -> dict:
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
-            "displayName": "Cliente Teste",
+            "dateOfBirth": "1985-04-12", "displayName": "Cliente Teste",
             "registrationNumber": _REGISTRATION_NUMBER,
             "email": _EMAIL,
             "phone": "+244900000000",

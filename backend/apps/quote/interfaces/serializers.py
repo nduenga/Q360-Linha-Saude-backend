@@ -28,7 +28,10 @@ class QuoteSerializer(serializers.Serializer):
     proposerId = serializers.UUIDField(source="proposer_id")
     planId = serializers.UUIDField(source="plan_id")
     status = serializers.ChoiceField(choices=[s.value for s in QuoteStatus])
+    
     effectiveDate = serializers.DateField(source="effective_date")
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
     validUntil = serializers.DateField(source="valid_until", allow_null=True)
     currencyCode = serializers.CharField(source="currency_code", allow_null=True)
     latestPricingRunId = serializers.UUIDField(source="latest_pricing_run_id", allow_null=True)
@@ -48,6 +51,11 @@ class QuoteSerializer(serializers.Serializer):
     # o cliente referenciar o produto/plano).
     planName = serializers.SerializerMethodField(method_name="get_plan_name")
     productName = serializers.SerializerMethodField(method_name="get_product_name")
+    proposerName = serializers.SerializerMethodField(method_name="get_proposer_name")
+
+    def get_proposer_name(self, obj) -> str | None:
+        proposer = getattr(obj, "proposer", None)
+        return proposer.display_name if proposer else None
 
     def get_plan_name(self, obj) -> str | None:
         plan = getattr(obj, "plan", None)

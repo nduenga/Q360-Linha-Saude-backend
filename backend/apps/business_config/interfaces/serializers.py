@@ -34,3 +34,27 @@ class BusinessConfigurationCatalogSerializer(serializers.Serializer):
     items=BusinessConfigurationCatalogEntrySerializer(many=True)
 class BusinessConfigurationDocumentUploadSerializer(serializers.Serializer):
     file=serializers.FileField();documentType=serializers.CharField(required=False)
+
+class BusinessConfigurationRejectSerializer(serializers.Serializer):
+    reason=serializers.CharField(min_length=5,max_length=1000)
+class BusinessConfigurationHistoryEntrySerializer(serializers.Serializer):
+    action=serializers.CharField();actorId=serializers.CharField(allow_null=True);occurredAt=serializers.CharField(allow_null=True)
+    status=serializers.CharField(allow_null=True);checksum=serializers.CharField(allow_null=True);reason=serializers.CharField(allow_null=True)
+class BusinessConfigurationHistorySerializer(serializers.Serializer):
+    configurationId=serializers.UUIDField();items=BusinessConfigurationHistoryEntrySerializer(many=True)
+class FormulaSubmitSerializer(serializers.Serializer):
+    changeReason=serializers.CharField(required=False,allow_blank=True,max_length=1000)
+class FormulaTestSerializer(serializers.Serializer):
+    expression=serializers.CharField(max_length=500,allow_blank=False)
+    variables=serializers.DictField(child=serializers.JSONField(),required=False,default=dict)
+class FormulaValidateSerializer(serializers.Serializer):
+    value=serializers.JSONField()
+class FormulaSimulateSerializer(serializers.Serializer):
+    totalAmount=serializers.DecimalField(max_digits=18,decimal_places=2,min_value=0,help_text="Valor de partida: total da cotação (QUOTE) ou prémio da pessoa (PERSON)")
+    membersCount=serializers.IntegerField(min_value=0,max_value=100000)
+    stage=serializers.ChoiceField(choices=["QUOTE","PERSON"],default="QUOTE")
+    age=serializers.IntegerField(min_value=0,max_value=130,required=False,allow_null=True,default=None,help_text="Obrigatória na fase PERSON")
+    def validate(self,attrs):
+        if attrs["stage"]=="PERSON" and attrs.get("age") is None:
+            raise serializers.ValidationError({"age":"Indique a idade para simular fórmulas por pessoa."})
+        return attrs

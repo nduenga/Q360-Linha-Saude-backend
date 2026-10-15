@@ -41,12 +41,12 @@ def _blocking_reason(quote: Quote) -> str | None:
     return None
 
 
-def _installment_preview(total: Decimal | None, currency: str) -> dict[str, list[dict[str, str]]]:
+def _installment_preview(quote: Quote, total: Decimal | None, currency: str) -> dict[str, list[dict[str, str]]]:
     if total is None:
         return {}
     preview = {}
     for frequency, count in issuance_service._INSTALLMENT_COUNT.items():
-        amount = issuance_service._round2(total / count)
+        amount = issuance_service.installment_amount(quote, total, frequency)
         preview[frequency] = [{"installmentNo": n, "amount": str(amount), "currencyCode": currency} for n in range(1, count + 1)]
     return preview
 
@@ -98,7 +98,7 @@ def build_draft(quote: Quote) -> dict[str, Any]:
                 "capacity": "REPRESENTANTE_LEGAL" if proposer.proposer_type == "ORGANISATION" else "TOMADOR",
             },
         },
-        "installmentsPreview": _installment_preview(total, currency),
+        "installmentsPreview": _installment_preview(quote, total, currency),
         "paymentMethods": PAYMENT_METHODS,
         "members": [],
         "terms": None,

@@ -44,17 +44,28 @@ def _rating_table(client, *, code: str) -> None:
     client.post(f"/api/v1/configuration/rating-table/{created['id']}/publish")
 
 
-def _proposer(client, *, registration_number: str = "123456789LA042", email: str = "holder@example.com") -> str:
-    return client.post(
+
+def _proposer(
+    client,
+    *,
+    registration_number: str = "123456789LA042",
+    email: str = "holder@example.com",
+) -> str:
+    response = client.post(
         "/api/v1/proposers",
         {
             "proposerType": "INDIVIDUAL",
             "displayName": "Holder",
             "registrationNumber": registration_number,
+            "dateOfBirth": "1990-01-01",
             "email": email,
             "phone": "+244900000000",
         },
-    ).data["id"]
+        format="json",
+    )
+    assert response.status_code in (200, 201), response.data
+    return response.data["id"]
+
 
 
 def _member(client, *, proposer_id: str, date_of_birth: str = "1990-01-01") -> str:
@@ -93,6 +104,10 @@ def test_create_quote_starts_as_draft(admin_client):
     assert body["latestPricingRunId"] is None
     # Validade por omissão (QUOTE_DEFAULT_VALIDITY_DAYS=30 em teste) foi calculada, não pedida ao cliente.
     assert body["validUntil"] == "2026-07-01"
+    # Nomes legíveis para a UI, além dos ids (regressão).
+    assert body["proposerName"] and body["planName"] and body["productName"]
+    listed = admin_client.get("/api/v1/quotes").data["items"]
+    assert next(q for q in listed if q["id"] == body["id"])["proposerName"] == body["proposerName"]
 
 
 @pytest.mark.django_db

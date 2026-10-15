@@ -37,3 +37,8 @@ CUSTOMER_PORTAL_LOGIN_RATE_LIMIT = 0  # Same rationale as RATE_LIMIT_REQUESTS = 
 # starts a disposable PostgreSQL container (Testcontainers) for the test
 # session unless Q360_TEST_POSTGRES=true points at an already-running
 # instance via the POSTGRES_* env vars above.
+
+# PBKDF2 (o hasher de produção) é deliberadamente lento; nos testes cada
+# conta criada custava centenas de ms. Hasher rápido só aqui - produção não
+# é afetada (base.py mantém o predefinido do Django).
+PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]

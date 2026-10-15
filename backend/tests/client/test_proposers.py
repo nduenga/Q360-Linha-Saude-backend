@@ -10,16 +10,19 @@ from __future__ import annotations
 import pytest
 
 
+
 def _valid_payload(**overrides) -> dict:
     payload = {
         "proposerType": "INDIVIDUAL",
         "displayName": "Ana Silva",
         "registrationNumber": "123456789LA042",
+        "dateOfBirth": "1990-05-14",
         "email": "ana@example.com",
         "phone": "+244900000000",
     }
     payload.update(overrides)
     return payload
+
 
 
 @pytest.mark.django_db
@@ -28,8 +31,9 @@ def test_create_and_get_proposer(admin_client):
     assert response.status_code == 201
     body = response.data
     assert set(body.keys()) == {
-        "id", "proposerType", "externalReference", "displayName",
-        "nif", "registrationNumber", "email", "phone", "address", "attributes", "status", "rowVersion",
+    "id", "proposerType", "externalReference", "displayName",
+    "nif", "registrationNumber", "dateOfBirth", "email", "phone",
+    "address", "attributes", "status", "rowVersion",
     }
     assert body["status"] == "ACTIVE"
     assert body["rowVersion"] == 0
@@ -54,8 +58,8 @@ def test_create_proposer_without_registration_number_is_rejected(admin_client):
 @pytest.mark.parametrize(
     ("nif", "expected"),
     [
-        ("5402132186", "5402132186"),
-        (" 002345678 la 041 ", "002345678LA041"),
+        ("123456789LA042", "123456789LA042"),
+        (" 123456789 la 042 ", "123456789LA042"),
     ],
 )
 def test_create_proposer_accepts_and_normalises_agt_nif(admin_client, nif, expected):
@@ -81,8 +85,8 @@ def test_create_proposer_rejects_nif_outside_agt_formats(admin_client, nif):
 
 @pytest.mark.django_db
 def test_nif_is_unique_within_a_tenant(admin_client):
-    first_payload = _valid_payload(nif="5402132186")
-    duplicate_payload = _valid_payload(displayName="Same NIF", nif="5402132186")
+    first_payload = _valid_payload(nif="123456789LA042")
+    duplicate_payload = _valid_payload(displayName="Same NIF", nif="123456789LA042",)
     del first_payload["registrationNumber"]
     del duplicate_payload["registrationNumber"]
     first = admin_client.post("/api/v1/proposers", first_payload)
@@ -109,18 +113,33 @@ def test_create_proposer_without_phone_is_rejected(admin_client):
     assert response.status_code == 400
 
 
+
 @pytest.mark.django_db
 def test_duplicate_external_reference_is_conflict(admin_client):
-    admin_client.post(
+    first = admin_client.post(
         "/api/v1/proposers",
-        _valid_payload(proposerType="ORGANISATION", displayName="Acme", externalReference="EXT-1"),
+        _valid_payload(
+            proposerType="ORGANISATION",
+            displayName="Acme",
+            externalReference="EXT-1",
+            registrationNumber="5402132186",
+        ),
     )
-    response = admin_client.post(
+
+    assert first.status_code == 201, first.data
+
+    second = admin_client.post(
         "/api/v1/proposers",
-        _valid_payload(proposerType="ORGANISATION", displayName="Acme 2", externalReference="EXT-1"),
+        _valid_payload(
+            proposerType="ORGANISATION",
+            displayName="Acme 2",
+            externalReference="EXT-1",
+            registrationNumber="5402132187",
+        ),
     )
-    assert response.status_code == 409
-    assert response.data["code"] == "CONFLICT"
+
+    assert second.status_code == 409, second.data
+    assert second.data["code"] == "CONFLICT"
 
 
 @pytest.mark.django_db
@@ -131,6 +150,7 @@ def test_update_proposer_optimistic_lock(admin_client):
         {
             "displayName": "Renamed",
             "registrationNumber": proposer["registrationNumber"],
+            "dateOfBirth": "1990-05-14",
             "email": proposer["email"],
             "phone": proposer["phone"],
             "rowVersion": 0,
@@ -144,6 +164,7 @@ def test_update_proposer_optimistic_lock(admin_client):
         {
             "displayName": "Conflict",
             "registrationNumber": proposer["registrationNumber"],
+            "dateOfBirth": "1990-05-14",
             "email": proposer["email"],
             "phone": proposer["phone"],
             "rowVersion": 0,
