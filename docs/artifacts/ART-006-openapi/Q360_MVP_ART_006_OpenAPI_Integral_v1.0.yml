@@ -1206,6 +1206,81 @@ paths:
                 type: string
                 format: binary
           description: ''
+  /api/v1/business-config/approvals/pending:
+    get:
+      operationId: listPendingApprovals
+      description: 'Filtro opcional `?area=` (ORGANIZATION, PRODUCTS, TARIFF, RULES,
+
+        PARAMETERS, DOCUMENTS).
+
+
+        Requer: scope q360.read.'
+      summary: Fila única de aprovações pendentes
+      parameters:
+      - in: query
+        name: area
+        schema:
+          type: string
+        description: ORGANIZATION, PRODUCTS, TARIFF, RULES, PARAMETERS ou DOCUMENTS.
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingApprovals'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/business-config/approvals/pending/count:
+    get:
+      operationId: countPendingApprovals
+      description: 'Requer: scope q360.read.'
+      summary: Contagem de aprovações pendentes (para o menu)
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingApprovalsCount'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/business-config/catalog:
     get:
       operationId: getBusinessConfigurationCatalog
@@ -1659,7 +1734,9 @@ paths:
   /api/v1/business-config/formulas/test:
     post:
       operationId: testPricingFormula
-      description: 'Testa uma expressão isolada sem guardar nem publicar alterações.
+      description: 'Testa uma expressão isolada sem guardar nem publicar alterações e
+
+        devolve o cálculo passo a passo.
 
 
         Requer: scope q360.write, permissão pricing-config:manage.'
@@ -1677,6 +1754,10 @@ paths:
         - q360.write
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormulaTestResult'
           description: Sucesso.
         '400':
           content:
@@ -1745,6 +1826,61 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/business-config/formulas/variables:
+    get:
+      operationId: getFormulaVariables
+      description: 'Catálogo único de variáveis: motor, parâmetros e auxiliares das
+
+        fórmulas publicadas, campos do produto (`?productId=`) e campos das
+
+        regras. Filtro `?usableIn=PRICING_FORMULAS|PRICING_FORMULAS:PERSON|
+
+        PRICING_FORMULAS:QUOTE|PRODUCT_FORMULAS|RULE_CONDITIONS`.
+
+
+        Requer: scope q360.read.'
+      summary: Catálogo único das variáveis de fórmulas e regras
+      parameters:
+      - in: query
+        name: productId
+        schema:
+          type: string
+        description: 'UUID do produto: junta os grupos, opções, campos e fórmulas dele.'
+      - in: query
+        name: usableIn
+        schema:
+          type: string
+        description: PRICING_FORMULAS, PRICING_FORMULAS:PERSON, PRICING_FORMULAS:QUOTE, PRODUCT_FORMULAS ou RULE_CONDITIONS.
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormulaVariablesCatalog'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/business-config/formulas/{configuration_id}:
     get:
       operationId: getFormulaSet
@@ -8155,6 +8291,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/formula-engine:
+    get:
+      operationId: getPlatformFormulaEngine
+      description: 'O motor de fórmulas e regras visto pelo fornecedor (sem tenant):
+
+        funções, operadores, limites e variáveis do sistema de cada contexto, e
+
+        os campos/ações das regras «Quando… então…». Só leitura: mudar o motor é
+
+        uma nova versão do sistema; as fórmulas e regras de negócio são de cada
+
+        tenant (`/business-config/formulas`).
+
+
+        Só leitura: funções, operadores, limites e variáveis do motor de fórmulas e os campos/ações/etapas das regras.
+        As fórmulas e regras de negócio são de cada tenant.'
+      summary: Obter platform formula engine
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformFormulaEngine'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/platform/me:
     get:
       operationId: getPlatformMe
@@ -8226,6 +8403,1036 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/reference-tables:
+    get:
+      operationId: getPlatformReferenceTableList
+      description: 'GET: as tabelas (versão em vigor e pendentes). POST: propor uma versão
+
+        nova de uma tabela (nova ou existente), à espera de outra conta.
+
+
+        Uma linha por tabela: versão em vigor (sem as linhas) e pendentes.'
+      summary: Listar platform reference table list
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReferenceTableSummary'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    post:
+      operationId: postPlatformReferenceTableList
+      description: 'GET: as tabelas (versão em vigor e pendentes). POST: propor uma versão
+
+        nova de uma tabela (nova ou existente), à espera de outra conta.
+
+
+        Versão nova da tabela inteira, PENDING_APPROVAL até outra conta a aprovar.'
+      summary: Criar platform reference table list
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferenceTableProposal'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceTableVersion'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/reference-tables/{code}:
+    get:
+      operationId: getPlatformReferenceTableDetail
+      summary: Obter platform reference table detail
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceTableDetail'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/platform/reference-tables/{code}/versions:
+    get:
+      operationId: getPlatformReferenceTableVersions
+      summary: Obter platform reference table versions
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReferenceTableVersion'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/platform/reference-tables/{code}/versions/{version_no}/approve:
+    post:
+      operationId: postPlatformReferenceTableApprove
+      description: Quem propôs não pode aprovar (SEC-403).
+      summary: Criar platform reference table approve
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: version_no
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformParameterDecision'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceTableVersion'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/reference-tables/{code}/versions/{version_no}/reject:
+    post:
+      operationId: postPlatformReferenceTableReject
+      summary: Criar platform reference table reject
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: version_no
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformParameterDecision'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceTableVersion'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/system-parameters:
+    get:
+      operationId: getPlatformParameterList
+      description: 'Every parameter as the platform sees it: level, value in effect,
+
+        code default, limits imposed on tenants and pending versions.
+
+        Filters: `?level=PLATFORM_MANDATORY|PLATFORM_DEFAULT`, `?category=`.'
+      summary: Listar platform parameter list
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: OPERATIONAL, STRUCTURAL, LEGAL, LIMIT ou MARKET.
+      - in: query
+        name: level
+        schema:
+          type: string
+        description: PLATFORM_MANDATORY ou PLATFORM_DEFAULT.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlatformParameter'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/platform/system-parameters/{code}:
+    get:
+      operationId: getPlatformParameterDetail
+      summary: Obter platform parameter detail
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformParameter'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/platform/system-parameters/{code}/rollback:
+    post:
+      operationId: postPlatformParameterRollback
+      description: Cria uma versão nova (pendente de aprovação) com o valor de uma versão publicada anterior.
+      summary: Criar platform parameter rollback
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformParameterRollbackRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformParameterVersion'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/system-parameters/{code}/versions:
+    get:
+      operationId: getPlatformParameterVersions
+      description: 'GET: version history. POST: propose a new version (pending approval
+
+        by another platform account).'
+      summary: Obter platform parameter versions
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlatformParameterVersion'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    post:
+      operationId: postPlatformParameterVersions
+      description: 'GET: version history. POST: propose a new version (pending approval
+
+        by another platform account).
+
+
+        Fica PENDING_APPROVAL até outra conta da plataforma a aprovar. Uma pendente de cada vez (CONFLICT).'
+      summary: Criar platform parameter versions
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformParameterProposalWithSource'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformParameterVersion'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/system-parameters/{code}/versions/{version_no}/approve:
+    post:
+      operationId: postPlatformParameterApprove
+      description: Quem propôs não pode aprovar (SEC-403). Vale a partir da vigência indicada ou da aprovação.
+      summary: Criar platform parameter approve
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: version_no
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformParameterDecision'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformParameterVersion'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/system-parameters/{code}/versions/{version_no}/reject:
+    post:
+      operationId: postPlatformParameterReject
+      summary: Criar platform parameter reject
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: version_no
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformParameterDecision'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformParameterVersion'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/templates:
+    get:
+      operationId: getPlatformTemplateList
+      description: 'GET: os modelos (publicado e pendentes). POST: propor uma versão nova
+
+        de um modelo, à espera de outra conta.'
+      summary: Listar platform template list
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TemplateSummary'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    post:
+      operationId: postPlatformTemplateList
+      description: 'GET: os modelos (publicado e pendentes). POST: propor uma versão nova
+
+        de um modelo, à espera de outra conta.
+
+
+        O conteúdo é validado como configuração do tenant; um modelo não muda de tipo.'
+      summary: Criar platform template list
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateProposal'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateVersion'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/templates/{code}:
+    get:
+      operationId: getPlatformTemplateDetail
+      summary: Obter platform template detail
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDetail'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/platform/templates/{code}/versions:
+    get:
+      operationId: getPlatformTemplateVersions
+      summary: Obter platform template versions
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TemplateVersion'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/platform/templates/{code}/versions/{version_no}/approve:
+    post:
+      operationId: postPlatformTemplateApprove
+      summary: Criar platform template approve
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: version_no
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformParameterDecision'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateVersion'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/templates/{code}/versions/{version_no}/reject:
+    post:
+      operationId: postPlatformTemplateReject
+      summary: Criar platform template reject
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: version_no
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformParameterDecision'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateVersion'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
         '409':
           content:
             application/problem+json:
@@ -9338,7 +10545,12 @@ paths:
         OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
 
 
-        Requer: scope q360.read.'
+        Requer: scope q360.read.
+
+
+        Obsoleto: tarifa antiga. Converta-a com `manage.py migrate_legacy_tariffs` e use a configuração de negócio
+        (`/business-config/configurations`, `/products/{id}/tariff`). Deixa de ser usada quando o tenant publica
+        `pricing.reference_premiums`.'
       summary: Listar pricing parameter set create
       parameters:
       - in: query
@@ -9361,6 +10573,7 @@ paths:
       security:
       - oauth2:
         - q360.read
+      deprecated: true
       responses:
         '200':
           content:
@@ -9401,7 +10614,12 @@ paths:
         OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
 
 
-        Requer: scope q360.admin, permissão pricing-config:manage.'
+        Requer: scope q360.admin, permissão pricing-config:manage.
+
+
+        Obsoleto: tarifa antiga. Converta-a com `manage.py migrate_legacy_tariffs` e use a configuração de negócio
+        (`/business-config/configurations`, `/products/{id}/tariff`). Deixa de ser usada quando o tenant publica
+        `pricing.reference_premiums`.'
       summary: Criar pricing parameter set create
       parameters:
       - in: header
@@ -9421,6 +10639,7 @@ paths:
       security:
       - oauth2:
         - q360.admin
+      deprecated: true
       responses:
         '201':
           content:
@@ -9466,7 +10685,12 @@ paths:
         in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`.
 
 
-        Requer: scope q360.admin, permissão pricing-config:manage.'
+        Requer: scope q360.admin, permissão pricing-config:manage.
+
+
+        Obsoleto: tarifa antiga. Converta-a com `manage.py migrate_legacy_tariffs` e use a configuração de negócio
+        (`/business-config/configurations`, `/products/{id}/tariff`). Deixa de ser usada quando o tenant publica
+        `pricing.reference_premiums`.'
       summary: Remover pricing parameter set detail
       parameters:
       - in: header
@@ -9486,6 +10710,7 @@ paths:
       security:
       - oauth2:
         - q360.admin
+      deprecated: true
       responses:
         '204':
           description: Sem conteúdo.
@@ -9526,7 +10751,12 @@ paths:
         in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`.
 
 
-        Requer: scope q360.admin, permissão pricing-config:manage.'
+        Requer: scope q360.admin, permissão pricing-config:manage.
+
+
+        Obsoleto: tarifa antiga. Converta-a com `manage.py migrate_legacy_tariffs` e use a configuração de negócio
+        (`/business-config/configurations`, `/products/{id}/tariff`). Deixa de ser usada quando o tenant publica
+        `pricing.reference_premiums`.'
       summary: Alterar pricing parameter set detail
       parameters:
       - in: header
@@ -9551,6 +10781,7 @@ paths:
       security:
       - oauth2:
         - q360.admin
+      deprecated: true
       responses:
         '200':
           content:
@@ -10563,6 +11794,108 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProductPricingSetupValidation'
           description: ''
+  /api/v1/products/{product_id}/tariff:
+    get:
+      operationId: getProductTariff
+      description: 'Requer: scope q360.read.'
+      summary: Tarifa do produto por passo do cálculo
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductTariff'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/products/{product_id}/tariff/simulate:
+    post:
+      operationId: simulateProductTariff
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.'
+      summary: Simular a tarifa (com rascunhos) numa cotação de exemplo, sem gravar nada
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TariffSimulation'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TariffSimulationResult'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/proposers:
     get:
       operationId: getProposerListCreate
@@ -13631,7 +14964,12 @@ paths:
         OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
 
 
-        Requer: scope q360.read.'
+        Requer: scope q360.read.
+
+
+        Obsoleto: tarifa antiga. Converta-a com `manage.py migrate_legacy_tariffs` e use a configuração de negócio
+        (`/business-config/configurations`, `/products/{id}/tariff`). Deixa de ser usada quando o tenant publica
+        `pricing.reference_premiums`.'
       summary: Listar rating table create
       parameters:
       - in: query
@@ -13654,6 +14992,7 @@ paths:
       security:
       - oauth2:
         - q360.read
+      deprecated: true
       responses:
         '200':
           content:
@@ -13686,7 +15025,12 @@ paths:
         OPEN_DECISIONS.md#S04-LISTING-GAPS-001/DECISIONS_TAKEN.md.
 
 
-        Requer: scope q360.admin, permissão pricing-config:manage.'
+        Requer: scope q360.admin, permissão pricing-config:manage.
+
+
+        Obsoleto: tarifa antiga. Converta-a com `manage.py migrate_legacy_tariffs` e use a configuração de negócio
+        (`/business-config/configurations`, `/products/{id}/tariff`). Deixa de ser usada quando o tenant publica
+        `pricing.reference_premiums`.'
       summary: Criar rating table create
       parameters:
       - in: header
@@ -13706,6 +15050,7 @@ paths:
       security:
       - oauth2:
         - q360.admin
+      deprecated: true
       responses:
         '201':
           content:
@@ -13747,7 +15092,12 @@ paths:
         rating_table_service.update_rating_table/delete_rating_table.
 
 
-        Requer: scope q360.admin, permissão pricing-config:manage.'
+        Requer: scope q360.admin, permissão pricing-config:manage.
+
+
+        Obsoleto: tarifa antiga. Converta-a com `manage.py migrate_legacy_tariffs` e use a configuração de negócio
+        (`/business-config/configurations`, `/products/{id}/tariff`). Deixa de ser usada quando o tenant publica
+        `pricing.reference_premiums`.'
       summary: Remover rating table detail
       parameters:
       - in: header
@@ -13767,6 +15117,7 @@ paths:
       security:
       - oauth2:
         - q360.admin
+      deprecated: true
       responses:
         '204':
           description: Sem conteúdo.
@@ -13803,7 +15154,12 @@ paths:
         rating_table_service.update_rating_table/delete_rating_table.
 
 
-        Requer: scope q360.admin, permissão pricing-config:manage.'
+        Requer: scope q360.admin, permissão pricing-config:manage.
+
+
+        Obsoleto: tarifa antiga. Converta-a com `manage.py migrate_legacy_tariffs` e use a configuração de negócio
+        (`/business-config/configurations`, `/products/{id}/tariff`). Deixa de ser usada quando o tenant publica
+        `pricing.reference_premiums`.'
       summary: Alterar rating table detail
       parameters:
       - in: header
@@ -13828,6 +15184,7 @@ paths:
       security:
       - oauth2:
         - q360.admin
+      deprecated: true
       responses:
         '200':
           content:
@@ -13865,6 +15222,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/reference-tables:
+    get:
+      operationId: getReferenceTableList
+      description: 'Tabelas com versão em vigor (sem as linhas).
+
+
+        Requer: scope q360.read.'
+      summary: Listar reference table list
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReferenceTableVersion'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/reference-tables/{code}:
+    get:
+      operationId: getReferenceTableDetail
+      description: 'Requer: scope q360.read.'
+      summary: Obter reference table detail
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceTableVersion'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/relationship-codes:
     get:
       operationId: getRelationshipCodeList
@@ -14692,7 +16124,7 @@ paths:
         name: category
         schema:
           type: string
-        description: OPERATIONAL ou STRUCTURAL.
+        description: OPERATIONAL, STRUCTURAL, LEGAL, LIMIT ou MARKET.
       tags:
       - Configuration
       security:
@@ -14908,6 +16340,139 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemParameter'
           description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/templates:
+    get:
+      operationId: listTemplates
+      description: 'Requer: scope q360.read.'
+      summary: Modelos de partida publicados pelo fornecedor
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TemplateVersion'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/templates/{code}:
+    get:
+      operationId: getTemplate
+      description: 'Requer: scope q360.read.'
+      summary: Conteúdo da versão publicada de um modelo
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateVersion'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/templates/{code}/adopt:
+    post:
+      operationId: adoptTemplate
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.
+
+
+        Copia cada configuração do modelo para um rascunho do tenant; nada é publicado.'
+      summary: Copiar um modelo para rascunhos do tenant (não publica nada)
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateAdopt'
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateAdoptResult'
+          description: Criado.
         '400':
           content:
             application/problem+json:
@@ -18736,22 +20301,57 @@ components:
         category:
           allOf:
           - $ref: '#/components/schemas/CategoryEnum'
-          description: 'OPERATIONAL: o GTE altera; STRUCTURAL: só por evolução do sistema.
+          description: 'OPERATIONAL: o GTE altera; STRUCTURAL: só por evolução do sistema; LEGAL: valor legal; LIMIT:
+            teto do fornecedor; MARKET: dado de mercado (fornecedor).
 
 
             * `OPERATIONAL` - OPERATIONAL
 
-            * `STRUCTURAL` - STRUCTURAL'
+            * `STRUCTURAL` - STRUCTURAL
+
+            * `LEGAL` - LEGAL
+
+            * `LIMIT` - LIMIT
+
+            * `MARKET` - MARKET'
+        level:
+          allOf:
+          - $ref: '#/components/schemas/LevelEnum'
+          description: 'PLATFORM_MANDATORY: vale o valor do fornecedor; PLATFORM_DEFAULT: o tenant ajusta dentro
+            dos limites.
+
+
+            * `PLATFORM_MANDATORY` - PLATFORM_MANDATORY
+
+            * `PLATFORM_DEFAULT` - PLATFORM_DEFAULT'
         value:
           oneOf:
           - {}
           - type: 'null'
+        source:
+          allOf:
+          - $ref: '#/components/schemas/SystemParameterSourceEnum'
+          description: 'De onde vem o valor em vigor.
+
+
+            * `TENANT` - TENANT
+
+            * `PLATFORM` - PLATFORM
+
+            * `CODE_DEFAULT` - CODE_DEFAULT'
         default:
           oneOf:
           - {}
           - type: 'null'
+          description: Valor geral (do fornecedor ou do código) usado sem ajuste do tenant.
+        platformVersionNo:
+          type: integer
+          description: Versão geral em vigor (0 = valor do código).
         isDefault:
           type: boolean
+        tenantValueOutOfLimits:
+          type: boolean
+          description: O valor do tenant ficou fora dos limites do fornecedor e não se aplica.
         description:
           type: string
         unit:
@@ -18789,7 +20389,11 @@ components:
       - description
       - editable
       - isDefault
+      - level
+      - platformVersionNo
       - rowVersion
+      - source
+      - tenantValueOutOfLimits
       - unit
       - updatedAt
       - updatedBy
@@ -19748,10 +21352,19 @@ components:
       enum:
       - OPERATIONAL
       - STRUCTURAL
+      - LEGAL
+      - LIMIT
+      - MARKET
       type: string
       description: '* `OPERATIONAL` - OPERATIONAL
 
-        * `STRUCTURAL` - STRUCTURAL'
+        * `STRUCTURAL` - STRUCTURAL
+
+        * `LEGAL` - LEGAL
+
+        * `LIMIT` - LIMIT
+
+        * `MARKET` - MARKET'
     ClaimsContext:
       type: object
       properties:
@@ -25484,6 +27097,1446 @@ components:
         value: {}
       required:
       - value
+    ClaimsImportRequestSourceEnum:
+      enum:
+      - INTERNAL
+      - OTHER_INSURER
+      type: string
+      description: '* `INTERNAL` - INTERNAL
+
+        * `OTHER_INSURER` - OTHER_INSURER'
+    LevelEnum:
+      enum:
+      - PLATFORM_MANDATORY
+      - PLATFORM_DEFAULT
+      type: string
+      description: '* `PLATFORM_MANDATORY` - PLATFORM_MANDATORY
+
+        * `PLATFORM_DEFAULT` - PLATFORM_DEFAULT'
+    PlatformParameter:
+      type: object
+      properties:
+        code:
+          type: string
+        valueType:
+          $ref: '#/components/schemas/SystemParameterValueTypeEnum'
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        level:
+          $ref: '#/components/schemas/LevelEnum'
+        value:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Valor geral em vigor.
+        codeDefault:
+          oneOf:
+          - {}
+          - type: 'null'
+        isCodeDefault:
+          type: boolean
+        versionNo:
+          type: integer
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        legalReference:
+          type:
+          - string
+          - 'null'
+          description: Fonte da versão em vigor.
+        sourceUrl:
+          type:
+          - string
+          - 'null'
+        requiresLegalReference:
+          type: boolean
+          description: 'true nos parâmetros LEGAL: propor exige legalReference.'
+        description:
+          type: string
+        unit:
+          type:
+          - string
+          - 'null'
+        usedBy:
+          type:
+          - string
+          - 'null'
+        hardLimits:
+          type: object
+          additionalProperties:
+            oneOf:
+            - {}
+            - type: 'null'
+        tenantLimits:
+          type:
+          - object
+          - 'null'
+          additionalProperties:
+            oneOf:
+            - {}
+            - type: 'null'
+        allowedValues:
+          type:
+          - array
+          - 'null'
+          items: {}
+          description: Valores que o motor sabe executar.
+        tenantEditable:
+          type: boolean
+        pendingVersions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformParameterVersion'
+        tenantOverrides:
+          type: object
+          additionalProperties:
+            type: integer
+          description: count, outOfLimits.
+      required:
+      - allowedValues
+      - category
+      - code
+      - codeDefault
+      - description
+      - effectiveFrom
+      - hardLimits
+      - isCodeDefault
+      - legalReference
+      - level
+      - pendingVersions
+      - requiresLegalReference
+      - sourceUrl
+      - tenantEditable
+      - tenantLimits
+      - unit
+      - usedBy
+      - value
+      - valueType
+      - versionNo
+    PlatformParameterDecision:
+      type: object
+      properties:
+        note:
+          type:
+          - string
+          - 'null'
+          description: Obrigatória (mínimo 10 caracteres) ao rejeitar.
+    PlatformParameterProposal:
+      type: object
+      properties:
+        value: {}
+        minimum:
+          oneOf:
+          - {}
+          - type: 'null'
+        maximum:
+          oneOf:
+          - {}
+          - type: 'null'
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: Vigência; por omissão, a aprovação.
+        reason:
+          type: string
+          description: Motivo obrigatório (mínimo 10 caracteres).
+      required:
+      - reason
+      - value
+    PlatformParameterRollbackRequest:
+      type: object
+      properties:
+        versionNo:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+          description: Motivo obrigatório (mínimo 10 caracteres).
+      required:
+      - reason
+      - versionNo
+    PlatformParameterVersion:
+      type: object
+      properties:
+        code:
+          type: string
+        versionNo:
+          type: integer
+        status:
+          $ref: '#/components/schemas/PlatformVersionStatusEnum'
+        action:
+          type: string
+          description: CREATED ou ROLLBACK_TO_<n>.
+        value:
+          oneOf:
+          - {}
+          - type: 'null'
+        minimum:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Limite mínimo imposto aos tenants (só PLATFORM_DEFAULT).
+        maximum:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Limite máximo imposto aos tenants (só PLATFORM_DEFAULT).
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        inEffect:
+          type: boolean
+        reason:
+          type: string
+        legalReference:
+          type:
+          - string
+          - 'null'
+          description: Fonte legal (parâmetros LEGAL).
+        sourceUrl:
+          type:
+          - string
+          - 'null'
+        createdBy:
+          type: string
+        createdAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        decidedBy:
+          type:
+          - string
+          - 'null'
+        decidedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        decisionNote:
+          type:
+          - string
+          - 'null'
+      required:
+      - action
+      - code
+      - createdAt
+      - createdBy
+      - decidedAt
+      - decidedBy
+      - decisionNote
+      - effectiveFrom
+      - inEffect
+      - legalReference
+      - maximum
+      - minimum
+      - reason
+      - sourceUrl
+      - status
+      - value
+      - versionNo
+    PlatformParameterVersionStatusEnum:
+      enum:
+      - PENDING_APPROVAL
+      - PUBLISHED
+      - REJECTED
+      type: string
+      description: '* `PENDING_APPROVAL` - PENDING_APPROVAL
+
+        * `PUBLISHED` - PUBLISHED
+
+        * `REJECTED` - REJECTED'
+    SystemParameterSourceEnum:
+      enum:
+      - TENANT
+      - PLATFORM
+      - CODE_DEFAULT
+      type: string
+      description: '* `TENANT` - TENANT
+
+        * `PLATFORM` - PLATFORM
+
+        * `CODE_DEFAULT` - CODE_DEFAULT'
+    ValueTypeAf9Enum:
+      enum:
+      - INTEGER
+      - DECIMAL
+      - TEXT
+      - BOOLEAN
+      type: string
+      description: '* `INTEGER` - INTEGER
+
+        * `DECIMAL` - DECIMAL
+
+        * `TEXT` - TEXT
+
+        * `BOOLEAN` - BOOLEAN'
+    Kind54aEnum:
+      enum:
+      - PRODUCT
+      - ACTUARIAL_MODEL
+      - FORMULA_SET
+      - COVERAGE_LIBRARY
+      type: string
+      description: '* `PRODUCT` - PRODUCT
+
+        * `ACTUARIAL_MODEL` - ACTUARIAL_MODEL
+
+        * `FORMULA_SET` - FORMULA_SET
+
+        * `COVERAGE_LIBRARY` - COVERAGE_LIBRARY'
+    PlatformParameterProposalWithSource:
+      type: object
+      properties:
+        value: {}
+        minimum:
+          oneOf:
+          - {}
+          - type: 'null'
+        maximum:
+          oneOf:
+          - {}
+          - type: 'null'
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: Vigência; por omissão, a aprovação.
+        reason:
+          type: string
+          description: Motivo obrigatório (mínimo 10 caracteres).
+        legalReference:
+          type:
+          - string
+          - 'null'
+          description: Fonte legal (diploma, artigo). Obrigatória nos parâmetros LEGAL.
+        sourceUrl:
+          type:
+          - string
+          - 'null'
+          description: Ligação https para o texto da fonte.
+      required:
+      - reason
+      - value
+    ReferenceTableColumn:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        type:
+          $ref: '#/components/schemas/TypeEnum'
+      required:
+      - code
+      - type
+    ReferenceTableProposal:
+      type: object
+      properties:
+        code:
+          type: string
+          description: 'Minúsculas, números e ''_'' (ex.: provincias).'
+        name:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        keyColumn:
+          type: string
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenceTableColumn'
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: Até 5000 linhas; chaves únicas.
+        source:
+          type:
+          - string
+          - 'null'
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        reason:
+          type: string
+          description: Motivo obrigatório (mínimo 10 caracteres).
+      required:
+      - code
+      - columns
+      - keyColumn
+      - name
+      - reason
+      - rows
+    ReferenceTableVersion:
+      type: object
+      properties:
+        code:
+          type: string
+        versionNo:
+          type: integer
+        status:
+          $ref: '#/components/schemas/PlatformVersionStatusEnum'
+        name:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        keyColumn:
+          type: string
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenceTableColumn'
+        rowCount:
+          type: integer
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: Só no detalhe.
+        source:
+          type:
+          - string
+          - 'null'
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        inEffect:
+          type: boolean
+        reason:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        decidedBy:
+          type:
+          - string
+          - 'null'
+        decidedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        decisionNote:
+          type:
+          - string
+          - 'null'
+      required:
+      - code
+      - columns
+      - createdAt
+      - createdBy
+      - decidedAt
+      - decidedBy
+      - decisionNote
+      - description
+      - effectiveFrom
+      - inEffect
+      - keyColumn
+      - name
+      - reason
+      - rowCount
+      - source
+      - status
+      - versionNo
+    SegmentEnum:
+      enum:
+      - SAU
+      - SAG
+      type: string
+      description: '* `SAU` - SAU
+
+        * `SAG` - SAG'
+    SexEnum:
+      enum:
+      - M
+      - F
+      type: string
+      description: '* `M` - M
+
+        * `F` - F'
+    Status9b7Enum:
+      enum:
+      - PENDING_APPROVAL
+      - PUBLISHED
+      - REJECTED
+      type: string
+      description: '* `PENDING_APPROVAL` - PENDING_APPROVAL
+
+        * `PUBLISHED` - PUBLISHED
+
+        * `REJECTED` - REJECTED'
+    TariffMember:
+      type: object
+      properties:
+        age:
+          type: integer
+          maximum: 120
+          minimum: 0
+        sex:
+          allOf:
+          - $ref: '#/components/schemas/SexEnum'
+          default: M
+        relationship:
+          type:
+          - string
+          - 'null'
+          maxLength: 40
+      required:
+      - age
+    TariffSimulation:
+      type: object
+      properties:
+        planId:
+          type: string
+          format: uuid
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/TariffMember'
+        proposerType:
+          allOf:
+          - $ref: '#/components/schemas/ProposerTypeEnum'
+          default: INDIVIDUAL
+        selection: {}
+        actuarialProfile: {}
+        paymentFrequency:
+          $ref: '#/components/schemas/PaymentFrequencyEnum'
+        configurationIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        includeOpenDrafts:
+          type: boolean
+          default: false
+      required:
+      - members
+      - planId
+    TemplateAdopt:
+      type: object
+      properties:
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date
+    TemplateProposal:
+      type: object
+      properties:
+        code:
+          type: string
+        kind:
+          $ref: '#/components/schemas/TemplateKindEnum'
+        name:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        segment:
+          oneOf:
+          - $ref: '#/components/schemas/SegmentEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        content:
+          type: object
+          additionalProperties: {}
+          description: '{configurations: {configKey: valor}, marketProducts: bool}'
+        source:
+          type:
+          - string
+          - 'null'
+        reason:
+          type: string
+          description: Motivo obrigatório (mínimo 10 caracteres).
+      required:
+      - code
+      - content
+      - kind
+      - name
+      - reason
+    TemplateVersion:
+      type: object
+      properties:
+        code:
+          type: string
+        versionNo:
+          type: integer
+        status:
+          $ref: '#/components/schemas/PlatformVersionStatusEnum'
+        kind:
+          $ref: '#/components/schemas/TemplateKindEnum'
+        kindLabel:
+          type: string
+        name:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        segment:
+          type:
+          - string
+          - 'null'
+        configKeys:
+          type: array
+          items:
+            type: string
+        marketProducts:
+          type: boolean
+        content:
+          type: object
+          additionalProperties: {}
+          description: 'configurations {configKey: valor} e marketProducts (só no detalhe).'
+        source:
+          type:
+          - string
+          - 'null'
+        isLatestPublished:
+          type: boolean
+        reason:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        decidedBy:
+          type:
+          - string
+          - 'null'
+        decidedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        decisionNote:
+          type:
+          - string
+          - 'null'
+      required:
+      - code
+      - configKeys
+      - createdAt
+      - createdBy
+      - decidedAt
+      - decidedBy
+      - decisionNote
+      - description
+      - isLatestPublished
+      - kind
+      - kindLabel
+      - marketProducts
+      - name
+      - reason
+      - segment
+      - source
+      - status
+      - versionNo
+    TypeEnum:
+      enum:
+      - NUMBER
+      - TEXT
+      type: string
+      description: '* `NUMBER` - NUMBER
+
+        * `TEXT` - TEXT'
+    PlatformVersionStatusEnum:
+      enum:
+      - PENDING_APPROVAL
+      - PUBLISHED
+      - REJECTED
+      type: string
+      description: '* `PENDING_APPROVAL` - PENDING_APPROVAL
+
+        * `PUBLISHED` - PUBLISHED
+
+        * `REJECTED` - REJECTED'
+    TemplateKindEnum:
+      enum:
+      - PRODUCT
+      - ACTUARIAL_MODEL
+      - FORMULA_SET
+      - COVERAGE_LIBRARY
+      type: string
+      description: '* `PRODUCT` - PRODUCT
+
+        * `ACTUARIAL_MODEL` - ACTUARIAL_MODEL
+
+        * `FORMULA_SET` - FORMULA_SET
+
+        * `COVERAGE_LIBRARY` - COVERAGE_LIBRARY'
+    AreaEnum:
+      enum:
+      - ORGANIZATION
+      - PRODUCTS
+      - TARIFF
+      - RULES
+      - PARAMETERS
+      - DOCUMENTS
+      type: string
+      description: '* `ORGANIZATION` - ORGANIZATION
+
+        * `PRODUCTS` - PRODUCTS
+
+        * `TARIFF` - TARIFF
+
+        * `RULES` - RULES
+
+        * `PARAMETERS` - PARAMETERS
+
+        * `DOCUMENTS` - DOCUMENTS'
+    CodeEnum:
+      enum:
+      - PURE_PREMIUM
+      - RISK_FACTORS
+      - PERSON_RULES
+      - PERSON_FORMULAS
+      - LOADINGS
+      - ADJUSTMENTS
+      - LEGAL_TAXES
+      - CHARGES
+      - QUOTE_FORMULAS
+      - PRODUCT_SETUP
+      - FRACTIONATION
+      type: string
+      description: '* `PURE_PREMIUM` - PURE_PREMIUM
+
+        * `RISK_FACTORS` - RISK_FACTORS
+
+        * `PERSON_RULES` - PERSON_RULES
+
+        * `PERSON_FORMULAS` - PERSON_FORMULAS
+
+        * `LOADINGS` - LOADINGS
+
+        * `ADJUSTMENTS` - ADJUSTMENTS
+
+        * `LEGAL_TAXES` - LEGAL_TAXES
+
+        * `CHARGES` - CHARGES
+
+        * `QUOTE_FORMULAS` - QUOTE_FORMULAS
+
+        * `PRODUCT_SETUP` - PRODUCT_SETUP
+
+        * `FRACTIONATION` - FRACTIONATION'
+    FormulaExplanationStep:
+      type: object
+      properties:
+        step:
+          type: integer
+        expression:
+          type: string
+          description: Subexpressão calculada neste passo.
+        operation:
+          type: string
+          description: VARIABLE, CONSTANT, tabela, + - * / **, min, max, abs, round.
+        operands:
+          type: array
+          items:
+            type: string
+        result:
+          type: string
+      required:
+      - expression
+      - operands
+      - operation
+      - result
+      - step
+    FormulaReferenceTable:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        versionNo:
+          type: integer
+        keyColumn:
+          type: string
+        columns:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        example:
+          type: string
+      required:
+      - code
+      - columns
+      - example
+      - keyColumn
+      - name
+      - versionNo
+    FormulaTestResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        result:
+          type: string
+          description: Só quando valid=true.
+        variables:
+          type: array
+          items:
+            type: string
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormulaExplanationStep'
+          description: Cálculo passo a passo.
+        error:
+          type: string
+          description: Só quando valid=false (HTTP 400).
+      required:
+      - valid
+    FormulaVariable:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Nome a usar na expressão.
+        label:
+          type: string
+        source:
+          $ref: '#/components/schemas/FormulaVariableSourceEnum'
+        usableIn:
+          type: array
+          items:
+            type: string
+          description: PRICING_FORMULAS:PERSON|QUOTE, PRODUCT_FORMULAS, RULE_CONDITIONS.
+        unit:
+          type:
+          - string
+          - 'null'
+        value:
+          type:
+          - string
+          - 'null'
+          description: Parâmetros e constantes do fornecedor.
+        parameter:
+          type: string
+          description: 'Constantes: código do parâmetro do fornecedor.'
+        readOnly:
+          type: boolean
+        expression:
+          type: string
+          description: Valores auxiliares.
+      required:
+      - label
+      - source
+      - token
+      - usableIn
+    FormulaVariableSourceEnum:
+      enum:
+      - SYSTEM
+      - PARAMETER
+      - AUXILIARY
+      - PLATFORM_CONSTANT
+      - RULE_FIELD
+      - PRODUCT_GROUP
+      - PRODUCT_OPTION
+      - PRODUCT_FIELD
+      - PRODUCT_FORMULA
+      - PRODUCT_SYSTEM
+      type: string
+      description: '* `SYSTEM` - SYSTEM
+
+        * `PARAMETER` - PARAMETER
+
+        * `AUXILIARY` - AUXILIARY
+
+        * `PLATFORM_CONSTANT` - PLATFORM_CONSTANT
+
+        * `RULE_FIELD` - RULE_FIELD
+
+        * `PRODUCT_GROUP` - PRODUCT_GROUP
+
+        * `PRODUCT_OPTION` - PRODUCT_OPTION
+
+        * `PRODUCT_FIELD` - PRODUCT_FIELD
+
+        * `PRODUCT_FORMULA` - PRODUCT_FORMULA
+
+        * `PRODUCT_SYSTEM` - PRODUCT_SYSTEM'
+    FormulaVariablesCatalog:
+      type: object
+      properties:
+        variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormulaVariable'
+        functions:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+        operators:
+          type: array
+          items:
+            type: string
+        referenceTables:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormulaReferenceTable'
+        sources:
+          type: object
+          additionalProperties:
+            oneOf:
+            - {}
+            - type: 'null'
+          description: pricingFormulas, pricingFormulasError, productSetup, productSetupError.
+      required:
+      - functions
+      - operators
+      - referenceTables
+      - sources
+      - variables
+    OwnerEnum:
+      enum:
+      - CODE
+      - PLATFORM
+      - TENANT
+      type: string
+      description: '* `CODE` - CODE
+
+        * `PLATFORM` - PLATFORM
+
+        * `TENANT` - TENANT'
+    PendingApprovalItem:
+      type: object
+      properties:
+        configurationId:
+          type: string
+          format: uuid
+        configKey:
+          type: string
+        label:
+          type: string
+        area:
+          $ref: '#/components/schemas/AreaEnum'
+        areaLabel:
+          type: string
+        versionNo:
+          type: integer
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date
+        createdBy:
+          type:
+          - string
+          - 'null'
+        submittedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        againstVersionNo:
+          type:
+          - integer
+          - 'null'
+          description: Versão publicada com que se compara.
+        changeCount:
+          type:
+          - integer
+          - 'null'
+        changes:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: path, change (ADDED/REMOVED/CHANGED), before, after; até 50.
+        isNew:
+          type: boolean
+        canApprove:
+          type: boolean
+        cannotApproveReason:
+          type:
+          - string
+          - 'null'
+      required:
+      - againstVersionNo
+      - area
+      - areaLabel
+      - canApprove
+      - cannotApproveReason
+      - changeCount
+      - changes
+      - configKey
+      - configurationId
+      - createdBy
+      - effectiveFrom
+      - isNew
+      - label
+      - submittedAt
+      - versionNo
+    PendingApprovals:
+      type: object
+      properties:
+        total:
+          type: integer
+        byArea:
+          type: object
+          additionalProperties:
+            type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingApprovalItem'
+      required:
+      - byArea
+      - items
+      - total
+    PendingApprovalsCount:
+      type: object
+      properties:
+        total:
+          type: integer
+        canApprove:
+          type: integer
+        byArea:
+          type: object
+          additionalProperties:
+            type: integer
+      required:
+      - byArea
+      - canApprove
+      - total
+    PlatformFormulaEngine:
+      type: object
+      properties:
+        pricingFormulas:
+          type: object
+          additionalProperties: {}
+          description: Catálogo do motor de fórmulas de tarifação (fases, funções, variáveis…).
+        productFormulas:
+          type: object
+          additionalProperties: {}
+          description: systemVariables das fórmulas de produto.
+        rules:
+          type: object
+          additionalProperties: {}
+          description: Campos, operadores, etapas e ações das regras «Quando… então…».
+        platformConstants:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: name, parameter, unit, description.
+        limits:
+          type: object
+          additionalProperties:
+            type: integer
+      required:
+      - limits
+      - platformConstants
+      - pricingFormulas
+      - productFormulas
+      - rules
+    ProductTariff:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        productCode:
+          type: string
+        productName:
+          type: string
+        plans:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: id, code, name, status.
+        engine:
+          type: object
+          additionalProperties: {}
+          description: owner=CODE, order, rounding, structure.
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/TariffStage'
+        openDrafts:
+          type: array
+          items:
+            $ref: '#/components/schemas/TariffConfigVersion'
+        platformVersions:
+          type: object
+          additionalProperties:
+            type: integer
+      required:
+      - engine
+      - openDrafts
+      - plans
+      - platformVersions
+      - productCode
+      - productId
+      - productName
+      - stages
+    ReferenceTableDetail:
+      type: object
+      properties:
+        code:
+          type: string
+        inEffect:
+          oneOf:
+          - $ref: '#/components/schemas/ReferenceTableVersion'
+          - type: 'null'
+          description: Com as linhas.
+        pendingVersions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenceTableVersion'
+      required:
+      - code
+      - inEffect
+      - pendingVersions
+    ReferenceTableSummary:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        inEffect:
+          oneOf:
+          - $ref: '#/components/schemas/ReferenceTableVersion'
+          - type: 'null'
+        pendingVersions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferenceTableVersion'
+      required:
+      - code
+      - inEffect
+      - name
+      - pendingVersions
+    RequirementItemScopeEnum:
+      enum:
+      - QUOTE
+      - MEMBER
+      type: string
+      description: '* `QUOTE` - QUOTE
+
+        * `MEMBER` - MEMBER'
+    TariffConfigState:
+      type: object
+      properties:
+        configKey:
+          type: string
+        published:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+          description: Em vigor hoje.
+        draft:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+        pending:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+        scheduled:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+          description: Publicada com vigência futura.
+      required:
+      - configKey
+      - draft
+      - pending
+      - published
+      - scheduled
+    TariffConfigVersion:
+      type: object
+      properties:
+        configurationId:
+          type: string
+          format: uuid
+        versionNo:
+          type: integer
+        status:
+          type: string
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date
+        effectiveTo:
+          type:
+          - string
+          - 'null'
+          format: date
+        createdBy:
+          type:
+          - string
+          - 'null'
+        rowVersion:
+          type: integer
+      required:
+      - configurationId
+      - createdBy
+      - effectiveFrom
+      - effectiveTo
+      - rowVersion
+      - status
+      - versionNo
+    TariffSimulationResult:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        planId:
+          type: string
+          format: uuid
+        referenceDate:
+          type: string
+          format: date
+        currencyCode:
+          type: string
+        totalAmount:
+          type: string
+        installments:
+          type: object
+          additionalProperties:
+            type: string
+          description: Prestação por frequência (ANUAL, SEMESTRAL…).
+        components:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: Componentes do cálculo, cada um com owner.
+        appliedDrafts:
+          type: array
+          items:
+            $ref: '#/components/schemas/TariffConfigVersion'
+        versions:
+          type: object
+          additionalProperties: {}
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/TariffSimulationStep'
+        persisted:
+          type: boolean
+          description: 'Sempre false: a simulação não grava nada.'
+      required:
+      - appliedDrafts
+      - components
+      - currencyCode
+      - installments
+      - persisted
+      - planId
+      - productId
+      - referenceDate
+      - steps
+      - totalAmount
+      - versions
+    TariffSimulationStep:
+      type: object
+      properties:
+        sequence:
+          type: integer
+        stepCode:
+          type: string
+        ruleCode:
+          type:
+          - string
+          - 'null'
+        owner:
+          $ref: '#/components/schemas/OwnerEnum'
+        input:
+          oneOf:
+          - {}
+          - type: 'null'
+        output:
+          oneOf:
+          - {}
+          - type: 'null'
+        message:
+          type:
+          - string
+          - 'null'
+      required:
+      - input
+      - message
+      - output
+      - owner
+      - ruleCode
+      - sequence
+      - stepCode
+    TariffStage:
+      type: object
+      properties:
+        order:
+          type: integer
+        code:
+          $ref: '#/components/schemas/CodeEnum'
+        label:
+          type: string
+        owner:
+          $ref: '#/components/schemas/OwnerEnum'
+        editable:
+          type: boolean
+        scope:
+          allOf:
+          - $ref: '#/components/schemas/TariffStageScopeEnum'
+          description: 'TENANT: a chave vale para todos os produtos.
+
+
+            * `TENANT` - TENANT
+
+            * `PRODUCT` - PRODUCT'
+        configurations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TariffConfigState'
+        platformParameters:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: code, value, versionNo, unit.
+        summary:
+          type: object
+          additionalProperties: {}
+          description: Resumo do passo (depende do passo).
+      required:
+      - code
+      - configurations
+      - editable
+      - label
+      - order
+      - owner
+      - platformParameters
+      - scope
+      - summary
+    TariffStageScopeEnum:
+      enum:
+      - TENANT
+      - PRODUCT
+      type: string
+      description: '* `TENANT` - TENANT
+
+        * `PRODUCT` - PRODUCT'
+    TemplateAdoptDraft:
+      type: object
+      properties:
+        configKey:
+          type: string
+        configurationId:
+          type: string
+          format: uuid
+        versionNo:
+          type: integer
+        status:
+          type: string
+      required:
+      - configKey
+      - configurationId
+      - status
+      - versionNo
+    TemplateAdoptResult:
+      type: object
+      properties:
+        template:
+          type: object
+          additionalProperties: {}
+          description: code, versionNo, name.
+        effectiveFrom:
+          type: string
+          format: date
+        createdDrafts:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateAdoptDraft'
+        marketProducts:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          description: Relatório da criação dos produtos de mercado, se pedida.
+        next:
+          type: string
+      required:
+      - createdDrafts
+      - effectiveFrom
+      - marketProducts
+      - next
+      - template
+    TemplateDetail:
+      type: object
+      properties:
+        code:
+          type: string
+        published:
+          oneOf:
+          - $ref: '#/components/schemas/TemplateVersion'
+          - type: 'null'
+          description: Com o conteúdo.
+        pendingVersions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateVersion'
+      required:
+      - code
+      - pendingVersions
+      - published
+    TemplateSummary:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+        published:
+          oneOf:
+          - $ref: '#/components/schemas/TemplateVersion'
+          - type: 'null'
+        pendingVersions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateVersion'
+      required:
+      - code
+      - kind
+      - name
+      - pendingVersions
+      - published
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

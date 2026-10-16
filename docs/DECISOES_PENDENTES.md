@@ -26,12 +26,18 @@ Empresa Kilamba (que usava esse endereço) passa a
 `empresa.kilamba@demo.q360.local`, porque o seeder do portal repõe a conta da
 Empresa e apagaria a da Ana se partilhassem o endereço.
 
+- **Taxas legais (2026-10-15):** o imposto do selo e a taxa ARSEG são configurados pelo fornecedor em `/platform/system-parameters` (versão proposta por uma conta da plataforma e aprovada por outra, com vigência); os tenants só as consultam. Valores iniciais: selo 0 %, ARSEG 1 % (do modelo actuarial).
+
 ## Em aberto
 
 | Tema | Situação |
 |---|---|
 | Validação actuarial | O modelo continua marcado `DRAFT_REQUIRES_ACTUARIAL_APPROVAL`; os valores são do Excel temporário e têm de ser validados pelo actuário antes de produção |
 | Registos antigos sem NIF | A CHECK é `NOT VALID`: os proponentes antigos sem NIF continuam a existir e terão de o indicar na próxima edição |
+| Maioridade e idade com prova | Valores do código: maioridade 18 (art. 130.º CC), teto com prova 27 (permite as exceções corporativas atuais). A confirmar pelo jurídico |
+| Teto da comissão de mediação | Por omissão 100 % (sem teto). Só fixar se houver norma |
+| Câmbio e inflação | Valores iniciais do Excel (30/06/2026): 931,27 Kz/USD e 10,9 %. Atualização manual com aprovação; ligação automática ao BNA/INE fica para depois |
+| Fatores regionais vs. províncias oficiais | O modelo actuarial agrupa regiões («Luanda (Grande Luanda)»); não se validam contra a lista oficial de províncias para não partir o modelo. Decidir se o modelo passa a usar províncias |
 | SAG com menos de 5 colaboradores | A tabela de dimensão do Excel começa nos 5 («abaixo de 5 → SAU individual»); o cálculo recusa grupos menores com erro explícito |
 
 ## Limitações técnicas conhecidas

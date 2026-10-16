@@ -1,378 +1,1682 @@
-# Inventário de endpoints — API v1
+# Inventário de endpoints — novos e alterados
 
-Gerado a partir das rotas reais (`django.urls`) cruzadas com o contrato
-OpenAPI regenerado (`manage.py build_openapi` →
-`docs/artifacts/ART-006-openapi/Q360_MVP_ART_006_OpenAPI_Integral_v1.0.yml` e
-`backend/schema.yml`). O teste `tests/integration/test_openapi_contract.py`
-garante que **todas** as rotas estão no contrato, que o contrato não tem rotas
-inexistentes, que cada operação tem `operationId`, resumo, tags, resposta de
-sucesso, parâmetros de caminho e corpo, e que os ficheiros estão em dia.
+Só os endpoints **novos** e os **alterados** desde o commit `1ff1e6a` (15/10/2026). Este trabalho inclui:
+- a camada geral do fornecedor;
+- as regras por etapa;
+- as constantes e tabelas nas fórmulas;
+- a tarifa por produto com simulação;
+- a fila de aprovações;
+- os modelos de partida.
 
-Estados: **Novo** — criado neste trabalho; **Corrigido** — existia mas foi
-alterado; **Já implementado; faltava no contrato** — existia no código mas não
-no contrato anterior (`POST /api/v1/quotes/{quote_id}/reopen`);
-**Implementado** — sem alterações de rota.
+Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o que **envia** (resposta de sucesso), com o tipo de cada campo.
 
-## Em falta / fora do âmbito
+- As secções 1 e 2 são geradas a partir do contrato (`backend/schema.yml`, OpenAPI 3.1), comparado com o do commit `1ff1e6a`.
+- A secção 3 lista as alterações que o contrato não mostra: campos novos dentro de respostas sem tipo, regras e erros novos, rotas obsoletas.
+- Os caminhos estão sem o prefixo `/api/v1`.
+- Os erros vêm em `application/problem+json` (`code`, `detail`, `correlationId`).
+- As rotas `/platform/…` usam o token da conta da plataforma; as restantes, o token do tenant.
 
-- Não há rotas no contrato sem implementação, nem rotas implementadas fora do
-  contrato (verificado pelo teste acima).
-- O serviço de referência `quote360-products` tem também: comparação de
-  versões (**implementada aqui** em `…/configurations/{id}/compare`),
-  *sandbox* de fórmulas (coberto por `…/formulas/test` e `…/{id}/simulate`)
-  e um resultado esperado no *sandbox* (`expected_result`) — não
-  implementado: o teste de referência actuarial cumpre esse papel.
-- Fórmulas por pessoa: implementadas (fase `PERSON`, decisão A9).
+**Resumo:** 30 endpoints novos, 5 alterados no contrato, 28 alterados no comportamento (dos quais 8 obsoletos).
 
-## Alterações de contrato em rotas existentes
+| # | Método | Endpoint | operationId | Estado |
+|---|---|---|---|---|
+| 1 | GET | `/platform/system-parameters` | getPlatformParameterList | Novo |
+| 2 | GET | `/platform/system-parameters/{code}` | getPlatformParameterDetail | Novo |
+| 3 | POST | `/platform/system-parameters/{code}/rollback` | postPlatformParameterRollback | Novo |
+| 4 | GET | `/platform/system-parameters/{code}/versions` | getPlatformParameterVersions | Novo |
+| 5 | POST | `/platform/system-parameters/{code}/versions` | postPlatformParameterVersions | Novo |
+| 6 | POST | `/platform/system-parameters/{code}/versions/{version_no}/approve` | postPlatformParameterApprove | Novo |
+| 7 | POST | `/platform/system-parameters/{code}/versions/{version_no}/reject` | postPlatformParameterReject | Novo |
+| 8 | GET | `/platform/reference-tables` | getPlatformReferenceTableList | Novo |
+| 9 | POST | `/platform/reference-tables` | postPlatformReferenceTableList | Novo |
+| 10 | GET | `/platform/reference-tables/{code}` | getPlatformReferenceTableDetail | Novo |
+| 11 | GET | `/platform/reference-tables/{code}/versions` | getPlatformReferenceTableVersions | Novo |
+| 12 | POST | `/platform/reference-tables/{code}/versions/{version_no}/approve` | postPlatformReferenceTableApprove | Novo |
+| 13 | POST | `/platform/reference-tables/{code}/versions/{version_no}/reject` | postPlatformReferenceTableReject | Novo |
+| 14 | GET | `/platform/templates` | getPlatformTemplateList | Novo |
+| 15 | POST | `/platform/templates` | postPlatformTemplateList | Novo |
+| 16 | GET | `/platform/templates/{code}` | getPlatformTemplateDetail | Novo |
+| 17 | GET | `/platform/templates/{code}/versions` | getPlatformTemplateVersions | Novo |
+| 18 | POST | `/platform/templates/{code}/versions/{version_no}/approve` | postPlatformTemplateApprove | Novo |
+| 19 | POST | `/platform/templates/{code}/versions/{version_no}/reject` | postPlatformTemplateReject | Novo |
+| 20 | GET | `/platform/formula-engine` | getPlatformFormulaEngine | Novo |
+| 21 | GET | `/reference-tables` | getReferenceTableList | Novo |
+| 22 | GET | `/reference-tables/{code}` | getReferenceTableDetail | Novo |
+| 23 | GET | `/templates` | listTemplates | Novo |
+| 24 | GET | `/templates/{code}` | getTemplate | Novo |
+| 25 | POST | `/templates/{code}/adopt` | adoptTemplate | Novo |
+| 26 | GET | `/products/{product_id}/tariff` | getProductTariff | Novo |
+| 27 | POST | `/products/{product_id}/tariff/simulate` | simulateProductTariff | Novo |
+| 28 | GET | `/business-config/formulas/variables` | getFormulaVariables | Novo |
+| 29 | GET | `/business-config/approvals/pending` | listPendingApprovals | Novo |
+| 30 | GET | `/business-config/approvals/pending/count` | countPendingApprovals | Novo |
+| 31 | POST | `/business-config/formulas/test` | testPricingFormula | Alterado (contrato) |
+| 32 | GET | `/system-parameters` | getSystemParameterList | Alterado (contrato) |
+| 33 | GET | `/system-parameters/{code}` | getSystemParameterDetail | Alterado (contrato) |
+| 34 | PUT | `/system-parameters/{code}` | putSystemParameterDetail | Alterado (contrato) |
+| 35 | POST | `/system-parameters/{code}/rollback` | postSystemParameterRollback | Alterado (contrato) |
+| 36 | GET | `/business-config/catalog` | getBusinessConfigurationCatalog | Alterado (comportamento) |
+| 37 | POST | `/business-config/configurations` | createBusinessConfiguration | Alterado (comportamento) |
+| 38 | PUT | `/business-config/configurations/{configuration_id}` | updateBusinessConfiguration | Alterado (comportamento) |
+| 39 | POST | `/business-config/configurations/{configuration_id}` | changeBusinessConfigurationStatus | Alterado (comportamento) |
+| 40 | POST | `/business-config/configurations/{configuration_id}/approve` | approveBusinessConfiguration | Alterado (comportamento) |
+| 41 | POST | `/business-config/formulas/{configuration_id}/simulate` | simulateFormulaSet | Alterado (comportamento) |
+| 42 | GET | `/business-config/formulas/catalog` | getFormulaCatalog | Alterado (comportamento) |
+| 43 | PUT | `/products/{product_id}/pricing-setup` | saveProductPricingSetupDraft | Alterado (comportamento) |
+| 44 | POST | `/products/{product_id}/pricing-setup/validate` | validateProductPricingSetup | Alterado (comportamento) |
+| 45 | POST | `/products/{product_id}/pricing-setup/test` | testProductPricingSetup | Alterado (comportamento) |
+| 46 | GET | `/quotes/{quote_id}/requirements` | getQuoteRequirements | Alterado (comportamento) |
+| 47 | POST | `/quotes/{quote_id}/submit` | postQuoteSubmit | Alterado (comportamento) |
+| 48 | POST | `/quotes/{quote_id}/decision` | postQuoteDecision | Alterado (comportamento) |
+| 49 | POST | `/eligibility/evaluate` | postEligibilityEvaluate | Alterado (comportamento) |
+| 50 | POST | `/configuration/{config_type}/{config_id}/publish` | postConfigurationPublish | Alterado (comportamento) |
+| 51 | POST | `/quotes/{quote_id}/price` | postQuotePrice | Alterado (comportamento) |
+| 52 | POST | `/quotes/{quote_id}/preview` | postQuotePreview | Alterado (comportamento) |
+| 53 | POST | `/pricing/calculate` | postPricingCalculate | Alterado (comportamento) |
+| 54 | POST | `/pricing/preview` | postPricingPreview | Alterado (comportamento) |
+| 55 | GET | `/pricing/{pricing_run_id}/explanation` | getPricingExplanation | Alterado (comportamento) |
+| 56 | GET | `/rating-tables` | getRatingTableCreate | Obsoleto |
+| 57 | POST | `/rating-tables` | postRatingTableCreate | Obsoleto |
+| 58 | PATCH | `/rating-tables/{rating_table_id}` | patchRatingTableDetail | Obsoleto |
+| 59 | DELETE | `/rating-tables/{rating_table_id}` | deleteRatingTableDetail | Obsoleto |
+| 60 | GET | `/pricing-parameter-sets` | getPricingParameterSetCreate | Obsoleto |
+| 61 | POST | `/pricing-parameter-sets` | postPricingParameterSetCreate | Obsoleto |
+| 62 | PATCH | `/pricing-parameter-sets/{parameter_set_id}` | patchPricingParameterSetDetail | Obsoleto |
+| 63 | DELETE | `/pricing-parameter-sets/{parameter_set_id}` | deletePricingParameterSetDetail | Obsoleto |
 
-- `GET/POST/PUT /api/v1/members…`: novo campo opcional `nif` (pedido e resposta).
-- `GET /api/v1/quotes`, `GET /api/v1/quotes/{id}` e restantes respostas de
-  cotação: novo campo `proposerName` (além de `planName`/`productName`).
-- `POST /api/v1/business-config/formulas/test`: resposta inclui `variables`.
+## 1. Endpoints novos
 
-Alterações de 2026-10-15 (decisões A1–A9, R1–R2):
+## 1.1 Fornecedor — parâmetros gerais
 
-- Configurações: novo estado `REJECTED` (rejeição; `PUT` volta a DRAFT;
-  `submit` aceita DRAFT ou REJECTED); `GET …/configurations?status=REJECTED`.
-- `POST …/formulas/{id}/simulate`: novos campos `stage` (`QUOTE`/`PERSON`) e
-  `age`; resposta inclui `stage`. Validação/consulta de fórmulas devolvem
-  também `evaluationOrderByStage` e `stages`.
-- `POST/PUT /api/v1/proposers…`: NIF repetido no tenant → 409 também na
-  edição (antes só na criação). `POST/PUT /api/v1/members…`: NIF repetido no
-  tenant → 409.
-- Novas chaves no catálogo: `pricing.fractionation`; nova gravidade
-  `MODERATE_HIGH` em `underwriting.pre_existing_conditions`.
-- Novas rotas do modelo actuarial (abaixo).
+### `GET /platform/system-parameters`
 
-Alterações de 2026-10-15 (cotação sem data de efeito):
+**Novo** · `getPlatformParameterList` · Listar platform parameter list
 
-- A cotação deixa de ter `effectiveDate`: tem `createdAt` e `validUntil`
-  (dia de criação + `quote.validity_days`, configurável em
-  `/system-parameters`). Uma cotação aberta calcula com o que está em vigor no
-  dia do cálculo (configurações publicadas na interface valem no próximo
-  cálculo); submetida, fica no dia do último cálculo. O início da vigência
-  escolhe-se na emissão (`requestedStartDate`).
-- `POST /quotes/{id}/price` sem `recalculate`: reaproveita o último cálculo
-  só se nada do que entrou nele mudou (configurações em vigor, plano e
-  coberturas, pessoas, escolhas, ajustes, dia).
-- `POST /api/v1/quotes`, `POST /quotes/renewals` e `POST /quotes/{id}/clone`
-  deixam de aceitar `effectiveDate` (é ignorado se for enviado).
-- `PUT /api/v1/quotes/{quote_id}` removido (só alterava a data de efeito);
-  esquema `QuoteUpdateRequest` retirado do contrato.
-- Renovação: `renewal.proposedStartDate` (dia a seguir ao fim do período
-  actual), que o formulário de emissão propõe em `defaults.requestedStartDate`.
-- `GET /quotes/{id}/policy-draft`: `effectiveDate` → `quoteCreatedAt`.
-- Portal (`/customer-portal/me/quotes`) e pesquisa por número: sem
-  `effectiveDate` (já tinham `createdAt`).
-- `GET /quotes/{id}/requirements`: `members.*.ageAtEffectiveDate` →
-  `ageAtQuoteDate`; o contrato passa a declarar `memberName` (já era enviado).
-- Proposta (documento): «Início de vigência» → «Data da cotação»; variável
-  de modelo `{{quote.effectiveDate}}` → `{{quote.date}}`.
-- Mantêm `effectiveDate` (é a data da avaliação, não da cotação):
-  `/eligibility/evaluate`, `/pricing/calculate`, `/pricing/preview`.
-- Configuração de tarifação **por produto** (como os separadores «Grupo de
-  opções», «Campos», «Formulário», «Valores» e «Fórmulas» do produto): 7 rotas
-  novas (`/products/{id}/pricing-setup…` e `/business-config/product-setup/catalog`).
-  `PUT /quotes/{id}/selection` aceita `productOptions` {grupo: [opções]} e
-  `productFields` {campo: valor}; com o formulário incompleto grava e devolve o
-  aviso `PRODUCT_INPUT_INCOMPLETE`. O cálculo devolve os componentes
-  `PRODUCT_FORMULA:<código>` (fórmula de prémio) e `PRODUCT_FORMULAS` (todos os
-  resultados); dados obrigatórios em falta → 422 `PRODUCT-SETUP-INPUT`.
-- Nova rota `GET /api/v1/search?q=` (pesquisa global, enviada por um colega
-  em 2026-10-14): passou a exigir o scope `q360.read` e ficou no contrato.
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros de pesquisa:** `category` (texto) — OPERATIONAL, STRUCTURAL, LEGAL, LIMIT ou MARKET.; `level` (texto) — PLATFORM_MANDATORY ou PLATFORM_DEFAULT.
 
-## Lista completa
+**Recebe:** nada (sem corpo).
 
-Total: **288 operações**. Corrigido (devolve variáveis; agora no contrato): 1 · Implementado: 260 · Já implementado; faltava no contrato: 1 · Novo (código + contrato): 15 · Novo (2026-10-15): 3 + 7 (configuração por produto) · Novo (2026-10-14, pesquisa global): 1. Removida: `PUT /api/v1/quotes/{quote_id}` (só alterava a data de efeito)
+**Envia** (200, `application/json`, lista de `PlatformParameter`):
 
-| Área | Método | Rota | operationId | Resumo | Estado |
-|---|---|---|---|---|---|
-| Administration | GET | `/api/v1/admin/staff-accounts` | getStaffAccountListCreate | Listar staff account list create | Implementado |
-| Administration | POST | `/api/v1/admin/staff-accounts` | postStaffAccountListCreate | Criar staff account list create | Implementado |
-| Administration | POST | `/api/v1/admin/staff-accounts/{account_id}/reset-password` | postStaffAccountResetPassword | Criar staff account reset password | Implementado |
-| Administration | PATCH | `/api/v1/admin/staff-accounts/{account_id}/roles` | patchStaffAccountRoles | Alterar staff account roles | Implementado |
-| Administration | PATCH | `/api/v1/admin/staff-accounts/{account_id}/status` | patchStaffAccountStatus | Alterar staff account status | Implementado |
-| Audit | GET | `/api/v1/audit-events` | getAuditEventList | Listar audit event list | Implementado |
-| Benefits | GET | `/api/v1/benefits` | getBenefitList | Listar benefit list | Implementado |
-| Benefits | POST | `/api/v1/benefits` | postBenefitList | Criar benefit list | Implementado |
-| Benefits | GET | `/api/v1/benefits/export` | getBenefitExport | Obter benefit export | Implementado |
-| Benefits | POST | `/api/v1/benefits/import` | postBenefitImport | Criar benefit import | Implementado |
-| Benefits | GET | `/api/v1/benefits/{benefit_id}` | getBenefitDetail | Obter benefit detail | Implementado |
-| Benefits | PATCH | `/api/v1/benefits/{benefit_id}` | patchBenefitDetail | Alterar benefit detail | Implementado |
-| Benefits | POST | `/api/v1/benefits/{benefit_id}/deactivate` | postBenefitDeactivate | Criar benefit deactivate | Implementado |
-| Benefits | POST | `/api/v1/benefits/{benefit_id}/reactivate` | postBenefitReactivate | Criar benefit reactivate | Implementado |
-| Benefits | GET | `/api/v1/benefits/{benefit_id}/revisions` | getBenefitRevisionList | Listar benefit revision list | Implementado |
-| Benefits | POST | `/api/v1/benefits/{benefit_id}/rollback` | postBenefitRollback | Criar benefit rollback | Implementado |
-| Benefits | GET | `/api/v1/benefits/{benefit_id}/usage` | getBenefitUsage | Obter benefit usage | Implementado |
-| Claims | GET | `/api/v1/claims/assumption-sets` | getAssumptionSetListCreate | Listar assumption set list create | Implementado |
-| Claims | POST | `/api/v1/claims/assumption-sets` | postAssumptionSetListCreate | Criar assumption set list create | Implementado |
-| Claims | GET | `/api/v1/claims/assumption-sets/{set_id}` | getAssumptionSetDetail | Obter assumption set detail | Implementado |
-| Claims | GET | `/api/v1/claims/import-template` | getClaimsImportTemplate | Obter claims import template | Implementado |
-| Claims | GET | `/api/v1/claims/imports` | getClaimsImportListCreate | Listar claims import list create | Implementado |
-| Claims | POST | `/api/v1/claims/imports` | postClaimsImportListCreate | Criar claims import list create | Implementado |
-| Claims | GET | `/api/v1/claims/imports/{import_id}` | getClaimsImportDetail | Obter claims import detail | Implementado |
-| Claims | GET | `/api/v1/claims/methodology` | getClaimsMethodology | Obter claims methodology | Implementado |
-| Claims | GET | `/api/v1/claims/profit-sharing` | getClaimsProfitSharing | Obter claims profit sharing | Implementado |
-| Claims | GET | `/api/v1/claims/profit-sharing/parameters` | getClaimsProfitSharingParameters | Obter claims profit sharing parameters | Implementado |
-| Claims | GET | `/api/v1/claims/projections` | getProjectionListCreate | Listar projection list create | Implementado |
-| Claims | POST | `/api/v1/claims/projections` | postProjectionListCreate | Criar projection list create | Implementado |
-| Claims | GET | `/api/v1/claims/projections/{run_id}` | getProjectionDetail | Obter projection detail | Implementado |
-| Claims | GET | `/api/v1/claims/summary` | getClaimsSummary | Obter claims summary | Implementado |
-| Clients | GET | `/api/v1/proposers` | getProposerListCreate | Listar proposer list create | Implementado |
-| Clients | POST | `/api/v1/proposers` | postProposerListCreate | Criar proposer list create | Implementado |
-| Clients | DELETE | `/api/v1/proposers/{proposer_id}` | deleteProposerDetail | Remover proposer detail | Implementado |
-| Clients | GET | `/api/v1/proposers/{proposer_id}` | getProposerDetail | Obter proposer detail | Implementado |
-| Clients | PUT | `/api/v1/proposers/{proposer_id}` | putProposerDetail | Substituir proposer detail | Implementado |
-| Configuration | GET | `/api/v1/business-config/actuarial-model/catalog` | getActuarialModelCatalog | Secções editáveis e opções de cálculo do modelo actuarial | Novo (2026-10-15) |
-| Configuration | POST | `/api/v1/business-config/actuarial-model/import` | importActuarialModelWorkbook | Importar o modelo actuarial de um Excel (cria uma versão DRAFT para aprovação) | Novo (2026-10-15) |
-| Configuration | GET | `/api/v1/business-config/actuarial-model/template` | downloadActuarialModelTemplate | Descarregar o Excel de referência do modelo actuarial | Novo (2026-10-15) |
-| Configuration | GET | `/api/v1/business-config/catalog` | getBusinessConfigurationCatalog | Consultar catálogo de configurações | Implementado |
-| Configuration | GET | `/api/v1/business-config/configurations` | listBusinessConfigurations | Listar configurações de negócio | Implementado |
-| Configuration | POST | `/api/v1/business-config/configurations` | createBusinessConfiguration | Criar configuração de negócio | Implementado |
-| Configuration | GET | `/api/v1/business-config/configurations/{configuration_id}` | getBusinessConfiguration | Consultar configuração de negócio | Implementado |
-| Configuration | POST | `/api/v1/business-config/configurations/{configuration_id}` | changeBusinessConfigurationStatus | Submeter ou retirar configuração de negócio | Implementado |
-| Configuration | PUT | `/api/v1/business-config/configurations/{configuration_id}` | updateBusinessConfiguration | Actualizar configuração de negócio em rascunho | Implementado |
-| Configuration | POST | `/api/v1/business-config/configurations/{configuration_id}/approve` | approveBusinessConfiguration | Aprovar configuração de negócio | Implementado |
-| Configuration | GET | `/api/v1/business-config/configurations/{configuration_id}/compare` | compareBusinessConfigurations | Comparar duas versões da mesma configuração | Novo (código + contrato) |
-| Configuration | GET | `/api/v1/business-config/configurations/{configuration_id}/documents` | listBusinessConfigurationDocuments | Listar documentos da configuração | Implementado |
-| Configuration | POST | `/api/v1/business-config/configurations/{configuration_id}/documents/upload` | uploadBusinessConfigurationDocument | Anexar documento à configuração | Implementado |
-| Configuration | GET | `/api/v1/business-config/configurations/{configuration_id}/history` | getBusinessConfigurationHistory | Histórico de uma versão de configuração | Novo (código + contrato) |
-| Configuration | POST | `/api/v1/business-config/configurations/{configuration_id}/reject` | rejectBusinessConfiguration | Rejeitar configuração pendente (fica REJECTED com o motivo registado) | Novo (código + contrato) |
-| Configuration | GET | `/api/v1/business-config/documents/{document_id}/download` | downloadBusinessConfigurationDocument | Descarregar documento da configuração | Implementado |
-| Configuration | GET | `/api/v1/business-config/formulas` | listFormulaSets | Listar versões do conjunto de fórmulas | Novo (código + contrato) |
-| Configuration | POST | `/api/v1/business-config/formulas` | createFormulaSet | Criar nova versão (DRAFT) do conjunto de fórmulas | Novo (código + contrato) |
-| Configuration | GET | `/api/v1/business-config/formulas/catalog` | getFormulaCatalog | Variáveis, funções e operadores do editor de fórmulas | Novo (código + contrato) |
-| Configuration | POST | `/api/v1/business-config/formulas/test` | testPricingFormula | Validar e testar uma expressão | Corrigido (devolve variáveis; agora no contrato) |
-| Configuration | POST | `/api/v1/business-config/formulas/validate` | validateFormulaSet | Validar um conjunto de fórmulas sem o gravar | Novo (código + contrato) |
-| Configuration | GET | `/api/v1/business-config/formulas/{configuration_id}` | getFormulaSet | Consultar versão do conjunto de fórmulas (com dependências) | Novo (código + contrato) |
-| Configuration | PUT | `/api/v1/business-config/formulas/{configuration_id}` | updateFormulaSet | Editar conjunto de fórmulas em DRAFT | Novo (código + contrato) |
-| Configuration | POST | `/api/v1/business-config/formulas/{configuration_id}/approve` | approveFormulaSet | Aprovar e publicar conjunto de fórmulas | Novo (código + contrato) |
-| Configuration | GET | `/api/v1/business-config/formulas/{configuration_id}/history` | getFormulaSetHistory | Histórico de uma versão do conjunto de fórmulas | Novo (código + contrato) |
-| Configuration | POST | `/api/v1/business-config/formulas/{configuration_id}/reject` | rejectFormulaSet | Rejeitar conjunto de fórmulas pendente | Novo (código + contrato) |
-| Configuration | POST | `/api/v1/business-config/formulas/{configuration_id}/retire` | retireFormulaSet | Retirar (desativar) conjunto de fórmulas publicado | Novo (código + contrato) |
-| Configuration | POST | `/api/v1/business-config/formulas/{configuration_id}/simulate` | simulateFormulaSet | Simular uma versão (qualquer estado) com valores de entrada, sem gravar nada | Novo (código + contrato) |
-| Configuration | POST | `/api/v1/business-config/formulas/{configuration_id}/submit` | submitFormulaSet | Submeter conjunto de fórmulas para aprovação | Novo (código + contrato) |
-| Configuration | GET | `/api/v1/business-config/rules/custom` | listCustomRules | Consultar regras personalizadas | Implementado |
-| Configuration | POST | `/api/v1/business-config/rules/custom` | createCustomRules | Criar nova versão de regras personalizadas | Implementado |
-| Configuration | GET | `/api/v1/business-config/rules/custom/catalog` | getCustomRulesCatalog | Consultar catálogo do construtor de regras personalizadas | Implementado |
-| Configuration | PUT | `/api/v1/business-config/rules/custom/{configuration_id}` | updateCustomRules | Actualizar regras personalizadas em DRAFT | Implementado |
-| Configuration | POST | `/api/v1/business-config/rules/custom/{configuration_id}/approve` | approveCustomRules | Publicar nova versão das regras personalizadas | Implementado |
-| Configuration | POST | `/api/v1/business-config/rules/custom/{configuration_id}/submit` | submitCustomRules | Submeter regras personalizadas para aprovação | Implementado |
-| Configuration | GET | `/api/v1/configuration/{config_type}/{config_id}/diff` | getConfigurationDiff | Obter configuration diff | Implementado |
-| Configuration | POST | `/api/v1/configuration/{config_type}/{config_id}/impact-simulation` | postConfigurationImpactSimulation | Criar configuration impact simulation | Implementado |
-| Configuration | POST | `/api/v1/configuration/{config_type}/{config_id}/publish` | postConfigurationPublish | Criar configuration publish | Implementado |
-| Configuration | POST | `/api/v1/configuration/{config_type}/{config_id}/retire` | postConfigurationRetire | Criar configuration retire | Implementado |
-| Configuration | POST | `/api/v1/configuration/{config_type}/{config_id}/rollback` | postConfigurationRollback | Criar configuration rollback | Implementado |
-| Configuration | GET | `/api/v1/configuration/{config_type}/{config_id}/versions` | getConfigurationVersions | Obter configuration versions | Implementado |
-| Configuration | GET | `/api/v1/pricing-parameter-sets` | getPricingParameterSetCreate | Listar pricing parameter set create | Implementado |
-| Configuration | POST | `/api/v1/pricing-parameter-sets` | postPricingParameterSetCreate | Criar pricing parameter set create | Implementado |
-| Configuration | DELETE | `/api/v1/pricing-parameter-sets/{parameter_set_id}` | deletePricingParameterSetDetail | Remover pricing parameter set detail | Implementado |
-| Configuration | PATCH | `/api/v1/pricing-parameter-sets/{parameter_set_id}` | patchPricingParameterSetDetail | Alterar pricing parameter set detail | Implementado |
-| Configuration | GET | `/api/v1/rating-tables` | getRatingTableCreate | Listar rating table create | Implementado |
-| Configuration | POST | `/api/v1/rating-tables` | postRatingTableCreate | Criar rating table create | Implementado |
-| Configuration | DELETE | `/api/v1/rating-tables/{rating_table_id}` | deleteRatingTableDetail | Remover rating table detail | Implementado |
-| Configuration | PATCH | `/api/v1/rating-tables/{rating_table_id}` | patchRatingTableDetail | Alterar rating table detail | Implementado |
-| Configuration | GET | `/api/v1/rule-versions` | getRuleVersionCreate | Listar rule version create | Implementado |
-| Configuration | POST | `/api/v1/rule-versions` | postRuleVersionCreate | Criar rule version create | Implementado |
-| Configuration | DELETE | `/api/v1/rule-versions/{rule_version_id}` | deleteRuleVersionDetail | Remover rule version detail | Implementado |
-| Configuration | PATCH | `/api/v1/rule-versions/{rule_version_id}` | patchRuleVersionDetail | Alterar rule version detail | Implementado |
-| Configuration | GET | `/api/v1/system-parameters` | getSystemParameterList | Listar system parameter list | Implementado |
-| Configuration | GET | `/api/v1/system-parameters/{code}` | getSystemParameterDetail | Obter system parameter detail | Implementado |
-| Configuration | PUT | `/api/v1/system-parameters/{code}` | putSystemParameterDetail | Substituir system parameter detail | Implementado |
-| Configuration | GET | `/api/v1/system-parameters/{code}/revisions` | getSystemParameterRevisions | Obter system parameter revisions | Implementado |
-| Configuration | POST | `/api/v1/system-parameters/{code}/rollback` | postSystemParameterRollback | Criar system parameter rollback | Implementado |
-| Configuration | GET | `/api/v1/business-config/product-setup/catalog` | getProductPricingSetupCatalog | Opções do editor (tipos de lista/campo/valor, unidades, indicadores) | Novo (2026-10-15) |
-| Configuration | GET | `/api/v1/products/{product_id}/pricing-setup` | getProductPricingSetup | Configuração do produto: publicada, rascunho, blocos do editor, formulário | Novo (2026-10-15) |
-| Configuration | PUT | `/api/v1/products/{product_id}/pricing-setup` | saveProductPricingSetupDraft | Gravar rascunho (grupos de opções, campos, valores, fórmulas) | Novo (2026-10-15) |
-| Configuration | GET | `/api/v1/products/{product_id}/pricing-setup/form` | getProductPricingSetupForm | Formulário da cotação do produto | Novo (2026-10-15) |
-| Configuration | GET | `/api/v1/products/{product_id}/pricing-setup/history` | listProductPricingSetupHistory | Histórico de versões | Novo (2026-10-15) |
-| Configuration | POST | `/api/v1/products/{product_id}/pricing-setup/test` | testProductPricingSetup | Testar fórmulas com valores de exemplo | Novo (2026-10-15) |
-| Configuration | POST | `/api/v1/products/{product_id}/pricing-setup/validate` | validateProductPricingSetup | Validar sem guardar | Novo (2026-10-15) |
-| Customer Portal | GET | `/api/v1/customer-portal/beneficiaries` | getCustomerPortalBeneficiaries | Obter customer portal beneficiaries | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/conversations` | getCustomerPortalConversations | Obter customer portal conversations | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/coverage` | getCustomerPortalCoverage | Obter customer portal coverage | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/dashboard` | getCustomerPortalDashboard | Obter customer portal dashboard | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/documents` | getCustomerPortalDocuments | Obter customer portal documents | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/documents/{document_id}/download` | getCustomerPortalDocumentDownload | Obter customer portal document download | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/eligibility` | postCustomerPortalEligibility | `POST /customer-portal/eligibility` — same coverage check as `GET /coverage`, as a POST with a body (kept for URL/method backward-compatibility with Fase 1; see module docstring). | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/me` | customerPortalMe | Obter informações do usuário autenticado no portal do cliente | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/me/quotes` | getCustomerPortalQuotes | Obter customer portal quotes | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/me/quotes/{quote_number}` | getCustomerPortalQuoteDetail | Obter customer portal quote detail | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/members/{member_id}/documents` | getCustomerPortalMemberDocuments | Obter customer portal member documents | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/members/{member_id}/documents` | postCustomerPortalMemberDocuments | Criar customer portal member documents | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/messages` | getCustomerPortalMessages | Obter customer portal messages | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/messages` | postCustomerPortalMessages | Criar customer portal messages | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/notifications` | getCustomerPortalNotifications | Obter customer portal notifications | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/notifications/read` | postCustomerPortalNotificationsRead | Criar customer portal notifications read | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/payments` | getCustomerPortalPayments | Obter customer portal payments | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/plan-benefits` | getCustomerPortalPlanBenefits | Obter customer portal plan benefits | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/plans/compare` | getCustomerPortalPlanCompare | Obter customer portal plan compare | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/policies` | getCustomerPortalPolicyList | Listar customer portal policy list | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/policies/{policy_number}` | getCustomerPortalPolicyDetail | Obter customer portal policy detail | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/policies/{policy_number}/document` | getCustomerPortalPolicyDocument | Obter customer portal policy document | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/policies/{policy_number}/history` | getCustomerPortalPolicyHistory | Obter customer portal policy history | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/policies/{policy_number}/members/{member_id}/card` | getCustomerPortalCard | Obter customer portal card | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/policies/{policy_number}/renewal` | getCustomerPortalRenewal | Obter customer portal renewal | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/policies/{policy_number}/statement` | getCustomerPortalPolicyStatement | Obter customer portal policy statement | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/profile` | getCustomerPortalProfile | Obter customer portal profile | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/request-types` | getCustomerPortalRequestTypes | Obter customer portal request types | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/requests` | getCustomerPortalRequests | Obter customer portal requests | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/requests` | postCustomerPortalRequests | Criar customer portal requests | Implementado |
-| Customer Portal | GET | `/api/v1/customer-portal/requests/{request_number}` | getCustomerPortalRequestDetail | Obter customer portal request detail | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/{tenant_id}/auth/first-access/confirm` | postFirstAccessConfirm | Criar first access confirm | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/{tenant_id}/auth/first-access/request` | postFirstAccessRequest | Criar first access request | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/{tenant_id}/auth/login` | postPasswordLogin | Criar password login | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/{tenant_id}/auth/password-reset/confirm` | postPasswordResetConfirm | Criar password reset confirm | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/{tenant_id}/auth/password-reset/request` | postPasswordResetRequest | Criar password reset request | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/{tenant_id}/auth/request-access` | customerPortalRequestAccess | Solicitar acesso ao portal do cliente | Implementado |
-| Customer Portal | POST | `/api/v1/customer-portal/{tenant_id}/auth/verify-otp` | customerPortalVerifyOtp | Verificar OTP para acesso ao portal do cliente | Implementado |
-| Customer Portal Support | GET | `/api/v1/portal-conversations` | getPortalConversationList | Listar portal conversation list | Implementado |
-| Customer Portal Support | GET | `/api/v1/portal-messages` | getPortalStaffMessages | Obter portal staff messages | Implementado |
-| Customer Portal Support | POST | `/api/v1/portal-messages` | postPortalStaffMessages | Criar portal staff messages | Implementado |
-| Customer Portal Support | GET | `/api/v1/portal-requests` | getPortalRequestList | Listar portal request list | Implementado |
-| Customer Portal Support | GET | `/api/v1/portal-requests/{request_number}` | getPortalRequestDetail | Obter portal request detail | Implementado |
-| Customer Portal Support | POST | `/api/v1/portal-requests/{request_number}/transition` | postPortalRequestTransition | Criar portal request transition | Implementado |
-| Documents | GET | `/api/v1/document-templates` | getDocumentTemplateListCreate | Listar document template list create | Implementado |
-| Documents | POST | `/api/v1/document-templates` | postDocumentTemplateListCreate | Criar document template list create | Implementado |
-| Documents | GET | `/api/v1/document-templates/schema` | getDocumentTemplateSchema | Obter document template schema | Implementado |
-| Documents | DELETE | `/api/v1/document-templates/{template_id}` | deleteDocumentTemplateDetail | Remover document template detail | Implementado |
-| Documents | PATCH | `/api/v1/document-templates/{template_id}` | patchDocumentTemplateDetail | Alterar document template detail | Implementado |
-| Documents | DELETE | `/api/v1/document-templates/{template_id}/letterhead` | deleteDocumentTemplateLetterhead | Remover document template letterhead | Implementado |
-| Documents | GET | `/api/v1/document-templates/{template_id}/letterhead` | getDocumentTemplateLetterhead | Obter document template letterhead | Implementado |
-| Documents | POST | `/api/v1/document-templates/{template_id}/letterhead` | postDocumentTemplateLetterhead | Criar document template letterhead | Implementado |
-| Documents | GET | `/api/v1/document-templates/{template_id}/preview` | getDocumentTemplatePreview | Obter document template preview | Implementado |
-| Documents | POST | `/api/v1/document-templates/{template_id}/publish` | postDocumentTemplatePublish | Criar document template publish | Implementado |
-| Documents | POST | `/api/v1/document-templates/{template_id}/retire` | postDocumentTemplateRetire | Criar document template retire | Implementado |
-| Documents | DELETE | `/api/v1/document-templates/{template_id}/word` | deleteDocumentTemplateWord | Remover document template word | Implementado |
-| Documents | GET | `/api/v1/document-templates/{template_id}/word` | getDocumentTemplateWord | Obter document template word | Implementado |
-| Documents | POST | `/api/v1/document-templates/{template_id}/word` | postDocumentTemplateWord | Criar document template word | Implementado |
-| Documents | GET | `/api/v1/documents/signed/{token}` | getDocumentSignedDownload | Obter document signed download | Implementado |
-| Documents | GET | `/api/v1/documents/{document_id}/download` | getDocumentDownload | Obter document download | Implementado |
-| Documents | POST | `/api/v1/documents/{document_id}/retry` | postDocumentRetry | Criar document retry | Implementado |
-| Documents | POST | `/api/v1/documents/{document_id}/signed-url` | postDocumentSignedUrl | Criar document signed url | Implementado |
-| Documents | GET | `/api/v1/quotes/{quote_id}/proposal` | getQuoteProposal | Obter quote proposal | Implementado |
-| Documents | POST | `/api/v1/quotes/{quote_id}/proposal` | postQuoteProposal | Criar quote proposal | Implementado |
-| Documents | GET | `/api/v1/quotes/{quote_id}/proposals` | getQuoteProposalListCreate | Listar quote proposal list create | Implementado |
-| Documents | POST | `/api/v1/quotes/{quote_id}/proposals` | postQuoteProposalListCreate | Criar quote proposal list create | Implementado |
-| Documents | GET | `/api/v1/quotes/{quote_id}/proposals/preview` | getQuoteProposalPreview | Obter quote proposal preview | Implementado |
-| Eligibility | POST | `/api/v1/eligibility/evaluate` | postEligibilityEvaluate | Criar eligibility evaluate | Implementado |
-| Eligibility | GET | `/api/v1/eligibility/evaluations` | getEligibilityExecutionList | Listar eligibility execution list | Implementado |
-| Eligibility | GET | `/api/v1/eligibility/evaluations/{evaluation_id}` | getEligibilityExecutionDetail | Obter eligibility execution detail | Implementado |
-| Health | GET | `/api/v1/health/live` | getLiveHealth | Obter live health | Implementado |
-| Health | GET | `/api/v1/health/ready` | getReadyHealth | Obter ready health | Implementado |
-| Identity | POST | `/api/v1/auth/dev-login` | postDevLogin | Criar dev login | Implementado |
-| Identity | POST | `/api/v1/auth/login` | postLogin | Criar login | Implementado |
-| Identity | POST | `/api/v1/auth/logout` | postLogout | Criar logout | Implementado |
-| Identity | POST | `/api/v1/auth/refresh` | postRefresh | Criar refresh | Implementado |
-| Identity | GET | `/api/v1/me` | getCurrentActor | Obter actor, tenant, roles e permissões | Implementado |
-| Identity | GET | `/api/v1/member-documents` | getMemberDocumentQueue | Listar member document queue | Implementado |
-| Identity | GET | `/api/v1/member-documents/{document_id}/download` | getMemberDocumentDownload | Obter member document download | Implementado |
-| Identity | POST | `/api/v1/member-documents/{document_id}/review` | postMemberDocumentReview | Criar member document review | Implementado |
-| Identity | POST | `/api/v1/member-imports` | postMemberImportUpload | Criar member import upload | Implementado |
-| Identity | GET | `/api/v1/member-imports/{import_id}` | getMemberImportDetail | Obter member import detail | Implementado |
-| Identity | POST | `/api/v1/member-imports/{import_id}/commit` | postMemberImportCommit | Criar member import commit | Implementado |
-| Identity | GET | `/api/v1/members` | getMemberListCreate | Listar member list create | Implementado |
-| Identity | POST | `/api/v1/members` | postMemberListCreate | Criar member list create | Implementado |
-| Identity | DELETE | `/api/v1/members/{member_id}` | deleteMemberDetail | Remover member detail | Implementado |
-| Identity | GET | `/api/v1/members/{member_id}` | getMemberDetail | Obter member detail | Implementado |
-| Identity | PUT | `/api/v1/members/{member_id}` | putMemberDetail | Substituir member detail | Implementado |
-| Identity | GET | `/api/v1/members/{member_id}/documents` | getMemberDocumentListCreate | Listar member document list create | Implementado |
-| Identity | POST | `/api/v1/members/{member_id}/documents` | postMemberDocumentListCreate | Criar member document list create | Implementado |
-| Other | GET | `/api/v1/installments` | getInstallmentList | Listar installment list | Implementado |
-| Other | GET | `/api/v1/platform/admins` | getPlatformAdminListCreate | Listar platform admin list create | Implementado |
-| Other | POST | `/api/v1/platform/admins` | postPlatformAdminListCreate | Criar platform admin list create | Implementado |
-| Other | PATCH | `/api/v1/platform/admins/{admin_id}` | patchPlatformAdminStatus | Alterar platform admin status | Implementado |
-| Other | POST | `/api/v1/platform/admins/{admin_id}/reset-password` | postPlatformAdminResetPassword | Criar platform admin reset password | Implementado |
-| Other | GET | `/api/v1/platform/audit` | getPlatformAudit | Obter platform audit | Implementado |
-| Other | POST | `/api/v1/platform/auth/login` | postPlatformLogin | Criar platform login | Implementado |
-| Other | GET | `/api/v1/platform/me` | getPlatformMe | Obter platform me | Implementado |
-| Other | POST | `/api/v1/platform/me/password` | postPlatformChangePassword | Criar platform change password | Implementado |
-| Other | GET | `/api/v1/platform/tenants` | getPlatformTenantListCreate | Listar platform tenant list create | Implementado |
-| Other | POST | `/api/v1/platform/tenants` | postPlatformTenantListCreate | Criar platform tenant list create | Implementado |
-| Other | GET | `/api/v1/platform/tenants/{tenant_id}` | getPlatformTenantDetail | Obter platform tenant detail | Implementado |
-| Other | PATCH | `/api/v1/platform/tenants/{tenant_id}` | patchPlatformTenantDetail | Alterar platform tenant detail | Implementado |
-| Other | POST | `/api/v1/platform/tenants/{tenant_id}/accounts/{account_id}/reset-password` | postPlatformTenantAccountReset | Criar platform tenant account reset | Implementado |
-| Other | POST | `/api/v1/platform/tenants/{tenant_id}/admins` | postPlatformTenantAdmins | Criar platform tenant admins | Implementado |
-| Plans | GET | `/api/v1/plans` | getPlanListCreate | Listar plan list create | Implementado |
-| Plans | POST | `/api/v1/plans` | postPlanListCreate | Criar plan list create | Implementado |
-| Plans | DELETE | `/api/v1/plans/{plan_id}` | deletePlanDetail | Remover plan detail | Implementado |
-| Plans | GET | `/api/v1/plans/{plan_id}` | getPlanDetail | Obter plan detail | Implementado |
-| Plans | PATCH | `/api/v1/plans/{plan_id}` | patchPlanDetail | Alterar plan detail | Implementado |
-| Plans | GET | `/api/v1/plans/{plan_id}/benefits` | getPlanBenefitListCreate | Listar plan benefit list create | Implementado |
-| Plans | POST | `/api/v1/plans/{plan_id}/benefits` | postPlanBenefitListCreate | Criar plan benefit list create | Implementado |
-| Plans | DELETE | `/api/v1/plans/{plan_id}/benefits/{benefit_id}` | deletePlanBenefitDetail | Remover plan benefit detail | Implementado |
-| Plans | GET | `/api/v1/plans/{plan_id}/benefits/{benefit_id}` | getPlanBenefitDetail | Obter plan benefit detail | Implementado |
-| Plans | PUT | `/api/v1/plans/{plan_id}/benefits/{benefit_id}` | putPlanBenefitDetail | Substituir plan benefit detail | Implementado |
-| Plans | GET | `/api/v1/plans/{plan_id}/validation` | getPlanValidation | Obter plan validation | Implementado |
-| Policies | GET | `/api/v1/coverage` | getCoverageLookup | Obter coverage lookup | Implementado |
-| Policies | GET | `/api/v1/policies` | getPolicyList | Listar policy list | Implementado |
-| Policies | GET | `/api/v1/policies/{policy_id}` | getPolicyDetail | Obter policy detail | Implementado |
-| Policies | GET | `/api/v1/policies/{policy_id}/coverage` | getPolicyCoverage | Obter policy coverage | Implementado |
-| Policies | GET | `/api/v1/policies/{policy_id}/document` | getPolicyDocument | Obter policy document | Implementado |
-| Policies | GET | `/api/v1/policies/{policy_id}/installments` | getPolicyInstallmentList | Listar policy installment list | Implementado |
-| Policies | POST | `/api/v1/policies/{policy_id}/installments/{installment_no}/payment` | postRegisterFirstPremiumPayment | Criar register first premium payment | Implementado |
-| Policies | GET | `/api/v1/policies/{policy_id}/members` | getPolicyMemberList | Listar policy member list | Implementado |
-| Policies | GET | `/api/v1/policies/{policy_id}/signature` | getPolicySignature | Obter policy signature | Implementado |
-| Population | GET | `/api/v1/relationship-codes` | getRelationshipCodeList | Listar relationship code list | Implementado |
-| Pricing | POST | `/api/v1/pricing/calculate` | postPricingCalculate | Criar pricing calculate | Implementado |
-| Pricing | POST | `/api/v1/pricing/preview` | postPricingPreview | Criar pricing preview | Implementado |
-| Pricing | GET | `/api/v1/pricing/runs` | getPricingExecutionList | Listar pricing execution list | Implementado |
-| Pricing | GET | `/api/v1/pricing/runs/{pricing_run_id}` | getPricingExecutionDetail | Obter pricing execution detail | Implementado |
-| Pricing | POST | `/api/v1/pricing/scenarios` | postPricingScenario | Criar pricing scenario | Implementado |
-| Pricing | GET | `/api/v1/pricing/{pricing_run_id}/explanation` | getPricingExplanation | Obter pricing explanation | Implementado |
-| Products | POST | `/api/v1/product-templates/market` | postMarketTemplates | Criar market templates | Implementado |
-| Products | GET | `/api/v1/products` | getProductListCreate | Listar product list create | Implementado |
-| Products | POST | `/api/v1/products` | postProductListCreate | Criar product list create | Implementado |
-| Products | DELETE | `/api/v1/products/{product_id}` | deleteProductDetail | Remover product detail | Implementado |
-| Products | GET | `/api/v1/products/{product_id}` | getProductDetail | Obter product detail | Implementado |
-| Products | PUT | `/api/v1/products/{product_id}` | putProductDetail | Substituir product detail | Implementado |
-| Quotes | GET | `/api/v1/dashboard` | getDashboard | Obter dashboard agregado de cotações e subscrição | Implementado |
-| Quotes | GET | `/api/v1/quotes` | getQuoteListCreate | Listar quote list create | Implementado |
-| Quotes | POST | `/api/v1/quotes` | postQuoteListCreate | Criar quote list create | Implementado |
-| Quotes | POST | `/api/v1/quotes/renewals` | postQuoteRenewalCreate | Criar quote renewal create | Implementado |
-| Quotes | DELETE | `/api/v1/quotes/{quote_id}` | deleteQuoteDetail | Remover quote detail | Implementado |
-| Quotes | GET | `/api/v1/quotes/{quote_id}` | getQuoteDetail | Obter quote detail | Implementado |
-| Quotes | GET | `/api/v1/quotes/{quote_id}/adjustments` | getQuoteAdjustmentListCreate | Listar quote adjustment list create | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/adjustments` | postQuoteAdjustmentListCreate | Criar quote adjustment list create | Implementado |
-| Quotes | DELETE | `/api/v1/quotes/{quote_id}/adjustments/{adjustment_id}` | deleteQuoteAdjustmentDetail | Remover quote adjustment detail | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/cancel` | postQuoteCancel | Criar quote cancel | Implementado |
-| Quotes | GET | `/api/v1/quotes/{quote_id}/claims-context` | getQuoteClaimsContext | Obter quote claims context | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/clone` | postQuoteClone | Criar quote clone | Implementado |
-| Quotes | GET | `/api/v1/quotes/{quote_id}/history` | getQuoteHistory | Obter quote history | Implementado |
-| Quotes | GET | `/api/v1/quotes/{quote_id}/members` | getQuoteMemberListCreate | Listar quote member list create | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/members` | postQuoteMemberListCreate | Criar quote member list create | Implementado |
-| Quotes | DELETE | `/api/v1/quotes/{quote_id}/members/{member_id}` | deleteQuoteMemberDetail | Remover quote member detail | Implementado |
-| Quotes | DELETE | `/api/v1/quotes/{quote_id}/members/{member_id}/pre-existing` | deleteQuoteMemberPreExisting | Remover quote member pre existing | Implementado |
-| Quotes | PUT | `/api/v1/quotes/{quote_id}/members/{member_id}/pre-existing` | putQuoteMemberPreExisting | Substituir quote member pre existing | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/policy` | postIssuePolicy | Criar issue policy | Implementado |
-| Quotes | GET | `/api/v1/quotes/{quote_id}/policy-draft` | getPolicyDraft | Obter policy draft | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/policy/emit` | postEmitPolicy | Criar emit policy | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/preview` | postQuotePreview | Criar quote preview | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/price` | postQuotePrice | Criar quote price | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/renewal/indexation` | postQuoteIndexation | Criar quote indexation | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/reopen` | postQuoteReopen | Criar quote reopen | Já implementado; faltava no contrato |
-| Quotes | GET | `/api/v1/quotes/{quote_id}/requirements` | getQuoteRequirements | Obter quote requirements | Implementado |
-| Quotes | GET | `/api/v1/quotes/{quote_id}/selection` | getQuoteSelection | Obter quote selection | Implementado |
-| Quotes | PUT | `/api/v1/quotes/{quote_id}/selection` | putQuoteSelection | Substituir quote selection | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/submit` | postQuoteSubmit | Criar quote submit | Implementado |
-| Quotes | GET | `/api/v1/quotes/{quote_id}/versions` | getQuoteVersionListCreate | Listar quote version list create | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/versions` | postQuoteVersionListCreate | Criar quote version list create | Implementado |
-| Quotes | GET | `/api/v1/quotes/{quote_id}/versions/{version_no}` | getQuoteVersionDetail | Obter quote version detail | Implementado |
-| Quotes | GET | `/api/v1/quotes/{quote_id}/versions/{version_no}/diff` | getQuoteVersionDiff | Obter quote version diff | Implementado |
-| Quotes | POST | `/api/v1/quotes/{quote_id}/versions/{version_no}/restore` | postQuoteVersionRestore | Criar quote version restore | Implementado |
-| Scenarios | GET | `/api/v1/quotes/{quote_id}/scenarios` | getQuoteScenarioListCreate | Listar quote scenario list create | Implementado |
-| Scenarios | POST | `/api/v1/quotes/{quote_id}/scenarios` | postQuoteScenarioListCreate | Criar quote scenario list create | Implementado |
-| Scenarios | GET | `/api/v1/quotes/{quote_id}/scenarios/compare` | getQuoteScenarioCompare | Obter quote scenario compare | Implementado |
-| Scenarios | GET | `/api/v1/quotes/{quote_id}/scenarios/compare/export` | getQuoteScenarioCompareExport | Obter quote scenario compare export | Implementado |
-| Scenarios | DELETE | `/api/v1/scenarios/{scenario_id}` | deleteScenarioDetail | Remover scenario detail | Implementado |
-| Scenarios | GET | `/api/v1/scenarios/{scenario_id}` | getScenarioDetail | Obter scenario detail | Implementado |
-| Scenarios | PATCH | `/api/v1/scenarios/{scenario_id}` | patchScenarioDetail | Alterar scenario detail | Implementado |
-| Scenarios | POST | `/api/v1/scenarios/{scenario_id}/apply` | postScenarioApply | Criar scenario apply | Implementado |
-| Scenarios | POST | `/api/v1/scenarios/{scenario_id}/clone` | postScenarioClone | Criar scenario clone | Implementado |
-| Scenarios | POST | `/api/v1/scenarios/{scenario_id}/recalculate` | postScenarioRecalculate | Criar scenario recalculate | Implementado |
-| Scenarios | POST | `/api/v1/scenarios/{scenario_id}/select` | postScenarioSelect | Criar scenario select | Implementado |
-| Search | GET | `/api/v1/search` | getGlobalSearch | Pesquisa global (clientes, cotações, produtos, apólices) | Novo (2026-10-14) |
-| Underwriting | POST | `/api/v1/quotes/{quote_id}/decision` | postQuoteDecision | Criar quote decision | Implementado |
-| Underwriting | GET | `/api/v1/quotes/{quote_id}/review` | getQuoteReview | Obter quote review | Implementado |
-| Underwriting | GET | `/api/v1/reviews` | getReviewQueue | Listar review queue | Implementado |
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `[].code` | texto | sim |  |
+| `[].valueType` | texto (INTEGER · DECIMAL · TEXT · BOOLEAN) | sim |  |
+| `[].category` | texto (OPERATIONAL · STRUCTURAL · LEGAL · LIMIT · MARKET) | sim |  |
+| `[].level` | texto (PLATFORM_MANDATORY · PLATFORM_DEFAULT) | sim |  |
+| `[].value` | qualquer ou null | sim | Valor geral em vigor. |
+| `[].codeDefault` | qualquer ou null | sim |  |
+| `[].isCodeDefault` | booleano | sim |  |
+| `[].versionNo` | inteiro | sim |  |
+| `[].effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `[].legalReference` | texto ou null | sim | Fonte da versão em vigor. |
+| `[].sourceUrl` | texto ou null | sim |  |
+| `[].requiresLegalReference` | booleano | sim | true nos parâmetros LEGAL: propor exige legalReference. |
+| `[].description` | texto | sim |  |
+| `[].unit` | texto ou null | sim |  |
+| `[].usedBy` | texto ou null | sim |  |
+| `[].hardLimits` | mapa de qualquer ou null | sim |  |
+| `[].tenantLimits` | mapa de qualquer ou null ou null | sim |  |
+| `[].allowedValues` | lista de qualquer ou null | sim | Valores que o motor sabe executar. |
+| `[].tenantEditable` | booleano | sim |  |
+| `[].pendingVersions` | lista de objeto `PlatformParameterVersion` | sim |  |
+| `[].pendingVersions[].code` | texto | sim |  |
+| `[].pendingVersions[].versionNo` | inteiro | sim |  |
+| `[].pendingVersions[].status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `[].pendingVersions[].action` | texto | sim | CREATED ou ROLLBACK_TO_<n>. |
+| `[].pendingVersions[].value` | qualquer ou null | sim |  |
+| `[].pendingVersions[].minimum` | qualquer ou null | sim | Limite mínimo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `[].pendingVersions[].maximum` | qualquer ou null | sim | Limite máximo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `[].pendingVersions[].effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `[].pendingVersions[].inEffect` | booleano | sim |  |
+| `[].pendingVersions[].reason` | texto | sim |  |
+| `[].pendingVersions[].legalReference` | texto ou null | sim | Fonte legal (parâmetros LEGAL). |
+| `[].pendingVersions[].sourceUrl` | texto ou null | sim |  |
+| `[].pendingVersions[].createdBy` | texto | sim |  |
+| `[].pendingVersions[].createdAt` | texto (data e hora) ou null | sim |  |
+| `[].pendingVersions[].decidedBy` | texto ou null | sim |  |
+| `[].pendingVersions[].decidedAt` | texto (data e hora) ou null | sim |  |
+| `[].pendingVersions[].decisionNote` | texto ou null | sim |  |
+| `[].tenantOverrides` | mapa de inteiro | não | count, outOfLimits. |
+
+**Erros:** 400, 401, 403.
+
+### `GET /platform/system-parameters/{code}`
+
+**Novo** · `getPlatformParameterDetail` · Obter platform parameter detail
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto)
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, `PlatformParameter`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `valueType` | texto (INTEGER · DECIMAL · TEXT · BOOLEAN) | sim |  |
+| `category` | texto (OPERATIONAL · STRUCTURAL · LEGAL · LIMIT · MARKET) | sim |  |
+| `level` | texto (PLATFORM_MANDATORY · PLATFORM_DEFAULT) | sim |  |
+| `value` | qualquer ou null | sim | Valor geral em vigor. |
+| `codeDefault` | qualquer ou null | sim |  |
+| `isCodeDefault` | booleano | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `legalReference` | texto ou null | sim | Fonte da versão em vigor. |
+| `sourceUrl` | texto ou null | sim |  |
+| `requiresLegalReference` | booleano | sim | true nos parâmetros LEGAL: propor exige legalReference. |
+| `description` | texto | sim |  |
+| `unit` | texto ou null | sim |  |
+| `usedBy` | texto ou null | sim |  |
+| `hardLimits` | mapa de qualquer ou null | sim |  |
+| `tenantLimits` | mapa de qualquer ou null ou null | sim |  |
+| `allowedValues` | lista de qualquer ou null | sim | Valores que o motor sabe executar. |
+| `tenantEditable` | booleano | sim |  |
+| `pendingVersions` | lista de objeto `PlatformParameterVersion` | sim |  |
+| `pendingVersions[].code` | texto | sim |  |
+| `pendingVersions[].versionNo` | inteiro | sim |  |
+| `pendingVersions[].status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `pendingVersions[].action` | texto | sim | CREATED ou ROLLBACK_TO_<n>. |
+| `pendingVersions[].value` | qualquer ou null | sim |  |
+| `pendingVersions[].minimum` | qualquer ou null | sim | Limite mínimo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `pendingVersions[].maximum` | qualquer ou null | sim | Limite máximo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `pendingVersions[].effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `pendingVersions[].inEffect` | booleano | sim |  |
+| `pendingVersions[].reason` | texto | sim |  |
+| `pendingVersions[].legalReference` | texto ou null | sim | Fonte legal (parâmetros LEGAL). |
+| `pendingVersions[].sourceUrl` | texto ou null | sim |  |
+| `pendingVersions[].createdBy` | texto | sim |  |
+| `pendingVersions[].createdAt` | texto (data e hora) ou null | sim |  |
+| `pendingVersions[].decidedBy` | texto ou null | sim |  |
+| `pendingVersions[].decidedAt` | texto (data e hora) ou null | sim |  |
+| `pendingVersions[].decisionNote` | texto ou null | sim |  |
+| `tenantOverrides` | mapa de inteiro | não | count, outOfLimits. |
+
+**Erros:** 401, 403, 404.
+
+### `POST /platform/system-parameters/{code}/rollback`
+
+**Novo** · `postPlatformParameterRollback` · Criar platform parameter rollback
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto)
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`application/json`, `PlatformParameterRollbackRequest`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `versionNo` | inteiro | sim |  |
+| `reason` | texto | sim | Motivo obrigatório (mínimo 10 caracteres). |
+
+**Envia** (201, `application/json`, `PlatformParameterVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `action` | texto | sim | CREATED ou ROLLBACK_TO_<n>. |
+| `value` | qualquer ou null | sim |  |
+| `minimum` | qualquer ou null | sim | Limite mínimo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `maximum` | qualquer ou null | sim | Limite máximo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `inEffect` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `legalReference` | texto ou null | sim | Fonte legal (parâmetros LEGAL). |
+| `sourceUrl` | texto ou null | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+### `GET /platform/system-parameters/{code}/versions`
+
+**Novo** · `getPlatformParameterVersions` · Obter platform parameter versions
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto)
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, lista de `PlatformParameterVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `[].code` | texto | sim |  |
+| `[].versionNo` | inteiro | sim |  |
+| `[].status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `[].action` | texto | sim | CREATED ou ROLLBACK_TO_<n>. |
+| `[].value` | qualquer ou null | sim |  |
+| `[].minimum` | qualquer ou null | sim | Limite mínimo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `[].maximum` | qualquer ou null | sim | Limite máximo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `[].effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `[].inEffect` | booleano | sim |  |
+| `[].reason` | texto | sim |  |
+| `[].legalReference` | texto ou null | sim | Fonte legal (parâmetros LEGAL). |
+| `[].sourceUrl` | texto ou null | sim |  |
+| `[].createdBy` | texto | sim |  |
+| `[].createdAt` | texto (data e hora) ou null | sim |  |
+| `[].decidedBy` | texto ou null | sim |  |
+| `[].decidedAt` | texto (data e hora) ou null | sim |  |
+| `[].decisionNote` | texto ou null | sim |  |
+
+**Erros:** 401, 403, 404.
+
+### `POST /platform/system-parameters/{code}/versions`
+
+**Novo** · `postPlatformParameterVersions` · Criar platform parameter versions
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto)
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`application/json`, `PlatformParameterProposalWithSource`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `value` | qualquer | sim |  |
+| `minimum` | qualquer ou null | não |  |
+| `maximum` | qualquer ou null | não |  |
+| `effectiveFrom` | texto (data e hora) ou null | não | Vigência; por omissão, a aprovação. |
+| `reason` | texto | sim | Motivo obrigatório (mínimo 10 caracteres). |
+| `legalReference` | texto ou null | não | Fonte legal (diploma, artigo). Obrigatória nos parâmetros LEGAL. |
+| `sourceUrl` | texto ou null | não | Ligação https para o texto da fonte. |
+
+**Envia** (201, `application/json`, `PlatformParameterVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `action` | texto | sim | CREATED ou ROLLBACK_TO_<n>. |
+| `value` | qualquer ou null | sim |  |
+| `minimum` | qualquer ou null | sim | Limite mínimo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `maximum` | qualquer ou null | sim | Limite máximo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `inEffect` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `legalReference` | texto ou null | sim | Fonte legal (parâmetros LEGAL). |
+| `sourceUrl` | texto ou null | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+### `POST /platform/system-parameters/{code}/versions/{version_no}/approve`
+
+**Novo** · `postPlatformParameterApprove` · Criar platform parameter approve
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto), `version_no` (inteiro)
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`application/json`, `PlatformParameterDecision`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `note` | texto ou null | não | Obrigatória (mínimo 10 caracteres) ao rejeitar. |
+
+**Envia** (200, `application/json`, `PlatformParameterVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `action` | texto | sim | CREATED ou ROLLBACK_TO_<n>. |
+| `value` | qualquer ou null | sim |  |
+| `minimum` | qualquer ou null | sim | Limite mínimo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `maximum` | qualquer ou null | sim | Limite máximo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `inEffect` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `legalReference` | texto ou null | sim | Fonte legal (parâmetros LEGAL). |
+| `sourceUrl` | texto ou null | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+### `POST /platform/system-parameters/{code}/versions/{version_no}/reject`
+
+**Novo** · `postPlatformParameterReject` · Criar platform parameter reject
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto), `version_no` (inteiro)
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`application/json`, `PlatformParameterDecision`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `note` | texto ou null | não | Obrigatória (mínimo 10 caracteres) ao rejeitar. |
+
+**Envia** (200, `application/json`, `PlatformParameterVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `action` | texto | sim | CREATED ou ROLLBACK_TO_<n>. |
+| `value` | qualquer ou null | sim |  |
+| `minimum` | qualquer ou null | sim | Limite mínimo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `maximum` | qualquer ou null | sim | Limite máximo imposto aos tenants (só PLATFORM_DEFAULT). |
+| `effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `inEffect` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `legalReference` | texto ou null | sim | Fonte legal (parâmetros LEGAL). |
+| `sourceUrl` | texto ou null | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+## 1.2 Fornecedor — tabelas de referência
+
+### `GET /platform/reference-tables`
+
+**Novo** · `getPlatformReferenceTableList` · Listar platform reference table list
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, lista de `ReferenceTableSummary`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `[].code` | texto | sim |  |
+| `[].name` | texto | sim |  |
+| `[].inEffect` | objeto `ReferenceTableVersion` ou null | sim |  |
+| `[].inEffect.code` | texto | sim |  |
+| `[].inEffect.versionNo` | inteiro | sim |  |
+| `[].inEffect.status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `[].inEffect.name` | texto | sim |  |
+| `[].inEffect.description` | texto ou null | sim |  |
+| `[].inEffect.keyColumn` | texto | sim |  |
+| `[].inEffect.columns` | lista de objeto `ReferenceTableColumn` | sim |  |
+| `[].inEffect.rowCount` | inteiro | sim |  |
+| `[].inEffect.rows` | lista de objeto | não | Só no detalhe. |
+| `[].inEffect.source` | texto ou null | sim |  |
+| `[].inEffect.effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `[].inEffect.inEffect` | booleano | sim |  |
+| `[].inEffect.reason` | texto | sim |  |
+| `[].inEffect.createdBy` | texto | sim |  |
+| `[].inEffect.createdAt` | texto (data e hora) ou null | sim |  |
+| `[].inEffect.decidedBy` | texto ou null | sim |  |
+| `[].inEffect.decidedAt` | texto (data e hora) ou null | sim |  |
+| `[].inEffect.decisionNote` | texto ou null | sim |  |
+| `[].pendingVersions` | lista de objeto `ReferenceTableVersion` | sim |  |
+| `[].pendingVersions[].code` | texto | sim |  |
+| `[].pendingVersions[].versionNo` | inteiro | sim |  |
+| `[].pendingVersions[].status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `[].pendingVersions[].name` | texto | sim |  |
+| `[].pendingVersions[].description` | texto ou null | sim |  |
+| `[].pendingVersions[].keyColumn` | texto | sim |  |
+| `[].pendingVersions[].columns` | lista de objeto `ReferenceTableColumn` | sim |  |
+| `[].pendingVersions[].rowCount` | inteiro | sim |  |
+| `[].pendingVersions[].rows` | lista de objeto | não | Só no detalhe. |
+| `[].pendingVersions[].source` | texto ou null | sim |  |
+| `[].pendingVersions[].effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `[].pendingVersions[].inEffect` | booleano | sim |  |
+| `[].pendingVersions[].reason` | texto | sim |  |
+| `[].pendingVersions[].createdBy` | texto | sim |  |
+| `[].pendingVersions[].createdAt` | texto (data e hora) ou null | sim |  |
+| `[].pendingVersions[].decidedBy` | texto ou null | sim |  |
+| `[].pendingVersions[].decidedAt` | texto (data e hora) ou null | sim |  |
+| `[].pendingVersions[].decisionNote` | texto ou null | sim |  |
+
+**Erros:** 401, 403.
+
+### `POST /platform/reference-tables`
+
+**Novo** · `postPlatformReferenceTableList` · Criar platform reference table list
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`application/json`, `ReferenceTableProposal`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `code` | texto | sim | Minúsculas, números e '_' (ex.: provincias). |
+| `name` | texto | sim |  |
+| `description` | texto ou null | não |  |
+| `keyColumn` | texto | sim |  |
+| `columns` | lista de objeto `ReferenceTableColumn` | sim |  |
+| `columns[].code` | texto | sim |  |
+| `columns[].label` | texto | não |  |
+| `columns[].type` | texto (NUMBER · TEXT) | sim |  |
+| `rows` | lista de objeto | sim | Até 5000 linhas; chaves únicas. |
+| `source` | texto ou null | não |  |
+| `effectiveFrom` | texto (data e hora) ou null | não |  |
+| `reason` | texto | sim | Motivo obrigatório (mínimo 10 caracteres). |
+
+**Envia** (201, `application/json`, `ReferenceTableVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `name` | texto | sim |  |
+| `description` | texto ou null | sim |  |
+| `keyColumn` | texto | sim |  |
+| `columns` | lista de objeto `ReferenceTableColumn` | sim |  |
+| `columns[].code` | texto | sim |  |
+| `columns[].label` | texto | não |  |
+| `columns[].type` | texto (NUMBER · TEXT) | sim |  |
+| `rowCount` | inteiro | sim |  |
+| `rows` | lista de objeto | não | Só no detalhe. |
+| `source` | texto ou null | sim |  |
+| `effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `inEffect` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 400, 401, 403, 409.
+
+### `GET /platform/reference-tables/{code}`
+
+**Novo** · `getPlatformReferenceTableDetail` · Obter platform reference table detail
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto)
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, `ReferenceTableDetail`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `inEffect` | objeto `ReferenceTableVersion` ou null | sim | Com as linhas. |
+| `inEffect.code` | texto | sim |  |
+| `inEffect.versionNo` | inteiro | sim |  |
+| `inEffect.status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `inEffect.name` | texto | sim |  |
+| `inEffect.description` | texto ou null | sim |  |
+| `inEffect.keyColumn` | texto | sim |  |
+| `inEffect.columns` | lista de objeto `ReferenceTableColumn` | sim |  |
+| `inEffect.rowCount` | inteiro | sim |  |
+| `inEffect.rows` | lista de objeto | não | Só no detalhe. |
+| `inEffect.source` | texto ou null | sim |  |
+| `inEffect.effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `inEffect.inEffect` | booleano | sim |  |
+| `inEffect.reason` | texto | sim |  |
+| `inEffect.createdBy` | texto | sim |  |
+| `inEffect.createdAt` | texto (data e hora) ou null | sim |  |
+| `inEffect.decidedBy` | texto ou null | sim |  |
+| `inEffect.decidedAt` | texto (data e hora) ou null | sim |  |
+| `inEffect.decisionNote` | texto ou null | sim |  |
+| `pendingVersions` | lista de objeto `ReferenceTableVersion` | sim |  |
+| `pendingVersions[].code` | texto | sim |  |
+| `pendingVersions[].versionNo` | inteiro | sim |  |
+| `pendingVersions[].status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `pendingVersions[].name` | texto | sim |  |
+| `pendingVersions[].description` | texto ou null | sim |  |
+| `pendingVersions[].keyColumn` | texto | sim |  |
+| `pendingVersions[].columns` | lista de objeto `ReferenceTableColumn` | sim |  |
+| `pendingVersions[].rowCount` | inteiro | sim |  |
+| `pendingVersions[].rows` | lista de objeto | não | Só no detalhe. |
+| `pendingVersions[].source` | texto ou null | sim |  |
+| `pendingVersions[].effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `pendingVersions[].inEffect` | booleano | sim |  |
+| `pendingVersions[].reason` | texto | sim |  |
+| `pendingVersions[].createdBy` | texto | sim |  |
+| `pendingVersions[].createdAt` | texto (data e hora) ou null | sim |  |
+| `pendingVersions[].decidedBy` | texto ou null | sim |  |
+| `pendingVersions[].decidedAt` | texto (data e hora) ou null | sim |  |
+| `pendingVersions[].decisionNote` | texto ou null | sim |  |
+
+**Erros:** 401, 403, 404.
+
+### `GET /platform/reference-tables/{code}/versions`
+
+**Novo** · `getPlatformReferenceTableVersions` · Obter platform reference table versions
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto)
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, lista de `ReferenceTableVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `[].code` | texto | sim |  |
+| `[].versionNo` | inteiro | sim |  |
+| `[].status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `[].name` | texto | sim |  |
+| `[].description` | texto ou null | sim |  |
+| `[].keyColumn` | texto | sim |  |
+| `[].columns` | lista de objeto `ReferenceTableColumn` | sim |  |
+| `[].columns[].code` | texto | sim |  |
+| `[].columns[].label` | texto | não |  |
+| `[].columns[].type` | texto (NUMBER · TEXT) | sim |  |
+| `[].rowCount` | inteiro | sim |  |
+| `[].rows` | lista de objeto | não | Só no detalhe. |
+| `[].source` | texto ou null | sim |  |
+| `[].effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `[].inEffect` | booleano | sim |  |
+| `[].reason` | texto | sim |  |
+| `[].createdBy` | texto | sim |  |
+| `[].createdAt` | texto (data e hora) ou null | sim |  |
+| `[].decidedBy` | texto ou null | sim |  |
+| `[].decidedAt` | texto (data e hora) ou null | sim |  |
+| `[].decisionNote` | texto ou null | sim |  |
+
+**Erros:** 401, 403, 404.
+
+### `POST /platform/reference-tables/{code}/versions/{version_no}/approve`
+
+**Novo** · `postPlatformReferenceTableApprove` · Criar platform reference table approve
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto), `version_no` (inteiro)
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`application/json`, `PlatformParameterDecision`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `note` | texto ou null | não | Obrigatória (mínimo 10 caracteres) ao rejeitar. |
+
+**Envia** (200, `application/json`, `ReferenceTableVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `name` | texto | sim |  |
+| `description` | texto ou null | sim |  |
+| `keyColumn` | texto | sim |  |
+| `columns` | lista de objeto `ReferenceTableColumn` | sim |  |
+| `columns[].code` | texto | sim |  |
+| `columns[].label` | texto | não |  |
+| `columns[].type` | texto (NUMBER · TEXT) | sim |  |
+| `rowCount` | inteiro | sim |  |
+| `rows` | lista de objeto | não | Só no detalhe. |
+| `source` | texto ou null | sim |  |
+| `effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `inEffect` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+### `POST /platform/reference-tables/{code}/versions/{version_no}/reject`
+
+**Novo** · `postPlatformReferenceTableReject` · Criar platform reference table reject
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto), `version_no` (inteiro)
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`application/json`, `PlatformParameterDecision`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `note` | texto ou null | não | Obrigatória (mínimo 10 caracteres) ao rejeitar. |
+
+**Envia** (200, `application/json`, `ReferenceTableVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `name` | texto | sim |  |
+| `description` | texto ou null | sim |  |
+| `keyColumn` | texto | sim |  |
+| `columns` | lista de objeto `ReferenceTableColumn` | sim |  |
+| `columns[].code` | texto | sim |  |
+| `columns[].label` | texto | não |  |
+| `columns[].type` | texto (NUMBER · TEXT) | sim |  |
+| `rowCount` | inteiro | sim |  |
+| `rows` | lista de objeto | não | Só no detalhe. |
+| `source` | texto ou null | sim |  |
+| `effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `inEffect` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+## 1.3 Fornecedor — modelos de partida
+
+### `GET /platform/templates`
+
+**Novo** · `getPlatformTemplateList` · Listar platform template list
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, lista de `TemplateSummary`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `[].code` | texto | sim |  |
+| `[].name` | texto | sim |  |
+| `[].kind` | texto | sim |  |
+| `[].published` | objeto `TemplateVersion` ou null | sim |  |
+| `[].published.code` | texto | sim |  |
+| `[].published.versionNo` | inteiro | sim |  |
+| `[].published.status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `[].published.kind` | texto (PRODUCT · ACTUARIAL_MODEL · FORMULA_SET · COVERAGE_LIBRARY) | sim |  |
+| `[].published.kindLabel` | texto | sim |  |
+| `[].published.name` | texto | sim |  |
+| `[].published.description` | texto ou null | sim |  |
+| `[].published.segment` | texto ou null | sim |  |
+| `[].published.configKeys` | lista de texto | sim |  |
+| `[].published.marketProducts` | booleano | sim |  |
+| `[].published.content` | objeto | não | configurations {configKey: valor} e marketProducts (só no detalhe). |
+| `[].published.source` | texto ou null | sim |  |
+| `[].published.isLatestPublished` | booleano | sim |  |
+| `[].published.reason` | texto | sim |  |
+| `[].published.createdBy` | texto | sim |  |
+| `[].published.createdAt` | texto (data e hora) ou null | sim |  |
+| `[].published.decidedBy` | texto ou null | sim |  |
+| `[].published.decidedAt` | texto (data e hora) ou null | sim |  |
+| `[].published.decisionNote` | texto ou null | sim |  |
+| `[].pendingVersions` | lista de objeto `TemplateVersion` | sim |  |
+| `[].pendingVersions[].code` | texto | sim |  |
+| `[].pendingVersions[].versionNo` | inteiro | sim |  |
+| `[].pendingVersions[].status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `[].pendingVersions[].kind` | texto (PRODUCT · ACTUARIAL_MODEL · FORMULA_SET · COVERAGE_LIBRARY) | sim |  |
+| `[].pendingVersions[].kindLabel` | texto | sim |  |
+| `[].pendingVersions[].name` | texto | sim |  |
+| `[].pendingVersions[].description` | texto ou null | sim |  |
+| `[].pendingVersions[].segment` | texto ou null | sim |  |
+| `[].pendingVersions[].configKeys` | lista de texto | sim |  |
+| `[].pendingVersions[].marketProducts` | booleano | sim |  |
+| `[].pendingVersions[].content` | objeto | não | configurations {configKey: valor} e marketProducts (só no detalhe). |
+| `[].pendingVersions[].source` | texto ou null | sim |  |
+| `[].pendingVersions[].isLatestPublished` | booleano | sim |  |
+| `[].pendingVersions[].reason` | texto | sim |  |
+| `[].pendingVersions[].createdBy` | texto | sim |  |
+| `[].pendingVersions[].createdAt` | texto (data e hora) ou null | sim |  |
+| `[].pendingVersions[].decidedBy` | texto ou null | sim |  |
+| `[].pendingVersions[].decidedAt` | texto (data e hora) ou null | sim |  |
+| `[].pendingVersions[].decisionNote` | texto ou null | sim |  |
+
+**Erros:** 401, 403.
+
+### `POST /platform/templates`
+
+**Novo** · `postPlatformTemplateList` · Criar platform template list
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`application/json`, `TemplateProposal`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `kind` | texto (PRODUCT · ACTUARIAL_MODEL · FORMULA_SET · COVERAGE_LIBRARY) | sim |  |
+| `name` | texto | sim |  |
+| `description` | texto ou null | não |  |
+| `segment` | qualquer | não |  |
+| `content` | objeto | sim | {configurations: {configKey: valor}, marketProducts: bool} |
+| `source` | texto ou null | não |  |
+| `reason` | texto | sim | Motivo obrigatório (mínimo 10 caracteres). |
+
+**Envia** (201, `application/json`, `TemplateVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `kind` | texto (PRODUCT · ACTUARIAL_MODEL · FORMULA_SET · COVERAGE_LIBRARY) | sim |  |
+| `kindLabel` | texto | sim |  |
+| `name` | texto | sim |  |
+| `description` | texto ou null | sim |  |
+| `segment` | texto ou null | sim |  |
+| `configKeys` | lista de texto | sim |  |
+| `marketProducts` | booleano | sim |  |
+| `content` | objeto | não | configurations {configKey: valor} e marketProducts (só no detalhe). |
+| `source` | texto ou null | sim |  |
+| `isLatestPublished` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 400, 401, 403, 409.
+
+### `GET /platform/templates/{code}`
+
+**Novo** · `getPlatformTemplateDetail` · Obter platform template detail
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto)
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, `TemplateDetail`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `published` | objeto `TemplateVersion` ou null | sim | Com o conteúdo. |
+| `published.code` | texto | sim |  |
+| `published.versionNo` | inteiro | sim |  |
+| `published.status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `published.kind` | texto (PRODUCT · ACTUARIAL_MODEL · FORMULA_SET · COVERAGE_LIBRARY) | sim |  |
+| `published.kindLabel` | texto | sim |  |
+| `published.name` | texto | sim |  |
+| `published.description` | texto ou null | sim |  |
+| `published.segment` | texto ou null | sim |  |
+| `published.configKeys` | lista de texto | sim |  |
+| `published.marketProducts` | booleano | sim |  |
+| `published.content` | objeto | não | configurations {configKey: valor} e marketProducts (só no detalhe). |
+| `published.source` | texto ou null | sim |  |
+| `published.isLatestPublished` | booleano | sim |  |
+| `published.reason` | texto | sim |  |
+| `published.createdBy` | texto | sim |  |
+| `published.createdAt` | texto (data e hora) ou null | sim |  |
+| `published.decidedBy` | texto ou null | sim |  |
+| `published.decidedAt` | texto (data e hora) ou null | sim |  |
+| `published.decisionNote` | texto ou null | sim |  |
+| `pendingVersions` | lista de objeto `TemplateVersion` | sim |  |
+| `pendingVersions[].code` | texto | sim |  |
+| `pendingVersions[].versionNo` | inteiro | sim |  |
+| `pendingVersions[].status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `pendingVersions[].kind` | texto (PRODUCT · ACTUARIAL_MODEL · FORMULA_SET · COVERAGE_LIBRARY) | sim |  |
+| `pendingVersions[].kindLabel` | texto | sim |  |
+| `pendingVersions[].name` | texto | sim |  |
+| `pendingVersions[].description` | texto ou null | sim |  |
+| `pendingVersions[].segment` | texto ou null | sim |  |
+| `pendingVersions[].configKeys` | lista de texto | sim |  |
+| `pendingVersions[].marketProducts` | booleano | sim |  |
+| `pendingVersions[].content` | objeto | não | configurations {configKey: valor} e marketProducts (só no detalhe). |
+| `pendingVersions[].source` | texto ou null | sim |  |
+| `pendingVersions[].isLatestPublished` | booleano | sim |  |
+| `pendingVersions[].reason` | texto | sim |  |
+| `pendingVersions[].createdBy` | texto | sim |  |
+| `pendingVersions[].createdAt` | texto (data e hora) ou null | sim |  |
+| `pendingVersions[].decidedBy` | texto ou null | sim |  |
+| `pendingVersions[].decidedAt` | texto (data e hora) ou null | sim |  |
+| `pendingVersions[].decisionNote` | texto ou null | sim |  |
+
+**Erros:** 401, 403, 404.
+
+### `GET /platform/templates/{code}/versions`
+
+**Novo** · `getPlatformTemplateVersions` · Obter platform template versions
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto)
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, lista de `TemplateVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `[].code` | texto | sim |  |
+| `[].versionNo` | inteiro | sim |  |
+| `[].status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `[].kind` | texto (PRODUCT · ACTUARIAL_MODEL · FORMULA_SET · COVERAGE_LIBRARY) | sim |  |
+| `[].kindLabel` | texto | sim |  |
+| `[].name` | texto | sim |  |
+| `[].description` | texto ou null | sim |  |
+| `[].segment` | texto ou null | sim |  |
+| `[].configKeys` | lista de texto | sim |  |
+| `[].marketProducts` | booleano | sim |  |
+| `[].content` | objeto | não | configurations {configKey: valor} e marketProducts (só no detalhe). |
+| `[].source` | texto ou null | sim |  |
+| `[].isLatestPublished` | booleano | sim |  |
+| `[].reason` | texto | sim |  |
+| `[].createdBy` | texto | sim |  |
+| `[].createdAt` | texto (data e hora) ou null | sim |  |
+| `[].decidedBy` | texto ou null | sim |  |
+| `[].decidedAt` | texto (data e hora) ou null | sim |  |
+| `[].decisionNote` | texto ou null | sim |  |
+
+**Erros:** 401, 403, 404.
+
+### `POST /platform/templates/{code}/versions/{version_no}/approve`
+
+**Novo** · `postPlatformTemplateApprove` · Criar platform template approve
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto), `version_no` (inteiro)
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`application/json`, `PlatformParameterDecision`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `note` | texto ou null | não | Obrigatória (mínimo 10 caracteres) ao rejeitar. |
+
+**Envia** (200, `application/json`, `TemplateVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `kind` | texto (PRODUCT · ACTUARIAL_MODEL · FORMULA_SET · COVERAGE_LIBRARY) | sim |  |
+| `kindLabel` | texto | sim |  |
+| `name` | texto | sim |  |
+| `description` | texto ou null | sim |  |
+| `segment` | texto ou null | sim |  |
+| `configKeys` | lista de texto | sim |  |
+| `marketProducts` | booleano | sim |  |
+| `content` | objeto | não | configurations {configKey: valor} e marketProducts (só no detalhe). |
+| `source` | texto ou null | sim |  |
+| `isLatestPublished` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+### `POST /platform/templates/{code}/versions/{version_no}/reject`
+
+**Novo** · `postPlatformTemplateReject` · Criar platform template reject
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+- **Parâmetros no caminho:** `code` (texto), `version_no` (inteiro)
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`application/json`, `PlatformParameterDecision`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `note` | texto ou null | não | Obrigatória (mínimo 10 caracteres) ao rejeitar. |
+
+**Envia** (200, `application/json`, `TemplateVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `kind` | texto (PRODUCT · ACTUARIAL_MODEL · FORMULA_SET · COVERAGE_LIBRARY) | sim |  |
+| `kindLabel` | texto | sim |  |
+| `name` | texto | sim |  |
+| `description` | texto ou null | sim |  |
+| `segment` | texto ou null | sim |  |
+| `configKeys` | lista de texto | sim |  |
+| `marketProducts` | booleano | sim |  |
+| `content` | objeto | não | configurations {configKey: valor} e marketProducts (só no detalhe). |
+| `source` | texto ou null | sim |  |
+| `isLatestPublished` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+## 1.4 Fornecedor — motor de fórmulas (consulta)
+
+### `GET /platform/formula-engine`
+
+**Novo** · `getPlatformFormulaEngine` · Obter platform formula engine
+
+- **Quem pode:** conta da plataforma (super administrador, token `platform`).
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, `PlatformFormulaEngine`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `pricingFormulas` | objeto | sim | Catálogo do motor de fórmulas de tarifação (fases, funções, variáveis…). |
+| `productFormulas` | objeto | sim | systemVariables das fórmulas de produto. |
+| `rules` | objeto | sim | Campos, operadores, etapas e ações das regras «Quando… então…». |
+| `platformConstants` | lista de objeto | sim | name, parameter, unit, description. |
+| `limits` | mapa de inteiro | sim |  |
+
+**Erros:** 401, 403.
+
+## 1.5 Tenant — tabelas de referência e modelos
+
+### `GET /reference-tables`
+
+**Novo** · `getReferenceTableList` · Listar reference table list
+
+- **Quem pode:** scope q360.read.
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, lista de `ReferenceTableVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `[].code` | texto | sim |  |
+| `[].versionNo` | inteiro | sim |  |
+| `[].status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `[].name` | texto | sim |  |
+| `[].description` | texto ou null | sim |  |
+| `[].keyColumn` | texto | sim |  |
+| `[].columns` | lista de objeto `ReferenceTableColumn` | sim |  |
+| `[].columns[].code` | texto | sim |  |
+| `[].columns[].label` | texto | não |  |
+| `[].columns[].type` | texto (NUMBER · TEXT) | sim |  |
+| `[].rowCount` | inteiro | sim |  |
+| `[].rows` | lista de objeto | não | Só no detalhe. |
+| `[].source` | texto ou null | sim |  |
+| `[].effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `[].inEffect` | booleano | sim |  |
+| `[].reason` | texto | sim |  |
+| `[].createdBy` | texto | sim |  |
+| `[].createdAt` | texto (data e hora) ou null | sim |  |
+| `[].decidedBy` | texto ou null | sim |  |
+| `[].decidedAt` | texto (data e hora) ou null | sim |  |
+| `[].decisionNote` | texto ou null | sim |  |
+
+**Erros:** 401, 403.
+
+### `GET /reference-tables/{code}`
+
+**Novo** · `getReferenceTableDetail` · Obter reference table detail
+
+- **Quem pode:** scope q360.read.
+- **Parâmetros no caminho:** `code` (texto)
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, `ReferenceTableVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `name` | texto | sim |  |
+| `description` | texto ou null | sim |  |
+| `keyColumn` | texto | sim |  |
+| `columns` | lista de objeto `ReferenceTableColumn` | sim |  |
+| `columns[].code` | texto | sim |  |
+| `columns[].label` | texto | não |  |
+| `columns[].type` | texto (NUMBER · TEXT) | sim |  |
+| `rowCount` | inteiro | sim |  |
+| `rows` | lista de objeto | não | Só no detalhe. |
+| `source` | texto ou null | sim |  |
+| `effectiveFrom` | texto (data e hora) ou null | sim |  |
+| `inEffect` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 401, 403, 404.
+
+### `GET /templates`
+
+**Novo** · `listTemplates` · Modelos de partida publicados pelo fornecedor
+
+- **Quem pode:** scope q360.read.
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, lista de `TemplateVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `[].code` | texto | sim |  |
+| `[].versionNo` | inteiro | sim |  |
+| `[].status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `[].kind` | texto (PRODUCT · ACTUARIAL_MODEL · FORMULA_SET · COVERAGE_LIBRARY) | sim |  |
+| `[].kindLabel` | texto | sim |  |
+| `[].name` | texto | sim |  |
+| `[].description` | texto ou null | sim |  |
+| `[].segment` | texto ou null | sim |  |
+| `[].configKeys` | lista de texto | sim |  |
+| `[].marketProducts` | booleano | sim |  |
+| `[].content` | objeto | não | configurations {configKey: valor} e marketProducts (só no detalhe). |
+| `[].source` | texto ou null | sim |  |
+| `[].isLatestPublished` | booleano | sim |  |
+| `[].reason` | texto | sim |  |
+| `[].createdBy` | texto | sim |  |
+| `[].createdAt` | texto (data e hora) ou null | sim |  |
+| `[].decidedBy` | texto ou null | sim |  |
+| `[].decidedAt` | texto (data e hora) ou null | sim |  |
+| `[].decisionNote` | texto ou null | sim |  |
+
+**Erros:** 401, 403.
+
+### `GET /templates/{code}`
+
+**Novo** · `getTemplate` · Conteúdo da versão publicada de um modelo
+
+- **Quem pode:** scope q360.read.
+- **Parâmetros no caminho:** `code` (texto)
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, `TemplateVersion`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `versionNo` | inteiro | sim |  |
+| `status` | texto (PENDING_APPROVAL · PUBLISHED · REJECTED) | sim |  |
+| `kind` | texto (PRODUCT · ACTUARIAL_MODEL · FORMULA_SET · COVERAGE_LIBRARY) | sim |  |
+| `kindLabel` | texto | sim |  |
+| `name` | texto | sim |  |
+| `description` | texto ou null | sim |  |
+| `segment` | texto ou null | sim |  |
+| `configKeys` | lista de texto | sim |  |
+| `marketProducts` | booleano | sim |  |
+| `content` | objeto | não | configurations {configKey: valor} e marketProducts (só no detalhe). |
+| `source` | texto ou null | sim |  |
+| `isLatestPublished` | booleano | sim |  |
+| `reason` | texto | sim |  |
+| `createdBy` | texto | sim |  |
+| `createdAt` | texto (data e hora) ou null | sim |  |
+| `decidedBy` | texto ou null | sim |  |
+| `decidedAt` | texto (data e hora) ou null | sim |  |
+| `decisionNote` | texto ou null | sim |  |
+
+**Erros:** 401, 403, 404.
+
+### `POST /templates/{code}/adopt`
+
+**Novo** · `adoptTemplate` · Copiar um modelo para rascunhos do tenant (não publica nada)
+
+- **Quem pode:** scope q360.write, permissão pricing-config:manage.
+- **Parâmetros no caminho:** `code` (texto)
+
+**Recebe** (`application/json`, `TemplateAdopt`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `effectiveFrom` | texto (data) ou null | não |  |
+
+**Envia** (201, `application/json`, `TemplateAdoptResult`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `template` | objeto | sim | code, versionNo, name. |
+| `effectiveFrom` | texto (data) | sim |  |
+| `createdDrafts` | lista de objeto `TemplateAdoptDraft` | sim |  |
+| `createdDrafts[].configKey` | texto | sim |  |
+| `createdDrafts[].configurationId` | texto (UUID) | sim |  |
+| `createdDrafts[].versionNo` | inteiro | sim |  |
+| `createdDrafts[].status` | texto | sim |  |
+| `marketProducts` | objeto ou null | sim | Relatório da criação dos produtos de mercado, se pedida. |
+| `next` | texto | sim |  |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+## 1.6 Tenant — tarifa por produto e simulação
+
+### `GET /products/{product_id}/tariff`
+
+**Novo** · `getProductTariff` · Tarifa do produto por passo do cálculo
+
+- **Quem pode:** scope q360.read.
+- **Parâmetros no caminho:** `product_id` (texto (UUID))
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, `ProductTariff`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `productId` | texto (UUID) | sim |  |
+| `productCode` | texto | sim |  |
+| `productName` | texto | sim |  |
+| `plans` | lista de objeto | sim | id, code, name, status. |
+| `engine` | objeto | sim | owner=CODE, order, rounding, structure. |
+| `stages` | lista de objeto `TariffStage` | sim |  |
+| `stages[].order` | inteiro | sim |  |
+| `stages[].code` | texto (PURE_PREMIUM · RISK_FACTORS · PERSON_RULES · PERSON_FORMULAS · LOADINGS · ADJUSTMENTS · LEGAL_TAXES · CHARGES · QUOTE_FORMULAS · PRODUCT_SETUP · FRACTIONATION) | sim |  |
+| `stages[].label` | texto | sim |  |
+| `stages[].owner` | texto (CODE · PLATFORM · TENANT) | sim |  |
+| `stages[].editable` | booleano | sim |  |
+| `stages[].scope` | texto (TENANT · PRODUCT) | sim | TENANT: a chave vale para todos os produtos. |
+| `stages[].configurations` | lista de objeto `TariffConfigState` | sim |  |
+| `stages[].platformParameters` | lista de objeto | sim | code, value, versionNo, unit. |
+| `stages[].summary` | objeto | sim | Resumo do passo (depende do passo). |
+| `openDrafts` | lista de objeto `TariffConfigVersion` | sim |  |
+| `openDrafts[].configurationId` | texto (UUID) | sim |  |
+| `openDrafts[].versionNo` | inteiro | sim |  |
+| `openDrafts[].status` | texto | sim |  |
+| `openDrafts[].effectiveFrom` | texto (data) ou null | sim |  |
+| `openDrafts[].effectiveTo` | texto (data) ou null | sim |  |
+| `openDrafts[].createdBy` | texto ou null | sim |  |
+| `openDrafts[].rowVersion` | inteiro | sim |  |
+| `platformVersions` | mapa de inteiro | sim |  |
+
+**Erros:** 401, 403, 404.
+
+### `POST /products/{product_id}/tariff/simulate`
+
+**Novo** · `simulateProductTariff` · Simular a tarifa (com rascunhos) numa cotação de exemplo, sem gravar nada
+
+- **Quem pode:** scope q360.write, permissão pricing-config:manage.
+- **Parâmetros no caminho:** `product_id` (texto (UUID))
+
+**Recebe** (`application/json`, `TariffSimulation`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `planId` | texto (UUID) | sim |  |
+| `members` | lista de objeto `TariffMember` | sim |  |
+| `members[].age` | inteiro | sim |  |
+| `members[].sex` | texto (M · F) | não |  |
+| `members[].relationship` | texto ou null | não |  |
+| `proposerType` | texto (INDIVIDUAL · ORGANISATION) | não |  |
+| `selection` | qualquer | não |  |
+| `actuarialProfile` | qualquer | não |  |
+| `paymentFrequency` | texto (ANUAL · SEMESTRAL · TRIMESTRAL · MENSAL) | não |  |
+| `configurationIds` | lista de texto (UUID) | não |  |
+| `includeOpenDrafts` | booleano | não |  |
+
+**Envia** (200, `application/json`, `TariffSimulationResult`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `productId` | texto (UUID) | sim |  |
+| `planId` | texto (UUID) | sim |  |
+| `referenceDate` | texto (data) | sim |  |
+| `currencyCode` | texto | sim |  |
+| `totalAmount` | texto | sim |  |
+| `installments` | mapa de texto | sim | Prestação por frequência (ANUAL, SEMESTRAL…). |
+| `components` | lista de objeto | sim | Componentes do cálculo, cada um com owner. |
+| `appliedDrafts` | lista de objeto `TariffConfigVersion` | sim |  |
+| `appliedDrafts[].configurationId` | texto (UUID) | sim |  |
+| `appliedDrafts[].versionNo` | inteiro | sim |  |
+| `appliedDrafts[].status` | texto | sim |  |
+| `appliedDrafts[].effectiveFrom` | texto (data) ou null | sim |  |
+| `appliedDrafts[].effectiveTo` | texto (data) ou null | sim |  |
+| `appliedDrafts[].createdBy` | texto ou null | sim |  |
+| `appliedDrafts[].rowVersion` | inteiro | sim |  |
+| `versions` | objeto | sim |  |
+| `steps` | lista de objeto `TariffSimulationStep` | sim |  |
+| `steps[].sequence` | inteiro | sim |  |
+| `steps[].stepCode` | texto | sim |  |
+| `steps[].ruleCode` | texto ou null | sim |  |
+| `steps[].owner` | texto (CODE · PLATFORM · TENANT) | sim |  |
+| `steps[].input` | qualquer ou null | sim |  |
+| `steps[].output` | qualquer ou null | sim |  |
+| `steps[].message` | texto ou null | sim |  |
+| `persisted` | booleano | sim | Sempre false: a simulação não grava nada. |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+## 1.7 Tenant — fórmulas
+
+### `GET /business-config/formulas/variables`
+
+**Novo** · `getFormulaVariables` · Catálogo único das variáveis de fórmulas e regras
+
+- **Quem pode:** scope q360.read.
+- **Parâmetros de pesquisa:** `productId` (texto) — UUID do produto: junta os grupos, opções, campos e fórmulas dele.; `usableIn` (texto) — PRICING_FORMULAS, PRICING_FORMULAS:PERSON, PRICING_FORMULAS:QUOTE, PRODUCT_FORMULAS ou RULE_CONDITIONS.
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, `FormulaVariablesCatalog`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `variables` | lista de objeto `FormulaVariable` | sim |  |
+| `variables[].token` | texto | sim | Nome a usar na expressão. |
+| `variables[].label` | texto | sim |  |
+| `variables[].source` | texto (SYSTEM · PARAMETER · AUXILIARY · PLATFORM_CONSTANT · RULE_FIELD · PRODUCT_GROUP · PRODUCT_OPTION · PRODUCT_FIELD · PRODUCT_FORMULA · PRODUCT_SYSTEM) | sim |  |
+| `variables[].usableIn` | lista de texto | sim | PRICING_FORMULAS:PERSON/QUOTE, PRODUCT_FORMULAS, RULE_CONDITIONS. |
+| `variables[].unit` | texto ou null | não |  |
+| `variables[].value` | texto ou null | não | Parâmetros e constantes do fornecedor. |
+| `variables[].parameter` | texto | não | Constantes: código do parâmetro do fornecedor. |
+| `variables[].readOnly` | booleano | não |  |
+| `variables[].expression` | texto | não | Valores auxiliares. |
+| `functions` | lista de mapa de texto | sim |  |
+| `operators` | lista de texto | sim |  |
+| `referenceTables` | lista de objeto `FormulaReferenceTable` | sim |  |
+| `referenceTables[].code` | texto | sim |  |
+| `referenceTables[].name` | texto | sim |  |
+| `referenceTables[].versionNo` | inteiro | sim |  |
+| `referenceTables[].keyColumn` | texto | sim |  |
+| `referenceTables[].columns` | lista de objeto | sim |  |
+| `referenceTables[].example` | texto | sim |  |
+| `sources` | mapa de qualquer ou null | sim | pricingFormulas, pricingFormulasError, productSetup, productSetupError. |
+
+**Erros:** 400, 401, 403.
+
+## 1.8 Tenant — aprovações
+
+### `GET /business-config/approvals/pending`
+
+**Novo** · `listPendingApprovals` · Fila única de aprovações pendentes
+
+- **Quem pode:** scope q360.read.
+- **Parâmetros de pesquisa:** `area` (texto) — ORGANIZATION, PRODUCTS, TARIFF, RULES, PARAMETERS ou DOCUMENTS.
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, `PendingApprovals`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `total` | inteiro | sim |  |
+| `byArea` | mapa de inteiro | sim |  |
+| `items` | lista de objeto `PendingApprovalItem` | sim |  |
+| `items[].configurationId` | texto (UUID) | sim |  |
+| `items[].configKey` | texto | sim |  |
+| `items[].label` | texto | sim |  |
+| `items[].area` | texto (ORGANIZATION · PRODUCTS · TARIFF · RULES · PARAMETERS · DOCUMENTS) | sim |  |
+| `items[].areaLabel` | texto | sim |  |
+| `items[].versionNo` | inteiro | sim |  |
+| `items[].effectiveFrom` | texto (data) ou null | sim |  |
+| `items[].createdBy` | texto ou null | sim |  |
+| `items[].submittedAt` | texto (data e hora) ou null | sim |  |
+| `items[].againstVersionNo` | inteiro ou null | sim | Versão publicada com que se compara. |
+| `items[].changeCount` | inteiro ou null | sim |  |
+| `items[].changes` | lista de objeto | sim | path, change (ADDED/REMOVED/CHANGED), before, after; até 50. |
+| `items[].isNew` | booleano | sim |  |
+| `items[].canApprove` | booleano | sim |  |
+| `items[].cannotApproveReason` | texto ou null | sim |  |
+
+**Erros:** 400, 401, 403.
+
+### `GET /business-config/approvals/pending/count`
+
+**Novo** · `countPendingApprovals` · Contagem de aprovações pendentes (para o menu)
+
+- **Quem pode:** scope q360.read.
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, `PendingApprovalsCount`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `total` | inteiro | sim |  |
+| `canApprove` | inteiro | sim |  |
+| `byArea` | mapa de inteiro | sim |  |
+
+**Erros:** 401, 403.
+
+## 2. Endpoints alterados no contrato
+
+### `POST /business-config/formulas/test`
+
+**Alterado** · `testPricingFormula` · Validar e testar uma expressão
+
+- **Quem pode:** scope q360.write, permissão pricing-config:manage.
+- **O que mudou:**
+  - Envia: formato passou a estar descrito no contrato.
+
+**Recebe** (`application/json`, `FormulaTest`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `expression` | texto | sim |  |
+| `variables` | objeto | não |  |
+
+**Envia** (200, `application/json`, `FormulaTestResult`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `valid` | booleano | sim |  |
+| `result` | texto | não | Só quando valid=true. |
+| `variables` | lista de texto | não |  |
+| `steps` | lista de objeto `FormulaExplanationStep` | não | Cálculo passo a passo. |
+| `steps[].step` | inteiro | sim |  |
+| `steps[].expression` | texto | sim | Subexpressão calculada neste passo. |
+| `steps[].operation` | texto | sim | VARIABLE, CONSTANT, tabela, + - * / **, min, max, abs, round. |
+| `steps[].operands` | lista de texto | sim |  |
+| `steps[].result` | texto | sim |  |
+| `error` | texto | não | Só quando valid=false (HTTP 400). |
+
+**Erros:** 400, 401, 403, 409.
+
+### `GET /system-parameters`
+
+**Alterado** · `getSystemParameterList` · Listar system parameter list
+
+- **Quem pode:** scope q360.read.
+- **Parâmetros de pesquisa:** `category` (texto) — OPERATIONAL, STRUCTURAL, LEGAL, LIMIT ou MARKET.
+- **O que mudou:**
+  - Envia — campos novos: `[].level`, `[].platformVersionNo`, `[].source`, `[].tenantValueOutOfLimits`
+  - Envia — tipo alterado: `[].category` (texto (OPERATIONAL · STRUCTURAL) → texto (OPERATIONAL · STRUCTURAL · LEGAL · LIMIT · MARKET))
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, lista de `SystemParameter`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `[].code` | texto | sim |  |
+| `[].valueType` | texto (INTEGER · DECIMAL · TEXT · BOOLEAN) | sim |  |
+| `[].category` | texto (OPERATIONAL · STRUCTURAL · LEGAL · LIMIT · MARKET) | sim | OPERATIONAL: o GTE altera; STRUCTURAL: só por evolução do sistema; LEGAL: valor legal; LIMIT: teto do fornecedor; MARKET: dado de mercado (fornecedor). |
+| `[].level` | texto (PLATFORM_MANDATORY · PLATFORM_DEFAULT) | sim | PLATFORM_MANDATORY: vale o valor do fornecedor; PLATFORM_DEFAULT: o tenant ajusta dentro dos limites. |
+| `[].value` | qualquer ou null | sim |  |
+| `[].source` | texto (TENANT · PLATFORM · CODE_DEFAULT) | sim | De onde vem o valor em vigor. |
+| `[].default` | qualquer ou null | sim | Valor geral (do fornecedor ou do código) usado sem ajuste do tenant. |
+| `[].platformVersionNo` | inteiro | sim | Versão geral em vigor (0 = valor do código). |
+| `[].isDefault` | booleano | sim |  |
+| `[].tenantValueOutOfLimits` | booleano | sim | O valor do tenant ficou fora dos limites do fornecedor e não se aplica. |
+| `[].description` | texto | sim |  |
+| `[].unit` | texto ou null | sim |  |
+| `[].constraints` | mapa de qualquer ou null | sim |  |
+| `[].usedBy` | texto ou null | sim |  |
+| `[].editable` | booleano | sim |  |
+| `[].rowVersion` | inteiro | sim |  |
+| `[].updatedBy` | texto ou null | sim |  |
+| `[].updatedAt` | texto (data e hora) ou null | sim |  |
+
+**Erros:** 400, 401, 403.
+
+### `GET /system-parameters/{code}`
+
+**Alterado** · `getSystemParameterDetail` · Obter system parameter detail
+
+- **Quem pode:** scope q360.read.
+- **Parâmetros no caminho:** `code` (texto)
+- **O que mudou:**
+  - Envia — campos novos: `level`, `platformVersionNo`, `source`, `tenantValueOutOfLimits`
+  - Envia — tipo alterado: `category` (texto (OPERATIONAL · STRUCTURAL) → texto (OPERATIONAL · STRUCTURAL · LEGAL · LIMIT · MARKET))
+
+**Recebe:** nada (sem corpo).
+
+**Envia** (200, `application/json`, `SystemParameter`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `valueType` | texto (INTEGER · DECIMAL · TEXT · BOOLEAN) | sim |  |
+| `category` | texto (OPERATIONAL · STRUCTURAL · LEGAL · LIMIT · MARKET) | sim | OPERATIONAL: o GTE altera; STRUCTURAL: só por evolução do sistema; LEGAL: valor legal; LIMIT: teto do fornecedor; MARKET: dado de mercado (fornecedor). |
+| `level` | texto (PLATFORM_MANDATORY · PLATFORM_DEFAULT) | sim | PLATFORM_MANDATORY: vale o valor do fornecedor; PLATFORM_DEFAULT: o tenant ajusta dentro dos limites. |
+| `value` | qualquer ou null | sim |  |
+| `source` | texto (TENANT · PLATFORM · CODE_DEFAULT) | sim | De onde vem o valor em vigor. |
+| `default` | qualquer ou null | sim | Valor geral (do fornecedor ou do código) usado sem ajuste do tenant. |
+| `platformVersionNo` | inteiro | sim | Versão geral em vigor (0 = valor do código). |
+| `isDefault` | booleano | sim |  |
+| `tenantValueOutOfLimits` | booleano | sim | O valor do tenant ficou fora dos limites do fornecedor e não se aplica. |
+| `description` | texto | sim |  |
+| `unit` | texto ou null | sim |  |
+| `constraints` | mapa de qualquer ou null | sim |  |
+| `usedBy` | texto ou null | sim |  |
+| `editable` | booleano | sim |  |
+| `rowVersion` | inteiro | sim |  |
+| `updatedBy` | texto ou null | sim |  |
+| `updatedAt` | texto (data e hora) ou null | sim |  |
+
+**Erros:** 401, 403, 404.
+
+### `PUT /system-parameters/{code}`
+
+**Alterado** · `putSystemParameterDetail` · Substituir system parameter detail
+
+- **Quem pode:** scope q360.admin, permissão pricing-config:manage.
+- **Parâmetros no caminho:** `code` (texto)
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+- **O que mudou:**
+  - Envia — campos novos: `level`, `platformVersionNo`, `source`, `tenantValueOutOfLimits`
+  - Envia — tipo alterado: `category` (texto (OPERATIONAL · STRUCTURAL) → texto (OPERATIONAL · STRUCTURAL · LEGAL · LIMIT · MARKET))
+
+**Recebe** (`application/json`, `SystemParameterUpdate`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `value` | qualquer | sim |  |
+| `rowVersion` | inteiro | sim |  |
+| `reason` | texto | sim | Motivo obrigatório (mínimo 10 caracteres). |
+
+**Envia** (200, `application/json`, `SystemParameter`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `valueType` | texto (INTEGER · DECIMAL · TEXT · BOOLEAN) | sim |  |
+| `category` | texto (OPERATIONAL · STRUCTURAL · LEGAL · LIMIT · MARKET) | sim | OPERATIONAL: o GTE altera; STRUCTURAL: só por evolução do sistema; LEGAL: valor legal; LIMIT: teto do fornecedor; MARKET: dado de mercado (fornecedor). |
+| `level` | texto (PLATFORM_MANDATORY · PLATFORM_DEFAULT) | sim | PLATFORM_MANDATORY: vale o valor do fornecedor; PLATFORM_DEFAULT: o tenant ajusta dentro dos limites. |
+| `value` | qualquer ou null | sim |  |
+| `source` | texto (TENANT · PLATFORM · CODE_DEFAULT) | sim | De onde vem o valor em vigor. |
+| `default` | qualquer ou null | sim | Valor geral (do fornecedor ou do código) usado sem ajuste do tenant. |
+| `platformVersionNo` | inteiro | sim | Versão geral em vigor (0 = valor do código). |
+| `isDefault` | booleano | sim |  |
+| `tenantValueOutOfLimits` | booleano | sim | O valor do tenant ficou fora dos limites do fornecedor e não se aplica. |
+| `description` | texto | sim |  |
+| `unit` | texto ou null | sim |  |
+| `constraints` | mapa de qualquer ou null | sim |  |
+| `usedBy` | texto ou null | sim |  |
+| `editable` | booleano | sim |  |
+| `rowVersion` | inteiro | sim |  |
+| `updatedBy` | texto ou null | sim |  |
+| `updatedAt` | texto (data e hora) ou null | sim |  |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+### `POST /system-parameters/{code}/rollback`
+
+**Alterado** · `postSystemParameterRollback` · Criar system parameter rollback
+
+- **Quem pode:** scope q360.admin, permissão pricing-config:manage.
+- **Parâmetros no caminho:** `code` (texto)
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+- **O que mudou:**
+  - Envia — campos novos: `level`, `platformVersionNo`, `source`, `tenantValueOutOfLimits`
+  - Envia — tipo alterado: `category` (texto (OPERATIONAL · STRUCTURAL) → texto (OPERATIONAL · STRUCTURAL · LEGAL · LIMIT · MARKET))
+
+**Recebe** (`application/json`, `SystemParameterRollbackRequest`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `revisionNo` | inteiro | sim |  |
+| `reason` | texto | sim | Motivo obrigatório (mínimo 10 caracteres). |
+
+**Envia** (200, `application/json`, `SystemParameter`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `code` | texto | sim |  |
+| `valueType` | texto (INTEGER · DECIMAL · TEXT · BOOLEAN) | sim |  |
+| `category` | texto (OPERATIONAL · STRUCTURAL · LEGAL · LIMIT · MARKET) | sim | OPERATIONAL: o GTE altera; STRUCTURAL: só por evolução do sistema; LEGAL: valor legal; LIMIT: teto do fornecedor; MARKET: dado de mercado (fornecedor). |
+| `level` | texto (PLATFORM_MANDATORY · PLATFORM_DEFAULT) | sim | PLATFORM_MANDATORY: vale o valor do fornecedor; PLATFORM_DEFAULT: o tenant ajusta dentro dos limites. |
+| `value` | qualquer ou null | sim |  |
+| `source` | texto (TENANT · PLATFORM · CODE_DEFAULT) | sim | De onde vem o valor em vigor. |
+| `default` | qualquer ou null | sim | Valor geral (do fornecedor ou do código) usado sem ajuste do tenant. |
+| `platformVersionNo` | inteiro | sim | Versão geral em vigor (0 = valor do código). |
+| `isDefault` | booleano | sim |  |
+| `tenantValueOutOfLimits` | booleano | sim | O valor do tenant ficou fora dos limites do fornecedor e não se aplica. |
+| `description` | texto | sim |  |
+| `unit` | texto ou null | sim |  |
+| `constraints` | mapa de qualquer ou null | sim |  |
+| `usedBy` | texto ou null | sim |  |
+| `editable` | booleano | sim |  |
+| `rowVersion` | inteiro | sim |  |
+| `updatedBy` | texto ou null | sim |  |
+| `updatedAt` | texto (data e hora) ou null | sim |  |
+
+**Erros:** 400, 401, 403, 404, 409.
+
+## 3. Endpoints alterados no comportamento
+
+O formato destes endpoints no contrato é o mesmo, ou a resposta não tem tipo no contrato. Mudou o que aceitam, o que devolvem dentro de campos livres (JSON) ou as regras que aplicam.
+
+### `GET /business-config/catalog`
+
+**Alterado** · `getBusinessConfigurationCatalog`
+
+- **Recebe:** nada (sem corpo).
+- **Envia (200):** `items[]`, com os campos novos:
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `items[].area` | texto (ORGANIZATION · PRODUCTS · TARIFF · RULES · DOCUMENTS) | Área da Administração onde o tipo é editado |
+| `items[].areaLabel` | texto | Nome da área |
+| `items[].formSchema.meta.stages[]` | lista de `{key, label}` | Só em `rules.custom`: ELIGIBILITY, PRICING, UNDERWRITING, VALIDATION, WORKFLOW |
+| `items[].formSchema.meta.approvalRoles` | lista de texto | Só em `rules.custom`: SUBSCRIPTION_MANAGER, ADMIN |
+| `items[].formSchema.meta.actions[].stage` · `needsRole` · `personOnly` | texto · booleano · booleano | Etapa da ação; se pede o perfil; se só vale por pessoa |
+| `items[].formSchema.meta.fields[].quoteOnly` · `excludedStages` | booleano · lista de texto | Campo `total_premium`: só para a cotação inteira; não serve para preço nem elegibilidade |
+
+### `POST /business-config/configurations` · `PUT /business-config/configurations/{configuration_id}`
+
+**Alterado** · `createBusinessConfiguration` · `updateBusinessConfiguration`
+
+- **Recebe:** `{configKey, value, effectiveFrom, effectiveTo?, metadata?}`. A forma é a mesma, mas o `value` aceita mais:
+  - **`rules.custom`:**
+    - `value.rules[]` aceita `stage` (opcional; tem de coincidir com a etapa da ação) e `role` (obrigatório em `REQUIRE_APPROVAL_BY_ROLE`).
+    - Ações novas: `NOT_ELIGIBLE` e `REFER_TO_UNDERWRITING` (só «Cada pessoa»), `VALIDATION_ERROR`, `VALIDATION_WARNING` e `REQUIRE_APPROVAL_BY_ROLE`.
+    - Campo de condição novo: `total_premium` (só «A cotação inteira»).
+  - **`pricing.formulas`:**
+    - As expressões podem usar as constantes do fornecedor (`cambio_usd_aoa`, `inflacao_geral_pct`, `taxa_arseg_pct`, `taxa_selo_pct`, `maioridade`) e a função `tabela("codigo", chave, "coluna")`.
+    - Esses nomes ficam reservados: um parâmetro com o mesmo código dá 400.
+- **Envia:** igual (`BusinessConfiguration`).
+- **Erros novos:** 400 `VALIDATION-400` quando a etapa não coincide com a ação, quando falta o perfil, quando `total_premium` é usado no preço ou na elegibilidade, ou quando há um nome reservado.
+
+### `POST /business-config/configurations/{configuration_id}` (ação `submit`) · `POST /business-config/configurations/{configuration_id}/approve`
+
+**Alterado** · `changeBusinessConfigurationStatus` · `approveBusinessConfiguration`
+
+- **Recebe:** igual (`{"action": "submit"}` / sem corpo).
+- **Envia:** igual.
+- **Erro novo:** 400 `VALIDATION-400` em `pricing.actuarial_model` quando a comissão de mediação de um segmento passa o teto do fornecedor (`limits.max_acquisition_commission_pct`). Verifica-se ao submeter e de novo ao aprovar.
+
+### `POST /business-config/formulas/test`
+
+**Alterado** · `testPricingFormula`
+
+- **Recebe:** igual: `{expression: texto, variables: mapa}`.
+- **Envia (200):** `{valid, result, variables, steps[]}`. Campo novo `steps[]`: `{step, expression, operation, operands[], result}`, o cálculo passo a passo; `operation` pode ser `VARIABLE`, `CONSTANT`, `tabela`, um operador ou uma função. Com expressão inválida devolve 400 `{valid: false, error}`.
+
+### `POST /business-config/formulas/{configuration_id}/simulate`
+
+**Alterado** · `simulateFormulaSet`
+
+- **Recebe:** igual: `{totalAmount, membersCount, stage?, age?}`.
+- **Envia (200):** em cada `steps[]`, campos novos `explanation[]` (passos do cálculo da fórmula) e `auxiliaryExplanations` (mapa: valor auxiliar → passos). Os `variables` de cada passo mostram também o valor das constantes do fornecedor usadas.
+
+### `GET /business-config/formulas/catalog`
+
+**Alterado** · `getFormulaCatalog`
+
+- **Envia (200):** `functions[]` passa a incluir `tabela`.
+
+### `PUT /products/{product_id}/pricing-setup` · `POST …/pricing-setup/validate` · `POST …/pricing-setup/test`
+
+**Alterado** · `saveProductPricingSetupDraft` e as rotas de validar e testar
+
+- **Recebe:** igual. As fórmulas do produto aceitam as constantes do fornecedor e `tabela()`. Os códigos de grupos, campos e fórmulas não podem usar os nomes das constantes.
+- **Envia:** igual.
+
+### `GET /quotes/{quote_id}/requirements`
+
+**Alterado** · `getQuoteRequirements`
+
+- **Envia (200):** os itens de `errors[]`, `warnings[]` e `info[]` que vêm das regras «Quando… então…» ganham:
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `stage` | texto (ELIGIBILITY · UNDERWRITING · VALIDATION · WORKFLOW) | Etapa da regra |
+| `requiredRole` | texto (SUBSCRIPTION_MANAGER · ADMIN) | Só nas regras de fluxo |
+
+- **Códigos novos:**
+  - `CUSTOM_RULE_NOT_ELIGIBLE` (erro);
+  - `CUSTOM_RULE_ELIGIBILITY_REFERRAL` (aviso);
+  - `CUSTOM_RULE_VALIDATION_ERROR` (erro);
+  - `CUSTOM_RULE_VALIDATION_WARNING` (aviso);
+  - `CUSTOM_RULE_APPROVAL_ROLE` (informação).
+
+### `POST /quotes/{quote_id}/submit`
+
+**Alterado** · `postQuoteSubmit`
+
+- **Recebe/Envia:** igual.
+- **Erro novo:** a submissão é recusada quando uma regra de validação (`VALIDATION_ERROR`) ou de elegibilidade (`NOT_ELIGIBLE`) se verifica. A mensagem traz o texto da regra.
+
+### `POST /quotes/{quote_id}/decision`
+
+**Alterado** · `postQuoteDecision`
+
+- **Recebe/Envia:** igual (`{decision, reasonCode, reasonText?, rowVersion}`).
+- **Erro novo:** 403 `SEC-403` ao aprovar uma cotação em que se verifica uma regra `REQUIRE_APPROVAL_BY_ROLE`, se quem aprova não tem esse perfil. Um ADMIN pode sempre.
+
+### `POST /eligibility/evaluate`
+
+**Alterado** · `postEligibilityEvaluate`
+
+- **Recebe:** igual.
+- **Envia (200):** a mesma forma. Mudanças:
+  - `decision` pode passar a `HARD_STOP` (regra `NOT_ELIGIBLE`) ou `REFERRAL` (regra `REFER_TO_UNDERWRITING`), com mensagens de código `ELIG-CUSTOM-RULE`;
+  - os filhos passam a respeitar a maioridade (`legal.age_of_majority`) e a idade máxima com prova (`limits.dependent_max_age_with_proof`) do fornecedor, mesmo com regras publicadas antes;
+  - o registo guarda `customRulesVersion`.
+
+### `POST /configuration/rule-version/{config_id}/publish`
+
+**Alterado** · `postConfigurationPublish` (`config_type = rule-version`)
+
+- **Recebe/Envia:** igual.
+- **Erro novo:** 400 `VALIDATION-400` numa regra de elegibilidade cujo `categoryRules.CHILD`, ou o de uma exceção corporativa, passa a maioridade (sem prova) ou a idade máxima com prova.
+
+### `POST /quotes/{quote_id}/price` · `POST /quotes/{quote_id}/preview` · `POST /pricing/calculate` · `POST /pricing/preview`
+
+**Alterado** · `postQuotePrice` · `postQuotePreview` · `postPricingCalculate` · `postPricingPreview`
+
+- **Recebe:** igual.
+- **Envia (200):** a mesma forma. Mudanças:
+  - os componentes `STAMP_DUTY` e `ARSEG_LEVY` usam a taxa do fornecedor e têm `sourceCode = PLATFORM_PARAMETER:<código>` e `sourceVersion` = versão do valor;
+  - um encargo do tenant com código legal passa a usar a taxa do fornecedor;
+  - as fórmulas podem usar constantes e tabelas do fornecedor;
+  - uma versão nova de um valor, constante ou tabela do fornecedor faz com que o cálculo seguinte de uma cotação aberta seja feito de novo.
+
+### `GET /pricing/{pricing_run_id}/explanation`
+
+**Alterado** · `getPricingExplanation`
+
+- **Envia (200):** no passo `CONTEXT_RESOLVED`, `output` ganha `platformParameterVersions` e `platformReferenceTableVersions` (mapa código → versão). Os passos `ACTUARIAL_TAX_APPLIED` passam a ter em `input` `parameter` e `modelRate`.
+
+### `PUT /system-parameters/{code}`
+
+**Alterado no comportamento** (além dos campos da secção 2)
+
+- **Erros:**
+  - 403 `SEC-403` em parâmetros `LEGAL`, `LIMIT`, `MARKET` e `STRUCTURAL`, que são definidos pelo fornecedor;
+  - 400 `VALIDATION-400` quando o valor sai dos limites que o fornecedor fixou para os tenants.
+
+### Rotas da tarifa antiga (obsoletas)
+
+`GET`/`POST /rating-tables`, `PATCH`/`DELETE /rating-tables/{rating_table_id}`, `GET`/`POST /pricing-parameter-sets`, `PATCH`/`DELETE /pricing-parameter-sets/{parameter_set_id}`
+
+- **Recebe/Envia:** igual.
+- **Mudança:** marcadas `deprecated: true` no contrato. A tarifa antiga converte-se com `manage.py migrate_legacy_tariffs` e deixa de ser usada quando o tenant publica `pricing.reference_premiums`.

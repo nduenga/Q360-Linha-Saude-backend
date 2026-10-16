@@ -148,11 +148,119 @@ operador (`EQ NE GT GTE LT LTE BETWEEN`), segunda condição opcional, âmbito
 - preço: `INCREASE_PERCENT`, `DISCOUNT_PERCENT`, `MULTIPLY`, `ADD_AMOUNT`,
   `SUBTRACT_AMOUNT`;
 - aceitação: `REQUIRE_MEDICAL_REVIEW`, `REQUIRE_TECHNICAL_REVIEW`, `WARN`,
-  `DECLINE`.
+  `DECLINE`;
+- elegibilidade (só `PERSON`): `NOT_ELIGIBLE` (a avaliação de elegibilidade
+  passa a `HARD_STOP`, a cotação ganha um erro que bloqueia o envio) e
+  `REFER_TO_UNDERWRITING` (`REFERRAL`). Só agravam uma decisão `ELIGIBLE`
+  ou `WARNING`; nunca desfazem um bloqueio ou pendência do motor;
+- validação: `VALIDATION_ERROR` (erro que bloqueia o envio) e
+  `VALIDATION_WARNING`;
+- fluxo: `REQUIRE_APPROVAL_BY_ROLE` com `role` (`SUBSCRIPTION_MANAGER` ou
+  `ADMIN`): a aprovação da cotação só é aceite por esse perfil (um ADMIN
+  pode sempre; outro perfil recebe SEC-403).
+
+A etapa (`stage`: `ELIGIBILITY`, `PRICING`, `UNDERWRITING`, `VALIDATION`,
+`WORKFLOW`) deduz-se da ação; se vier na linha, tem de coincidir. O campo
+`total_premium` (prémio do último cálculo, só `QUOTE`) serve para validação,
+aceitação e fluxo, nunca para preço nem elegibilidade. Os itens dos
+requisitos trazem `stage` (e `requiredRole` nas regras de fluxo).
 
 São executadas pelo motor de preços existente (não há um segundo motor),
 por ordem determinística; o trace regista as aplicadas e as ignoradas.
 Catálogo: `GET /business-config/rules/custom/catalog`.
+
+## 5.1 Catálogo único de variáveis
+
+`GET /business-config/formulas/variables[?productId=&usableIn=]` junta numa
+resposta tudo o que o tenant pode usar: variáveis do motor por fase
+(`SYSTEM`), parâmetros e valores auxiliares do `pricing.formulas` publicado
+(`PARAMETER`, `AUXILIARY`), grupos/opções/campos/fórmulas do produto
+(`PRODUCT_*`) e os campos das regras (`RULE_FIELD`). Cada entrada diz onde se
+usa (`usableIn`: `PRICING_FORMULAS:PERSON|QUOTE`, `PRODUCT_FORMULAS`,
+`RULE_CONDITIONS`). O teste de uma expressão (`POST /business-config/formulas/test`)
+e a simulação de um conjunto devolvem o cálculo passo a passo (`steps` /
+`explanation`: subexpressão, operação, operandos e resultado intermédio).
+
+## 5.2 Camada geral do fornecedor (parâmetros da plataforma)
+
+Os parâmetros de `/system-parameters` têm um nível:
+
+| Nível | Parâmetros | Quem manda |
+|---|---|---|
+| `PLATFORM_MANDATORY` | estruturais (`pricing.rounding_policy`, `pricing.formula`, `capital.pro_rata_rule`) e legais (`tax.stamp_duty_pct` 0 %, `tax.arseg_levy_pct` 1 %) | o fornecedor; o tenant só consulta (PUT → 403) |
+| `PLATFORM_DEFAULT` | operacionais (validade da cotação, beneficiários, validade das ligações, inflação médica) | o fornecedor dá o valor por omissão e pode estreitar os limites; o tenant ajusta dentro deles |
+
+Prioridade: obrigatório → valor do fornecedor; por omissão → valor do tenant
+enquanto estiver dentro dos limites do fornecedor (fora deles volta a valer
+o geral, `tenantValueOutOfLimits: true`); sem versão do fornecedor → valor
+do código. A resposta do tenant diz de onde vem o valor (`source`).
+
+As contas da plataforma gerem a camada em `/platform/system-parameters`:
+propor uma versão (motivo obrigatório, vigência opcional), aprovar por
+**outra** conta (SEC-403 se for quem propôs), rejeitar, histórico e
+reverter (cria uma versão nova, também por aprovar). Uma versão pendente de
+cada vez. Tudo fica na auditoria da plataforma. Os estruturais só aceitam
+os valores que o motor sabe executar (`allowedValues`): outro valor é uma
+nova versão do sistema.
+
+Impostos legais no cálculo: com modelo actuarial, o selo e a ARSEG usam a
+taxa geral (o valor do modelo fica só no rasto como `modelRate`); sem modelo,
+um encargo do tenant com código legal (`STAMP_DUTY`, `ARSEG_LEVY`, …) mantém
+o lugar e o `included_in_premium`, mas a taxa é a geral. O componente TAX
+regista `PLATFORM_PARAMETER:<código>` e a versão. Uma nova versão publicada
+pelo fornecedor torna desatualizado o último cálculo das cotações abertas.
+
+`GET /platform/formula-engine` mostra ao fornecedor, sem tenant, o catálogo
+do motor (funções, operadores, limites, variáveis do sistema, campos, ações e
+etapas das regras). As fórmulas e regras de negócio continuam a ser de cada
+tenant.
+
+## 5.3 Valores legais, tetos e dados de mercado (plano, fases 1 e 2)
+
+- **Fonte legal:** cada versão de um parâmetro `LEGAL` exige `legalReference`
+  (diploma e artigo) e aceita `sourceUrl`. Novos parâmetros:
+  `legal.age_of_majority` (18, art. 130.º CC) e os tetos `LIMIT`
+  `limits.dependent_max_age_with_proof` (27) e
+  `limits.max_acquisition_commission_pct` (100 % = sem teto).
+- **Tetos aplicados:** a elegibilidade usa a maioridade como limite «sem
+  prova» e o teto de idade com prova (também nas exceções corporativas); a
+  publicação de uma regra acima deles é recusada. A comissão do modelo
+  actuarial é verificada ao submeter e ao aprovar.
+- **Dados de mercado (`MARKET`):** `market.usd_aoa` (931,27) e
+  `market.inflation_pct` (10,9 %), valores iniciais do Excel a 30/06/2026.
+- **Constantes nas fórmulas:** `cambio_usd_aoa`, `inflacao_geral_pct`,
+  `taxa_arseg_pct`, `taxa_selo_pct`, `maioridade` — só leitura, nomes
+  reservados, valor e versão registados no rasto do cálculo.
+- **Tabelas de referência:** `/platform/reference-tables` (versão inteira,
+  duas contas, vigência); os tenants consultam em `/reference-tables` e usam
+  `tabela("codigo", chave, "coluna")` nas fórmulas. As versões entram no
+  rasto e na impressão digital da cotação.
+
+## 5.4 Tarifa por produto, simulação e migração (fase 3)
+
+- `GET /products/{id}/tariff`: os passos pela ordem do motor, com dono
+  (CODE, PLATFORM, TENANT), versão publicada, rascunho e pendente de cada
+  configuração, e um resumo por passo.
+- `POST /products/{id}/tariff/simulate`: cria uma cotação de exemplo e
+  calcula-a pelo caminho normal, com os rascunhos escolhidos
+  (`configurationIds` ou `includeOpenDrafts`) a valer só dentro de uma
+  transação revertida. Nada fica gravado. Devolve componentes e passos com
+  dono e as prestações.
+- `manage.py migrate_legacy_tariffs --tenant-code X [--dry-run]`: converte a
+  tarifa antiga em rascunhos de `pricing.reference_premiums` e
+  `pricing.factors`; o que não dá o mesmo prémio fica no relatório. As rotas
+  antigas estão marcadas `deprecated` no contrato.
+
+## 5.5 Aprovações e modelos de partida (fases 4 e 5)
+
+- `GET /business-config/approvals/pending[?area=]` e `/count`: tudo o que
+  espera pela segunda pessoa, com as diferenças face à versão publicada e se
+  o utilizador atual pode aprovar. O catálogo indica a `area` de cada tipo.
+- Modelos de partida do fornecedor em `/platform/templates` (tipos
+  PRODUCT, ACTUARIAL_MODEL, FORMULA_SET, COVERAGE_LIBRARY; duas contas). Os
+  tenants veem `/templates` e adotam com `POST /templates/{code}/adopt`:
+  cópia para rascunhos, nunca ligação. `manage.py seed_platform_templates`
+  carrega a configuração de referência de Angola e o modelo actuarial.
 
 ## 6. Ordem de cálculo (com modelo actuarial publicado)
 
