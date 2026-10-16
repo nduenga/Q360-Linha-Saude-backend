@@ -6,6 +6,7 @@ from apps.business_config.domain.errors import InvalidConfiguration
 from apps.business_config.domain.formula_engine import (
     FormulaError,
     evaluate_formula,
+    explain_formula,
     referenced_names,
 )
 from apps.business_config.domain.formulas import evaluate_formula_set, parse_formula_set
@@ -104,6 +105,20 @@ def test_rejeita_expressao_demasiado_longa_ou_complexa():
 
 def test_extrai_variaveis_sem_avaliar():
     assert referenced_names("max(a, b) * (1 + taxa)") == {"a", "b", "taxa"}
+
+
+def test_explica_o_calculo_passo_a_passo():
+    result, steps = explain_formula("max(base * (1 + taxa), -minimo)", {"base": "100", "taxa": "0.1", "minimo": "-50"})
+    assert result == evaluate_formula("max(base * (1 + taxa), -minimo)", {"base": "100", "taxa": "0.1", "minimo": "-50"})
+    assert [(s["step"], s["expression"], s["operation"], s["operands"], s["result"]) for s in steps] == [
+        (1, "base", "VARIABLE", [], "100"),
+        (2, "taxa", "VARIABLE", [], "0.1"),
+        (3, "1 + taxa", "+", ["1", "0.1"], "1.1"),
+        (4, "base * (1 + taxa)", "*", ["100", "1.1"], "110.0"),
+        (5, "minimo", "VARIABLE", [], "-50"),
+        (6, "-minimo", "-", ["-50"], "50"),
+        (7, "max(base * (1 + taxa), -minimo)", "max", ["110.0", "50"], "110.0"),
+    ]
 
 
 # ------------------------------------------------------------ conjunto de fórmulas
@@ -235,6 +250,15 @@ def test_formulas_por_pessoa_correm_so_na_sua_fase_por_ordem():
     assert young["total"] == Decimal("50.00")  # mínimo por pessoa
     quote = _run(_person_set())
     assert [s["code"] for s in quote["steps"]] == ["total"]
+
+
+def test_conjunto_explica_cada_passo_e_os_valores_auxiliares():
+    outcome = evaluate_formula_set(parse_formula_set(_set()), total_amount=Decimal("100.00"), members_count=1,
+                                   round_money=round_amount, explain=True)
+    first = outcome["steps"][0]
+    assert [s["operation"] for s in first["explanation"]] == ["VARIABLE", "VARIABLE", "+"]
+    assert [s["result"] for s in first["auxiliaryExplanations"]["encargos"]] == ["100.00", "0.13", "13.0000"]
+    assert "explanation" not in _run(_set())["steps"][0]  # o motor de preço não paga o custo da explicação
 
 
 def test_fase_pessoa_exige_idade():

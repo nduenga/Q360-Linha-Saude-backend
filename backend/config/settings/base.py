@@ -243,6 +243,13 @@ SPECTACULAR_SETTINGS = {
         "VersionedConfigStatusEnum": "apps.product.domain.enums.VersionedConfigStatus",
         "TenantStatusEnum": ["ACTIVE", "SUSPENDED", "INACTIVE"],
         "PlatformAdminStatusEnum": ["ACTIVE", "DISABLED"],
+        # Nomes já publicados no contrato: fixados para não mudarem quando
+        # outros componentes ganham campos com o mesmo nome.
+        "SourceEnum": ["INTERNAL", "OTHER_INSURER"],
+        "SystemParameterValueTypeEnum": ["INTEGER", "DECIMAL", "TEXT", "BOOLEAN"],
+        "PlatformVersionStatusEnum": ["PENDING_APPROVAL", "PUBLISHED", "REJECTED"],
+        "TemplateKindEnum": ["PRODUCT", "ACTUARIAL_MODEL", "FORMULA_SET", "COVERAGE_LIBRARY"],
+        "ScopeEnum": ["QUOTE", "MEMBER"],
     },
     "SCHEMA_PATH_PREFIX": "/api/v1",
     "SECURITY": [{"oauth2": ["q360.read"]}],

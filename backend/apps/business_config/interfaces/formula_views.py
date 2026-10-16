@@ -8,6 +8,8 @@ análise de dependências e a simulação.
 """
 from __future__ import annotations
 
+import uuid
+
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers
@@ -23,8 +25,9 @@ from apps.business_config.application.service import (
     submit_configuration,
     update_configuration,
 )
+from apps.business_config.application.formula_variables import variable_catalog
 from apps.business_config.domain.errors import InvalidConfiguration
-from apps.business_config.domain.formula_engine import FormulaError, evaluate_formula, referenced_names
+from apps.business_config.domain.formula_engine import FormulaError, explain_formula, referenced_names
 from apps.business_config.domain.formulas import (
     CONFIG_KEY,
     evaluate_formula_set,
@@ -44,6 +47,7 @@ from apps.business_config.interfaces.serializers import (
 )
 from apps.business_config.interfaces.views import _ConfigPermissions
 from apps.pricing.domain.money import round_amount
+from apps.product.infrastructure.models import Product
 
 
 class FormulaCreateSerializer(serializers.Serializer):
@@ -70,7 +74,7 @@ def _simulation(value, total_amount, members_count, stage="QUOTE", age=None) -> 
     formula_set = parse_formula_set(value)
     outcome = evaluate_formula_set(
         formula_set, total_amount=total_amount, members_count=members_count, round_money=round_amount,
-        stage=stage, age=age,
+        stage=stage, age=age, explain=True,
     )
     return {
         "stage": stage,
@@ -90,6 +94,25 @@ class FormulaCatalogView(_ConfigPermissions, APIView):
                    tags=["Configuration"])
     def get(self, request):
         return Response(formula_catalog())
+
+
+class FormulaVariablesView(_ConfigPermissions, APIView):
+    """Catálogo único de variáveis: motor, parâmetros e auxiliares das
+    fórmulas publicadas, campos do produto (`?productId=`) e campos das
+    regras. Filtro `?usableIn=PRICING_FORMULAS|PRICING_FORMULAS:PERSON|
+    PRICING_FORMULAS:QUOTE|PRODUCT_FORMULAS|RULE_CONDITIONS`."""
+
+    @extend_schema(operation_id="getFormulaVariables", summary="Catálogo único das variáveis de fórmulas e regras",
+                   tags=["Configuration"])
+    def get(self, request):
+        product_id = request.query_params.get("productId")
+        if product_id:
+            try:
+                uuid.UUID(product_id)
+            except ValueError:
+                return Response({"valid": False, "error": "productId tem de ser um UUID"}, status=400)
+            get_object_or_404(Product, id=product_id)
+        return Response(variable_catalog(product_id=product_id, usable_in=request.query_params.get("usableIn")))
 
 
 class FormulaListCreateView(_ConfigPermissions, APIView):
@@ -208,7 +231,8 @@ class FormulaValidateView(_ConfigPermissions, APIView):
 
 
 class FormulaTestView(_ConfigPermissions, APIView):
-    """Testa uma expressão isolada sem guardar nem publicar alterações."""
+    """Testa uma expressão isolada sem guardar nem publicar alterações e
+    devolve o cálculo passo a passo."""
 
     @extend_schema(operation_id="testPricingFormula", summary="Validar e testar uma expressão", tags=["Configuration"],
                    request=FormulaTestSerializer)
@@ -218,7 +242,8 @@ class FormulaTestView(_ConfigPermissions, APIView):
         data = s.validated_data
         try:
             variables = sorted(referenced_names(data["expression"]))
-            result = evaluate_formula(data["expression"], data["variables"])
+            result, steps = explain_formula(data["expression"], data["variables"])
         except FormulaError as exc:
             return Response({"valid": False, "error": str(exc)}, status=400)
-        return Response({"valid": True, "result": str(result), "variables": variables})
+        # `steps`: o cálculo operação a operação, pela ordem em que é feito.
+        return Response({"valid": True, "result": str(result), "variables": variables, "steps": steps})

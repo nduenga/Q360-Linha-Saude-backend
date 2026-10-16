@@ -272,3 +272,32 @@ def test_no_waiting_period_configured_produces_no_extra_message():
     decision, messages = _evaluate(_input(date_of_birth=datetime.date(2015, 1, 1)), EligibilityRuleConfig())
     assert decision == EligibilityDecision.ELIGIBLE
     assert all(m.code != "ELIG-WAITING-PERIOD" for m in messages)
+
+
+# --- limites legais da camada geral (fornecedor) --------------------------
+
+
+def test_legal_majority_caps_the_tenant_age_without_proof():
+    from apps.eligibility.domain.evaluation import LegalAgeLimits
+
+    config = EligibilityRuleConfig(category_rules={"CHILD": {**_CHILD_RULE["CHILD"], "maxAgeWithoutProof": 21}})
+    child_20 = _input(date_of_birth=datetime.date(2006, 1, 1))
+    assert _evaluate(child_20, config)[0] == EligibilityDecision.ELIGIBLE  # só a regra do tenant
+    decision, messages = evaluate(data=child_20, plan=_PLAN_ACTIVE, config=config,
+                                  legal=LegalAgeLimits(age_of_majority=18, max_age_with_proof=27))
+    assert decision == EligibilityDecision.PENDING_DOCUMENT and messages[0].code == "FALTA_CERTIFICADO_MATRICULA"
+
+
+def test_platform_cap_limits_the_age_with_proof_even_for_corporate_exceptions():
+    from apps.eligibility.domain.evaluation import LegalAgeLimits
+
+    config = EligibilityRuleConfig(
+        category_rules=_CHILD_RULE,
+        corporate_overrides={"org-1": {"categoryRules": {"CHILD": {"maxAgeWithProof": 30}}}},
+    )
+    child_28 = _input(date_of_birth=datetime.date(1998, 1, 1), organisation_proposer_id="org-1",
+                      angola_evidence=AngolaEvidence(has_enrollment_certificate=True))
+    assert _evaluate(child_28, config)[0] == EligibilityDecision.ELIGIBLE
+    decision, messages = evaluate(data=child_28, plan=_PLAN_ACTIVE, config=config,
+                                  legal=LegalAgeLimits(age_of_majority=18, max_age_with_proof=27))
+    assert decision == EligibilityDecision.HARD_STOP and messages[0].code == "IDADE_ACIMA_LIMITE_DEPENDENTE"

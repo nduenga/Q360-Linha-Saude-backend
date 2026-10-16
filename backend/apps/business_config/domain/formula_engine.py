@@ -5,11 +5,20 @@ e só são aceites números, variáveis, os operadores + - * / ** e as funções
 de `ALLOWED_FUNCTIONS`. Qualquer outro nó (atributos, índices, chamadas a
 nomes não autorizados, lambdas, comparações, strings…) é recusado antes de
 qualquer cálculo. Todos os valores são `Decimal`.
+
+Além das variáveis que quem chama fornece, uma fórmula pode usar as
+constantes do fornecedor (`PLATFORM_CONSTANTS`, ex.: `cambio_usd_aoa`) e
+consultar tabelas de referência com `tabela("codigo", chave, "coluna")`. O
+texto só é aceite como 1.º e 3.º argumento de `tabela` (e como chave).
+Os valores vêm de `platform_inputs.current()`.
 """
 
 import ast
 import operator
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
+from apps.foundation.domain import platform_inputs
+from apps.foundation.domain.system_parameters import PLATFORM_CONSTANTS
 
 
 _BINARY_OPERATORS = {
@@ -25,12 +34,16 @@ _UNARY_OPERATORS = {
     ast.USub: operator.neg,
 }
 
+_SYMBOLS = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/", ast.Pow: "**", ast.UAdd: "+", ast.USub: "-"}
+
 ALLOWED_FUNCTIONS = {
     "min": "Menor dos valores: min(a, b, …)",
     "max": "Maior dos valores: max(a, b, …)",
     "abs": "Valor absoluto: abs(a)",
     "round": "Arredondamento meio-para-cima: round(a) ou round(a, casas) com 0–6 casas",
+    "tabela": 'Valor de uma tabela de referência do fornecedor: tabela("codigo", chave, "coluna")',
 }
+TABLE_FUNCTION = "tabela"
 ALLOWED_OPERATORS = ("+", "-", "*", "/", "**")
 
 MAX_EXPRESSION_LENGTH = 500
@@ -86,10 +99,51 @@ def _check_node(node, names):
             raise FormulaError("Argumentos nomeados não são permitidos.")
         if not node.args:
             raise FormulaError(f"A função '{node.func.id}' precisa de argumentos.")
+        if node.func.id == TABLE_FUNCTION:
+            _check_table_call(node, names)
+            return
         for arg in node.args:
             _check_node(arg, names)
     else:
         raise FormulaError(f"Expressão não permitida: {type(node).__name__}.")
+
+
+def _is_text(node):
+    return isinstance(node, ast.Constant) and isinstance(node.value, str)
+
+
+def _check_table_call(node, names):
+    if len(node.args) != 3:
+        raise FormulaError('tabela() precisa de 3 argumentos: tabela("codigo", chave, "coluna").')
+    code, key, column = node.args
+    if not _is_text(code) or not code.value.strip():
+        raise FormulaError('O 1.º argumento de tabela() é o código da tabela, entre aspas.')
+    if not _is_text(column) or not column.value.strip():
+        raise FormulaError('O 3.º argumento de tabela() é o nome da coluna, entre aspas.')
+    if not _is_text(key):
+        _check_node(key, names)
+
+
+def referenced_tables(expression):
+    """Códigos das tabelas de referência usadas por uma expressão."""
+    tree, _ = parse_formula(expression)
+    return {
+        n.args[0].value.strip() for n in ast.walk(tree)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == TABLE_FUNCTION
+    }
+
+
+class _Scope(dict):
+    """Variáveis de quem chama + acesso preguiçoso aos valores do fornecedor."""
+
+    def __init__(self, variables):
+        super().__init__(variables or {})
+        self._inputs = None
+
+    def platform(self):
+        if self._inputs is None:
+            self._inputs = platform_inputs.current()
+        return self._inputs
 
 
 def parse_formula(expression):
@@ -119,21 +173,40 @@ def referenced_names(expression):
     return parse_formula(expression)[1]
 
 
-def _evaluate(node, variables):
+def _record(record, node, operation, operands, result):
+    """Passo do cálculo (modo explicação): a subexpressão, a operação, os
+    operandos já calculados e o resultado — pela ordem em que são feitos."""
+    if record is not None:
+        record.append({
+            "step": len(record) + 1,
+            "expression": ast.unparse(node),
+            "operation": operation,
+            "operands": [str(v) for v in operands],
+            "result": str(result),
+        })
+    return result
+
+
+def _evaluate(node, variables, record=None):
     if isinstance(node, ast.Expression):
-        return _evaluate(node.body, variables)
+        return _evaluate(node.body, variables, record)
 
     if isinstance(node, ast.Constant):
         return _number(node.value)
 
     if isinstance(node, ast.Name):
-        if node.id not in variables:
-            raise FormulaError(f"Variável '{node.id}' não fornecida.")
-        return _number(variables[node.id])
+        if node.id in variables:
+            return _record(record, node, "VARIABLE", [], _number(variables[node.id]))
+        if node.id in PLATFORM_CONSTANTS:
+            value = variables.platform().constants.get(node.id)
+            if value is None:
+                raise FormulaError(f"A constante do fornecedor '{node.id}' não tem valor em vigor.")
+            return _record(record, node, "CONSTANT", [], _number(value))
+        raise FormulaError(f"Variável '{node.id}' não fornecida.")
 
     if isinstance(node, ast.BinOp):
-        left = _evaluate(node.left, variables)
-        right = _evaluate(node.right, variables)
+        left = _evaluate(node.left, variables, record)
+        right = _evaluate(node.right, variables, record)
 
         if isinstance(node.op, ast.Div) and right == 0:
             raise FormulaError("Divisão por zero.")
@@ -146,23 +219,29 @@ def _evaluate(node, variables):
         except (ArithmeticError, ValueError):
             raise FormulaError("Não foi possível calcular esta operação.") from None
 
-        return _number(result)
+        return _record(record, node, _SYMBOLS[type(node.op)], [left, right], _number(result))
 
     if isinstance(node, ast.UnaryOp):
-        return _UNARY_OPERATORS[type(node.op)](_evaluate(node.operand, variables))
+        operand = _evaluate(node.operand, variables, record)
+        result = _UNARY_OPERATORS[type(node.op)](operand)
+        if isinstance(node.op, ast.USub) and isinstance(node.operand, ast.Constant):
+            return result  # número negativo escrito na expressão, não é um passo
+        return _record(record, node, _SYMBOLS[type(node.op)], [operand], result)
 
     # ast.Call (o único nó restante depois de `_check_node`)
     name = node.func.id
-    args = [_evaluate(arg, variables) for arg in node.args]
+    if name == TABLE_FUNCTION:
+        return _evaluate_table(node, variables, record)
+    args = [_evaluate(arg, variables, record) for arg in node.args]
 
     if name == "abs" and len(args) == 1:
-        return abs(args[0])
+        return _record(record, node, "abs", args, abs(args[0]))
 
     if name == "min":
-        return min(args)
+        return _record(record, node, "min", args, min(args))
 
     if name == "max":
-        return max(args)
+        return _record(record, node, "max", args, max(args))
 
     if name == "round" and len(args) in (1, 2):
         places = args[1] if len(args) == 2 else Decimal(0)
@@ -172,12 +251,39 @@ def _evaluate(node, variables):
 
         quantum = Decimal("1").scaleb(-int(places))
 
-        return args[0].quantize(quantum, rounding=ROUND_HALF_UP)
+        return _record(record, node, "round", args, args[0].quantize(quantum, rounding=ROUND_HALF_UP))
 
     raise FormulaError(f"Número de argumentos inválido para '{name}'.")
+
+
+def _evaluate_table(node, variables, record):
+    code = node.args[0].value.strip()
+    column = node.args[2].value.strip()
+    key_node = node.args[1]
+    key = key_node.value if _is_text(key_node) else _evaluate(key_node, variables, record)
+    table = variables.platform().tables.get(code)
+    if table is None:
+        raise FormulaError(f"A tabela de referência '{code}' não existe ou não tem versão em vigor.")
+    try:
+        raw = table.lookup(key, column)
+    except KeyError as exc:
+        raise FormulaError(str(exc.args[0])) from None
+    if raw is None or raw == "":
+        raise FormulaError(f"A tabela '{code}' não tem valor na coluna '{column}' para a chave '{key}'.")
+    return _record(record, node, TABLE_FUNCTION, [code, key, column], _number(raw))
 
 
 def evaluate_formula(expression, variables):
     """Valida e calcula uma expressão matemática."""
     tree, _names = parse_formula(expression)
-    return _evaluate(tree, variables)
+    return _evaluate(tree, _Scope(variables))
+
+
+def explain_formula(expression, variables):
+    """Como `evaluate_formula`, mas devolve também os passos do cálculo:
+    `(resultado, passos)`, cada passo com a subexpressão, a operação
+    (VARIABLE para a substituição de uma variável), os operandos e o
+    resultado intermédio."""
+    tree, _names = parse_formula(expression)
+    steps = []
+    return _evaluate(tree, _Scope(variables), steps), steps

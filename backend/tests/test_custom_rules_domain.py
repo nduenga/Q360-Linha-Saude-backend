@@ -106,7 +106,24 @@ def test_field_catalog_drives_the_interface():
 
     meta = get_form_schema("rules.custom")["meta"]
     assert {f["key"] for f in meta["fields"]} >= {"age", "plan", "members_count"}
-    assert {a["group"] for a in meta["actions"]} == {"PRICING", "UNDERWRITING"}
+    assert {a["group"] for a in meta["actions"]} == {"PRICING", "UNDERWRITING", "ELIGIBILITY", "VALIDATION", "WORKFLOW"}
+    assert [s["key"] for s in meta["stages"]] == ["ELIGIBILITY", "PRICING", "UNDERWRITING", "VALIDATION", "WORKFLOW"]
+
+
+def test_stage_constraints():
+    assert parse_rule(_row(action="VALIDATION_ERROR")).stage == "VALIDATION"
+    with pytest.raises(InvalidConfiguration, match="Cada pessoa"):
+        parse_rule(_row(action="NOT_ELIGIBLE", scope="QUOTE", field="members_count"))
+    with pytest.raises(InvalidConfiguration, match="perfil"):
+        parse_rule(_row(action="REQUIRE_APPROVAL_BY_ROLE", scope="QUOTE", field="members_count"))
+    with pytest.raises(InvalidConfiguration, match="etapa"):
+        parse_rule(_row(action="WARN", stage="PRICING"))
+    with pytest.raises(InvalidConfiguration, match="prémio total"):
+        parse_rule(_row(action="INCREASE_PERCENT", amount="5", scope="QUOTE", field="total_premium"))
+    with pytest.raises(InvalidConfiguration, match="cotação inteira"):
+        parse_rule(_row(action="WARN", scope="PERSON", field="total_premium"))
+    rule = parse_rule(_row(action="REQUIRE_APPROVAL_BY_ROLE", scope="QUOTE", field="total_premium", role="ADMIN"))
+    assert rule.stage == "WORKFLOW" and rule.role == "ADMIN"
 
 
 def test_structure_accepts_the_form_shape_and_rejects_unknown_fields():

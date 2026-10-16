@@ -19,7 +19,10 @@ class PublishedRules:
         return [r for r in self.rules if r.is_pricing and r.scope == scope]
 
     def underwriting(self, scope: str) -> list[CustomRule]:
-        return [r for r in self.rules if not r.is_pricing and r.scope == scope]
+        return self.for_stage("UNDERWRITING", scope)
+
+    def for_stage(self, stage: str, scope: str) -> list[CustomRule]:
+        return [r for r in self.rules if r.stage == stage and r.scope == scope]
 
 
 def load_published_rules(effective_date: datetime.date) -> PublishedRules:
@@ -64,9 +67,11 @@ def quote_facts(
     plan_name: str | None,
     dimensions: Mapping[str, Any],
     product: tuple[str | None, str | None] = (),
+    total_premium: Any = None,
 ) -> dict[str, Any]:
     return {
         "members_count": members_count,
+        "total_premium": total_premium,
         "product": product,  # (código, nome) do produto a que o plano pertence
         "plan": (plan_code, plan_name),  # o GTE pode escrever o código ou o nome
         "segment": dimensions.get("segment"),

@@ -70,6 +70,11 @@ _CUSTOM_RULE_ITEMS = {
     "REQUIRE_MEDICAL_REVIEW": ("WARNING", "CUSTOM_RULE_MEDICAL_REVIEW"),
     "REQUIRE_TECHNICAL_REVIEW": ("WARNING", "CUSTOM_RULE_TECHNICAL_REVIEW"),
     "WARN": ("WARNING", "CUSTOM_RULE_WARNING"),
+    "NOT_ELIGIBLE": ("ERROR", "CUSTOM_RULE_NOT_ELIGIBLE"),
+    "REFER_TO_UNDERWRITING": ("WARNING", "CUSTOM_RULE_ELIGIBILITY_REFERRAL"),
+    "VALIDATION_ERROR": ("ERROR", "CUSTOM_RULE_VALIDATION_ERROR"),
+    "VALIDATION_WARNING": ("WARNING", "CUSTOM_RULE_VALIDATION_WARNING"),
+    "REQUIRE_APPROVAL_BY_ROLE": ("INFO", "CUSTOM_RULE_APPROVAL_ROLE"),
 }
 
 
@@ -88,6 +93,8 @@ def _custom_rule_item(
         member_id=member_id, member_name=member_name,
         ruleCode=rule.code,
         ruleName=rule.name,
+        stage=rule.stage,
+        **({"requiredRole": rule.role} if rule.role else {}),
     )
 
 def _item(
@@ -235,9 +242,11 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
         "segment": segment,
         "participationOption": (quote.selection_json or {}).get("participationOption") or settings.get("participationOption"),
     }
+    last_run = quote.latest_pricing_run
     quote_facts_ = quote_facts(
         members_count=len(counted), plan_code=str(plan.code), plan_name=str(plan.name), dimensions=custom_dimensions,
         product=(plan.product.code, plan.product.name),
+        total_premium=last_run.total_amount if last_run is not None else None,
     )
     for rule in custom_rules:
         if rule.scope == "QUOTE" and not rule.is_pricing and rule.matches(quote_facts_):
@@ -420,6 +429,13 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
         "waitingPeriods": waiting,
         "exclusions": exclusions,
     }
+
+
+def required_approval_roles(quote: Quote) -> list[str]:
+    """Perfis exigidos pelas regras de fluxo (`REQUIRE_APPROVAL_BY_ROLE`)
+    que se verificam na cotação; vazio = qualquer aprovador."""
+    result = evaluate_requirements(quote)
+    return sorted({i["requiredRole"] for i in result["info"] if i["code"] == "CUSTOM_RULE_APPROVAL_ROLE"})
 
 
 def enforce_requirements(quote: Quote) -> None:

@@ -13,7 +13,16 @@ from typing import Any
 from apps.client.domain.enums import ProposerType
 from apps.client.infrastructure.models import InsuredMember, Proposer, RelationshipCode
 from apps.eligibility.domain.errors import ReferencedEntityNotFoundError
-from apps.eligibility.domain.evaluation import AngolaEvidence, EvaluationInput, PlanFacts, evaluate
+from apps.eligibility.domain.enums import EligibilityDecision
+from apps.eligibility.domain.evaluation import (
+    AngolaEvidence,
+    EligibilityMessage,
+    EvaluationInput,
+    LegalAgeLimits,
+    PlanFacts,
+    _age_on,
+    evaluate,
+)
 from apps.eligibility.infrastructure.models import EligibilityEvaluation
 from apps.eligibility.infrastructure.rule_repository import parse_config, resolve_eligibility_rule_version
 from apps.foundation.application.audit_service import AuditService
@@ -45,6 +54,42 @@ def _with_member_evidence(context: dict[str, Any] | None, member: InsuredMember 
             angola[key] = True
     merged["angola"] = angola
     return merged
+
+
+# Decisões que uma regra "Quando… então…" de elegibilidade ainda pode
+# agravar (nunca desfaz um bloqueio nem uma pendência do motor).
+_CUSTOM_RULE_OVERRIDABLE = {EligibilityDecision.ELIGIBLE, EligibilityDecision.WARNING}
+
+
+def _apply_custom_rules(
+    *, decision: EligibilityDecision, messages: list, member: InsuredMember | None, plan: Plan,
+    relationship_category: str | None, effective_date: datetime.date,
+):
+    """Regras `rules.custom` da etapa ELIGIBILITY (por pessoa): NOT_ELIGIBLE
+    bloqueia (HARD_STOP); REFER_TO_UNDERWRITING encaminha (REFERRAL)."""
+    from apps.business_config.application.custom_rules import load_published_rules, person_facts
+    from apps.business_config.application.overlays import effective_plan_settings
+    from apps.business_config.domain.custom_rules import describe as describe_rule
+
+    published = load_published_rules(effective_date)
+    rules = published.for_stage("ELIGIBILITY", "PERSON")
+    if not rules or decision not in _CUSTOM_RULE_OVERRIDABLE:
+        return decision, messages, published.version
+    facts = person_facts(
+        age=_age_on(member.date_of_birth) if member is not None and member.date_of_birth else None,
+        members_count=None, plan_code=str(plan.code), plan_name=str(plan.name),
+        dimensions={"segment": effective_plan_settings(plan, effective_date).get("segment")},
+        relationship=relationship_category, product=(plan.product.code, plan.product.name),
+    )
+    matched = [r for r in rules if r.matches(facts)]
+    blocking = [r for r in matched if r.action == "NOT_ELIGIBLE"]
+    chosen = blocking or matched
+    if not chosen:
+        return decision, messages, published.version
+    new_decision = EligibilityDecision.HARD_STOP if blocking else EligibilityDecision.REFERRAL
+    severity = "ERROR" if blocking else "WARNING"
+    extra = [EligibilityMessage("ELIG-CUSTOM-RULE", severity, r.message or describe_rule(r)) for r in chosen]
+    return new_decision, [*messages, *extra], published.version
 
 
 class EvaluateEligibilityUseCase:
@@ -112,7 +157,17 @@ class EvaluateEligibilityUseCase:
         )
         plan_facts = PlanFacts(is_active=plan.status == "ACTIVE")
 
-        decision, messages = evaluate(data=data, plan=plan_facts, config=config)
+        from apps.foundation.application import system_parameter_service
+
+        legal = LegalAgeLimits(
+            age_of_majority=system_parameter_service.get_value("legal.age_of_majority"),
+            max_age_with_proof=system_parameter_service.get_value("limits.dependent_max_age_with_proof"),
+        )
+        decision, messages = evaluate(data=data, plan=plan_facts, config=config, legal=legal)
+        decision, messages, custom_rules_version = _apply_custom_rules(
+            decision=decision, messages=list(messages), member=member, plan=plan,
+            relationship_category=relationship_category, effective_date=effective_date,
+        )
 
         evaluation = EligibilityEvaluation.objects.create(
             tenant_id=tenant_id.value,
@@ -127,6 +182,7 @@ class EvaluateEligibilityUseCase:
                 "planId": str(plan_id),
                 "effectiveDate": effective_date.isoformat(),
                 "context": context,
+                "customRulesVersion": custom_rules_version,
             },
             evidence_json=[
                 {"code": m.code, "severity": m.severity, "message": m.message} for m in messages

@@ -47,11 +47,14 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 
 from apps.business_config.domain.errors import InvalidConfiguration
+from apps.foundation.domain import platform_inputs
+from apps.foundation.domain.system_parameters import PLATFORM_CONSTANTS
 from apps.business_config.domain.formula_engine import (
     ALLOWED_FUNCTIONS,
     ALLOWED_OPERATORS,
     FormulaError,
     evaluate_formula,
+    explain_formula,
     parse_formula,
 )
 
@@ -185,7 +188,7 @@ def _parse_parameters(rows: Any, reserved: set[str]) -> tuple[Parameter, ...]:
             raise InvalidConfiguration(f"{path}: campos desconhecidos {sorted(unknown)}")
         code = _code(row.get("code"), f"{path}.code")
         if code in reserved:
-            raise InvalidConfiguration(f"{path}.code: '{code}' é uma variável do sistema")
+            raise InvalidConfiguration(f"{path}.code: '{code}' é um nome reservado (variável do sistema ou constante do fornecedor)")
         if code in seen:
             raise InvalidConfiguration(f"{path}.code: '{code}' está duplicado")
         seen.add(code)
@@ -305,7 +308,8 @@ def parse_formula_set(value: Any) -> FormulaSet:
     if len(rows) > MAX_FORMULAS:
         raise InvalidConfiguration(f"pricing.formulas.rules: máximo de {MAX_FORMULAS} fórmulas")
 
-    system = set().union(*(set(v) for v in SYSTEM_VARIABLES.values()))
+    # Variáveis do motor e constantes do fornecedor: nomes reservados.
+    system = set().union(*(set(v) for v in SYSTEM_VARIABLES.values())) | set(PLATFORM_CONSTANTS)
     parameters = _parse_parameters(value.get("parameters"), system)
     parameter_codes = {p.code for p in parameters}
     formulas = [_parse_formula(row, index) for index, row in enumerate(rows)]
@@ -323,7 +327,7 @@ def parse_formula_set(value: Any) -> FormulaSet:
     values = {f.code: f for f in formulas if f.target == "VALUE"}
     totals = {f.code for f in formulas if f.target == "TOTAL"}
     for formula in formulas:
-        allowed = set(SYSTEM_VARIABLES[formula.stage]) | parameter_codes | set(values)
+        allowed = set(SYSTEM_VARIABLES[formula.stage]) | parameter_codes | set(values) | set(PLATFORM_CONSTANTS)
         for name in sorted(formula.variables):
             if name in totals:
                 current = "person_amount" if formula.stage == "PERSON" else "total_amount"
@@ -386,6 +390,7 @@ def evaluate_formula_set(
     round_money: Callable[[Decimal], Decimal],
     stage: str = "QUOTE",
     age: int | None = None,
+    explain: bool = False,
 ) -> dict[str, Any]:
     """Executa os passos TOTAL da fase, por ordem, e devolve o detalhe de cada um.
 
@@ -393,6 +398,8 @@ def evaluate_formula_set(
     ou o prémio da pessoa (PERSON, que também exige `age`).
     Erros de cálculo (divisão por zero, resultado fora do intervalo…) são
     lançados como `FormulaError`; quem chama decide como os reportar.
+    `explain=True` junta a cada passo o cálculo operação a operação
+    (`explanation`, e `auxiliaryExplanations` para os valores auxiliares).
     """
     if stage not in STAGES:
         raise FormulaError(f"Fase desconhecida: {stage!r}")
@@ -405,6 +412,7 @@ def evaluate_formula_set(
     for formula in formula_set.steps_for(stage):
         system = _system_values(stage, current=current, base=base_total, members_count=members_count, age=age)
         cache: dict[str, Decimal] = {}
+        explanations: dict[str, list[dict[str, Any]]] = {}
 
         def resolve(code: str) -> Decimal:
             if code not in cache:
@@ -420,17 +428,33 @@ def evaluate_formula_set(
                     scope[name] = system[name]
                 elif name in parameters:
                     scope[name] = parameters[name]
+                elif name in PLATFORM_CONSTANTS:
+                    continue  # o avaliador lê-a do fornecedor (platform_inputs)
                 else:
                     scope[name] = resolve(name)
-            return evaluate_formula(item.expression, scope)
+            if not explain:
+                return evaluate_formula(item.expression, scope)
+            result, explanations[item.code] = explain_formula(item.expression, scope)
+            return result
 
         before = current
         raw = compute(formula)
         current = round_money(raw)
         _check_output(formula, current)
-        inputs = {name: str(system.get(name, parameters.get(name, cache.get(name)))) for name in sorted(formula.variables)}
+        constants = platform_inputs.current().constants if formula.variables & set(PLATFORM_CONSTANTS) else {}
+        inputs = {
+            name: str(system.get(name, parameters.get(name, cache.get(name, constants.get(name)))))
+            for name in sorted(formula.variables)
+        }
+        extra: dict[str, Any] = {}
+        if explain:
+            extra = {
+                "explanation": explanations[formula.code],
+                "auxiliaryExplanations": {code: explanations[code] for code in sorted(cache)},
+            }
         steps.append(
             {
+                **extra,
                 "code": formula.code,
                 "name": formula.name,
                 "expression": formula.expression,

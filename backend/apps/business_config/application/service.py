@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.business_config.application import role_permissions
+from apps.business_config.application.platform_limits import check_platform_limits
 from apps.business_config.application.readers import BusinessSnapshot
 from apps.business_config.domain.catalog import CATALOG_BY_KEY
 from apps.business_config.domain.product_setup import is_product_setup_key, validate_product_setup
@@ -130,6 +131,7 @@ def submit_configuration(request, c, change_reason=None):
     else:
         validate_structure(c.config_key, c.value_json)
     validate_for_publication(c.config_key, c.value_json)
+    check_platform_limits(c.config_key, c.value_json)
     c.status = "PENDING_APPROVAL"
     c.submitted_at = timezone.now()
     c.row_version += 1
@@ -147,6 +149,8 @@ def approve_configuration(request, c):
     who = actor_id()
     if c.created_by == who and _rules().get("four_eyes_required") is not False:
         raise FourEyesViolation("O criador não pode aprovar a própria configuração.")
+    # Os tetos do fornecedor podem ter mudado desde a submissão.
+    check_platform_limits(c.config_key, c.value_json)
     now = timezone.now()
     # A nova versão substitui a anterior vigente da mesma chave.
     for old in (BusinessConfiguration.objects.select_for_update()
@@ -250,6 +254,11 @@ def _diff(old, new, path=""):
                 changes.extend(_diff(old[index], new[index], child))
         return changes
     return [] if old == new else [{"path": path, "change": "CHANGED", "before": old, "after": new}]
+
+
+def diff_values(old, new) -> list[dict]:
+    """Diferenças entre dois valores de configuração (ver `_diff`)."""
+    return _diff(old, new)
 
 
 def compare_configurations(base, other):

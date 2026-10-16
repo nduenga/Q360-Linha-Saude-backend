@@ -90,10 +90,21 @@ class ImpactSimulation(s.Serializer):
 class SystemParameter(s.Serializer):
     code = s.CharField()
     valueType = s.ChoiceField(choices=["INTEGER", "DECIMAL", "TEXT", "BOOLEAN"])
-    category = s.ChoiceField(choices=["OPERATIONAL", "STRUCTURAL"], help_text="OPERATIONAL: o GTE altera; STRUCTURAL: só por evolução do sistema.")
+    category = s.ChoiceField(
+        choices=["OPERATIONAL", "STRUCTURAL", "LEGAL", "LIMIT", "MARKET"],
+        help_text="OPERATIONAL: o GTE altera; STRUCTURAL: só por evolução do sistema; LEGAL: valor legal; LIMIT: teto do "
+                  "fornecedor; MARKET: dado de mercado (fornecedor).",
+    )
+    level = s.ChoiceField(
+        choices=["PLATFORM_MANDATORY", "PLATFORM_DEFAULT"],
+        help_text="PLATFORM_MANDATORY: vale o valor do fornecedor; PLATFORM_DEFAULT: o tenant ajusta dentro dos limites.",
+    )
     value = s.JSONField(allow_null=True)
-    default = s.JSONField(allow_null=True)
+    source = s.ChoiceField(choices=["TENANT", "PLATFORM", "CODE_DEFAULT"], help_text="De onde vem o valor em vigor.")
+    default = s.JSONField(allow_null=True, help_text="Valor geral (do fornecedor ou do código) usado sem ajuste do tenant.")
+    platformVersionNo = s.IntegerField(help_text="Versão geral em vigor (0 = valor do código).")
     isDefault = s.BooleanField()
+    tenantValueOutOfLimits = s.BooleanField(help_text="O valor do tenant ficou fora dos limites do fornecedor e não se aplica.")
     description = s.CharField()
     unit = s.CharField(allow_null=True)
     constraints = s.DictField(child=s.JSONField(allow_null=True))
@@ -122,6 +133,347 @@ class SystemParameterRevision(s.Serializer):
     reason = s.CharField(allow_null=True)
     changedBy = s.CharField()
     createdAt = s.DateTimeField()
+
+
+class PlatformParameterVersion(s.Serializer):
+    code = s.CharField()
+    versionNo = s.IntegerField()
+    status = s.ChoiceField(choices=["PENDING_APPROVAL", "PUBLISHED", "REJECTED"])
+    action = s.CharField(help_text="CREATED ou ROLLBACK_TO_<n>.")
+    value = s.JSONField(allow_null=True)
+    minimum = s.JSONField(allow_null=True, help_text="Limite mínimo imposto aos tenants (só PLATFORM_DEFAULT).")
+    maximum = s.JSONField(allow_null=True, help_text="Limite máximo imposto aos tenants (só PLATFORM_DEFAULT).")
+    effectiveFrom = s.DateTimeField(allow_null=True)
+    inEffect = s.BooleanField()
+    reason = s.CharField()
+    legalReference = s.CharField(allow_null=True, help_text="Fonte legal (parâmetros LEGAL).")
+    sourceUrl = s.CharField(allow_null=True)
+    createdBy = s.CharField()
+    createdAt = s.DateTimeField(allow_null=True)
+    decidedBy = s.CharField(allow_null=True)
+    decidedAt = s.DateTimeField(allow_null=True)
+    decisionNote = s.CharField(allow_null=True)
+
+
+class PlatformParameter(s.Serializer):
+    code = s.CharField()
+    valueType = s.ChoiceField(choices=["INTEGER", "DECIMAL", "TEXT", "BOOLEAN"])
+    category = s.ChoiceField(choices=["OPERATIONAL", "STRUCTURAL", "LEGAL", "LIMIT", "MARKET"])
+    level = s.ChoiceField(choices=["PLATFORM_MANDATORY", "PLATFORM_DEFAULT"])
+    value = s.JSONField(allow_null=True, help_text="Valor geral em vigor.")
+    codeDefault = s.JSONField(allow_null=True)
+    isCodeDefault = s.BooleanField()
+    versionNo = s.IntegerField()
+    effectiveFrom = s.DateTimeField(allow_null=True)
+    legalReference = s.CharField(allow_null=True, help_text="Fonte da versão em vigor.")
+    sourceUrl = s.CharField(allow_null=True)
+    requiresLegalReference = s.BooleanField(help_text="true nos parâmetros LEGAL: propor exige legalReference.")
+    description = s.CharField()
+    unit = s.CharField(allow_null=True)
+    usedBy = s.CharField(allow_null=True)
+    hardLimits = s.DictField(child=s.JSONField(allow_null=True))
+    tenantLimits = s.DictField(child=s.JSONField(allow_null=True), allow_null=True)
+    allowedValues = s.ListField(child=s.JSONField(), allow_null=True, help_text="Valores que o motor sabe executar.")
+    tenantEditable = s.BooleanField()
+    pendingVersions = PlatformParameterVersion(many=True)
+    tenantOverrides = s.DictField(child=s.IntegerField(), required=False, help_text="count, outOfLimits.")
+
+
+class PlatformParameterProposal(s.Serializer):
+    value = s.JSONField()
+    minimum = s.JSONField(required=False, allow_null=True)
+    maximum = s.JSONField(required=False, allow_null=True)
+    effectiveFrom = s.DateTimeField(required=False, allow_null=True, help_text="Vigência; por omissão, a aprovação.")
+    reason = s.CharField(help_text="Motivo obrigatório (mínimo 10 caracteres).")
+
+
+class PlatformParameterDecision(s.Serializer):
+    note = s.CharField(required=False, allow_null=True, help_text="Obrigatória (mínimo 10 caracteres) ao rejeitar.")
+
+
+class PlatformParameterRollbackRequest(s.Serializer):
+    versionNo = s.IntegerField(min_value=1)
+    reason = s.CharField(help_text="Motivo obrigatório (mínimo 10 caracteres).")
+
+
+class PlatformParameterProposalWithSource(PlatformParameterProposal):
+    legalReference = s.CharField(required=False, allow_null=True,
+                                 help_text="Fonte legal (diploma, artigo). Obrigatória nos parâmetros LEGAL.")
+    sourceUrl = s.CharField(required=False, allow_null=True, help_text="Ligação https para o texto da fonte.")
+
+
+class ReferenceTableColumn(s.Serializer):
+    code = s.CharField()
+    label = s.CharField(required=False)
+    type = s.ChoiceField(choices=["NUMBER", "TEXT"])
+
+
+class ReferenceTableVersion(s.Serializer):
+    code = s.CharField()
+    versionNo = s.IntegerField()
+    status = s.ChoiceField(choices=["PENDING_APPROVAL", "PUBLISHED", "REJECTED"])
+    name = s.CharField()
+    description = s.CharField(allow_null=True)
+    keyColumn = s.CharField()
+    columns = ReferenceTableColumn(many=True)
+    rowCount = s.IntegerField()
+    rows = s.ListField(child=s.DictField(), required=False, help_text="Só no detalhe.")
+    source = s.CharField(allow_null=True)
+    effectiveFrom = s.DateTimeField(allow_null=True)
+    inEffect = s.BooleanField()
+    reason = s.CharField()
+    createdBy = s.CharField()
+    createdAt = s.DateTimeField(allow_null=True)
+    decidedBy = s.CharField(allow_null=True)
+    decidedAt = s.DateTimeField(allow_null=True)
+    decisionNote = s.CharField(allow_null=True)
+
+
+class ReferenceTableProposal(s.Serializer):
+    code = s.CharField(help_text="Minúsculas, números e '_' (ex.: provincias).")
+    name = s.CharField()
+    description = s.CharField(required=False, allow_null=True)
+    keyColumn = s.CharField()
+    columns = ReferenceTableColumn(many=True)
+    rows = s.ListField(child=s.DictField(), help_text="Até 5000 linhas; chaves únicas.")
+    source = s.CharField(required=False, allow_null=True)
+    effectiveFrom = s.DateTimeField(required=False, allow_null=True)
+    reason = s.CharField(help_text="Motivo obrigatório (mínimo 10 caracteres).")
+
+
+class TemplateVersion(s.Serializer):
+    code = s.CharField()
+    versionNo = s.IntegerField()
+    status = s.ChoiceField(choices=["PENDING_APPROVAL", "PUBLISHED", "REJECTED"])
+    kind = s.ChoiceField(choices=["PRODUCT", "ACTUARIAL_MODEL", "FORMULA_SET", "COVERAGE_LIBRARY"])
+    kindLabel = s.CharField()
+    name = s.CharField()
+    description = s.CharField(allow_null=True)
+    segment = s.CharField(allow_null=True)
+    configKeys = s.ListField(child=s.CharField())
+    marketProducts = s.BooleanField()
+    content = s.DictField(required=False, help_text="configurations {configKey: valor} e marketProducts (só no detalhe).")
+    source = s.CharField(allow_null=True)
+    isLatestPublished = s.BooleanField()
+    reason = s.CharField()
+    createdBy = s.CharField()
+    createdAt = s.DateTimeField(allow_null=True)
+    decidedBy = s.CharField(allow_null=True)
+    decidedAt = s.DateTimeField(allow_null=True)
+    decisionNote = s.CharField(allow_null=True)
+
+
+class TemplateProposal(s.Serializer):
+    code = s.CharField()
+    kind = s.ChoiceField(choices=["PRODUCT", "ACTUARIAL_MODEL", "FORMULA_SET", "COVERAGE_LIBRARY"])
+    name = s.CharField()
+    description = s.CharField(required=False, allow_null=True)
+    segment = s.ChoiceField(choices=["SAU", "SAG"], required=False, allow_null=True)
+    content = s.DictField(help_text="{configurations: {configKey: valor}, marketProducts: bool}")
+    source = s.CharField(required=False, allow_null=True)
+    reason = s.CharField(help_text="Motivo obrigatório (mínimo 10 caracteres).")
+
+
+class TemplateAdoptRequest(s.Serializer):
+    effectiveFrom = s.DateField(required=False, allow_null=True, help_text="Vigência dos rascunhos; por omissão hoje.")
+
+
+# ------------------------------------------------- fórmulas: teste e catálogo
+class FormulaExplanationStep(s.Serializer):
+    step = s.IntegerField()
+    expression = s.CharField(help_text="Subexpressão calculada neste passo.")
+    operation = s.CharField(help_text="VARIABLE, CONSTANT, tabela, + - * / **, min, max, abs, round.")
+    operands = s.ListField(child=s.CharField())
+    result = s.CharField()
+
+
+class FormulaTestResult(s.Serializer):
+    valid = s.BooleanField()
+    result = s.CharField(required=False, help_text="Só quando valid=true.")
+    variables = s.ListField(child=s.CharField(), required=False)
+    steps = FormulaExplanationStep(many=True, required=False, help_text="Cálculo passo a passo.")
+    error = s.CharField(required=False, help_text="Só quando valid=false (HTTP 400).")
+
+
+class FormulaVariable(s.Serializer):
+    token = s.CharField(help_text="Nome a usar na expressão.")
+    label = s.CharField()
+    source = s.ChoiceField(choices=["SYSTEM", "PARAMETER", "AUXILIARY", "PLATFORM_CONSTANT", "RULE_FIELD", "PRODUCT_GROUP",
+                                    "PRODUCT_OPTION", "PRODUCT_FIELD", "PRODUCT_FORMULA", "PRODUCT_SYSTEM"])
+    usableIn = s.ListField(child=s.CharField(), help_text="PRICING_FORMULAS:PERSON|QUOTE, PRODUCT_FORMULAS, RULE_CONDITIONS.")
+    unit = s.CharField(required=False, allow_null=True)
+    value = s.CharField(required=False, allow_null=True, help_text="Parâmetros e constantes do fornecedor.")
+    parameter = s.CharField(required=False, help_text="Constantes: código do parâmetro do fornecedor.")
+    readOnly = s.BooleanField(required=False)
+    expression = s.CharField(required=False, help_text="Valores auxiliares.")
+
+
+class FormulaReferenceTable(s.Serializer):
+    code = s.CharField()
+    name = s.CharField()
+    versionNo = s.IntegerField()
+    keyColumn = s.CharField()
+    columns = s.ListField(child=s.DictField())
+    example = s.CharField()
+
+
+class FormulaVariablesCatalog(s.Serializer):
+    variables = FormulaVariable(many=True)
+    functions = s.ListField(child=s.DictField(child=s.CharField()))
+    operators = s.ListField(child=s.CharField())
+    referenceTables = FormulaReferenceTable(many=True)
+    sources = s.DictField(child=s.JSONField(allow_null=True),
+                          help_text="pricingFormulas, pricingFormulasError, productSetup, productSetupError.")
+
+
+class PlatformFormulaEngine(s.Serializer):
+    pricingFormulas = s.DictField(help_text="Catálogo do motor de fórmulas de tarifação (fases, funções, variáveis…).")
+    productFormulas = s.DictField(help_text="systemVariables das fórmulas de produto.")
+    rules = s.DictField(help_text="Campos, operadores, etapas e ações das regras «Quando… então…».")
+    platformConstants = s.ListField(child=s.DictField(), help_text="name, parameter, unit, description.")
+    limits = s.DictField(child=s.IntegerField())
+
+
+# ------------------------------------------- camada geral: listas e detalhes
+class ReferenceTableSummary(s.Serializer):
+    code = s.CharField()
+    name = s.CharField()
+    inEffect = ReferenceTableVersion(allow_null=True)
+    pendingVersions = ReferenceTableVersion(many=True)
+
+
+class ReferenceTableDetail(s.Serializer):
+    code = s.CharField()
+    inEffect = ReferenceTableVersion(allow_null=True, help_text="Com as linhas.")
+    pendingVersions = ReferenceTableVersion(many=True)
+
+
+class TemplateSummary(s.Serializer):
+    code = s.CharField()
+    name = s.CharField()
+    kind = s.CharField()
+    published = TemplateVersion(allow_null=True)
+    pendingVersions = TemplateVersion(many=True)
+
+
+class TemplateDetail(s.Serializer):
+    code = s.CharField()
+    published = TemplateVersion(allow_null=True, help_text="Com o conteúdo.")
+    pendingVersions = TemplateVersion(many=True)
+
+
+class TemplateAdoptDraft(s.Serializer):
+    configKey = s.CharField()
+    configurationId = s.UUIDField()
+    versionNo = s.IntegerField()
+    status = s.CharField()
+
+
+class TemplateAdoptResult(s.Serializer):
+    template = s.DictField(help_text="code, versionNo, name.")
+    effectiveFrom = s.DateField()
+    createdDrafts = TemplateAdoptDraft(many=True)
+    marketProducts = s.DictField(allow_null=True, help_text="Relatório da criação dos produtos de mercado, se pedida.")
+    next = s.CharField()
+
+
+# ------------------------------------------------------- tarifa por produto
+class TariffConfigVersion(s.Serializer):
+    configurationId = s.UUIDField()
+    versionNo = s.IntegerField()
+    status = s.CharField()
+    effectiveFrom = s.DateField(allow_null=True)
+    effectiveTo = s.DateField(allow_null=True)
+    createdBy = s.CharField(allow_null=True)
+    rowVersion = s.IntegerField()
+
+
+class TariffConfigState(s.Serializer):
+    configKey = s.CharField()
+    published = TariffConfigVersion(allow_null=True, help_text="Em vigor hoje.")
+    draft = TariffConfigVersion(allow_null=True)
+    pending = TariffConfigVersion(allow_null=True)
+    scheduled = TariffConfigVersion(allow_null=True, help_text="Publicada com vigência futura.")
+
+
+class TariffStage(s.Serializer):
+    order = s.IntegerField()
+    code = s.ChoiceField(choices=["PURE_PREMIUM", "RISK_FACTORS", "PERSON_RULES", "PERSON_FORMULAS", "LOADINGS",
+                                  "ADJUSTMENTS", "LEGAL_TAXES", "CHARGES", "QUOTE_FORMULAS", "PRODUCT_SETUP",
+                                  "FRACTIONATION"])
+    label = s.CharField()
+    owner = s.ChoiceField(choices=["CODE", "PLATFORM", "TENANT"])
+    editable = s.BooleanField()
+    scope = s.ChoiceField(choices=["TENANT", "PRODUCT"], help_text="TENANT: a chave vale para todos os produtos.")
+    configurations = TariffConfigState(many=True)
+    platformParameters = s.ListField(child=s.DictField(), help_text="code, value, versionNo, unit.")
+    summary = s.DictField(help_text="Resumo do passo (depende do passo).")
+
+
+class ProductTariff(s.Serializer):
+    productId = s.UUIDField()
+    productCode = s.CharField()
+    productName = s.CharField()
+    plans = s.ListField(child=s.DictField(), help_text="id, code, name, status.")
+    engine = s.DictField(help_text="owner=CODE, order, rounding, structure.")
+    stages = TariffStage(many=True)
+    openDrafts = TariffConfigVersion(many=True)
+    platformVersions = s.DictField(child=s.IntegerField())
+
+
+class TariffSimulationStep(s.Serializer):
+    sequence = s.IntegerField()
+    stepCode = s.CharField()
+    ruleCode = s.CharField(allow_null=True)
+    owner = s.ChoiceField(choices=["CODE", "PLATFORM", "TENANT"])
+    input = s.JSONField(allow_null=True)
+    output = s.JSONField(allow_null=True)
+    message = s.CharField(allow_null=True)
+
+
+class TariffSimulationResult(s.Serializer):
+    productId = s.UUIDField()
+    planId = s.UUIDField()
+    referenceDate = s.DateField()
+    currencyCode = s.CharField()
+    totalAmount = s.CharField()
+    installments = s.DictField(child=s.CharField(), help_text="Prestação por frequência (ANUAL, SEMESTRAL…).")
+    components = s.ListField(child=s.DictField(), help_text="Componentes do cálculo, cada um com owner.")
+    appliedDrafts = TariffConfigVersion(many=True)
+    versions = s.DictField()
+    steps = TariffSimulationStep(many=True)
+    persisted = s.BooleanField(help_text="Sempre false: a simulação não grava nada.")
+
+
+# ------------------------------------------------------------- aprovações
+class PendingApprovalItem(s.Serializer):
+    configurationId = s.UUIDField()
+    configKey = s.CharField()
+    label = s.CharField()
+    area = s.ChoiceField(choices=["ORGANIZATION", "PRODUCTS", "TARIFF", "RULES", "PARAMETERS", "DOCUMENTS"])
+    areaLabel = s.CharField()
+    versionNo = s.IntegerField()
+    effectiveFrom = s.DateField(allow_null=True)
+    createdBy = s.CharField(allow_null=True)
+    submittedAt = s.DateTimeField(allow_null=True)
+    againstVersionNo = s.IntegerField(allow_null=True, help_text="Versão publicada com que se compara.")
+    changeCount = s.IntegerField(allow_null=True)
+    changes = s.ListField(child=s.DictField(), help_text="path, change (ADDED/REMOVED/CHANGED), before, after; até 50.")
+    isNew = s.BooleanField()
+    canApprove = s.BooleanField()
+    cannotApproveReason = s.CharField(allow_null=True)
+
+
+class PendingApprovals(s.Serializer):
+    total = s.IntegerField()
+    byArea = s.DictField(child=s.IntegerField())
+    items = PendingApprovalItem(many=True)
+
+
+class PendingApprovalsCount(s.Serializer):
+    total = s.IntegerField()
+    canApprove = s.IntegerField()
+    byArea = s.DictField(child=s.IntegerField())
 
 
 # ------------------------------------------------------------ benefits/plans

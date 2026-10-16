@@ -29,3 +29,46 @@ CONFIG_CATALOG=[
 {"key":"pricing.fractionation","category":"PRICING","label":"Encargos de fracionamento do prémio","priority":"MEDIUM","value_type":"object"},
 ]
 CATALOG_BY_KEY={x["key"]:x for x in CONFIG_CATALOG}
+
+# Área da Administração do tenant onde cada tipo de configuração é editado
+# (as 7 áreas: ORGANIZATION, APPROVALS, PRODUCTS, TARIFF, RULES, PARAMETERS,
+# DOCUMENTS). Nenhum tipo fica sem ecrã de assunto.
+AREAS = ("ORGANIZATION", "APPROVALS", "PRODUCTS", "TARIFF", "RULES", "PARAMETERS", "DOCUMENTS")
+AREA_LABELS = {
+    "ORGANIZATION": "Organização · Utilizadores e perfis",
+    "APPROVALS": "Organização · Aprovações pendentes",
+    "PRODUCTS": "Negócio · Produtos e planos",
+    "TARIFF": "Negócio · Tarifação",
+    "RULES": "Negócio · Regras",
+    "PARAMETERS": "Negócio · Parâmetros",
+    "DOCUMENTS": "Comunicação · Documentos e marca",
+}
+_AREA_BY_KEY = {
+    "group.rules": "RULES",
+    "renewal.rules": "RULES",
+    "renewal.deadlines": "RULES",
+    "rules.custom": "RULES",
+    "network.rules": "PRODUCTS",
+    "foreign_coverage.rules": "PRODUCTS",
+}
+_AREA_BY_CATEGORY = {
+    "PRODUCT": "PRODUCTS",
+    "PRICING": "TARIFF",
+    "UNDERWRITING": "RULES",
+    "GROUP": "RULES",
+    "RENEWAL": "RULES",
+    "NETWORK": "PRODUCTS",
+    "SECURITY": "ORGANIZATION",
+    "RULES": "RULES",
+    "DOCUMENTS": "DOCUMENTS",
+    "PROPOSAL": "DOCUMENTS",
+}
+
+
+def area_of(config_key: str) -> str:
+    if config_key.startswith("product.pricing_setup:"):
+        return "TARIFF"
+    if config_key in _AREA_BY_KEY:
+        return _AREA_BY_KEY[config_key]
+    entry = CATALOG_BY_KEY.get(config_key)
+    return _AREA_BY_CATEGORY.get(entry["category"], "PARAMETERS") if entry else "PARAMETERS"

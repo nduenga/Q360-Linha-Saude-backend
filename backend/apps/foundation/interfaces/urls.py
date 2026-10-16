@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.foundation.interfaces.auth_views import DevLoginView
+from apps.foundation.interfaces.reference_table_views import ReferenceTableDetailView, ReferenceTableListView
 from apps.foundation.interfaces.rule_views import RuleVersionCreateView, RuleVersionDetailView
 from apps.foundation.interfaces.system_parameter_views import (
     SystemParameterDetailView,
@@ -21,6 +22,8 @@ urlpatterns = [
     path("system-parameters/<str:code>", SystemParameterDetailView.as_view(), name="system-parameter-detail"),
     path("system-parameters/<str:code>/revisions", SystemParameterRevisionsView.as_view(), name="system-parameter-revisions"),
     path("system-parameters/<str:code>/rollback", SystemParameterRollbackView.as_view(), name="system-parameter-rollback"),
+    path("reference-tables", ReferenceTableListView.as_view(), name="reference-table-list"),
+    path("reference-tables/<str:code>", ReferenceTableDetailView.as_view(), name="reference-table-detail"),
     path("dashboard", DashboardView.as_view(), name="dashboard"),
     path("health/live", LiveHealthView.as_view(), name="health-live"),
     path("health/ready", ReadyHealthView.as_view(), name="health-ready"),

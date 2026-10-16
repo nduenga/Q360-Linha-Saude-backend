@@ -26,6 +26,9 @@ from .views import (
     DocumentListView,
     DocumentUploadView,
 )
+from .approvals_views import PendingApprovalsCountView, PendingApprovalsView
+from .tariff_views import ProductTariffSimulationView, ProductTariffView
+from .template_views import TemplateAdoptView, TemplateDetailView, TemplateListView
 from .formula_views import (
     FormulaApproveView,
     FormulaCatalogView,
@@ -38,11 +41,19 @@ from .formula_views import (
     FormulaSubmitView,
     FormulaTestView,
     FormulaValidateView,
+    FormulaVariablesView,
 )
 
 urlpatterns = [
     path("business-config/product-setup/catalog", ProductPricingSetupCatalogView.as_view()),
     path("products/<uuid:product_id>/pricing-setup", ProductPricingSetupView.as_view()),
+    path("business-config/approvals/pending", PendingApprovalsView.as_view()),
+    path("templates", TemplateListView.as_view()),
+    path("templates/<str:code>", TemplateDetailView.as_view()),
+    path("templates/<str:code>/adopt", TemplateAdoptView.as_view()),
+    path("business-config/approvals/pending/count", PendingApprovalsCountView.as_view()),
+    path("products/<uuid:product_id>/tariff", ProductTariffView.as_view()),
+    path("products/<uuid:product_id>/tariff/simulate", ProductTariffSimulationView.as_view()),
     path("products/<uuid:product_id>/pricing-setup/validate", ProductPricingSetupValidateView.as_view()),
     path("products/<uuid:product_id>/pricing-setup/test", ProductPricingSetupTestView.as_view()),
     path("products/<uuid:product_id>/pricing-setup/history", ProductPricingSetupHistoryView.as_view()),
@@ -67,6 +78,7 @@ urlpatterns = [
     path("business-config/actuarial-model/template", ActuarialModelTemplateView.as_view()),
     path("business-config/formulas/catalog", FormulaCatalogView.as_view()),
     path("business-config/formulas/test", FormulaTestView.as_view()),
+    path("business-config/formulas/variables", FormulaVariablesView.as_view()),
     path("business-config/formulas/validate", FormulaValidateView.as_view()),
     path("business-config/formulas", FormulaListCreateView.as_view()),
     path("business-config/formulas/<uuid:configuration_id>", FormulaDetailView.as_view()),

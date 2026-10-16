@@ -258,8 +258,25 @@ class PlanFacts:
     is_active: bool
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class LegalAgeLimits:
+    """Limites da camada geral do fornecedor: a maioridade (lei) e o teto de
+    idade de um filho com prova de estudos. Prevalecem sobre a configuração
+    do tenant, mesmo numa versão de regras publicada antes de mudarem."""
+
+    age_of_majority: int | None = None
+    max_age_with_proof: int | None = None
+
+
+def _cap(value: int | None, limit: int | None) -> int | None:
+    if value is None or limit is None:
+        return value
+    return min(value, limit)
+
+
 def _evaluate_category_rules(
-    *, data: EvaluationInput, age: int | None, config: EligibilityRuleConfig
+    *, data: EvaluationInput, age: int | None, config: EligibilityRuleConfig,
+    legal: LegalAgeLimits | None = None,
 ) -> tuple[EligibilityDecision, list[EligibilityMessage]] | None:
     """MOTOR_ELEGIBILIDADE.md secção 1, "MÓDULO DE REGRAS DINÂMICAS" block
     (CHILD/SPOUSE/ASCENDANT). Returns None to mean "no verdict, continue
@@ -271,6 +288,12 @@ def _evaluate_category_rules(
     rule = config.category_rule_for(data.relationship_category, organisation_proposer_id=data.organisation_proposer_id)
     if rule is None:
         return None
+    if legal is not None:
+        rule = dataclasses.replace(
+            rule,
+            max_age_without_proof=_cap(rule.max_age_without_proof, legal.age_of_majority),
+            max_age_with_proof=_cap(rule.max_age_with_proof, legal.max_age_with_proof),
+        )
     evidence = data.angola_evidence or AngolaEvidence()
 
     if data.relationship_category == "CHILD":
@@ -358,6 +381,7 @@ def evaluate(
     data: EvaluationInput,
     plan: PlanFacts | None,
     config: EligibilityRuleConfig | None,
+    legal: LegalAgeLimits | None = None,
 ) -> tuple[EligibilityDecision, list[EligibilityMessage]]:
     """Pure function: same inputs always produce the same decision (DOC-004
     s9/DOC-000 P-02 determinism). Rule IDs referenced in comments are
@@ -439,7 +463,7 @@ def evaluate(
     # Runs after ELIG-005 (relationship allowed) and before ELIG-008/009
     # (generic referral/warning), exactly as the design doc's decision
     # tree orders it.
-    category_result = _evaluate_category_rules(data=data, age=age, config=config)
+    category_result = _evaluate_category_rules(data=data, age=age, config=config, legal=legal)
     if category_result is not None:
         return category_result
 

@@ -25,9 +25,28 @@ REGISTRY: dict[str, dict] = {
     # ------------------------------------------------------ system parameters
     "SystemParameterListView.get": {
         "response": d.SystemParameter, "many": True,
-        "queries": {"category": ("string", False, "OPERATIONAL ou STRUCTURAL.")},
+        "queries": {"category": ("string", False, "OPERATIONAL, STRUCTURAL, LEGAL, LIMIT ou MARKET.")},
     },
     "SystemParameterDetailView.get": {"response": d.SystemParameter},
+    "ReferenceTableListView.get": {"response": d.ReferenceTableVersion, "many": True},
+    "ReferenceTableDetailView.get": {"response": d.ReferenceTableVersion},
+    "TemplateListView.get": {"response": d.TemplateVersion, "many": True},
+    "TemplateDetailView.get": {"response": d.TemplateVersion},
+    "TemplateAdoptView.post": {
+        "request": d.TemplateAdoptRequest, "response": d.TemplateAdoptResult, "status": 201,
+        "notes": "Copia cada configuração do modelo para um rascunho do tenant; nada é publicado.",
+    },
+    "PendingApprovalsCountView.get": {"response": d.PendingApprovalsCount},
+    "ProductTariffView.get": {"response": d.ProductTariff},
+    "ProductTariffSimulationView.post": {"response": d.TariffSimulationResult},
+    "FormulaTestView.post": {"response": d.FormulaTestResult},
+    "PendingApprovalsView.get": {"response": d.PendingApprovals, "queries": {"area": ("string", False, "ORGANIZATION, PRODUCTS, TARIFF, RULES, PARAMETERS ou DOCUMENTS.")}},
+    "FormulaVariablesView.get": {
+        "response": d.FormulaVariablesCatalog,
+        "queries": {"productId": ("string", False, "UUID do produto: junta os grupos, opções, campos e fórmulas dele."),
+                    "usableIn": ("string", False, "PRICING_FORMULAS, PRICING_FORMULAS:PERSON, PRICING_FORMULAS:QUOTE, "
+                                                  "PRODUCT_FORMULAS ou RULE_CONDITIONS.")},
+    },
     "SystemParameterDetailView.put": {"request": d.SystemParameterUpdate, "response": d.SystemParameter},
     "SystemParameterRevisionsView.get": {"response": d.SystemParameterRevision, "many": True},
     "SystemParameterRollbackView.post": {"request": d.SystemParameterRollbackRequest, "response": d.SystemParameter},
@@ -338,6 +357,53 @@ REGISTRY.update(
         "PlatformAdminListCreateView.post": {"request": _pl.CreatePlatformAdminSerializer, "response": _pl.CreatePlatformAdminResponseSerializer, "status": 201},
         "PlatformAdminStatusView.patch": {"request": _pl.UpdatePlatformAdminStatusSerializer, "response": _pl.PlatformAdminSerializer},
         "PlatformAdminResetPasswordView.post": {"request": d.EmptyRequest, "response": _pl.TemporaryPasswordResponseSerializer},
+        "PlatformFormulaEngineView.get": {
+            "response": d.PlatformFormulaEngine,
+            "notes": "Só leitura: funções, operadores, limites e variáveis do motor de fórmulas e os campos/ações/etapas "
+                     "das regras. As fórmulas e regras de negócio são de cada tenant.",
+        },
+        "PlatformParameterListView.get": {
+            "response": d.PlatformParameter, "many": True,
+            "queries": {"level": ("string", False, "PLATFORM_MANDATORY ou PLATFORM_DEFAULT."),
+                        "category": ("string", False, "OPERATIONAL, STRUCTURAL, LEGAL, LIMIT ou MARKET.")},
+        },
+        "PlatformParameterDetailView.get": {"response": d.PlatformParameter},
+        "PlatformParameterVersionsView.get": {"response": d.PlatformParameterVersion, "many": True},
+        "PlatformParameterVersionsView.post": {
+            "request": d.PlatformParameterProposalWithSource, "response": d.PlatformParameterVersion, "status": 201,
+            "notes": "Fica PENDING_APPROVAL até outra conta da plataforma a aprovar. Uma pendente de cada vez (CONFLICT).",
+        },
+        "PlatformParameterApproveView.post": {
+            "request": d.PlatformParameterDecision, "response": d.PlatformParameterVersion,
+            "notes": "Quem propôs não pode aprovar (SEC-403). Vale a partir da vigência indicada ou da aprovação.",
+        },
+        "PlatformParameterRejectView.post": {"request": d.PlatformParameterDecision, "response": d.PlatformParameterVersion},
+        "PlatformParameterRollbackView.post": {
+            "request": d.PlatformParameterRollbackRequest, "response": d.PlatformParameterVersion, "status": 201,
+            "notes": "Cria uma versão nova (pendente de aprovação) com o valor de uma versão publicada anterior.",
+        },
+        "PlatformReferenceTableListView.get": {"response": d.ReferenceTableSummary, "many": True,
+                                               "notes": "Uma linha por tabela: versão em vigor (sem as linhas) e pendentes."},
+        "PlatformReferenceTableListView.post": {
+            "request": d.ReferenceTableProposal, "response": d.ReferenceTableVersion, "status": 201,
+            "notes": "Versão nova da tabela inteira, PENDING_APPROVAL até outra conta a aprovar.",
+        },
+        "PlatformReferenceTableDetailView.get": {"response": d.ReferenceTableDetail},
+        "PlatformReferenceTableVersionsView.get": {"response": d.ReferenceTableVersion, "many": True},
+        "PlatformReferenceTableApproveView.post": {
+            "request": d.PlatformParameterDecision, "response": d.ReferenceTableVersion,
+            "notes": "Quem propôs não pode aprovar (SEC-403).",
+        },
+        "PlatformReferenceTableRejectView.post": {"request": d.PlatformParameterDecision, "response": d.ReferenceTableVersion},
+        "PlatformTemplateListView.get": {"response": d.TemplateSummary, "many": True},
+        "PlatformTemplateDetailView.get": {"response": d.TemplateDetail},
+        "PlatformTemplateListView.post": {
+            "request": d.TemplateProposal, "response": d.TemplateVersion, "status": 201,
+            "notes": "O conteúdo é validado como configuração do tenant; um modelo não muda de tipo.",
+        },
+        "PlatformTemplateVersionsView.get": {"response": d.TemplateVersion, "many": True},
+        "PlatformTemplateApproveView.post": {"request": d.PlatformParameterDecision, "response": d.TemplateVersion},
+        "PlatformTemplateRejectView.post": {"request": d.PlatformParameterDecision, "response": d.TemplateVersion},
         "PlatformAuditView.get": {
             "response": _pl.PlatformAuditEventSerializer, "many": True,
             "queries": {"action": ("string", False, "Ação."), "entityType": ("string", False, "Tipo de entidade."),
@@ -345,6 +411,21 @@ REGISTRY.update(
                         "limit": ("integer", False, "Máximo 500 (por omissão 100).")},
         },
     }
+)
+
+# Views kept only while tenants migrate to the business configuration
+# (`manage.py migrate_legacy_tariffs`, then `/products/{id}/tariff`):
+# marked `deprecated` in the contract.
+DEPRECATED_VIEWS = {
+    "RatingTableCreateView",
+    "RatingTableDetailView",
+    "PricingParameterSetCreateView",
+    "PricingParameterSetDetailView",
+}
+DEPRECATION_NOTE = (
+    "Obsoleto: tarifa antiga. Converta-a com `manage.py migrate_legacy_tariffs` e use a configuração de negócio "
+    "(`/business-config/configurations`, `/products/{id}/tariff`). Deixa de ser usada quando o tenant publica "
+    "`pricing.reference_premiums`."
 )
 
 # Approved ART-006 component schemas whose operation no longer exists: the

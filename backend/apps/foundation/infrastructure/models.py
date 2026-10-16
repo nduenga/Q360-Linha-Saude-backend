@@ -263,3 +263,101 @@ class SystemParameterRevision(TenantScopedModel):
     class Meta:
         managed = False
         db_table = "system_parameter_revision"
+
+
+class PlatformParameterVersion(models.Model):
+    """Versão de um parâmetro na camada geral do fornecedor (sem tenant).
+    Criada por uma conta da plataforma e aprovada por outra; a versão em
+    vigor é a PUBLISHED de maior número cuja vigência já começou."""
+
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    PUBLISHED = "PUBLISHED"
+    REJECTED = "REJECTED"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=100)
+    version_no = models.IntegerField()
+    status = models.CharField(max_length=20, default=PENDING_APPROVAL)
+    action = models.CharField(max_length=30, default="CREATED")
+    value_json = models.JSONField()
+    minimum_json = models.JSONField(null=True, blank=True)
+    maximum_json = models.JSONField(null=True, blank=True)
+    effective_from = models.DateTimeField(null=True, blank=True)
+    reason = models.TextField()
+    # Fonte legal (diploma, norma) — obrigatória nos parâmetros LEGAL.
+    legal_reference = models.TextField(null=True, blank=True)
+    source_url = models.CharField(max_length=500, null=True, blank=True)
+    created_by = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+    decided_by = models.CharField(max_length=200, null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "platform_parameter_version"
+
+
+class PlatformReferenceTableVersion(models.Model):
+    """Versão de uma tabela de referência do fornecedor (sem tenant):
+    províncias, tabelas de mercado… Usada nas fórmulas com `tabela()`.
+    Mesmo ciclo que os parâmetros gerais: proposta, aprovação por outra
+    conta, vigência."""
+
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    PUBLISHED = "PUBLISHED"
+    REJECTED = "REJECTED"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=60)
+    version_no = models.IntegerField()
+    status = models.CharField(max_length=20, default=PENDING_APPROVAL)
+    name = models.CharField(max_length=200)
+    description = models.TextField(null=True, blank=True)
+    key_column = models.CharField(max_length=60)
+    columns_json = models.JSONField()
+    rows_json = models.JSONField()
+    source = models.TextField(null=True, blank=True)
+    effective_from = models.DateTimeField(null=True, blank=True)
+    reason = models.TextField()
+    created_by = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+    decided_by = models.CharField(max_length=200, null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "platform_reference_table_version"
+
+
+class PlatformTemplateVersion(models.Model):
+    """Versão de um modelo de partida do fornecedor (sem tenant): um conjunto
+    de configurações de negócio (produto de mercado, modelo actuarial,
+    fórmulas…) que cada tenant copia para rascunhos e ajusta. Proposta e
+    aprovada por contas diferentes da plataforma."""
+
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    PUBLISHED = "PUBLISHED"
+    REJECTED = "REJECTED"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=60)
+    version_no = models.IntegerField()
+    status = models.CharField(max_length=20, default=PENDING_APPROVAL)
+    kind = models.CharField(max_length=30)
+    name = models.CharField(max_length=200)
+    description = models.TextField(null=True, blank=True)
+    segment = models.CharField(max_length=20, null=True, blank=True)
+    content_json = models.JSONField()
+    source = models.TextField(null=True, blank=True)
+    reason = models.TextField()
+    created_by = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+    decided_by = models.CharField(max_length=200, null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "platform_template_version"

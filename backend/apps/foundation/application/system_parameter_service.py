@@ -1,6 +1,8 @@
-"""Parâmetros globais do sistema: leitura com valor por omissão, alteração
-com motivo/histórico/auditoria e rollback (R7). As definições estão em
-`apps.foundation.domain.system_parameters`."""
+"""Parâmetros globais do sistema vistos pelo tenant: leitura com a
+prioridade entre a camada geral do fornecedor e o tenant, alteração com
+motivo/histórico/auditoria e rollback (R7). As definições estão em
+`apps.foundation.domain.system_parameters`; a camada geral em
+`platform_parameter_service`."""
 from __future__ import annotations
 
 from typing import Any
@@ -12,9 +14,12 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.change_audit import change_metadata, require_reason
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
 from apps.foundation.domain.problem import DomainProblem
+from apps.foundation.application import platform_parameter_service as platform
 from apps.foundation.domain.system_parameters import (
     DEFINITIONS,
-    OPERATIONAL,
+    LEGAL,
+    LIMIT,
+    InvalidSystemParameterError,
     StructuralParameterError,
     validate_value,
 )
@@ -41,40 +46,76 @@ def _definition(code: str):
     return definition
 
 
-def get_value(code: str) -> Any:
-    """Current value for the tenant bound to the context (default when the
-    GTE never changed it). Used by the modules that consume parameters."""
+def _tenant_row(code: str):
+    return SystemParameter.objects.filter(code=code).first()
+
+
+def _resolve(code: str) -> tuple[Any, str, Any]:
+    """(value, source, tenant row) — the priority between the levels:
+    PLATFORM_MANDATORY → the platform's value always; PLATFORM_DEFAULT → the
+    tenant's value while it is inside the platform's limits, otherwise the
+    platform's value; with no platform version, the code default."""
     definition = _definition(code)
-    row = SystemParameter.objects.filter(code=code).first()
-    return row.value_json if row is not None else definition.default
+    version = platform.effective_version(code)
+    platform_val = version.value_json if version is not None else definition.default
+    platform_source = "PLATFORM" if version is not None else "CODE_DEFAULT"
+    if not definition.tenant_editable:
+        return platform_val, platform_source, None
+    row = _tenant_row(code)
+    if row is not None and platform.within_limits(row.value_json, platform.platform_limits(code)):
+        return row.value_json, "TENANT", row
+    return platform_val, platform_source, row
+
+
+def get_value(code: str) -> Any:
+    """Current value for the tenant bound to the context (see `_resolve`).
+    Used by the modules that consume parameters."""
+    return _resolve(code)[0]
 
 
 def get_stored_value(code: str) -> Any:
-    """The value the GTE explicitly set, or None when it never did (so a
-    caller can fall back to its own configuration, e.g. an env setting)."""
-    _definition(code)
-    row = SystemParameter.objects.filter(code=code).first()
-    return row.value_json if row is not None else None
+    """The value someone explicitly set — the tenant (inside the limits) or
+    the platform — or None when nobody did (so a caller can fall back to its
+    own configuration, e.g. an env setting)."""
+    value, source, _ = _resolve(code)
+    return None if source == "CODE_DEFAULT" else value
+
+
+def get_platform_version(code: str) -> int:
+    """Version number of the platform value in effect (0 = code default);
+    the pricing trace records it next to the legal taxes it applies."""
+    version = platform.effective_version(code)
+    return version.version_no if version is not None else 0
 
 
 def describe(code: str) -> dict[str, Any]:
     definition = _definition(code)
-    row = SystemParameter.objects.filter(code=code).first()
+    value, source, row = _resolve(code)
+    version = platform.effective_version(code)
+    platform_val = version.value_json if version is not None else definition.default
+    lo, hi = platform.platform_limits(code) if definition.tenant_editable else (definition.minimum, definition.maximum)
     return {
         "code": code,
         "valueType": definition.value_type,
         "category": definition.category,
-        "value": row.value_json if row is not None else definition.default,
-        "default": definition.default,
-        "isDefault": row is None,
+        "level": definition.level,
+        "value": value,
+        "source": source,
+        "default": platform_val,
+        "platformVersionNo": version.version_no if version is not None else 0,
+        "isDefault": source != "TENANT",
+        "tenantValueOutOfLimits": row is not None and source != "TENANT",
         "description": definition.description,
         "unit": definition.unit,
-        "constraints": definition.constraints(),
+        "constraints": {"minimum": lo, "maximum": hi},
         "usedBy": definition.used_by,
-        "editable": definition.category == OPERATIONAL,
+        "editable": definition.tenant_editable,
         "rowVersion": row.row_version if row is not None else 0,
-        "updatedBy": row.updated_by if row is not None else None,
-        "updatedAt": row.updated_at.isoformat() if row is not None else None,
+        "updatedBy": row.updated_by if row is not None else (version.decided_by if version is not None else None),
+        "updatedAt": (
+            row.updated_at.isoformat() if row is not None
+            else (version.decided_at.isoformat() if version is not None and version.decided_at else None)
+        ),
     }
 
 
@@ -96,12 +137,21 @@ def _record_revision(*, code: str, action: str, value: Any, reason: str | None) 
 
 def set_value(*, code: str, value: Any, reason: str | None, row_version: int, action: str = "UPDATED") -> dict[str, Any]:
     definition = _definition(code)
-    if definition.category != OPERATIONAL:
+    if not definition.tenant_editable:
+        kind = {
+            LEGAL: "um valor legal",
+            LIMIT: "um teto que o fornecedor impõe a todas as seguradoras",
+        }.get(definition.category, "um parâmetro estrutural (faz parte do motor de cálculo)")
         raise StructuralParameterError(
-            f"'{code}' é um parâmetro estrutural (faz parte do motor de cálculo): alterá-lo exige uma evolução do sistema"
+            f"'{code}' é {kind}, definido pelo fornecedor para todos os tenants: o tenant só o consulta"
         )
     reason = require_reason(reason)
     clean = validate_value(definition, value)
+    limits = platform.platform_limits(code)
+    if not platform.within_limits(clean, limits):
+        raise InvalidSystemParameterError(
+            f"{code} tem de estar entre {limits[0]} e {limits[1]} (limites definidos pelo fornecedor)"
+        )
     tenant_id = CurrentTenantProvider.require().value
     actor = CurrentActorProvider.get()
     actor_id = actor.actor_id if actor else "unknown"

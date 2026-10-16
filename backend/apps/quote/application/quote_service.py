@@ -593,6 +593,7 @@ def _pricing_inputs_fingerprint(quote: Quote, context: dict, member_ids: list) -
     from django.db.models import Q as _Q
 
     from apps.business_config.infrastructure.models import BusinessConfiguration
+    from apps.foundation.application import platform_parameter_service, platform_reference_service
     from apps.pricing.application.rating_table_service import resolve_rating_table
     from apps.pricing.infrastructure.parameter_repository import resolve_pricing_parameter_set
 
@@ -625,6 +626,14 @@ def _pricing_inputs_fingerprint(quote: Quote, context: dict, member_ids: list) -
         "people": people,
         "context": context,
     }
+    # Camada geral do fornecedor (impostos legais, limites): só entra quando
+    # existe alguma versão publicada, para não invalidar cálculos antigos.
+    platform_versions = platform_parameter_service.snapshot()
+    if platform_versions:
+        payload["platformParameters"] = platform_versions
+    reference_tables = platform_reference_service.snapshot()
+    if reference_tables:
+        payload["platformReferenceTables"] = reference_tables
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 
@@ -1004,6 +1013,18 @@ def decide_quote(
 
     authority_policy = None
     if decision == QuoteDecisionType.APPROVE.value:
+        # Regras de fluxo (`rules.custom`, etapa WORKFLOW): certas cotações só
+        # podem ser aprovadas por um perfil (ex.: Gestor de subscrição acima de
+        # um prémio). Um ADMIN pode sempre.
+        from apps.quote.application import requirements_service
+
+        required_roles = requirements_service.required_approval_roles(quote)
+        actor_roles = {getattr(r, "value", r) for r in (actor.roles if actor else ())}
+        if required_roles and not actor_roles & {*required_roles, "ADMIN"}:
+            raise SegregationOfDutiesError(
+                f"A cotação {quote.id} só pode ser aprovada pelo perfil: {', '.join(required_roles)} "
+                "(regra de fluxo configurada)"
+            )
         authority_policy, max_amount = _resolve_authority_limit(effective_date=quote.reference_date)
         if max_amount is not None and quote.latest_pricing_run and quote.latest_pricing_run.total_amount is not None:
             from decimal import Decimal

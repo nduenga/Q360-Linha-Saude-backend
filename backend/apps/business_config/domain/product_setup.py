@@ -85,6 +85,7 @@ from typing import Any
 
 from apps.business_config.domain.errors import InvalidConfiguration, ProductSetupInputError
 from apps.business_config.domain.formula_engine import FormulaError, evaluate_formula, parse_formula
+from apps.foundation.domain.system_parameters import PLATFORM_CONSTANTS
 
 KEY_PREFIX = "product.pricing_setup:"
 
@@ -486,7 +487,7 @@ def _parse_formulas(rows: list, names: set[str]) -> dict[str, Formula]:
         path = f"formulas[{i}]"
         row = _obj(raw, path)
         code = _code(row.get("code"), f"{path}.code")
-        if code in formulas or code in names or code in SYSTEM_VARIABLES:
+        if code in formulas or code in names or code in SYSTEM_VARIABLES or code in PLATFORM_CONSTANTS:
             raise _err(f"{path}.code", f"o código «{code}» já é usado")
         expression = row.get("expression")
         try:
@@ -554,12 +555,12 @@ def parse_product_setup(value: Any) -> ProductSetup:
     values = _parse_values(_list(value.get("values"), "values", MAX_GROUPS), groups, fields)
     option_tokens = {f"{g.code}__{o}" for g in groups.values() for o in g.option_codes}
     numeric_fields = {c for c, f in fields.items() if f.type in NUMERIC_FIELD_TYPES}
-    clashes = sorted(set(SYSTEM_VARIABLES) & (set(groups) | set(fields)))
+    clashes = sorted((set(SYSTEM_VARIABLES) | set(PLATFORM_CONSTANTS)) & (set(groups) | set(fields)))
     if clashes:
         raise InvalidConfiguration(f"Códigos reservados pelo sistema: {clashes}")
     names = set(groups) | set(fields) | option_tokens
     formulas = _parse_formulas(_list(value.get("formulas"), "formulas", MAX_FORMULAS), names)
-    allowed = set(values) | option_tokens | numeric_fields | set(SYSTEM_VARIABLES)
+    allowed = set(values) | option_tokens | numeric_fields | set(SYSTEM_VARIABLES) | set(PLATFORM_CONSTANTS)
     for formula in formulas.values():
         without_values = sorted(formula.names & (set(groups) - set(values)))
         if without_values:

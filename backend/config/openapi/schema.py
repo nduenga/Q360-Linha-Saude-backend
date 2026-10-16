@@ -40,6 +40,8 @@ _TAGS = [
     ("/api/v1/rating-tables", "Configuration"),
     ("/api/v1/rule-versions", "Configuration"),
     ("/api/v1/system-parameters", "Configuration"),
+    ("/api/v1/reference-tables", "Configuration"),
+    ("/api/v1/templates", "Configuration"),
     ("/api/v1/pricing", "Pricing"),
     ("/api/v1/scenarios", "Scenarios"),
     ("/api/v1/quotes/{quote_id}/scenarios", "Scenarios"),
@@ -163,6 +165,11 @@ class Q360AutoSchema(AutoSchema):
             verb = "Listar"
         return f"{verb} {name}"
 
+    def is_deprecated(self) -> bool:
+        from config.openapi.registry import DEPRECATED_VIEWS
+
+        return self.view.__class__.__name__ in DEPRECATED_VIEWS or super().is_deprecated()
+
     def get_description(self) -> str:
         # cleandoc: Python 3.13+ already dedents __doc__ at compile time, 3.12 does not.
         method_doc = inspect.cleandoc(getattr(self.view, self.method.lower(), None).__doc__ or "")
@@ -176,6 +183,10 @@ class Q360AutoSchema(AutoSchema):
             )
         if extra:
             parts.append(extra)
+        if self.is_deprecated():
+            from config.openapi.registry import DEPRECATION_NOTE
+
+            parts.append(DEPRECATION_NOTE)
         return "\n\n".join(parts)
 
     def get_auth(self) -> list[dict[str, list[str]]]:

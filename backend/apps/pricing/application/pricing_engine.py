@@ -37,9 +37,17 @@ from django.utils import timezone
 
 from apps.client.domain.enums import RelationshipCategory
 from apps.client.infrastructure.models import InsuredMember, RelationshipCode
+from apps.foundation.application import (
+    platform_inputs_loader,
+    platform_parameter_service,
+    platform_reference_service,
+    system_parameter_service,
+)
+from apps.foundation.domain import platform_inputs
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
+from apps.foundation.domain.system_parameters import LEGAL_TAX_CODES
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.pricing.domain.commercial_adjustments import CommercialAdjustment, parse_commercial_adjustments
 from apps.pricing.domain.enums import PricingComponentType, PricingRunStatus
@@ -352,24 +360,26 @@ def _execute(
             PricingRun.objects.filter(id=pricing_run.id).update(
                 status=PricingRunStatus.CALCULATING.value, started_at=timezone.now()
             )
-            total_amount = _run_calculation(
-                pricing_run=pricing_run,
-                tenant_id=tenant_id.value,
-                members=members,
-                member_ids=member_ids,
-                per_member_context=per_member_context,
-                rating_table_code=rating_table_code,
-                base_premium=base_premium,
-                business_pricing=business_pricing,
-                plan=plan,
-                rule_config=rule_config,
-                plan_context=plan_context,
-                commercial_adjustments=commercial_adjustments,
-                pre_existing=pre_existing,
-                custom_rules=custom_rules,
-                context=context,
-                product_setup=product_setup,
-            )
+            # Constantes e tabelas do fornecedor: carregadas uma vez por cálculo.
+            with platform_inputs.use(platform_inputs_loader.load()):
+                total_amount = _run_calculation(
+                    pricing_run=pricing_run,
+                    tenant_id=tenant_id.value,
+                    members=members,
+                    member_ids=member_ids,
+                    per_member_context=per_member_context,
+                    rating_table_code=rating_table_code,
+                    base_premium=base_premium,
+                    business_pricing=business_pricing,
+                    plan=plan,
+                    rule_config=rule_config,
+                    plan_context=plan_context,
+                    commercial_adjustments=commercial_adjustments,
+                    pre_existing=pre_existing,
+                    custom_rules=custom_rules,
+                    context=context,
+                    product_setup=product_setup,
+                )
             PricingRun.objects.filter(id=pricing_run.id).update(
                 status=PricingRunStatus.CALCULATED.value,
                 total_amount=total_amount,
@@ -472,6 +482,8 @@ def _run_calculation(
             "basePremium": str(base_premium) if base_premium is not None else None,
             "businessConfigurationVersions": business_pricing.versions if business_pricing else {},
             "customRulesVersion": custom_rules.version,
+            "platformParameterVersions": platform_parameter_service.snapshot(),
+            "platformReferenceTableVersions": platform_reference_service.snapshot(),
         },
     )
     actuarial_model = business_pricing.actuarial_model if business_pricing is not None else None
@@ -1116,7 +1128,7 @@ def _run_calculation(
                   output_data={"totalAmount": str(total_amount)})
             order += 1
 
-        for charge in ([] if actuarial_model is not None else resolve_taxes_and_fees(pricing=business_pricing)):
+        for charge in ([] if actuarial_model is not None else _with_legal_rates(resolve_taxes_and_fees(pricing=business_pricing))):
             before_total = total_amount
             if charge["type"] == "PERCENTAGE":
                 total_amount = round_amount(total_amount * (Decimal("1") + charge["value"] / Decimal("100")))
@@ -1129,11 +1141,11 @@ def _run_calculation(
                 component_code=charge["code"], component_type=component_type,
                 factor_value=(Decimal("1") + charge["value"] / Decimal("100")) if charge["type"] == "PERCENTAGE" else None,
                 adjustment_amount=round_amount(total_amount - before_total), result_amount=total_amount,
-                source_code=f"BUSINESS_CONFIG:pricing.taxes_fees:{charge['code']}",
-                source_version=str(business_pricing.versions["pricing.taxes_fees"]["versionNo"]),
+                **_charge_source(charge, business_pricing),
             )
             trace("BUSINESS_CHARGE_APPLIED", rule_code=charge["code"],
-                  input_data={"type": charge["type"], "value": str(charge["value"])},
+                  input_data={"type": charge["type"], "value": str(charge["value"]),
+                              "legalParameter": charge.get("legal_parameter")},
                   output_data={"totalAmount": str(total_amount)})
             order += 1
 
@@ -1169,17 +1181,18 @@ def _run_calculation(
     if actuarial_model is not None:
         segment = actuarial_group_adjustment["segment"]
         loading_data = actuarial_model.get("assumptions", {}).get("loadings", {}).get(segment, {})
-        model_tax_codes = {"STAMP_DUTY", "IMPOSTO_SELO", "ARSEG", "ARSEG_LEVY"}
         # Calculador!C85 = C84 × (imposto do selo + ARSEG): as taxas somam-se
         # sobre o prémio comercial líquido, não se aplicam em cascata.
         net_commercial_premium = total_amount
-        for code, field in (("STAMP_DUTY", "stamp_duty"), ("ARSEG_LEVY", "arseg_levy")):
-            try:
-                rate = Decimal(str(loading_data[field]))
-            except (KeyError, TypeError, InvalidOperation) as exc:
-                raise PricingConfigError(f"Taxa actuarial '{field}' ausente para '{segment}'.") from exc
-            if rate < 0:
-                raise PricingConfigError(f"Taxa actuarial '{field}' não pode ser negativa.")
+        # Impostos legais: a taxa vem da camada geral do fornecedor (nível
+        # PLATFORM_MANDATORY) e prevalece sobre a do modelo actuarial do tenant,
+        # que fica só como referência no rasto.
+        for code, field, parameter in (
+            ("STAMP_DUTY", "stamp_duty", "tax.stamp_duty_pct"),
+            ("ARSEG_LEVY", "arseg_levy", "tax.arseg_levy_pct"),
+        ):
+            rate = _legal_rate(parameter)
+            model_rate = loading_data.get(field)
             if rate == 0:
                 continue
             before_tax = total_amount
@@ -1190,18 +1203,19 @@ def _run_calculation(
                 tenant_id=tenant_id, pricing_run=pricing_run, member=None, component_order=order,
                 component_code=code, component_type=PricingComponentType.TAX.value,
                 factor_value=Decimal("1") + rate, adjustment_amount=tax_amount, result_amount=total_amount,
-                source_code="BUSINESS_CONFIG:pricing.actuarial_model",
-                source_version=str(business_pricing.versions["pricing.actuarial_model"]["versionNo"]),
-                metadata_json={"taxRatePct": str(rate * Decimal("100")), "segment": segment},
+                source_code=f"PLATFORM_PARAMETER:{parameter}",
+                source_version=str(system_parameter_service.get_platform_version(parameter)),
+                metadata_json={"taxRatePct": str(rate * Decimal("100")), "segment": segment,
+                               "modelRate": None if model_rate is None else str(model_rate)},
             )
             trace("ACTUARIAL_TAX_APPLIED", rule_code=code,
-                  input_data={"rate": str(rate), "baseAmount": str(before_tax)},
+                  input_data={"rate": str(rate), "baseAmount": str(before_tax), "parameter": parameter,
+                              "modelRate": None if model_rate is None else str(model_rate)},
                   output_data={"taxAmount": str(tax_amount), "totalAmount": str(total_amount)})
             order += 1
 
-        model_tax_codes = {"STAMP_DUTY", "IMPOSTO_SELO", "ARSEG", "ARSEG_LEVY"}
         for charge in resolve_taxes_and_fees(pricing=business_pricing):
-            if charge["code"].strip().upper() in model_tax_codes:
+            if charge["code"].strip().upper() in LEGAL_TAX_CODES:
                 continue
             before_total = total_amount
             if charge["type"] == "PERCENTAGE":
@@ -1353,6 +1367,36 @@ def _member_age(member: InsuredMember, reference_date: datetime.date) -> int:
 #: capacity, not a business limit: catching a runaway multiplication
 #: before it reaches actual column overflow (Q360-S5-03 "overflow").
 _OVERFLOW_GUARD = Decimal("1000000000000")  # 10^12
+
+
+def _legal_rate(parameter: str) -> Decimal:
+    """Legal tax rate (fraction) from the platform layer — e.g. 1 % → 0.01."""
+    rate = Decimal(str(system_parameter_service.get_value(parameter))) / Decimal("100")
+    if rate < 0:
+        raise PricingConfigError(f"A taxa legal '{parameter}' não pode ser negativa.")
+    return rate
+
+
+def _with_legal_rates(charges: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A tenant charge with a legal tax code keeps its place in the order
+    and `included_in_premium`, but the rate is always the platform's."""
+    result = []
+    for charge in charges:
+        parameter = LEGAL_TAX_CODES.get(charge["code"].strip().upper())
+        if parameter is not None:
+            charge = {**charge, "category": "TAX", "type": "PERCENTAGE", "legal_parameter": parameter,
+                      "value": Decimal(str(system_parameter_service.get_value(parameter)))}
+        result.append(charge)
+    return result
+
+
+def _charge_source(charge: dict[str, Any], business_pricing) -> dict[str, str]:
+    parameter = charge.get("legal_parameter")
+    if parameter is not None:
+        return {"source_code": f"PLATFORM_PARAMETER:{parameter}",
+                "source_version": str(system_parameter_service.get_platform_version(parameter))}
+    return {"source_code": f"BUSINESS_CONFIG:pricing.taxes_fees:{charge['code']}",
+            "source_version": str(business_pricing.versions["pricing.taxes_fees"]["versionNo"])}
 
 
 def _guard_amount(amount: Decimal) -> None:

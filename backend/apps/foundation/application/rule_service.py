@@ -29,6 +29,51 @@ class RuleVersionImmutableError(DomainProblem):
     problem_code = "CONFLICT"
 
 
+class RuleVersionLimitError(DomainProblem):
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+def _check_eligibility_limits(rule_version: RuleVersion) -> None:
+    """Uma regra de elegibilidade não pode passar a maioridade (sem prova) nem
+    o teto de idade com prova definidos pelo fornecedor — nem nas regras
+    gerais nem nas exceções corporativas."""
+    import json
+
+    from apps.foundation.application import system_parameter_service
+
+    if rule_version.rule_set.rule_domain != "ELIGIBILITY" or rule_version.artifact_type != "JSON":
+        return
+    try:
+        raw = json.loads(rule_version.artifact_ref or "{}")
+    except (TypeError, ValueError):
+        return
+    if not isinstance(raw, dict):
+        return
+    majority = system_parameter_service.get_value("legal.age_of_majority")
+    with_proof = system_parameter_service.get_value("limits.dependent_max_age_with_proof")
+    blocks = [("regras gerais", raw.get("categoryRules") or {})]
+    for org, override in (raw.get("corporateOverrides") or {}).items():
+        if isinstance(override, dict):
+            blocks.append((f"exceção corporativa {org}", override.get("categoryRules") or {}))
+    for where, rules in blocks:
+        child = rules.get("CHILD") if isinstance(rules, dict) else None
+        if not isinstance(child, dict):
+            continue
+        without = child.get("maxAgeWithoutProof")
+        if isinstance(without, int) and majority is not None and without > majority:
+            raise RuleVersionLimitError(
+                f"Filhos ({where}): sem prova só até à maioridade ({majority} anos, legal.age_of_majority); "
+                f"indicado {without}"
+            )
+        proof = child.get("maxAgeWithProof")
+        if isinstance(proof, int) and with_proof is not None and proof > with_proof:
+            raise RuleVersionLimitError(
+                f"Filhos ({where}): com prova de estudos até {with_proof} anos no máximo "
+                f"(limits.dependent_max_age_with_proof); indicado {proof}"
+            )
+
+
 def create_rule_version(
     *,
     code: str,
@@ -133,6 +178,7 @@ def retire_rule_version(rule_version: RuleVersion) -> RuleVersion:
 
 
 def publish_rule_version(rule_version: RuleVersion) -> RuleVersion:
+    _check_eligibility_limits(rule_version)
     actor = CurrentActorProvider.get()
     updated = RuleVersion.objects.filter(id=rule_version.id, status="DRAFT").update(
         status="PUBLISHED",

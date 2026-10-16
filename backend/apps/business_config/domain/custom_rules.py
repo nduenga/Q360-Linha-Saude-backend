@@ -6,9 +6,14 @@ ação com linguagem de negócio. As listas abaixo são fechadas: nenhuma
 expressão escrita pelo utilizador é interpretada, por isso não há execução de
 código e cada regra é determinística e auditável.
 
-Duas famílias de ação:
-- tarifação: alteram o prémio (por pessoa ou no total da cotação);
-- aceitação: geram um requisito/aviso/bloqueio na cotação.
+Cada ação pertence a uma etapa (`stage`), deduzida da ação:
+- PRICING (tarifação): alteram o prémio (por pessoa ou no total da cotação);
+- UNDERWRITING (aceitação): geram um requisito/aviso/bloqueio na cotação;
+- ELIGIBILITY (elegibilidade, só por pessoa): tornam a pessoa não elegível
+  ou encaminham-na para análise, na avaliação de elegibilidade e na cotação;
+- VALIDATION (validação): erros que bloqueiam o envio da cotação, ou avisos;
+- WORKFLOW (fluxo): exigem que a aprovação da cotação seja feita por um
+  perfil (ex.: Gestor de subscrição acima de um prémio).
 """
 from __future__ import annotations
 
@@ -28,6 +33,7 @@ FIELDS: dict[str, tuple[str, str, tuple[str, ...] | None]] = {
     "segment": ("Tipo de seguro", "choice", ("INDIVIDUAL_FAMILY", "GROUP")),
     "relationship": ("Relação com o titular", "choice", ("TITULAR", "SPOUSE", "CHILD", "ASCENDANT", "OTHER")),
     "participation_option": ("Opção de participação", "choice", ("A", "B", "C", "D", "E")),
+    "total_premium": ("Prémio total da cotação", "number", None),
 }
 FIELD_LABELS = {
     "age": "Idade da pessoa",
@@ -36,6 +42,7 @@ FIELD_LABELS = {
     "segment": "Tipo de seguro",
     "relationship": "Relação com o titular",
     "participation_option": "Opção de participação (A–E)",
+    "total_premium": "Prémio total da cotação (último cálculo)",
 }
 OPERATORS = ("EQ", "NE", "GT", "GTE", "LT", "LTE", "BETWEEN")
 OPERATOR_LABELS = {
@@ -52,7 +59,29 @@ SCOPE_LABELS = {"PERSON": "Cada pessoa (calcula pessoa a pessoa)", "QUOTE": "A c
 
 PRICING_ACTIONS = ("INCREASE_PERCENT", "DISCOUNT_PERCENT", "MULTIPLY", "ADD_AMOUNT", "SUBTRACT_AMOUNT")
 UNDERWRITING_ACTIONS = ("REQUIRE_MEDICAL_REVIEW", "REQUIRE_TECHNICAL_REVIEW", "DECLINE", "WARN")
-ACTIONS = PRICING_ACTIONS + UNDERWRITING_ACTIONS
+ELIGIBILITY_ACTIONS = ("NOT_ELIGIBLE", "REFER_TO_UNDERWRITING")
+VALIDATION_ACTIONS = ("VALIDATION_ERROR", "VALIDATION_WARNING")
+WORKFLOW_ACTIONS = ("REQUIRE_APPROVAL_BY_ROLE",)
+ACTIONS = PRICING_ACTIONS + UNDERWRITING_ACTIONS + ELIGIBILITY_ACTIONS + VALIDATION_ACTIONS + WORKFLOW_ACTIONS
+STAGES = ("ELIGIBILITY", "PRICING", "UNDERWRITING", "VALIDATION", "WORKFLOW")
+STAGE_LABELS = {
+    "ELIGIBILITY": "Elegibilidade",
+    "PRICING": "Preço",
+    "UNDERWRITING": "Aceitação",
+    "VALIDATION": "Validação",
+    "WORKFLOW": "Fluxo de aprovação",
+}
+ACTION_STAGE = {
+    **{a: "PRICING" for a in PRICING_ACTIONS},
+    **{a: "UNDERWRITING" for a in UNDERWRITING_ACTIONS},
+    **{a: "ELIGIBILITY" for a in ELIGIBILITY_ACTIONS},
+    **{a: "VALIDATION" for a in VALIDATION_ACTIONS},
+    **{a: "WORKFLOW" for a in WORKFLOW_ACTIONS},
+}
+# Perfis que uma regra de fluxo pode exigir para aprovar a cotação.
+APPROVAL_ROLES = ("SUBSCRIPTION_MANAGER", "ADMIN")
+# O prémio só é conhecido depois do cálculo: não serve para preço nem elegibilidade.
+STAGES_WITHOUT_PREMIUM = frozenset({"PRICING", "ELIGIBILITY"})
 ACTION_LABELS = {
     "INCREASE_PERCENT": "Aumentar o prémio em … %",
     "DISCOUNT_PERCENT": "Dar desconto no prémio de … %",
@@ -63,6 +92,11 @@ ACTION_LABELS = {
     "REQUIRE_TECHNICAL_REVIEW": "Enviar para análise técnica",
     "DECLINE": "Recusar (bloqueia o envio)",
     "WARN": "Mostrar apenas um aviso",
+    "NOT_ELIGIBLE": "Pessoa não elegível",
+    "REFER_TO_UNDERWRITING": "Elegível só com análise do subscritor",
+    "VALIDATION_ERROR": "Erro de validação (bloqueia o envio)",
+    "VALIDATION_WARNING": "Aviso de validação",
+    "REQUIRE_APPROVAL_BY_ROLE": "Aprovação só por um perfil",
 }
 ACTION_UNITS = {"INCREASE_PERCENT": "%", "DISCOUNT_PERCENT": "%", "MULTIPLY": "×", "ADD_AMOUNT": "valor", "SUBTRACT_AMOUNT": "valor"}
 # ações que precisam de um valor numérico
@@ -138,6 +172,7 @@ class CustomRule:
     message: str
     order: int
     products: tuple[str, ...] = ()
+    role: str | None = None  # perfil exigido (REQUIRE_APPROVAL_BY_ROLE)
 
     def applies_to_product(self, facts: Mapping[str, Any]) -> bool:
         """Sem produtos escolhidos, a regra vale para todos."""
@@ -153,6 +188,10 @@ class CustomRule:
     @property
     def is_pricing(self) -> bool:
         return self.action in PRICING_ACTIONS
+
+    @property
+    def stage(self) -> str:
+        return ACTION_STAGE[self.action]
 
 
 def _present(raw: Any) -> bool:
@@ -204,6 +243,26 @@ def parse_rule(row: Mapping[str, Any], index: int = 0) -> CustomRule:
     conditions = tuple(c for c in (_condition(row, "", f"{path} ({name})"), _condition(row, "_2", f"{path} ({name})")) if c)
     if not conditions:
         raise InvalidConfiguration(f"{path} ({name}): defina pelo menos uma condição (ex.: Idade é maior que 60)")
+    stage = ACTION_STAGE[action]
+    declared = row.get("stage")
+    if _present(declared) and declared != stage:
+        raise InvalidConfiguration(
+            f"{path} ({name}): a ação '{ACTION_LABELS[action]}' pertence à etapa {STAGE_LABELS[stage]}, não a {declared}"
+        )
+    if stage == "ELIGIBILITY" and scope != "PERSON":
+        raise InvalidConfiguration(f"{path} ({name}): as regras de elegibilidade aplicam-se a 'Cada pessoa'")
+    if stage in STAGES_WITHOUT_PREMIUM and any(c.field == "total_premium" for c in conditions):
+        raise InvalidConfiguration(
+            f"{path} ({name}): o prémio total só é conhecido depois do cálculo; "
+            f"não pode ser usado na etapa {STAGE_LABELS[stage]}"
+        )
+    if scope == "PERSON" and any(c.field == "total_premium" for c in conditions):
+        raise InvalidConfiguration(f"{path} ({name}): o prémio total é da cotação inteira; use 'A cotação inteira'")
+    role: str | None = None
+    if action == "REQUIRE_APPROVAL_BY_ROLE":
+        role = str(row.get("role") or "").strip()
+        if role not in APPROVAL_ROLES:
+            raise InvalidConfiguration(f"{path} ({name}): escolha o perfil que tem de aprovar (permitidos: {list(APPROVAL_ROLES)})")
     if scope == "QUOTE":
         bad = [FIELD_LABELS[c.field] for c in conditions if c.field in PERSON_ONLY_FIELDS]
         if bad:
@@ -238,6 +297,7 @@ def parse_rule(row: Mapping[str, Any], index: int = 0) -> CustomRule:
         value=value,
         message=str(row.get("message") or "").strip(),
         order=order_value,
+        role=role,
     )
 
 
@@ -292,14 +352,18 @@ def field_catalog() -> dict[str, Any]:
     return {
         "fields": [
             {"key": key, "label": FIELD_LABELS[key], "kind": kind, "options": list(options) if options else None,
-             "personOnly": key in PERSON_ONLY_FIELDS}
+             "personOnly": key in PERSON_ONLY_FIELDS, "quoteOnly": key == "total_premium",
+             "excludedStages": sorted(STAGES_WITHOUT_PREMIUM) if key == "total_premium" else []}
             for key, (_, kind, options) in FIELDS.items()
         ],
+        "stages": [{"key": k, "label": STAGE_LABELS[k]} for k in STAGES],
+        "approvalRoles": list(APPROVAL_ROLES),
         "operators": [{"key": k, "label": OPERATOR_LABELS[k]} for k in OPERATORS],
         "scopes": [{"key": k, "label": SCOPE_LABELS[k]} for k in SCOPES],
         "actions": [
-            {"key": k, "label": ACTION_LABELS[k], "group": "PRICING" if k in PRICING_ACTIONS else "UNDERWRITING",
-             "needsValue": k in VALUE_ACTIONS, "unit": ACTION_UNITS.get(k)}
+            {"key": k, "label": ACTION_LABELS[k], "group": ACTION_STAGE[k], "stage": ACTION_STAGE[k],
+             "needsValue": k in VALUE_ACTIONS, "needsRole": k in WORKFLOW_ACTIONS, "unit": ACTION_UNITS.get(k),
+             "personOnly": ACTION_STAGE[k] == "ELIGIBILITY"}
             for k in ACTIONS
         ],
     }

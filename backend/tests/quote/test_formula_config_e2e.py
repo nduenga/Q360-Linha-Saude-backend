@@ -58,11 +58,16 @@ def _priced_quote(client, approver):
 def test_catalog_and_isolated_expression_test(admin_client):
     catalog = admin_client.get(f"{FORMULAS}/catalog").data
     assert {v["name"] for v in catalog["systemVariables"]["QUOTE"]} == {"total_amount", "base_total", "members_count"}
-    assert {f["name"] for f in catalog["functions"]} == {"min", "max", "abs", "round"}
+    assert {f["name"] for f in catalog["functions"]} == {"min", "max", "abs", "round", "tabela"}
 
     ok = admin_client.post(f"{FORMULAS}/test", {"expression": "round(a * 1.1, 2)", "variables": {"a": "10.005"}},
                            format="json")
-    assert ok.status_code == 200 and ok.data == {"valid": True, "result": "11.01", "variables": ["a"]}
+    assert ok.status_code == 200 and ok.data["valid"] is True
+    assert ok.data["result"] == "11.01" and ok.data["variables"] == ["a"]
+    # Passo a passo: substituição da variável, multiplicação e arredondamento.
+    assert [(s["expression"], s["operation"], s["result"]) for s in ok.data["steps"]] == [
+        ("a", "VARIABLE", "10.005"), ("a * 1.1", "*", "11.0055"), ("round(a * 1.1, 2)", "round", "11.01"),
+    ]
     unsafe = admin_client.post(f"{FORMULAS}/test", {"expression": "__import__('os').system('id')"}, format="json")
     assert unsafe.status_code == 400 and unsafe.data["valid"] is False
 
