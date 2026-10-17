@@ -40,7 +40,7 @@ from apps.quote.application import (
     word_template,
 )
 from apps.quote.application.numbering_service import next_continuous_value
-from apps.quote.domain.enums import DocumentStatus, DocumentType, QuoteSnapshotType, QuoteStatus
+from apps.quote.domain.enums import DocumentStatus, DocumentType, QuoteSnapshotType, QuoteStatus, quote_status_label
 from apps.quote.domain.errors import QuoteStateError
 from apps.quote.domain.proposal_template import DEFAULT_TEMPLATE, default_body, parse_template
 from apps.quote.infrastructure.models import Document, DocumentTemplateVersion, Quote, QuoteScenario, QuoteSnapshot
@@ -82,14 +82,14 @@ def _scenario_for(quote: Quote, scenario_id) -> QuoteScenario | None:
     if scenario_id:
         scenario = QuoteScenario.objects.filter(id=scenario_id, quote=quote).first()
         if scenario is None:
-            raise ProposalRequestError(f"O cenário {scenario_id} não pertence à cotação {quote.id}")
+            raise ProposalRequestError(f"O cenário {scenario_id} não pertence a esta cotação")
         return scenario
     return QuoteScenario.objects.filter(quote=quote, is_selected=True).first()
 
 
 def _content_for(quote: Quote, scenario: QuoteScenario | None, render: Callable) -> dict[str, Any]:
     if quote.status in _BLOCKED:
-        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; não é possível gerar a proposta")
+        raise QuoteStateError(f"Esta cotação está em {quote_status_label(quote.status)}; não é possível gerar a proposta")
     if scenario is not None:
         if scenario_service.is_stale(scenario):
             raise ProposalError(

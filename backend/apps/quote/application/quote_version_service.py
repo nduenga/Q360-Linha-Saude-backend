@@ -34,7 +34,7 @@ from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositor
 from apps.pricing.application.plan_dimensions import resolve_plan_pricing_context
 from apps.pricing.domain.money import round_amount
 from apps.quote.application import quote_service, simulator_service
-from apps.quote.domain.enums import QuoteStatus
+from apps.quote.domain.enums import QuoteStatus, quote_status_label
 from apps.quote.domain.errors import QuoteStateError, ReferencedEntityNotFoundError
 from apps.quote.infrastructure.models import Quote, QuoteAdjustment, QuoteMember, QuoteVersion
 
@@ -86,6 +86,10 @@ def capture_state(quote: Quote) -> dict[str, Any]:
         "quoteType": quote.quote_type,
         "sourcePolicyId": str(quote.source_policy_id) if quote.source_policy_id else None,
         "planId": str(quote.plan_id),
+        # Nome a par do id: sem isto, o histórico de versões só mostrava o
+        # UUID do plano, sem forma de saber qual era sem ir consultar a API
+        # à parte.
+        "planName": quote.plan.name,
         "selection": quote.selection_json or {},
         "adjustments": adjustments,
         "members": members,
@@ -141,7 +145,7 @@ def list_versions(*, quote: Quote):
 def get_version(*, quote: Quote, version_no: int) -> QuoteVersion:
     version = QuoteVersion.objects.filter(quote=quote, version_no=version_no).first()
     if version is None:
-        raise QuoteVersionNotFoundError(f"A cotação {quote.id} não tem a versão {version_no}")
+        raise QuoteVersionNotFoundError(f"Esta cotação não tem a versão {version_no}")
     return version
 
 
@@ -160,6 +164,9 @@ def diff_states(before: dict[str, Any], after: dict[str, Any]) -> list[dict[str,
     # Versões gravadas antes de 2026-10-15 ainda trazem `effectiveDate`; a
     # cotação deixou de o ter e não entra na comparação.
     add("planId", before["planId"], after["planId"])
+    # Versões gravadas antes desta alteração não têm `planName` — usa .get()
+    # para não rebentar a comparar com uma versão antiga.
+    add("planName", before.get("planName"), after.get("planName"))
     for key in sorted(set(before["selection"]) | set(after["selection"])):
         add(f"selection.{key}", before["selection"].get(key), after["selection"].get(key))
     before_adj = {_adjustment_key(a): a for a in before["adjustments"]}
@@ -210,7 +217,7 @@ def compare_versions(*, quote: Quote, version_no: int, against: int | None) -> d
 # ---------------------------------------------------------------- restore
 def restore_version(*, quote: Quote, version_no: int, reason: str | None) -> tuple[Quote, dict[str, Any]]:
     if quote.status not in _EDITABLE:
-        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; só se pode restaurar uma versão em rascunho (DRAFT) ou pronta (READY)")
+        raise QuoteStateError(f"Esta cotação está em {quote_status_label(quote.status)}; só se pode restaurar uma versão em rascunho (DRAFT) ou pronta (READY)")
     reason = require_reason(reason)
     version = get_version(quote=quote, version_no=version_no)
     state = version.snapshot_json

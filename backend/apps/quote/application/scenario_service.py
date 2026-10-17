@@ -32,7 +32,7 @@ from apps.pricing.domain.money import round_amount
 from apps.pricing.infrastructure.parameter_repository import resolve_pricing_parameter_set
 from apps.product.infrastructure.models import PlanBenefit
 from apps.quote.application import quote_service, simulator_service
-from apps.quote.domain.enums import QuoteStatus
+from apps.quote.domain.enums import QuoteStatus, quote_status_label
 from apps.quote.domain.errors import QuoteStateError, ReferencedEntityNotFoundError, RowVersionMismatchError
 from apps.quote.infrastructure.models import Quote, QuoteAdjustment, QuoteScenario
 
@@ -66,14 +66,14 @@ class ScenarioStateError(DomainProblem):
 def _require_scenario_editable(quote: Quote) -> None:
     if quote.status not in _SCENARIO_EDITABLE:
         raise QuoteStateError(
-            f"A cotação {quote.id} está em {quote.status}; os cenários só podem ser alterados em rascunho (DRAFT), pronta (READY) ou em revisão (IN_REVIEW)"
+            f"Esta cotação está em {quote_status_label(quote.status)}; os cenários só podem ser alterados em rascunho (DRAFT), pronta (READY) ou em revisão (IN_REVIEW)"
         )
 
 
 def _require_quote_editable(quote: Quote) -> None:
     if quote.status not in _QUOTE_EDITABLE:
         raise QuoteStateError(
-            f"A cotação {quote.id} está em {quote.status}; a cotação oficial só pode ser alterada em rascunho (DRAFT) ou pronta (READY)"
+            f"Esta cotação está em {quote_status_label(quote.status)}; a cotação oficial só pode ser alterada em rascunho (DRAFT) ou pronta (READY)"
         )
 
 def _fmt(value: Decimal) -> str:
@@ -244,7 +244,7 @@ def create_scenario(
                 created_by=actor.actor_id if actor else "unknown",
             )
     except IntegrityError as exc:
-        raise DuplicateScenarioNameError(f"A cotação {quote.id} já tem um cenário com o nome '{name}'") from exc
+        raise DuplicateScenarioNameError(f"Esta cotação já tem um cenário com o nome '{name}'") from exc
     _audit.record(
         action="quote.scenario_created",
         entity_type="QuoteScenario",
@@ -287,7 +287,7 @@ def update_scenario(
                     f"A versão do cenário {scenario.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
                 )
     except IntegrityError as exc:
-        raise DuplicateScenarioNameError(f"A cotação {quote.id} já tem um cenário com o nome '{name}'") from exc
+        raise DuplicateScenarioNameError(f"Esta cotação já tem um cenário com o nome '{name}'") from exc
     scenario = get_scenario(scenario.id)
     _audit.record(
         action="quote.scenario_updated",

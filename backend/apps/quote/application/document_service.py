@@ -28,7 +28,7 @@ from apps.foundation.application.context import CurrentActorProvider, CurrentTen
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.quote.application.numbering_service import next_continuous_value
-from apps.quote.domain.enums import DocumentStatus, DocumentTemplateStatus, DocumentType, QuoteSnapshotType, QuoteStatus
+from apps.quote.domain.enums import DocumentStatus, DocumentTemplateStatus, DocumentType, QuoteSnapshotType, QuoteStatus, quote_status_label
 from apps.quote.domain.errors import QuoteStateError
 from apps.quote.domain.proposal_template import validate_template_body
 from apps.quote.infrastructure.models import Document, DocumentTemplateVersion, Quote, QuoteSnapshot
@@ -206,7 +206,7 @@ DEFAULT_TEMPLATE_CODE = "QUOTE_PROPOSAL_DEFAULT"
 
 def generate_quote_proposal(*, quote: Quote) -> Document:
     if quote.status != QuoteStatus.APPROVED.value:
-        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; só se pode gerar a proposta depois de a cotação estar aprovada (APPROVED)")
+        raise QuoteStateError(f"Esta cotação está em {quote_status_label(quote.status)}; só se pode gerar a proposta depois de a cotação estar aprovada (APPROVED)")
 
     approval_snapshot = (
         QuoteSnapshot.objects.filter(quote=quote, snapshot_type=QuoteSnapshotType.APPROVAL.value)
@@ -214,7 +214,7 @@ def generate_quote_proposal(*, quote: Quote) -> Document:
         .first()
     )
     if approval_snapshot is None:
-        raise QuoteStateError(f"A cotação {quote.id} não tem registo de aprovação (snapshot) para gerar a proposta")
+        raise QuoteStateError("Esta cotação não tem registo de aprovação (snapshot) para gerar a proposta")
 
     template = resolve_template_for(template_code=DEFAULT_TEMPLATE_CODE, effective_date=quote.reference_date)
     if template is None:

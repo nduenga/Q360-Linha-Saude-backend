@@ -24,6 +24,29 @@ class QuoteStatus(str, Enum):
     BOUND = "BOUND"
 
 
+# Mesmos rótulos do frontend (src/components/Statusbadge.tsx, "nomenclatura
+# consistente em toda a aplicação (regra 16.1)") — usados nas mensagens de
+# erro para a pessoa ver "Cancelada (CANCELLED)" em vez do código cru.
+QUOTE_STATUS_LABEL: dict[str, str] = {
+    QuoteStatus.DRAFT.value: "Rascunho",
+    QuoteStatus.READY.value: "Calculada",
+    QuoteStatus.IN_REVIEW.value: "Em Revisão",
+    QuoteStatus.APPROVED.value: "Aprovada",
+    QuoteStatus.REJECTED.value: "Rejeitada",
+    QuoteStatus.EXPIRED.value: "Expirada",
+    QuoteStatus.CANCELLED.value: "Cancelada",
+    QuoteStatus.BOUND.value: "Emitida",
+}
+
+
+def quote_status_label(status: str) -> str:
+    """'CANCELLED' -> 'Cancelada (CANCELLED)'; mantém o código técnico entre
+    parêntesis porque é o que a equipa de suporte/engenharia reconhece nos
+    logs e no ART-009, a par do nome que a pessoa a decidir entende."""
+    label = QUOTE_STATUS_LABEL.get(status)
+    return f"{label} ({status})" if label else status
+
+
 class QuoteMemberStatus(str, Enum):
     INCLUDED = "INCLUDED"
     EXCLUDED = "EXCLUDED"

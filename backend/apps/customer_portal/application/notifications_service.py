@@ -33,9 +33,24 @@ PAYMENT_DUE_SOON_DAYS = 7
 _QUOTE_NOTICES = {
     "IN_REVIEW": ("QUOTE_IN_REVIEW", "Cotação {n} em análise", ""),
     "AWAITING_SIGNATURE": ("QUOTE_APPROVED", "Cotação {n} aprovada", "A cotação está aprovada e a aguardar a sua aceitação."),
-    "REJECTED": ("QUOTE_REJECTED", "Cotação {n} recusada", ""),
+    # REJECTED não tem corpo fixo: _rejection_body busca o motivo real
+    # registado por quem decidiu (QuoteStateHistory.reason_text), em vez de
+    # deixar a notificação sem explicação nenhuma.
+    "REJECTED": ("QUOTE_REJECTED", "Cotação {n} recusada", None),
     "EXPIRED": ("QUOTE_EXPIRED", "Cotação {n} expirada", "O prazo de validade terminou."),
 }
+
+
+def _rejection_body(quote) -> str:
+    history = quote.state_history.filter(to_status="REJECTED").order_by("-changed_at").first()
+    reason_text = (history.reason_text or "").strip() if history else ""
+    if reason_text:
+        return f"Motivo: {reason_text}"
+    # reasonCode é sempre preenchido por quem decide, mas é um código técnico
+    # (ex. ELIGIBILITY_HARD_STOP) sem tradução para o cliente — mostrar isso
+    # cru seria pior do que não mostrar nada. Sem reasonText, só dá para
+    # remeter para o apoio ao cliente.
+    return "Contacte o apoio ao cliente para saber o motivo."
 
 
 def _tenant_id():
@@ -68,6 +83,8 @@ def sync_account(account_id: uuid.UUID, *, today: datetime.date | None = None) -
         if notice is None or quote.quote_number is None:
             continue
         code, title, body = notice
+        if status == "REJECTED":
+            body = _rejection_body(quote)
         link = f"/portal/cotacoes/{quote.quote_number}"
         at = {"AWAITING_SIGNATURE": quote.approved_at, "REJECTED": quote.rejected_at}.get(status)
         notify_account(

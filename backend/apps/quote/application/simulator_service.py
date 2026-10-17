@@ -37,7 +37,7 @@ from apps.pricing.domain.commercial_adjustments import KINDS, PERCENT_KINDS, SCO
 from apps.pricing.domain.money import round_amount
 from apps.product.domain.pre_existing import validate_pre_existing_decision
 from apps.quote.application import quote_service
-from apps.quote.domain.enums import QuoteStatus
+from apps.quote.domain.enums import QuoteStatus, quote_status_label
 from apps.quote.domain.errors import QuoteStateError, ReferencedEntityNotFoundError, RowVersionMismatchError
 from apps.quote.infrastructure.models import AuthorityPolicy, Quote, QuoteAdjustment, QuoteMember
 
@@ -57,7 +57,7 @@ class AdjustmentNotFoundError(DomainProblem):
 
 def _require_editable(quote: Quote) -> None:
     if quote.status not in _EDITABLE:
-        raise QuoteStateError(f"A cotação {quote.id} está em {quote.status}; só pode ser alterada em rascunho (DRAFT) ou pronta (READY)")
+        raise QuoteStateError(f"Esta cotação está em {quote_status_label(quote.status)}; só pode ser alterada em rascunho (DRAFT) ou pronta (READY)")
 
 
 def _money(value: Decimal | None) -> str | None:
@@ -113,7 +113,7 @@ def set_selection(*, quote: Quote, selection: dict[str, Any], row_version: int) 
             selection_json=plan_context.selection, row_version=row_version + 1
         )
         if updated == 0:
-            raise RowVersionMismatchError(f"A versão da cotação {quote.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
+            raise RowVersionMismatchError(f"A versão desta cotação ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
         quote.refresh_from_db()
         quote_service._demote_to_draft_if_ready(quote)
         quote.refresh_from_db()
@@ -287,7 +287,7 @@ def remove_adjustment(*, quote: Quote, adjustment_id: uuid.UUID, reason: str | N
     reason = require_reason(reason)
     adjustment = QuoteAdjustment.objects.filter(id=adjustment_id, quote=quote).first()
     if adjustment is None:
-        raise AdjustmentNotFoundError(f"O ajuste {adjustment_id} não existe na cotação {quote.id}")
+        raise AdjustmentNotFoundError(f"O ajuste {adjustment_id} não existe nesta cotação")
     if adjustment.status == "REMOVED":
         raise QuoteStateError(f"O ajuste {adjustment_id} já foi removido")
     actor = CurrentActorProvider.get()
@@ -334,7 +334,7 @@ def set_member_pre_existing(
     reason = require_reason(reason)
     quote_member = QuoteMember.objects.filter(quote=quote, member_id=member_id).first()
     if quote_member is None:
-        raise ReferencedEntityNotFoundError(f"A pessoa segura {member_id} não está associada à cotação {quote.id}")
+        raise ReferencedEntityNotFoundError(f"A pessoa segura {member_id} não está associada a esta cotação")
     clean, warnings = validate_pre_existing_decision(decision, plan_settings=effective_plan_settings(quote.plan, quote.reference_date))
     actor = CurrentActorProvider.get()
     stored = {
@@ -369,7 +369,7 @@ def clear_member_pre_existing(*, quote: Quote, member_id: uuid.UUID, reason: str
     reason = require_reason(reason)
     quote_member = QuoteMember.objects.filter(quote=quote, member_id=member_id).first()
     if quote_member is None:
-        raise ReferencedEntityNotFoundError(f"A pessoa segura {member_id} não está associada à cotação {quote.id}")
+        raise ReferencedEntityNotFoundError(f"A pessoa segura {member_id} não está associada a esta cotação")
     before = quote_member.pre_existing_json or None
     with transaction.atomic():
         QuoteMember.objects.filter(id=quote_member.id).update(pre_existing_json={})
