@@ -23,6 +23,7 @@ _EXPECTED: dict[Role, set[Permission]] = {
         Permission.PRODUCT_MANAGE,
         Permission.PRICING_CONFIG_MANAGE,
         Permission.AUDIT_READ,
+        Permission.QUOTE_DISCOUNT_APPROVE,
     },
     # Gestor de subscrição = Configurador + Aprovador + Auditor (que deixaram de existir).
     Role.SUBSCRIPTION_MANAGER: {
@@ -47,6 +48,7 @@ _EXPECTED: dict[Role, set[Permission]] = {
         Permission.QUOTE_APPROVE,
         Permission.QUOTE_REJECT,
     },
+    Role.TECHNICAL_DIRECTOR: {Permission.QUOTE_DISCOUNT_APPROVE},
 }
 
 
@@ -54,9 +56,12 @@ def test_role_permissions_matrix_matches_doc001_s18():
     assert {role: set(perms) for role, perms in ROLE_PERMISSIONS.items()} == _EXPECTED
 
 
-def test_admin_and_manager_have_every_permission_but_the_subscriber_does_not():
+def test_discount_approval_is_limited_to_admin_and_technical_director():
     everything = set(Permission)
-    assert ROLE_PERMISSIONS[Role.ADMIN] == everything == ROLE_PERMISSIONS[Role.SUBSCRIPTION_MANAGER]
+    assert ROLE_PERMISSIONS[Role.ADMIN] == everything
+    assert ROLE_PERMISSIONS[Role.SUBSCRIPTION_MANAGER] == everything - {Permission.QUOTE_DISCOUNT_APPROVE}
+    assert ROLE_PERMISSIONS[Role.TECHNICAL_DIRECTOR] == {Permission.QUOTE_DISCOUNT_APPROVE}
+    assert Permission.QUOTE_DISCOUNT_APPROVE not in ROLE_PERMISSIONS[Role.SUBSCRIBER]
     assert Permission.PRODUCT_MANAGE not in ROLE_PERMISSIONS[Role.SUBSCRIBER]
     assert Permission.PRICING_CONFIG_MANAGE not in ROLE_PERMISSIONS[Role.SUBSCRIBER]
     assert Permission.AUDIT_READ not in ROLE_PERMISSIONS[Role.SUBSCRIBER]

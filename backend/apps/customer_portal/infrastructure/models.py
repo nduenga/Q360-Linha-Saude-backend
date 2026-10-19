@@ -135,6 +135,20 @@ class PortalRequestEvent(TenantScopedModel):
         db_table = "portal_request_event"
 
 
+class PortalRequestSatisfaction(TenantScopedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    request = models.ForeignKey(PortalRequest, on_delete=models.DO_NOTHING, db_column="request_id")
+    customer_account = models.ForeignKey(CustomerAccount, on_delete=models.DO_NOTHING, db_column="customer_account_id")
+    score = models.PositiveSmallIntegerField()
+    comment = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "portal_request_satisfaction"
+
+
 class PortalMessage(TenantScopedModel):
     """Mensagem associada a uma cotação, apólice ou pedido (PDF s.15) — nunca
     um chat genérico. `proposer` é a fronteira de acesso do cliente."""

@@ -6,8 +6,10 @@ from __future__ import annotations
 import datetime
 import uuid
 from typing import Any
+from zoneinfo import ZoneInfo
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from apps.client.infrastructure.models import Proposer
 from apps.customer_portal.application import notifications_service
@@ -22,6 +24,8 @@ from apps.customer_portal.infrastructure.models import (
     CustomerAccountProposer,
     PortalRequest,
     PortalRequestEvent,
+    PortalRequestSatisfaction,
+    PortalMessage,
 )
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
@@ -190,6 +194,52 @@ def _numbers(requests: list[PortalRequest]) -> tuple[dict, dict]:
     return policies, quotes
 
 
+def _business_minutes(start: datetime.datetime, end: datetime.datetime, calendar: dict[str, Any]) -> int:
+    """Elapsed minutes inside the configured local business calendar."""
+    if end <= start:
+        return 0
+    zone = ZoneInfo(calendar["time_zone"])
+    open_time = datetime.time.fromisoformat(calendar["business_start"])
+    close_time = datetime.time.fromisoformat(calendar["business_end"])
+    weekdays = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6}
+    workdays = {weekdays[day] for day in calendar["business_days"]}
+    holidays = {line.strip() for line in (calendar.get("holidays") or "").splitlines() if line.strip()}
+    local_start, local_end = start.astimezone(zone), end.astimezone(zone)
+    total_seconds = 0
+    day = local_start.date()
+    while day <= local_end.date():
+        if day.weekday() in workdays and day.isoformat() not in holidays:
+            opening = datetime.datetime.combine(day, open_time, tzinfo=zone)
+            closing = datetime.datetime.combine(day, close_time, tzinfo=zone)
+            left, right = max(start, opening), min(end, closing)
+            if right > left:
+                total_seconds += (right - left).total_seconds()
+        day += datetime.timedelta(days=1)
+    return max(0, int(total_seconds // 60))
+
+
+def _sla_minutes(start, end, *, business_hours_only: bool, calendar: dict[str, Any], events, pause_while_awaiting_customer: bool) -> int:
+    def duration(left, right):
+        if business_hours_only:
+            return _business_minutes(left, right, calendar)
+        return max(0, int((right - left).total_seconds() // 60))
+
+    total = duration(start, end)
+    if not pause_while_awaiting_customer:
+        return total
+    pause_start = None
+    paused = 0
+    for event in events:
+        if event.to_status == rules.AWAITING_CUSTOMER and pause_start is None:
+            pause_start = event.created_at
+        elif event.from_status == rules.AWAITING_CUSTOMER and pause_start is not None:
+            paused += duration(pause_start, min(event.created_at, end))
+            pause_start = None
+    if pause_start is not None:
+        paused += duration(pause_start, end)
+    return max(0, total - paused)
+
+
 def items_for(requests: list[PortalRequest]) -> list[dict]:
     policies, quotes = _numbers(requests)
     return [_item(r, policy_number=policies.get(r.policy_id), quote_number=quotes.get(r.quote_id)) for r in requests]
@@ -241,8 +291,86 @@ def staff_list(*, status: str | None = None, request_type: str | None = None) ->
         queryset = queryset.filter(request_type=request_type)
     requests = list(queryset)
     holders = dict(Proposer.objects.filter(id__in=[r.proposer_id for r in requests]).values_list("id", "display_name"))
-    return [{**item, "customerName": holders.get(r.proposer_id), "payload": r.payload_json}
-            for item, r in zip(items_for(requests), requests)]
+    from apps.business_config.application.readers import BusinessSnapshot
+
+    policy = BusinessSnapshot.load().get("service.sla") or {}
+    calendar = {key: policy.get(key) for key in ("time_zone", "business_days", "business_start", "business_end", "holidays")}
+    targets = {row.get("priority"): row for row in policy.get("targets", []) if isinstance(row, dict)}
+    request_priorities = {
+        row.get("request_type"): row.get("priority")
+        for row in policy.get("request_priorities", []) if isinstance(row, dict)
+    }
+    events_by_request: dict[uuid.UUID, list[PortalRequestEvent]] = {}
+    staff_messages_by_number: dict[str, datetime.datetime] = {}
+    if requests:
+        for event in PortalRequestEvent.objects.filter(request_id__in=[r.id for r in requests]).order_by("created_at"):
+            events_by_request.setdefault(event.request_id, []).append(event)
+        message_rows = PortalMessage.objects.filter(
+            context_type="REQUEST", context_ref__in=[r.request_number for r in requests], sender_type="STAFF",
+        ).order_by("created_at").values_list("context_ref", "created_at")
+        for request_number, created_at in message_rows:
+            staff_messages_by_number.setdefault(request_number, created_at)
+    now = timezone.now()
+    output = []
+    for item, request in zip(items_for(requests), requests):
+        events = events_by_request.get(request.id, [])
+        first_staff_event = next(
+            (e.created_at for e in events if e.actor_type == "STAFF" and not (e.actor_ref or "").startswith("system:")),
+            None,
+        )
+        message_response = staff_messages_by_number.get(request.request_number)
+        response_times = [t for t in (first_staff_event, message_response) if t is not None]
+        first_staff_response = min(response_times) if response_times else None
+        completed_event = next(
+            (e.created_at for e in reversed(events) if e.to_status in (rules.APPROVED, rules.REJECTED, rules.COMPLETED)),
+            None,
+        )
+        end = completed_event or now
+        priority = request_priorities.get(request.request_type, "NORMAL")
+        target = targets.get(priority)
+        elapsed_minutes = max(0, int((end - request.created_at).total_seconds() // 60))
+        first_response_minutes = max(0, int((first_staff_response - request.created_at).total_seconds() // 60)) if first_staff_response else None
+        sla = None
+        if target:
+            business_hours_only = bool(target.get("business_hours_only"))
+            response_target = target.get("first_response_minutes")
+            resolution_target = target.get("resolution_minutes")
+            measured = bool(not business_hours_only or all(calendar.get(k) for k in ("time_zone", "business_days", "business_start", "business_end")))
+            if measured:
+                elapsed_minutes = _sla_minutes(
+                    request.created_at, end, business_hours_only=business_hours_only, calendar=calendar,
+                    events=events, pause_while_awaiting_customer=bool(target.get("pause_while_awaiting_customer")),
+                )
+                first_response_minutes = (
+                    _sla_minutes(
+                        request.created_at, first_staff_response, business_hours_only=business_hours_only,
+                        calendar=calendar, events=[], pause_while_awaiting_customer=False,
+                    ) if first_staff_response else None
+                )
+            else:
+                elapsed_minutes = None
+                first_response_minutes = None
+            sla = {
+                "priority": priority,
+                "firstResponseTargetMinutes": response_target,
+                "resolutionTargetMinutes": resolution_target,
+                "firstResponseMinutes": first_response_minutes,
+                "resolutionMinutes": elapsed_minutes if completed_event else None,
+                "openElapsedMinutes": elapsed_minutes if not completed_event else None,
+                "clock": "BUSINESS_HOURS" if business_hours_only else "ELAPSED_TIME",
+                "measurementStatus": "MEASURED" if measured else "UNMEASURED",
+                "firstResponseBreached": (
+                    response_target is not None and (
+                        first_response_minutes > response_target if first_response_minutes is not None
+                        else elapsed_minutes > response_target
+                    )
+                ) if measured and elapsed_minutes is not None else None,
+                "resolutionBreached": (
+                    elapsed_minutes > resolution_target
+                ) if resolution_target is not None and measured and elapsed_minutes is not None else None,
+            }
+        output.append({**item, "customerName": holders.get(request.proposer_id), "payload": request.payload_json, "sla": sla})
+    return output
 
 
 def staff_get(request_number: str) -> dict:
@@ -256,6 +384,39 @@ def staff_get(request_number: str) -> dict:
         "payload": request.payload_json,
         "history": _events(request),
     }
+
+
+def submit_satisfaction(*, request_number: str, account_id: uuid.UUID, score: int, comment: str = "") -> dict:
+    """Record one customer satisfaction score for a resolved request."""
+    from apps.business_config.application.readers import BusinessSnapshot
+
+    config = BusinessSnapshot.load().get("service.satisfaction") or {}
+    if not config.get("enabled"):
+        raise rules.PortalRequestConflictError("A avaliação de satisfação não está ativa.")
+    request = PortalRequest.objects.filter(request_number=request_number, customer_account_id=account_id).first()
+    if request is None:
+        raise PortalResourceNotFoundError("Não foi encontrado nenhum pedido com este número.")
+    if request.status not in (rules.APPROVED, rules.REJECTED, rules.COMPLETED):
+        raise rules.PortalRequestConflictError("Só é possível avaliar um pedido resolvido.")
+    if not config.get("minimum_score") <= score <= config.get("maximum_score"):
+        raise rules.PortalRequestInvalidError(
+            f"A pontuação deve estar entre {config.get('minimum_score')} e {config.get('maximum_score')}."
+        )
+    if PortalRequestSatisfaction.objects.filter(request=request).exists():
+        raise rules.PortalRequestConflictError("Este pedido já foi avaliado.")
+    try:
+        with transaction.atomic():
+            entry = PortalRequestSatisfaction.objects.create(
+                tenant_id=_tenant_id(), request=request, customer_account_id=account_id, score=score,
+                comment=comment.strip(),
+            )
+    except IntegrityError as exc:
+        raise rules.PortalRequestConflictError("Este pedido já foi avaliado.") from exc
+    _audit.record(
+        action="customer_portal.request_satisfaction_submitted", entity_type="PortalRequest",
+        entity_id=str(request.id), metadata={"score": score},
+    )
+    return {"requestNumber": request_number, "score": entry.score, "comment": entry.comment, "createdAt": entry.created_at}
 
 
 def staff_transition(*, request_number: str, to_status: str, note: str | None, actor_ref: str) -> dict:

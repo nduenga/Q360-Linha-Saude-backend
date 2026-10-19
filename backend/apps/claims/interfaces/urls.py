@@ -10,6 +10,7 @@ from apps.claims.interfaces.views import (
     ClaimsMethodologyView,
     ClaimsImportTemplateView,
     ClaimsSummaryView,
+    ClaimsExperienceRatingView,
     ProjectionDetailView,
     ProjectionListCreateView,
 )
@@ -20,6 +21,7 @@ urlpatterns = [
     path("claims/methodology", ClaimsMethodologyView.as_view(), name="claims-methodology"),
     path("claims/import-template", ClaimsImportTemplateView.as_view(), name="claims-import-template"),
     path("claims/summary", ClaimsSummaryView.as_view(), name="claims-summary"),
+    path("claims/experience-rating", ClaimsExperienceRatingView.as_view(), name="claims-experience-rating"),
     path("claims/profit-sharing", ClaimsProfitSharingView.as_view(), name="claims-profit-sharing"),
     path(
         "claims/profit-sharing/parameters",

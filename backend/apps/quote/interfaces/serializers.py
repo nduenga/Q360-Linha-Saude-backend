@@ -5,6 +5,8 @@ Serializer" rationale).
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.pricing.domain.money import round_amount
@@ -31,6 +33,8 @@ class QuoteSerializer(serializers.Serializer):
     # Sem data de efeito (decisão de 2026-10-15): data de criação e validade.
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+    submittedAt = serializers.DateTimeField(source="submitted_at", allow_null=True, read_only=True)
+    approvedAt = serializers.DateTimeField(source="approved_at", allow_null=True, read_only=True)
     validUntil = serializers.DateField(source="valid_until", allow_null=True)
     currencyCode = serializers.CharField(source="currency_code", allow_null=True)
     latestPricingRunId = serializers.UUIDField(source="latest_pricing_run_id", allow_null=True)
@@ -81,12 +85,22 @@ class QuoteSerializer(serializers.Serializer):
         pr = getattr(obj, "latest_pricing_run", None)
         if pr is None:
             return None
+        pricing_context = (getattr(pr, "input_snapshot_json", None) or {}).get("context", {})
+        experience = pricing_context.get("experienceRating") or {"available": False, "reason": "NOT_RECORDED"}
+        factor = Decimal(str(experience["factor"])) if experience.get("available") else None
         return {
             "id": str(pr.id),
             "status": pr.status,
             "currencyCode": pr.currency_code,
             "totalAmount": format(pr.total_amount.normalize(), "f"),
             "calculatedAt": pr.completed_at.isoformat() if getattr(pr, "completed_at", None) else None,
+            "experienceRating": {
+                "applied": bool(experience.get("available")),
+                "factor": str(factor) if factor is not None else None,
+                "changedPremium": bool(factor is not None and factor != Decimal("1")),
+                "available": bool(experience.get("available")),
+                "unavailableReason": experience.get("reason") if not experience.get("available") else None,
+            },
         }
 
 
@@ -204,6 +218,7 @@ class AdjustmentRemoveRequestSerializer(serializers.Serializer):
 class QuoteAdjustmentSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     quoteId = serializers.UUIDField(source="quote_id")
+    quoteRowVersion = serializers.IntegerField(source="quote.row_version")
     kind = serializers.CharField()
     value = serializers.SerializerMethodField()
     scope = serializers.CharField()
@@ -219,6 +234,28 @@ class QuoteAdjustmentSerializer(serializers.Serializer):
 
     def get_value(self, obj) -> str:
         return format(obj.value.normalize(), "f")
+
+
+class QuoteDiscountApprovalSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    quoteId = serializers.UUIDField(source="quote_id")
+    quoteNumber = serializers.CharField(source="quote.quote_number", allow_null=True)
+    proposerName = serializers.CharField(source="quote.proposer.display_name")
+    spec = serializers.JSONField(source="spec_json")
+    reason = serializers.CharField()
+    status = serializers.CharField()
+    requestedBy = serializers.CharField(source="requested_by")
+    requestedAt = serializers.DateTimeField(source="requested_at")
+    decidedBy = serializers.CharField(source="decided_by", allow_null=True)
+    decidedAt = serializers.DateTimeField(source="decided_at", allow_null=True)
+    decisionNote = serializers.CharField(source="decision_note", allow_null=True)
+    adjustmentId = serializers.UUIDField(source="adjustment_id", allow_null=True)
+    impact = serializers.JSONField(source="impact_json")
+
+
+class QuoteDiscountApprovalDecisionSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(choices=("APPROVE", "REJECT"))
+    note = serializers.CharField(min_length=10, max_length=1000)
 
 
 class PreExistingDecisionRequestSerializer(serializers.Serializer):

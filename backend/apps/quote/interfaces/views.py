@@ -38,7 +38,7 @@ from apps.quote.application import (
     word_template,
 )
 from apps.quote.domain.enums import QuoteDecisionType
-from apps.quote.infrastructure.models import DocumentTemplateVersion, Quote, ReviewTask
+from apps.quote.infrastructure.models import DocumentTemplateVersion, Quote, QuoteDiscountApproval, ReviewTask
 from apps.quote.interfaces.serializers import (
     AdjustmentRemoveRequestSerializer,
     AdjustmentRequestSerializer,
@@ -54,6 +54,8 @@ from apps.quote.interfaces.serializers import (
     ProposalDocumentSerializer,
     ProposalRequestSerializer,
     QuoteAdjustmentSerializer,
+    QuoteDiscountApprovalDecisionSerializer,
+    QuoteDiscountApprovalSerializer,
     QuoteCloneRequestSerializer,
     QuoteReopenRequestSerializer,
     QuoteCreateRequestSerializer,
@@ -102,6 +104,10 @@ class QuoteListCreateView(APIView):
         status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
+        proposer_id = request.query_params.get("proposerId")
+        if proposer_id:
+            # Database-level filtering avoids scanning every page in the frontend.
+            queryset = queryset.filter(proposer_id=proposer_id)
         # ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 4 (OD-ANGOLA-005) is
         # SUPERSEDED by DECISIONS_TAKEN.md#S09-POLICY-001 (2026-09-26):
         # "apólice" is no longer the quoteNumber of an approved Quote — a
@@ -543,6 +549,14 @@ class QuoteAdjustmentListCreateView(APIView):
         spec = {"kind": data["kind"], "value": data["value"], "scope": data["scope"], "memberId": data["memberId"]}
         if str(request.query_params.get("dryRun", "false")).lower() in ("1", "true", "yes"):
             return Response(simulator_service.simulate_adjustment(quote=quote, spec={**spec, "reason": data["reason"]}))
+        if simulator_service.discount_approval_required(quote=quote, spec=spec):
+            simulated = simulator_service.simulate_adjustment(quote=quote, spec={**spec, "reason": data["reason"]})
+            approval = simulator_service.request_discount_approval(quote=quote, spec=spec, reason=data["reason"])
+            return Response({
+                "approval": QuoteDiscountApprovalSerializer(approval).data,
+                "impact": simulated,
+                "message": "Desconto enviado à fila de aprovação da Direcção Técnica; ainda não foi aplicado.",
+            }, status=202)
         adjustment, updated = simulator_service.apply_adjustment(quote=quote, spec=spec, reason=data["reason"])
         return Response(
             {
@@ -552,6 +566,36 @@ class QuoteAdjustmentListCreateView(APIView):
             },
             status=201,
         )
+
+
+class QuoteDiscountApprovalQueueView(APIView):
+    permission_classes = [
+        require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_DISCOUNT_APPROVE),
+    ]
+
+    def get(self, request):
+        status_filter = request.query_params.get("status", "PENDING")
+        if status_filter not in {"PENDING", "APPROVED", "REJECTED", "ALL"}:
+            return Response({"detail": "status tem de ser PENDING, APPROVED, REJECTED ou ALL."}, status=400)
+        status_filter = "" if status_filter == "ALL" else status_filter
+        rows = simulator_service.list_discount_approvals(status=status_filter)
+        return Response({"items": QuoteDiscountApprovalSerializer(rows, many=True).data})
+
+
+@requires_idempotency
+class QuoteDiscountApprovalDecisionView(APIView):
+    permission_classes = [
+        require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_DISCOUNT_APPROVE),
+    ]
+
+    def post(self, request, approval_id):
+        body = QuoteDiscountApprovalDecisionSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        approval = simulator_service.decide_discount_approval(
+            approval_id=approval_id, decision=body.validated_data["decision"], note=body.validated_data["note"],
+        )
+        approval = QuoteDiscountApproval.objects.select_related("quote", "quote__proposer", "quote__plan").get(id=approval.id)
+        return Response(QuoteDiscountApprovalSerializer(approval).data)
 
 
 @requires_idempotency

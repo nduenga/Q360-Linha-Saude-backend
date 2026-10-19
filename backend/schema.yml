@@ -2521,6 +2521,72 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/claims/experience-rating:
+    get:
+      operationId: getClaimsExperienceRating
+      description: 'Calculate a configured, indicative experience-rating factor from the
+
+        proposer''s imported claims history. This endpoint never changes a quote.
+
+
+        Requer: scope q360.read, permissão audit:read.
+
+
+        Fator calculado segundo pricing.experience_rating; é informativo e não altera a cotação por este endpoint.'
+      summary: Obter claims experience rating
+      parameters:
+      - in: query
+        name: currency
+        schema:
+          type: string
+        description: AOA (por omissão) ou USD.
+      - in: query
+        name: policyId
+        schema:
+          type: string
+        description: UUID da apólice.
+      - in: query
+        name: proposerId
+        schema:
+          type: string
+        description: UUID do cliente.
+        required: true
+      tags:
+      - Claims
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperienceRating'
+          description: Sucesso.
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ExperienceRating'
+          description: Resposta.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/claims/import-template:
     get:
       operationId: getClaimsImportTemplate
@@ -5154,6 +5220,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/customer-portal/requests/{request_number}/satisfaction:
+    post:
+      operationId: postCustomerPortalRequestSatisfaction
+      description: Só pedidos resolvidos; uma avaliação por pedido.
+      summary: Criar customer portal request satisfaction
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: request_number
+        schema:
+          type: string
+        required: true
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestSatisfactionCreate'
+        required: true
+      security:
+      - customerPortalBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestSatisfactionResult'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/dashboard:
     get:
       operationId: getDashboard
@@ -5170,10 +5300,20 @@ paths:
           type: integer
         description: Página (começa em 0).
       - in: query
+        name: proposerId
+        schema:
+          type: string
+        description: Filtro.
+      - in: query
         name: size
         schema:
           type: integer
         description: Itens por página (máx. 200).
+      - in: query
+        name: trendPeriod
+        schema:
+          type: string
+        description: Filtro.
       tags:
       - Audit
       security:
@@ -5182,6 +5322,12 @@ paths:
       responses:
         '200':
           description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
         '401':
           content:
             application/problem+json:
@@ -10486,6 +10632,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/portal-requests/metrics:
+    get:
+      operationId: getPortalRequestMetrics
+      description: 'Requer: scope q360.read.'
+      summary: Obter portal request metrics
+      tags:
+      - Customer Portal Support
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalRequestMetrics'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/pricing-parameter-sets:
     get:
       operationId: getPricingParameterSetCreate
@@ -12117,6 +12292,116 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/quote-discount-approvals:
+    get:
+      operationId: getQuoteDiscountApprovalQueue
+      description: 'Requer: scope q360.approve, permissão quote:discount:approve.'
+      summary: Obter quote discount approval queue
+      parameters:
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: PENDING (por omissão), APPROVED, REJECTED ou ALL.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteDiscountApprovalQueue'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/quote-discount-approvals/{approval_id}/decision:
+    post:
+      operationId: postQuoteDiscountApprovalDecision
+      description: 'Requer: scope q360.approve, permissão quote:discount:approve.
+
+
+        Só Direcção Técnica; exige nota de decisão e impede autoaprovação.'
+      summary: Criar quote discount approval decision
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: approval_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteDiscountApprovalDecision'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteDiscountApproval'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/quotes:
     get:
       operationId: getQuoteListCreate
@@ -12131,6 +12416,11 @@ paths:
         schema:
           type: integer
         description: Página (começa em 0).
+      - in: query
+        name: proposerId
+        schema:
+          type: string
+        description: Filtro.
       - in: query
         name: quoteNumber
         schema:
@@ -12439,7 +12729,8 @@ paths:
         Requer: scope q360.write, permissão quote:calculate.
 
 
-        dryRun=true devolve AdjustmentDryRun (200); caso contrário 201 com {adjustment, quote, impact}.'
+        dryRun=true devolve AdjustmentDryRun (200); aplicação imediata devolve 201; desconto acima do limite cria
+        pedido de aprovação da Direcção Técnica (202).'
       summary: Criar quote adjustment list create
       parameters:
       - in: header
@@ -12483,6 +12774,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdjustmentDryRun'
           description: Sucesso.
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscountApprovalRequested'
+          description: Aceite.
         '400':
           content:
             application/problem+json:
@@ -17585,6 +17882,12 @@ components:
       - proposal.branding
       - pricing.formulas
       - pricing.fractionation
+      - quote.discount_approval
+      - service.sla
+      - service.satisfaction
+      - pricing.experience_rating
+      - quote.scenario_comparison
+      - claims.projections
       type: string
       description: '* `product.plans` - product.plans
 
@@ -17640,7 +17943,19 @@ components:
 
         * `pricing.formulas` - pricing.formulas
 
-        * `pricing.fractionation` - pricing.fractionation'
+        * `pricing.fractionation` - pricing.fractionation
+
+        * `quote.discount_approval` - quote.discount_approval
+
+        * `service.sla` - service.sla
+
+        * `service.satisfaction` - service.satisfaction
+
+        * `pricing.experience_rating` - pricing.experience_rating
+
+        * `quote.scenario_comparison` - quote.scenario_comparison
+
+        * `claims.projections` - claims.projections'
     ConfigurationChange:
       type: object
       properties:
@@ -17943,6 +18258,14 @@ components:
           default: ILLNESS
       required:
       - policyNumber
+    Decision328Enum:
+      enum:
+      - APPROVE
+      - REJECT
+      type: string
+      description: '* `APPROVE` - APPROVE
+
+        * `REJECT` - REJECT'
     DecisionRequest:
       type: object
       properties:
@@ -17998,6 +18321,19 @@ components:
       - accessToken
       - expiresIn
       - name
+    DiscountApprovalRequested:
+      type: object
+      properties:
+        approval:
+          $ref: '#/components/schemas/QuoteDiscountApproval'
+        impact:
+          $ref: '#/components/schemas/ImpactSummary'
+        message:
+          type: string
+      required:
+      - approval
+      - impact
+      - message
     Document:
       type: object
       description: DTO matching ART-006 `Document` verbatim.
@@ -18463,6 +18799,53 @@ components:
       - code
       - productDependent
       - text
+    ExperienceRating:
+      type: object
+      properties:
+        proposerId:
+          type: string
+          format: uuid
+        policyId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        currencyCode:
+          type: string
+        available:
+          type: boolean
+        reason:
+          type: string
+        detail:
+          type: string
+        metric:
+          type: string
+        observedValue:
+          type: string
+        targetValue:
+          type: string
+        weightPercent:
+          type: string
+        lookbackMonths:
+          type: integer
+        period:
+          type: object
+          additionalProperties: {}
+        unclampedFactor:
+          type: string
+        factor:
+          type: string
+        clamped:
+          type: boolean
+        indicative:
+          type: boolean
+        formula:
+          type: string
+      required:
+      - available
+      - currencyCode
+      - policyId
+      - proposerId
     FirstAccessConfirm:
       type: object
       properties:
@@ -19423,21 +19806,13 @@ components:
       type: object
       properties:
         decision:
-          $ref: '#/components/schemas/MemberDocumentReviewDecisionEnum'
+          $ref: '#/components/schemas/Decision328Enum'
         note:
           type: string
           default: ''
           maxLength: 1000
       required:
       - decision
-    MemberDocumentReviewDecisionEnum:
-      enum:
-      - APPROVE
-      - REJECT
-      type: string
-      description: '* `APPROVE` - APPROVE
-
-        * `REJECT` - REJECT'
     MemberDocumentReviewResult:
       type: object
       properties:
@@ -21592,6 +21967,16 @@ components:
         updatedAt:
           type: string
           format: date-time
+        customerName:
+          type:
+          - string
+          - 'null'
+        payload: {}
+        sla:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Metas e tempos medidos conforme o calendário SLA configurado.
         history:
           type: array
           items:
@@ -21668,6 +22053,16 @@ components:
         updatedAt:
           type: string
           format: date-time
+        customerName:
+          type:
+          - string
+          - 'null'
+        payload: {}
+        sla:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Metas e tempos medidos conforme o calendário SLA configurado.
       required:
       - createdAt
       - description
@@ -21690,6 +22085,17 @@ components:
             $ref: '#/components/schemas/PortalRequestItem'
       required:
       - requests
+    PortalRequestMetrics:
+      type: object
+      properties:
+        satisfaction:
+          type: object
+          additionalProperties:
+            oneOf:
+            - {}
+            - type: 'null'
+      required:
+      - satisfaction
     PortalRequestStatus:
       type: object
       properties:
@@ -22914,6 +23320,18 @@ components:
           type: string
           format: date-time
           readOnly: true
+        submittedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+        approvedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
         validUntil:
           type:
           - string
@@ -22971,6 +23389,7 @@ components:
           - 'null'
           readOnly: true
       required:
+      - approvedAt
       - createdAt
       - currencyCode
       - id
@@ -22990,6 +23409,7 @@ components:
       - selection
       - sourcePolicyId
       - status
+      - submittedAt
       - updatedAt
       - validUntil
     QuoteAdjustment:
@@ -23001,6 +23421,8 @@ components:
         quoteId:
           type: string
           format: uuid
+        quoteRowVersion:
+          type: integer
         kind:
           type: string
         value:
@@ -23047,6 +23469,7 @@ components:
       - kind
       - memberId
       - quoteId
+      - quoteRowVersion
       - reason
       - removedAt
       - removedBy
@@ -23086,6 +23509,86 @@ components:
           format: uuid
       required:
       - planId
+    QuoteDiscountApproval:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        quoteId:
+          type: string
+          format: uuid
+        quoteNumber:
+          type:
+          - string
+          - 'null'
+        proposerName:
+          type: string
+        spec: {}
+        reason:
+          type: string
+        status:
+          type: string
+        requestedBy:
+          type: string
+        requestedAt:
+          type: string
+          format: date-time
+        decidedBy:
+          type:
+          - string
+          - 'null'
+        decidedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        decisionNote:
+          type:
+          - string
+          - 'null'
+        adjustmentId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        impact: {}
+      required:
+      - adjustmentId
+      - decidedAt
+      - decidedBy
+      - decisionNote
+      - id
+      - impact
+      - proposerName
+      - quoteId
+      - quoteNumber
+      - reason
+      - requestedAt
+      - requestedBy
+      - spec
+      - status
+    QuoteDiscountApprovalDecision:
+      type: object
+      properties:
+        decision:
+          $ref: '#/components/schemas/Decision328Enum'
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 10
+      required:
+      - decision
+      - note
+    QuoteDiscountApprovalQueue:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteDiscountApproval'
+      required:
+      - items
     QuoteMember:
       type: object
       description: 'Pragmatic V1 addition (`GET /quotes/{quoteId}/members`, not in
@@ -23420,6 +23923,18 @@ components:
           type: string
           format: date-time
           readOnly: true
+        submittedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
+        approvedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          readOnly: true
         validUntil:
           type:
           - string
@@ -23481,6 +23996,7 @@ components:
           items:
             $ref: '#/components/schemas/Warning'
       required:
+      - approvedAt
       - createdAt
       - currencyCode
       - id
@@ -23500,6 +24016,7 @@ components:
       - selection
       - sourcePolicyId
       - status
+      - submittedAt
       - updatedAt
       - validUntil
       - warnings
@@ -23851,6 +24368,33 @@ components:
       - email
       - policyNumber
       - registrationNumber
+    RequestSatisfactionCreate:
+      type: object
+      properties:
+        score:
+          type: integer
+          minimum: 0
+        comment:
+          type: string
+      required:
+      - score
+    RequestSatisfactionResult:
+      type: object
+      properties:
+        requestNumber:
+          type: string
+        score:
+          type: integer
+        comment:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+      - comment
+      - createdAt
+      - requestNumber
+      - score
     RequirementItem:
       type: object
       properties:
@@ -24030,6 +24574,7 @@ components:
       - ADMIN
       - SUBSCRIPTION_MANAGER
       - SUBSCRIBER
+      - TECHNICAL_DIRECTOR
       type: string
       description: '* `PLATFORM_ADMIN` - PLATFORM_ADMIN
 
@@ -24037,7 +24582,9 @@ components:
 
         * `SUBSCRIPTION_MANAGER` - SUBSCRIPTION_MANAGER
 
-        * `SUBSCRIBER` - SUBSCRIBER'
+        * `SUBSCRIBER` - SUBSCRIBER
+
+        * `TECHNICAL_DIRECTOR` - TECHNICAL_DIRECTOR'
     RuleDomainEnum:
       enum:
       - ELIGIBILITY
@@ -24305,6 +24852,15 @@ components:
           oneOf:
           - {}
           - type: 'null'
+        margin:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Margem estimada; indisponível sem projeção de sinistros compatível.
+        marginUnavailableReason:
+          type:
+          - string
+          - 'null'
       required:
       - adjustments
       - deltaPercentVsFirst
@@ -24502,6 +25058,11 @@ components:
         payload:
           type: object
           additionalProperties: {}
+        sla:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Metas e tempos medidos conforme o calendário SLA configurado.
         history:
           type: array
           items:
@@ -24565,6 +25126,11 @@ components:
         payload:
           type: object
           additionalProperties: {}
+        sla:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Metas e tempos medidos conforme o calendário SLA configurado.
       required:
       - createdAt
       - customerName

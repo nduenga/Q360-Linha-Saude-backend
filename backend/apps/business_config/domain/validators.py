@@ -7,6 +7,8 @@ comerciais (esses são do negócio).
 from __future__ import annotations
 
 import re
+import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -139,10 +141,78 @@ def _check_rules(key: str, value: dict[str, Any]) -> None:
         for row in value.get("factors") or []:
             if _decimal(row.get("factor"), "factors.factor") == 0:
                 raise InvalidConfiguration("factors.factor: um multiplicador 0 anularia o prémio")
+    if key == "quote.discount_approval":
+        threshold = _decimal(value.get("approval_threshold_percent"), "approval_threshold_percent")
+        if threshold > 100:
+            raise InvalidConfiguration("approval_threshold_percent: deve ser no máximo 100 (a partir desse valor, a aprovação é obrigatória)")
+    if key == "service.sla":
+        priorities = [row.get("priority") for row in value.get("targets") or []]
+        if len(priorities) != len(set(priorities)):
+            raise InvalidConfiguration("targets: cada prioridade só pode ter uma meta")
+        request_types = [row.get("request_type") for row in value.get("request_priorities") or []]
+        if len(request_types) != len(set(request_types)):
+            raise InvalidConfiguration("request_priorities: cada tipo de pedido só pode ter uma prioridade")
+        for row in value.get("targets") or []:
+            response, resolution = row.get("first_response_minutes"), row.get("resolution_minutes")
+            if response is not None and resolution is not None and resolution < response:
+                raise InvalidConfiguration("targets.resolution_minutes não pode ser inferior a first_response_minutes")
+        if any(row.get("business_hours_only") for row in value.get("targets") or []):
+            try:
+                ZoneInfo(value.get("time_zone", ""))
+            except ZoneInfoNotFoundError:
+                raise InvalidConfiguration("calendar.time_zone tem de ser um fuso horário IANA válido") from None
+            days = value.get("business_days") or []
+            if not days:
+                raise InvalidConfiguration("calendar.business_days: indique pelo menos um dia útil")
+            try:
+                opening = datetime.time.fromisoformat(value.get("business_start", ""))
+                closing = datetime.time.fromisoformat(value.get("business_end", ""))
+            except ValueError:
+                raise InvalidConfiguration("calendar.business_start e business_end têm de usar HH:MM") from None
+            if closing <= opening:
+                raise InvalidConfiguration("calendar.business_end tem de ser posterior a business_start no mesmo dia")
+            raw_holidays = value.get("holidays") or ""
+            for holiday in filter(None, (line.strip() for line in raw_holidays.splitlines())):
+                try:
+                    datetime.date.fromisoformat(holiday)
+                except ValueError:
+                    raise InvalidConfiguration(f"calendar.holidays contém uma data inválida: {holiday}") from None
+    if key == "service.satisfaction":
+        if value.get("maximum_score", 0) <= value.get("minimum_score", 0):
+            raise InvalidConfiguration("maximum_score deve ser superior a minimum_score")
+    if key == "pricing.experience_rating":
+        minimum, maximum = value.get("minimum_factor"), value.get("maximum_factor")
+        if minimum is not None and _decimal(minimum, "minimum_factor") <= 0:
+            raise InvalidConfiguration("minimum_factor deve ser superior a zero")
+        if minimum is not None and maximum is not None and _decimal(maximum, "maximum_factor") < _decimal(minimum, "minimum_factor"):
+            raise InvalidConfiguration("maximum_factor não pode ser inferior a minimum_factor")
+        if value.get("target_value") is not None and _decimal(value["target_value"], "target_value") <= 0:
+            raise InvalidConfiguration("target_value deve ser superior a zero")
+        weight = value.get("weight_percent")
+        if weight is not None and _decimal(weight, "weight_percent") > 100:
+            raise InvalidConfiguration("weight_percent deve ser no máximo 100")
+    if key == "quote.scenario_comparison":
+        dimensions = value.get("radar_dimensions") or []
+        if len(dimensions) < 3:
+            raise InvalidConfiguration("radar_dimensions: selecione pelo menos três dimensões para o radar")
+        expense = _decimal(value.get("expense_ratio_percent", 0), "expense_ratio_percent")
+        commission = _decimal(value.get("commission_percent", 0), "commission_percent")
+        if expense > 100 or commission > 100 or expense + commission > 100:
+            raise InvalidConfiguration("expense_ratio_percent + commission_percent não pode exceder 100")
+    if key == "claims.projections":
+        horizon = value.get("horizon_months")
+        if horizon is not None and horizon > 120:
+            raise InvalidConfiguration("horizon_months: o horizonte máximo é 120 meses")
 
 
 def validate_for_publication(key: str, value: dict[str, Any]) -> None:
     """Regras mais fortes, verificadas ao submeter para aprovação."""
+    if key == "service.sla":
+        targets = value.get("targets") or []
+        if not targets:
+            raise InvalidConfiguration("service.sla: defina pelo menos uma meta de atendimento")
+        if not any(row.get("priority") == "NORMAL" for row in targets):
+            raise InvalidConfiguration("service.sla: defina uma meta para a prioridade NORMAL, usada quando não há classificação específica")
     if key == "pricing.reference_premiums":
         value = flatten(key, value)
         if not value.get("currency_code"):

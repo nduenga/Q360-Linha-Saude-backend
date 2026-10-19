@@ -27,6 +27,12 @@ CONFIG_CATALOG=[
 {"key":"proposal.branding","category":"PROPOSAL","label":"Identidade visual dos documentos","priority":"MEDIUM","value_type":"object"},
 {"key": "pricing.formulas", "category": "PRICING","label": "Fórmulas de tarifação","priority": "HIGH","value_type":"object",},
 {"key":"pricing.fractionation","category":"PRICING","label":"Encargos de fracionamento do prémio","priority":"MEDIUM","value_type":"object"},
+{"key":"quote.discount_approval","category":"APPROVALS","label":"Aprovação de descontos","priority":"HIGH","value_type":"object"},
+{"key":"service.sla","category":"SERVICE","label":"Metas de atendimento (SLA)","priority":"HIGH","value_type":"object"},
+{"key":"service.satisfaction","category":"SERVICE","label":"Avaliação de satisfação","priority":"MEDIUM","value_type":"object"},
+{"key":"pricing.experience_rating","category":"PRICING","label":"Experience rating","priority":"HIGH","value_type":"object"},
+{"key":"quote.scenario_comparison","category":"PRICING","label":"Comparação de cenários","priority":"MEDIUM","value_type":"object"},
+{"key":"claims.projections","category":"CLAIMS","label":"Projeções de sinistralidade","priority":"MEDIUM","value_type":"object"},
 ]
 CATALOG_BY_KEY={x["key"]:x for x in CONFIG_CATALOG}
 
@@ -62,6 +68,9 @@ _AREA_BY_CATEGORY = {
     "RULES": "RULES",
     "DOCUMENTS": "DOCUMENTS",
     "PROPOSAL": "DOCUMENTS",
+    "APPROVALS": "APPROVALS",
+    "SERVICE": "PARAMETERS",
+    "CLAIMS": "PARAMETERS",
 }
 
 

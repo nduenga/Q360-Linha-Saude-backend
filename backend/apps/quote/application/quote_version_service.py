@@ -228,7 +228,10 @@ def restore_version(*, quote: Quote, version_no: int, reason: str | None) -> tup
     # have changed since the version was saved.
     resolve_plan_pricing_context(plan=quote.plan, selection=state["selection"], effective_date=quote.reference_date)
     for spec in state["adjustments"]:
-        simulator_service._enforce_authority(quote, {"kind": spec["kind"], "value": Decimal(spec["value"])})
+        clean = simulator_service._validate_adjustment_spec(quote, spec)
+        if simulator_service._discount_approval_policy(quote, clean)[0]:
+            raise QuoteStateError("A versão contém um desconto que exige aprovação técnica; não pode ser restaurada diretamente")
+        simulator_service._enforce_authority(quote, clean)
 
     actor = CurrentActorProvider.get()
     before = capture_state(quote)

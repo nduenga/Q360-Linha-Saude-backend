@@ -13,7 +13,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.claims.application import import_service, projection_service, summary_service
+from apps.claims.application import experience_service, import_service, projection_service, summary_service
 from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import requires_idempotency
@@ -181,6 +181,26 @@ class ClaimsSummaryView(APIView):
                 currency=request.query_params.get("currency", "AOA").upper(),
             )
         )
+
+
+class ClaimsExperienceRatingView(APIView):
+    """Calculate a configured, indicative experience-rating factor from the
+    proposer's imported claims history. This endpoint never changes a quote."""
+
+    permission_classes = READ
+
+    def get(self, request):
+        proposer_id = _required_uuid(request, "proposerId")
+        policy_id = _optional_uuid(request, "policyId")
+        currency = request.query_params.get("currency", "AOA").upper()
+        result = experience_service.calculate(
+            proposer_id=proposer_id, policy_id=policy_id, currency=currency, record_audit=True,
+        )
+        if not result.get("available"):
+            return Response({"detail": result["reason"], **result}, status=409)
+        return Response({"proposerId": str(proposer_id), "policyId": str(policy_id) if policy_id else None,
+                         "currencyCode": currency, **result, "indicative": True,
+                         "formula": "clamp(1 + ((observed - target) / target) * weight, minimumFactor, maximumFactor)"})
 
 
 class ClaimsMethodologyView(APIView):

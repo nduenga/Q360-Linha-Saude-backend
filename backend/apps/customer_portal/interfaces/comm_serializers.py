@@ -29,3 +29,8 @@ class MarkReadSerializer(serializers.Serializer):
 class TransitionSerializer(serializers.Serializer):
     toStatus = serializers.ChoiceField(choices=sorted(rules.STATUS_LABELS))
     note = serializers.CharField(max_length=2000, required=False, allow_blank=True, allow_null=True, default=None)
+
+
+class RequestSatisfactionSerializer(serializers.Serializer):
+    score = serializers.IntegerField(min_value=0)
+    comment = serializers.CharField(max_length=2000, required=False, allow_blank=True, default="")

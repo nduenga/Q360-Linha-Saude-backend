@@ -13,6 +13,7 @@ from apps.customer_portal.interfaces.comm_views import (
     CustomerPortalPlanCompareView,
     CustomerPortalRenewalView,
     CustomerPortalRequestDetailView,
+    CustomerPortalRequestSatisfactionView,
     CustomerPortalRequestsView,
     CustomerPortalRequestTypesView,
 )
@@ -36,6 +37,7 @@ from apps.customer_portal.interfaces.staff_views import (
     PortalConversationListView,
     PortalRequestDetailView,
     PortalRequestListView,
+    PortalRequestMetricsView,
     PortalRequestTransitionView,
     PortalStaffMessagesView,
 )
@@ -109,6 +111,7 @@ urlpatterns = [
     path("customer-portal/request-types", CustomerPortalRequestTypesView.as_view(), name="customer-portal-request-types"),
     path("customer-portal/requests", CustomerPortalRequestsView.as_view(), name="customer-portal-requests"),
     path("customer-portal/requests/<str:request_number>", CustomerPortalRequestDetailView.as_view(), name="customer-portal-request-detail"),
+    path("customer-portal/requests/<str:request_number>/satisfaction", CustomerPortalRequestSatisfactionView.as_view(), name="customer-portal-request-satisfaction"),
     path("customer-portal/messages", CustomerPortalMessagesView.as_view(), name="customer-portal-messages"),
     path("customer-portal/conversations", CustomerPortalConversationsView.as_view(), name="customer-portal-conversations"),
     path("customer-portal/notifications", CustomerPortalNotificationsView.as_view(), name="customer-portal-notifications"),
@@ -117,6 +120,7 @@ urlpatterns = [
     path("customer-portal/plans/compare", CustomerPortalPlanCompareView.as_view(), name="customer-portal-plan-compare"),
     # Backoffice — atendimento dos pedidos e mensagens do portal (staff_views.py).
     path("portal-requests", PortalRequestListView.as_view(), name="portal-requests"),
+    path("portal-requests/metrics", PortalRequestMetricsView.as_view(), name="portal-request-metrics"),
     path("portal-requests/<str:request_number>", PortalRequestDetailView.as_view(), name="portal-request-detail"),
     path("portal-requests/<str:request_number>/transition", PortalRequestTransitionView.as_view(), name="portal-request-transition"),
     path("portal-conversations", PortalConversationListView.as_view(), name="portal-conversations"),

@@ -48,7 +48,7 @@ def test_queue_lists_pending_items_with_changes_and_who_can_approve(admin_client
 @pytest.mark.django_db
 def test_every_configuration_type_has_an_area(admin_client):
     items = admin_client.get("/api/v1/business-config/catalog").data["items"]
-    assert items and all(i["area"] in {"ORGANIZATION", "PRODUCTS", "TARIFF", "RULES", "DOCUMENTS"} for i in items)
+    assert items and all(i["area"] in {"ORGANIZATION", "APPROVALS", "PRODUCTS", "TARIFF", "RULES", "PARAMETERS", "DOCUMENTS"} for i in items)
     by_key = {i["key"]: i["area"] for i in items}
     assert by_key["pricing.formulas"] == "TARIFF" and by_key["security.role_permissions"] == "ORGANIZATION"
     assert by_key["rules.custom"] == "RULES" and by_key["proposal.branding"] == "DOCUMENTS"

@@ -8,7 +8,8 @@ reference.
 from __future__ import annotations
 
 from django.db import connections
-from django.db.models import Count, Q
+from django.db.models import Count, Q, F
+from django.db.models.functions import TruncMonth, TruncWeek
 from django.http import JsonResponse
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -118,6 +119,9 @@ class DashboardView(APIView):
     permission_classes = [IsAuthenticated, require_scope(Scope.READ)]
 
     def get(self, request):
+        trend_period = request.query_params.get("trendPeriod", "month").lower()
+        if trend_period not in {"week", "month"}:
+            return Response({"detail": "trendPeriod tem de ser 'week' ou 'month'."}, status=400)
         # ==========================================================
         # QUERYSETS
         # ==========================================================
@@ -130,6 +134,9 @@ class DashboardView(APIView):
             )
             .order_by("-created_at")
         )
+        proposer_id = request.query_params.get("proposerId")
+        if proposer_id:
+            quotes = quotes.filter(proposer_id=proposer_id)
 
         policies = (
             Policy.objects
@@ -276,10 +283,52 @@ class DashboardView(APIView):
                 }
             )
 
+        # Use persisted lifecycle timestamps; do not estimate missing durations.
+        approval_pairs = quotes.filter(
+            submitted_at__isnull=False,
+            approved_at__isnull=False,
+            approved_at__gte=F("submitted_at"),
+        ).values_list("submitted_at", "approved_at")
+        approval_durations = [
+            (approved_at - submitted_at).total_seconds()
+            for submitted_at, approved_at in approval_pairs
+        ]
+        average_approval_seconds = (
+            sum(approval_durations) / len(approval_durations) if approval_durations else None
+        )
+
+        status_counts = _status_counts(quotes)
+        total_quotes = sum(status_counts.values())
+        approved_quotes = status_counts.get("APPROVED", 0) + status_counts.get("BOUND", 0)
+        trunc_period = TruncWeek if trend_period == "week" else TruncMonth
+        created_buckets = {
+            row["period"].date().isoformat(): row["total"]
+            for row in quotes.annotate(period=trunc_period("created_at")).values("period").annotate(total=Count("id"))
+        }
+        approved_buckets = {
+            row["period"].date().isoformat(): row["total"]
+            for row in quotes.filter(approved_at__isnull=False)
+            .annotate(period=trunc_period("approved_at"))
+            .values("period").annotate(total=Count("id"))
+        }
+        trend = [
+            {"periodStart": day, "created": created_buckets.get(day, 0), "approved": approved_buckets.get(day, 0)}
+            for day in sorted(created_buckets.keys() | approved_buckets.keys())
+        ]
         quotations = {
             "total": quote_paginator.total_elements,
 
-            "byStatus": _status_counts(quotes),
+            "byStatus": status_counts,
+
+            "approvalMetrics": {
+                "measuredQuotes": len(approval_durations),
+                "averageDurationSeconds": round(average_approval_seconds, 2) if average_approval_seconds is not None else None,
+                "averageDurationHours": round(average_approval_seconds / 3600, 2) if average_approval_seconds is not None else None,
+                "approvedQuotes": approved_quotes,
+                "conversionRatePercent": round(approved_quotes / total_quotes * 100, 2) if total_quotes else None,
+                "conversionDefinition": "APPROVED or BOUND / all quotes in the current filter",
+            },
+            "trend": {"period": trend_period.upper(), "items": trend},
 
             "items": quote_items,
 

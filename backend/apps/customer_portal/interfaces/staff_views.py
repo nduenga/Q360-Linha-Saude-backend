@@ -5,12 +5,14 @@ documento funcional (DOC-001 s18) ainda não define uma para isto, e
 escrita que todos os perfis de trabalho já têm."""
 from __future__ import annotations
 
+from django.db.models import Avg, Count
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.customer_portal.application import messages_service, requests_service
 from apps.customer_portal.domain import requests as rules
+from apps.customer_portal.infrastructure.models import PortalRequestSatisfaction
 from apps.customer_portal.interfaces.comm_serializers import MessageSerializer, TransitionSerializer
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import requires_idempotency
@@ -33,6 +35,29 @@ class PortalRequestListView(APIView):
         if request_type and request_type not in rules.REQUEST_TYPES:
             raise ValidationError({"type": f"Must be one of {sorted(rules.REQUEST_TYPES)}."})
         return Response({"requests": requests_service.staff_list(status=status, request_type=request_type)})
+
+
+class PortalRequestMetricsView(APIView):
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request):
+        from apps.business_config.application.readers import BusinessSnapshot
+
+        config = BusinessSnapshot.load().get("service.satisfaction") or {}
+        stats = PortalRequestSatisfaction.objects.aggregate(count=Count("id"), average=Avg("score"))
+        distribution = list(
+            PortalRequestSatisfaction.objects.values("score").annotate(count=Count("id")).order_by("score")
+        )
+        return Response({
+            "satisfaction": {
+                "enabled": bool(config.get("enabled")),
+                "responses": stats["count"],
+                "averageScore": round(stats["average"], 2) if stats["average"] is not None else None,
+                "minimumScore": config.get("minimum_score"),
+                "maximumScore": config.get("maximum_score"),
+                "distribution": distribution,
+            }
+        })
 
 
 class PortalRequestDetailView(APIView):

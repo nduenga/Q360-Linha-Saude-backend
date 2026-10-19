@@ -79,8 +79,17 @@ REGISTRY: dict[str, dict] = {
     "QuoteSelectionView.get": {"response": d.QuoteSelectionRead},
     "QuoteAdjustmentListCreateView.post": {
         "queries": DRY_RUN,
-        "response": {201: d.AdjustmentApplied, 200: d.AdjustmentDryRun},
-        "notes": "dryRun=true devolve AdjustmentDryRun (200); caso contrário 201 com {adjustment, quote, impact}.",
+        "response": {201: d.AdjustmentApplied, 200: d.AdjustmentDryRun, 202: d.DiscountApprovalRequested},
+        "notes": "dryRun=true devolve AdjustmentDryRun (200); aplicação imediata devolve 201; desconto acima do limite cria pedido de aprovação da Direcção Técnica (202).",
+    },
+    "QuoteDiscountApprovalQueueView.get": {
+        "response": d.QuoteDiscountApprovalQueue,
+        "queries": {"status": ("string", False, "PENDING (por omissão), APPROVED, REJECTED ou ALL.")},
+    },
+    "QuoteDiscountApprovalDecisionView.post": {
+        "request": d.QuoteDiscountApprovalDecision,
+        "response": d.QuoteDiscountApproval,
+        "notes": "Só Direcção Técnica; exige nota de decisão e impede autoaprovação.",
     },
     "QuoteAdjustmentDetailView.delete": {"response": d.AdjustmentRemoved},
     "QuoteSelectionView.put": {"response": d.QuoteWithWarnings},
@@ -177,6 +186,13 @@ REGISTRY: dict[str, dict] = {
                     "from": ("string", False, "YYYY-MM-DD."), "to": ("string", False, "YYYY-MM-DD."),
                     "currency": ("string", False, "AOA (por omissão) ou USD.")},
     },
+    "ClaimsExperienceRatingView.get": {
+        "response": {200: d.ExperienceRating, 409: d.ExperienceRating},
+        "queries": {"proposerId": ("string", True, "UUID do cliente."),
+                    "policyId": ("string", False, "UUID da apólice."),
+                    "currency": ("string", False, "AOA (por omissão) ou USD.")},
+        "notes": "Fator calculado segundo pricing.experience_rating; é informativo e não altera a cotação por este endpoint.",
+    },
     "ClaimsProfitSharingView.get": {
         "response": d.ProfitSharing,
         "queries": {"proposerId": ("string", True, "Cliente."), "policyId": ("string", False, "Apólice."),
@@ -232,6 +248,10 @@ REGISTRY: dict[str, dict] = {
     },
     "CustomerPortalRequestsView.post": {"request": d.PortalRequestCreate, "response": d.PortalRequestDetail, "status": 201},
     "CustomerPortalRequestDetailView.get": {"response": d.PortalRequestDetail},
+    "CustomerPortalRequestSatisfactionView.post": {
+        "request": d.RequestSatisfactionCreate, "response": d.RequestSatisfactionResult, "status": 201,
+        "notes": "Só pedidos resolvidos; uma avaliação por pedido.",
+    },
     "CustomerPortalRequestTypesView.get": {"response": d.PortalRequestTypes},
     "CustomerPortalMessagesView.get": {
         "response": d.PortalMessages,
@@ -255,6 +275,7 @@ REGISTRY: dict[str, dict] = {
         "queries": {"status": ("string", False, "OPEN, IN_REVIEW, AWAITING_CUSTOMER, APPROVED, REJECTED ou COMPLETED."),
                     "type": ("string", False, "Tipo do pedido.")},
     },
+    "PortalRequestMetricsView.get": {"response": d.PortalRequestMetrics},
     "PortalRequestDetailView.get": {"response": d.StaffPortalRequestDetail},
     "PortalRequestTransitionView.post": {"request": d.StaffPortalTransition, "response": d.StaffPortalRequestDetail},
     "PortalConversationListView.get": {

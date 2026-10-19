@@ -255,6 +255,7 @@ def test_apply_surcharge_requires_reason_reprices_and_records_impact(admin_clien
     assert applied.data["impact"] == {
         "previousTotal": "200.00", "newTotal": "220.00", "delta": "20.00", "deltaPercent": "10.00",
         "currencyCode": "AOA", "aboveAuthorityLimit": False,
+        "discountApprovalPermission": None,
     }
     assert _total(admin_client, scope) == Decimal("220.00")
 

@@ -19,6 +19,8 @@ from apps.quote.interfaces.views import (
     DocumentTemplateRetireView,
     QuoteAdjustmentDetailView,
     QuoteAdjustmentListCreateView,
+    QuoteDiscountApprovalQueueView,
+    QuoteDiscountApprovalDecisionView,
     QuoteCancelView,
     QuoteCloneView,
     QuoteReopenView,
@@ -112,6 +114,8 @@ urlpatterns = [
     path("scenarios/<uuid:scenario_id>/select", ScenarioSelectView.as_view(), name="scenario-select"),
     path("scenarios/<uuid:scenario_id>/apply", ScenarioApplyView.as_view(), name="scenario-apply"),
     path("quotes/<uuid:quote_id>/adjustments", QuoteAdjustmentListCreateView.as_view(), name="quote-adjustments"),
+    path("quote-discount-approvals", QuoteDiscountApprovalQueueView.as_view(), name="quote-discount-approvals"),
+    path("quote-discount-approvals/<uuid:approval_id>/decision", QuoteDiscountApprovalDecisionView.as_view(), name="quote-discount-approval-decision"),
     path(
         "quotes/<uuid:quote_id>/adjustments/<uuid:adjustment_id>",
         QuoteAdjustmentDetailView.as_view(),

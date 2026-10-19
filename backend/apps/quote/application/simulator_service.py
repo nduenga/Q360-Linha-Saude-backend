@@ -20,7 +20,7 @@ import uuid
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.business_config.application.overlays import effective_plan_settings
@@ -39,7 +39,7 @@ from apps.product.domain.pre_existing import validate_pre_existing_decision
 from apps.quote.application import quote_service
 from apps.quote.domain.enums import QuoteStatus, quote_status_label
 from apps.quote.domain.errors import QuoteStateError, ReferencedEntityNotFoundError, RowVersionMismatchError
-from apps.quote.infrastructure.models import AuthorityPolicy, Quote, QuoteAdjustment, QuoteMember
+from apps.quote.infrastructure.models import AuthorityPolicy, Quote, QuoteAdjustment, QuoteDiscountApproval, QuoteMember
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _EDITABLE = (QuoteStatus.DRAFT.value, QuoteStatus.READY.value)
@@ -199,7 +199,7 @@ def _authority_limits(quote: Quote) -> dict[str, Any]:
     return policy.policy_json if policy else {}
 
 
-def _enforce_authority(quote: Quote, spec: dict[str, Any]) -> bool:
+def _enforce_authority(quote: Quote, spec: dict[str, Any], *, approval_authorized: bool = False) -> bool:
     """Returns True when the adjustment is above the configured limit (the
     caller then needs manager authority: `pricing-config:manage`, held by the
     Administrador and the Gestor de subscrição, not by the Subscritor).
@@ -211,10 +211,31 @@ def _enforce_authority(quote: Quote, spec: dict[str, Any]) -> bool:
         return False
     actor = CurrentActorProvider.get()
     if actor is None or not actor.has_permission(Permission.PRICING_CONFIG_MANAGE):
+        if approval_authorized and actor and actor.has_permission(Permission.QUOTE_DISCOUNT_APPROVE):
+            return True
         raise AdjustmentAuthorityError(
             f"Um(a) {spec['kind']} de {spec['value']} excede o limite de autoridade ({key}={limit}); tem de ser aplicado por um gestor de subscrição"
         )
     return True
+
+
+def _discount_approval_policy(quote: Quote, spec: dict[str, Any]) -> tuple[bool, Permission | None]:
+    """Resolve the published approval threshold for percentage discounts."""
+    if spec["kind"] != "DISCOUNT_PERCENT":
+        return False, None
+    from apps.business_config.application.readers import BusinessSnapshot
+
+    config = BusinessSnapshot.load(on=quote.reference_date).get("quote.discount_approval") or {}
+    if not config.get("approval_required_above_threshold"):
+        return False, None
+    threshold = Decimal(str(config.get("approval_threshold_percent", "100")))
+    if spec["value"] < threshold:
+        return False, None
+    try:
+        permission = Permission(config["approver_permission"])
+    except (KeyError, ValueError):
+        raise AdjustmentAuthorityError("A configuração publicada de aprovação de descontos tem uma permissão inválida")
+    return True, permission
 
 
 def simulate_adjustment(*, quote: Quote, spec: dict[str, Any]) -> dict[str, Any]:
@@ -227,6 +248,8 @@ def simulate_adjustment(*, quote: Quote, spec: dict[str, Any]) -> dict[str, Any]
         needs_approval = _enforce_authority(quote, clean)
     except AdjustmentAuthorityError:
         needs_approval = True  # the simulation is allowed; applying is not
+    approval_required, _ = _discount_approval_policy(quote, clean)
+    needs_approval = needs_approval or approval_required
     baseline_context, member_ids = quote_service.build_pricing_context(quote)
     baseline = _preview_total(quote, baseline_context, member_ids)
     adjustments = quote_service.active_adjustments_for_context(quote)
@@ -240,12 +263,19 @@ def simulate_adjustment(*, quote: Quote, spec: dict[str, Any]) -> dict[str, Any]
     return {"dryRun": True, "requiresApproval": needs_approval, **impact}
 
 
-def apply_adjustment(*, quote: Quote, spec: dict[str, Any], reason: str | None) -> tuple[QuoteAdjustment, Quote]:
+def apply_adjustment(
+    *, quote: Quote, spec: dict[str, Any], reason: str | None, approval_authorized: bool = False
+) -> tuple[QuoteAdjustment, Quote]:
     _require_editable(quote)
     reason = require_reason(reason)
     clean = _validate_adjustment_spec(quote, spec)
-    exceeds_limit = _enforce_authority(quote, clean)
     actor = CurrentActorProvider.get()
+    exceeds_limit = _enforce_authority(quote, clean, approval_authorized=approval_authorized)
+    approval_required, approval_permission = _discount_approval_policy(quote, clean)
+    if approval_required and not approval_authorized:
+        raise AdjustmentAuthorityError("O desconto excede o limite configurado; submeta-o à fila de aprovação técnica")
+    if approval_required and (actor is None or not actor.has_permission(approval_permission)):
+        raise AdjustmentAuthorityError(f"É necessária a permissão {approval_permission.value} para aprovar este desconto")
 
     with transaction.atomic():
         baseline_context, member_ids = quote_service.build_pricing_context(quote)
@@ -266,6 +296,7 @@ def apply_adjustment(*, quote: Quote, spec: dict[str, Any], reason: str | None) 
         new_total = _money(quote.latest_pricing_run.total_amount) if quote.latest_pricing_run_id else None
         impact = _impact(baseline["totalAmount"], new_total, quote.currency_code)
         impact["aboveAuthorityLimit"] = exceeds_limit
+        impact["discountApprovalPermission"] = approval_permission.value if approval_permission else None
         QuoteAdjustment.objects.filter(id=adjustment.id).update(impact_json=impact)
         adjustment.refresh_from_db()
     _audit.record(
@@ -280,6 +311,85 @@ def apply_adjustment(*, quote: Quote, spec: dict[str, Any], reason: str | None) 
         ),
     )
     return adjustment, quote
+
+
+def discount_approval_required(*, quote: Quote, spec: dict[str, Any]) -> bool:
+    clean = _validate_adjustment_spec(quote, spec)
+    required, _ = _discount_approval_policy(quote, clean)
+    return required
+
+
+def request_discount_approval(*, quote: Quote, spec: dict[str, Any], reason: str | None) -> QuoteDiscountApproval:
+    _require_editable(quote)
+    reason = require_reason(reason)
+    clean = _validate_adjustment_spec(quote, spec)
+    required, _ = _discount_approval_policy(quote, clean)
+    if not required:
+        raise QuoteStateError("Este desconto não excede o limite configurado para aprovação técnica")
+    if QuoteDiscountApproval.objects.filter(quote=quote, status="PENDING").exists():
+        raise QuoteStateError("Esta cotação já tem um pedido de aprovação de desconto pendente")
+    actor = CurrentActorProvider.get()
+    try:
+        with transaction.atomic():
+            baseline, member_ids = quote_service.build_pricing_context(quote)
+            before = _preview_total(quote, baseline, member_ids)
+            adjustments = quote_service.active_adjustments_for_context(quote)
+            adjustments.append({"id": "discount-approval-preview", **clean, "reason": reason})
+            candidate, _ = quote_service.build_pricing_context(quote, adjustments=adjustments)
+            after = _preview_total(quote, candidate, member_ids)
+            impact = _impact(before["totalAmount"], after["totalAmount"], after.get("currencyCode"))
+            approval = QuoteDiscountApproval.objects.create(
+                tenant_id=quote.tenant_id, quote=quote, spec_json=clean, reason=reason,
+                quote_row_version=quote.row_version, requested_by=actor.actor_id if actor else "unknown", impact_json=impact,
+            )
+    except IntegrityError as exc:
+        raise QuoteStateError("Esta cotação já tem um pedido de aprovação de desconto pendente") from exc
+    _audit.record(
+        action="quote.discount_approval_requested", entity_type="Quote", entity_id=str(quote.id),
+        metadata={"approvalId": str(approval.id), "spec": clean, "impact": impact},
+    )
+    return approval
+
+
+def list_discount_approvals(*, status: str = "PENDING"):
+    queryset = QuoteDiscountApproval.objects.select_related("quote", "quote__proposer", "quote__plan").order_by("requested_at")
+    return queryset.filter(status=status) if status else queryset
+
+
+def decide_discount_approval(*, approval_id: uuid.UUID, decision: str, note: str | None):
+    actor = CurrentActorProvider.get()
+    if actor is None or not actor.has_permission(Permission.QUOTE_DISCOUNT_APPROVE):
+        raise AdjustmentAuthorityError("É necessária a permissão quote:discount:approve")
+    note = require_reason(note)
+    with transaction.atomic():
+        approval = QuoteDiscountApproval.objects.select_for_update().select_related("quote").filter(id=approval_id).first()
+        if approval is None:
+            raise AdjustmentNotFoundError(f"O pedido de aprovação {approval_id} não existe")
+        if approval.status != "PENDING":
+            raise QuoteStateError("Este pedido de aprovação já foi decidido")
+        if approval.requested_by == actor.actor_id:
+            raise QuoteStateError("Quem pediu o desconto não pode aprovar o próprio pedido")
+        locked_quote = Quote.objects.select_for_update().get(id=approval.quote_id)
+        if locked_quote.row_version != approval.quote_row_version:
+            raise QuoteStateError("A cotação mudou desde o pedido; rejeite esta aprovação e submeta o desconto novamente")
+        if decision == "APPROVE":
+            adjustment, quote = apply_adjustment(
+                quote=locked_quote, spec=approval.spec_json, reason=approval.reason, approval_authorized=True,
+            )
+            approval.adjustment = adjustment
+            approval.impact_json = adjustment.impact_json
+        elif decision != "REJECT":
+            raise ReferencedEntityNotFoundError("decision tem de ser APPROVE ou REJECT")
+        approval.status = "APPROVED" if decision == "APPROVE" else "REJECTED"
+        approval.decided_by = actor.actor_id
+        approval.decided_at = timezone.now()
+        approval.decision_note = note
+        approval.save(update_fields=["status", "decided_by", "decided_at", "decision_note", "adjustment", "impact_json"])
+    _audit.record(
+        action=f"quote.discount_approval_{approval.status.lower()}", entity_type="Quote",
+        entity_id=str(approval.quote_id), metadata={"approvalId": str(approval.id), "note": note},
+    )
+    return approval
 
 
 def remove_adjustment(*, quote: Quote, adjustment_id: uuid.UUID, reason: str | None) -> tuple[QuoteAdjustment, Quote]:

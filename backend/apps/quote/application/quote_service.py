@@ -17,6 +17,7 @@ import datetime
 import hashlib
 import json
 import uuid
+from decimal import Decimal
 from typing import Any
 
 from django.conf import settings
@@ -67,6 +68,7 @@ from apps.quote.infrastructure.models import (
     QuoteSnapshot,
     QuoteStateHistory,
     ReviewTask,
+    QuoteDiscountApproval,
 )
 
 from apps.client.domain.enums import MemberStatus
@@ -576,6 +578,40 @@ def build_pricing_context(
     if chosen_selection:
         context["selection"] = chosen_selection
     chosen_adjustments = active_adjustments_for_context(quote) if adjustments is None else adjustments
+    from apps.claims.application.experience_service import calculate as calculate_experience_rating
+
+    experience_currency = quote.currency_code
+    if not experience_currency:
+        reference_config = BusinessConfigurationResolver.get("pricing.reference_premiums", effective_date=quote.reference_date)
+        if reference_config is not None:
+            from apps.business_config.domain.shape import flatten
+
+            experience_currency = (flatten("pricing.reference_premiums", reference_config.value_json).get("currency_code") or "").upper() or None
+        else:
+            from apps.pricing.application.rating_table_service import resolve_rating_table
+
+            legacy_table = resolve_rating_table(
+                code=resolve_default_rating_table_code(effective_date=quote.reference_date),
+                effective_date=quote.reference_date,
+            )
+            experience_currency = legacy_table.currency_code if legacy_table else None
+    experience_rating = calculate_experience_rating(
+        proposer_id=quote.proposer_id, policy_id=None, currency=experience_currency,
+        on=quote.reference_date, record_audit=False,
+    )
+    context["experienceRating"] = experience_rating
+    if experience_rating.get("available"):
+        factor = Decimal(str(experience_rating["factor"]))
+        delta_pct = (factor - Decimal("1")) * Decimal("100")
+        if delta_pct:
+            chosen_adjustments.append({
+                "id": "experience-rating",
+                "kind": "SURCHARGE_PERCENT" if delta_pct > 0 else "DISCOUNT_PERCENT",
+                "value": str(abs(delta_pct)),
+                "scope": "QUOTE",
+                "memberId": None,
+                "reason": f"Experience rating {experience_rating['metric']} (factor {factor})",
+            })
     if chosen_adjustments:
         context["adjustments"] = chosen_adjustments
     chosen_pre_existing = pre_existing_for_context(quote) if pre_existing is None else pre_existing
@@ -915,6 +951,8 @@ def submit_quote(*, quote: Quote, row_version: int, correlation_id: str | None) 
     the quote to still be READY."""
     if quote.status != QuoteStatus.READY.value:
         raise QuoteStateError(f"Esta cotação está em {quote_status_label(quote.status)}; só uma cotação pronta (READY) pode ser submetida")
+    if QuoteDiscountApproval.objects.filter(quote=quote, status="PENDING").exists():
+        raise QuoteStateError("A cotação tem um desconto pendente de aprovação técnica; aguarde a decisão antes de submeter")
 
     # Plan-level underwriting rules (group minimum size, age limits,
     # household) — only evaluated for plans that configured them.

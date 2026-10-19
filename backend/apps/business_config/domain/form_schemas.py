@@ -5,6 +5,7 @@ def f(name,label,type_,required=False,options=None,labels=None,help=None):
     if help:x["help"]=help
     return x
 from apps.business_config.domain import custom_rules as cr
+from apps.customer_portal.domain import requests as portal_requests
 from apps.foundation.domain.permissions import Permission, Role
 PLANS=["Base","Conforto","Premium"]
 ROLES=[r.value for r in Role]
@@ -40,6 +41,62 @@ FORM_SCHEMAS={
 FORM_SCHEMAS["pricing.fractionation"]={"sections":[{"key":"installments","label":"Fracionamento","repeatable":True,"fields":[
     f("frequency","Periodicidade","select",True,["ANUAL","SEMESTRAL","TRIMESTRAL","MENSAL"]),
     f("loading","Encargo (fração, ex.: 0.04 = 4 %)","decimal",True,help="Acréscimo ao prémio anual quando pago nesta periodicidade; aplica-se a todas as apólices"),
+]}]}
+
+# Políticas de negócio que usam o ciclo versionado de BusinessConfiguration.
+# Os valores são editáveis; o backend valida os limites e a forma do contrato.
+FORM_SCHEMAS["quote.discount_approval"]={"sections":[{"key":"discount_approval","label":"Aprovação de descontos","fields":[
+    f("approval_threshold_percent","A partir de que desconto exige aprovação (% do prémio)","decimal",True),
+    f("approver_permission","Permissão de aprovação","select",True,["quote:discount:approve"]),
+    f("approval_required_above_threshold","Exigir aprovação acima do limite","boolean",True),
+]}]}
+FORM_SCHEMAS["service.sla"]={"sections":[
+    {"key":"calendar","label":"Calendário de atendimento","fields":[
+        f("time_zone","Fuso horário IANA","text",True,help="Ex.: Africa/Luanda"),
+        f("business_days","Dias úteis","multiselect",True,["MON","TUE","WED","THU","FRI","SAT","SUN"]),
+        f("business_start","Abertura (HH:MM)","text",True),
+        f("business_end","Fecho (HH:MM)","text",True),
+        f("holidays","Feriados (uma data AAAA-MM-DD por linha)","textarea"),
+    ]},
+    {"key":"targets","label":"Metas por prioridade","repeatable":True,"fields":[
+        f("priority","Prioridade","select",True,["LOW","NORMAL","HIGH","URGENT"]),
+        f("first_response_minutes","Meta de primeira resposta (minutos)","integer",True),
+        f("resolution_minutes","Meta de resolução (minutos)","integer",True),
+        f("business_hours_only","Contar apenas horário de expediente","boolean",True),
+        f("pause_while_awaiting_customer","Pausar relógio enquanto aguarda resposta do cliente","boolean",True),
+    ]},
+    {"key":"request_priorities","label":"Prioridade por tipo de pedido","repeatable":True,"fields":[
+        f("request_type","Tipo de pedido","select",True,sorted(portal_requests.REQUEST_TYPES)),
+        f("priority","Prioridade","select",True,["LOW","NORMAL","HIGH","URGENT"]),
+    ]},
+]}
+FORM_SCHEMAS["service.satisfaction"]={"sections":[{"key":"satisfaction","label":"Escala de satisfação","fields":[
+    f("enabled","Recolher avaliação","boolean",True),
+    f("minimum_score","Pontuação mínima","integer",True),
+    f("maximum_score","Pontuação máxima","integer",True),
+    f("question","Pergunta apresentada","text",True),
+    f("survey_trigger","Momento de envio","select",True,["ON_RESOLUTION","MANUAL"]),
+]}]}
+FORM_SCHEMAS["pricing.experience_rating"]={"sections":[{"key":"experience_rating","label":"Experience rating","fields":[
+    f("enabled","Ativo","boolean",True),
+    f("lookback_months","Meses de histórico","integer",True),
+    f("metric","Métrica","select",True,["LOSS_RATIO","CLAIMS_FREQUENCY","CLAIMS_SEVERITY"]),
+    f("target_value","Valor de referência da métrica","decimal",True),
+    f("weight_percent","Peso no ajuste (%)","decimal",True),
+    f("minimum_factor","Fator mínimo","decimal",True),
+    f("maximum_factor","Fator máximo","decimal",True),
+]}]}
+FORM_SCHEMAS["quote.scenario_comparison"]={"sections":[{"key":"scenario_comparison","label":"Comparação de cenários","fields":[
+    f("margin_method","Método da margem","select",True,["PREMIUM_MINUS_EXPECTED_CLAIMS"]),
+    f("expense_ratio_percent","Despesas (%)","decimal"),
+    f("commission_percent","Comissão (%)","decimal"),
+    f("radar_dimensions","Dimensões do radar","multiselect",True,["PREMIUM","COVERAGE","DEDUCTIBLE","COPAYMENT","MARGIN","LOSS_RATIO"]),
+]}]}
+FORM_SCHEMAS["claims.projections"]={"sections":[{"key":"projections","label":"Projeções","fields":[
+    f("method","Método de projeção","select",True,["TREND","CONFIGURED_GROWTH","ACTUARIAL_MODEL"]),
+    f("horizon_months","Horizonte (meses)","integer",True),
+    f("period","Agregação","select",True,["MONTHLY","QUARTERLY"]),
+    f("annual_trend_percent","Tendência anual (%)","decimal"),
 ]}]}
 
 def _condition_fields(suffix,optional):

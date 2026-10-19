@@ -12,7 +12,9 @@ from rest_framework.views import APIView
 from apps.customer_portal.application import messages_service, notifications_service, renewal_service, requests_service
 from apps.customer_portal.domain import requests as rules
 from apps.customer_portal.interfaces.authentication import CustomerPortalJwtAuthentication
-from apps.customer_portal.interfaces.comm_serializers import CreateRequestSerializer, MarkReadSerializer, MessageSerializer
+from apps.customer_portal.interfaces.comm_serializers import (
+    CreateRequestSerializer, MarkReadSerializer, MessageSerializer, RequestSatisfactionSerializer,
+)
 from apps.customer_portal.interfaces.permissions import IsCustomerPortalActor
 from apps.foundation.application.context import CurrentActorProvider
 from apps.foundation.interfaces.middleware import requires_idempotency
@@ -51,6 +53,18 @@ class CustomerPortalRequestsView(_PortalView):
 class CustomerPortalRequestDetailView(_PortalView):
     def get(self, request, request_number: str):
         return Response(requests_service.get_my_request(request_number))
+
+
+@requires_idempotency
+class CustomerPortalRequestSatisfactionView(_PortalView):
+    def post(self, request, request_number: str):
+        body = RequestSatisfactionSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        result = requests_service.submit_satisfaction(
+            request_number=request_number, account_id=_account_id(), score=body.validated_data["score"],
+            comment=body.validated_data["comment"],
+        )
+        return Response(result, status=201)
 
 
 class CustomerPortalRequestTypesView(_PortalView):

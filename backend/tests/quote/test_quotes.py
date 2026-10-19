@@ -77,13 +77,16 @@ def _member(client, *, proposer_id: str, date_of_birth: str = "1990-01-01") -> s
     ).data["id"]
 
 
-def _quote_scope(client, *, code_suffix: str) -> dict:
+def _quote_scope(
+    client, *, code_suffix: str, registration_number: str = "123456789LA042",
+    email: str = "holder@example.com",
+) -> dict:
     """Full working scope: product/plan + published rating table/parameter
     set (so pricing can actually succeed) + a proposer."""
     plan_ref = _plan(client, product_code=f"QUOTE-PROD-{code_suffix}")
     _parameter_set(client, code=f"QUOTE-PARAMS-{code_suffix}")
     _rating_table(client, code=f"QUOTE-TABLE-{code_suffix}")
-    proposer_id = _proposer(client)
+    proposer_id = _proposer(client, registration_number=registration_number, email=email)
     return {**plan_ref, "proposerId": proposer_id}
 
 
@@ -300,3 +303,62 @@ def test_list_quotes_filters_by_status(admin_client):
     assert response.status_code == 200
     assert response.data["page"]["totalElements"] >= 1
     assert all(item["status"] == "DRAFT" for item in response.data["items"])
+
+
+@pytest.mark.django_db
+def test_quotes_can_be_filtered_by_proposer_and_expose_lifecycle_timestamps(admin_client):
+    first = _quote_scope(
+        admin_client, code_suffix="filter-first",
+        registration_number="123456789LA051", email="first-filter@example.com",
+    )
+    second = _quote_scope(
+        admin_client, code_suffix="filter-second",
+        registration_number="123456789LA052", email="second-filter@example.com",
+    )
+    first_quote = admin_client.post(
+        "/api/v1/quotes",
+        {"proposerId": first["proposerId"], "planId": first["planId"]},
+        format="json",
+    )
+    second_quote = admin_client.post(
+        "/api/v1/quotes",
+        {"proposerId": second["proposerId"], "planId": second["planId"]},
+        format="json",
+    )
+    assert first_quote.status_code == second_quote.status_code == 201
+
+    response = admin_client.get(f"/api/v1/quotes?proposerId={first['proposerId']}")
+    assert response.status_code == 200
+    assert [item["id"] for item in response.data["items"]] == [first_quote.data["id"]]
+    assert "submittedAt" in response.data["items"][0]
+    assert "approvedAt" in response.data["items"][0]
+
+
+@pytest.mark.django_db
+def test_dashboard_reports_average_approval_duration_from_lifecycle_timestamps(admin_client, tenant):
+    from datetime import timedelta
+    from django.utils import timezone
+    from apps.quote.infrastructure.models import Quote
+
+    scope = _quote_scope(admin_client, code_suffix="approval-metrics")
+    created = admin_client.post(
+        "/api/v1/quotes",
+        {"proposerId": scope["proposerId"], "planId": scope["planId"]},
+        format="json",
+    )
+    assert created.status_code == 201
+    now = timezone.now()
+    submitted = now - timedelta(hours=5)
+    approved = now - timedelta(hours=2)
+    Quote.all_tenants.filter(id=created.data["id"], tenant_id=tenant.id).update(
+        submitted_at=submitted,
+        approved_at=approved,
+        status="APPROVED",
+    )
+
+    response = admin_client.get("/api/v1/dashboard")
+    assert response.status_code == 200
+    metrics = response.data["quotations"]["approvalMetrics"]
+    assert metrics["measuredQuotes"] == 1
+    assert metrics["averageDurationHours"] == 3.0
+    assert metrics["averageDurationSeconds"] == 10800.0

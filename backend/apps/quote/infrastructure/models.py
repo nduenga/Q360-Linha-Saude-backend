@@ -172,6 +172,29 @@ class QuoteAdjustment(TenantScopedModel):
         db_table = "quote_adjustment"
 
 
+class QuoteDiscountApproval(TenantScopedModel):
+    STATUS_CHOICES = (("PENDING", "PENDING"), ("APPROVED", "APPROVED"), ("REJECTED", "REJECTED"))
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    quote = models.ForeignKey(Quote, on_delete=models.CASCADE, db_column="quote_id", related_name="discount_approvals")
+    quote_row_version = models.BigIntegerField()
+    spec_json = models.JSONField(default=dict)
+    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
+    requested_by = models.CharField(max_length=200)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    decided_by = models.CharField(max_length=200, null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(null=True, blank=True)
+    adjustment = models.ForeignKey(QuoteAdjustment, on_delete=models.DO_NOTHING, db_column="adjustment_id", null=True, blank=True)
+    impact_json = models.JSONField(default=dict)
+
+    class Meta:
+        managed = False
+        db_table = "quote_discount_approval"
+
+
 class QuoteSnapshot(TenantScopedModel):
     TYPE_CHOICES = [(t.value, t.value) for t in QuoteSnapshotType]
 

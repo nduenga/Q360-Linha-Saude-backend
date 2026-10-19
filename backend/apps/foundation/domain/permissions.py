@@ -20,6 +20,7 @@ class Role(str, Enum):
     ADMIN = "ADMIN"  # Administrador do tenant: tudo, incluindo contas de utilizadores
     SUBSCRIPTION_MANAGER = "SUBSCRIPTION_MANAGER"  # Gestor de subscrição: configuração + aprovação + auditoria
     SUBSCRIBER = "SUBSCRIBER"  # Subscritor: cotações, elegibilidade e decisão (aprovar/reprovar)
+    TECHNICAL_DIRECTOR = "TECHNICAL_DIRECTOR"  # Aprova descontos comerciais acima do limite publicado
 
 
 # Perfis antigos que deixaram de existir: o Aprovador, o Auditor e o
@@ -42,6 +43,7 @@ class Permission(str, Enum):
     QUOTE_REVIEW = "quote:review"
     QUOTE_APPROVE = "quote:approve"
     QUOTE_REJECT = "quote:reject"
+    QUOTE_DISCOUNT_APPROVE = "quote:discount:approve"
     PRODUCT_MANAGE = "product:manage"
     PRICING_CONFIG_MANAGE = "pricing-config:manage"
     AUDIT_READ = "audit:read"
@@ -68,6 +70,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.PRODUCT_MANAGE,
             Permission.PRICING_CONFIG_MANAGE,
             Permission.AUDIT_READ,
+            Permission.QUOTE_DISCOUNT_APPROVE,
         }
     ),
     # Gestor de subscrição = tudo o que o Configurador de Produto fazia, mais o
@@ -101,6 +104,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
             Permission.QUOTE_REJECT,
         }
     ),
+    Role.TECHNICAL_DIRECTOR: frozenset({Permission.QUOTE_DISCOUNT_APPROVE}),
 }
 
 # Canonical Role -> ART-006 OAuth2 scope mapping (domain/scopes.py). Before
@@ -115,6 +119,7 @@ ROLE_SCOPES: dict[Role, frozenset[Scope]] = {
     Role.ADMIN: frozenset({Scope.READ, Scope.WRITE, Scope.ADMIN, Scope.APPROVE, Scope.AUDIT}),
     Role.SUBSCRIPTION_MANAGER: frozenset({Scope.READ, Scope.WRITE, Scope.ADMIN, Scope.APPROVE, Scope.AUDIT}),
     Role.SUBSCRIBER: frozenset({Scope.READ, Scope.WRITE, Scope.APPROVE}),
+    Role.TECHNICAL_DIRECTOR: frozenset({Scope.READ, Scope.APPROVE}),
 }
 
 
@@ -148,7 +153,7 @@ def scopes_for_permissions(permissions: frozenset[Permission]) -> frozenset[Scop
         Permission.PRODUCT_MANAGE, Permission.PRICING_CONFIG_MANAGE,
     }:
         scopes.add(Scope.WRITE)
-    if permissions & {Permission.QUOTE_APPROVE, Permission.QUOTE_REJECT}:
+    if permissions & {Permission.QUOTE_APPROVE, Permission.QUOTE_REJECT, Permission.QUOTE_DISCOUNT_APPROVE}:
         scopes.add(Scope.APPROVE)
     if permissions & {Permission.PRODUCT_MANAGE, Permission.PRICING_CONFIG_MANAGE}:
         scopes.add(Scope.ADMIN)

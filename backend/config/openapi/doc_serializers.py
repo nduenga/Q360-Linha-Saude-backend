@@ -735,6 +735,8 @@ class ScenarioCompareScenario(s.Serializer):
     adjustments = s.ListField(child=s.DictField())
     warnings = s.ListField(child=s.DictField())
     projection = s.JSONField(allow_null=True)
+    margin = s.JSONField(required=False, allow_null=True, help_text="Margem estimada; indisponível sem projeção de sinistros compatível.")
+    marginUnavailableReason = s.CharField(required=False, allow_null=True)
 
 
 class ScenarioCompareRow(s.Serializer):
@@ -810,6 +812,74 @@ class ClaimsSummary(s.Serializer):
     byBenefit = s.ListField(child=s.DictField())
     byMonth = s.ListField(child=s.DictField())
     formulas = s.DictField(child=s.CharField())
+
+
+class ExperienceRating(s.Serializer):
+    proposerId = s.UUIDField()
+    policyId = s.UUIDField(allow_null=True)
+    currencyCode = s.CharField()
+    available = s.BooleanField()
+    reason = s.CharField(required=False)
+    detail = s.CharField(required=False)
+    metric = s.CharField(required=False)
+    observedValue = s.CharField(required=False)
+    targetValue = s.CharField(required=False)
+    weightPercent = s.CharField(required=False)
+    lookbackMonths = s.IntegerField(required=False)
+    period = s.DictField(required=False)
+    unclampedFactor = s.CharField(required=False)
+    factor = s.CharField(required=False)
+    clamped = s.BooleanField(required=False)
+    indicative = s.BooleanField(required=False)
+    formula = s.CharField(required=False)
+
+
+class QuoteDiscountApproval(s.Serializer):
+    id = s.UUIDField()
+    quoteId = s.UUIDField()
+    quoteNumber = s.CharField(allow_null=True)
+    proposerName = s.CharField()
+    spec = s.JSONField()
+    reason = s.CharField()
+    status = s.CharField()
+    requestedBy = s.CharField()
+    requestedAt = s.DateTimeField()
+    decidedBy = s.CharField(allow_null=True)
+    decidedAt = s.DateTimeField(allow_null=True)
+    decisionNote = s.CharField(allow_null=True)
+    adjustmentId = s.UUIDField(allow_null=True)
+    impact = s.JSONField()
+
+
+class DiscountApprovalRequested(s.Serializer):
+    approval = QuoteDiscountApproval()
+    impact = ImpactSummary()
+    message = s.CharField()
+
+
+class QuoteDiscountApprovalDecision(s.Serializer):
+    decision = s.ChoiceField(choices=["APPROVE", "REJECT"])
+    note = s.CharField(min_length=10, max_length=1000)
+
+
+class QuoteDiscountApprovalQueue(s.Serializer):
+    items = QuoteDiscountApproval(many=True)
+
+
+class RequestSatisfactionCreate(s.Serializer):
+    score = s.IntegerField(min_value=0)
+    comment = s.CharField(required=False, allow_blank=True)
+
+
+class RequestSatisfactionResult(s.Serializer):
+    requestNumber = s.CharField()
+    score = s.IntegerField()
+    comment = s.CharField()
+    createdAt = s.DateTimeField()
+
+
+class PortalRequestMetrics(s.Serializer):
+    satisfaction = s.DictField(child=s.JSONField(allow_null=True))
 
 
 class ProfitSharing(s.Serializer):
@@ -975,6 +1045,9 @@ class PortalRequestItem(s.Serializer):
     resolutionNote = s.CharField(allow_null=True)
     createdAt = s.DateTimeField()
     updatedAt = s.DateTimeField()
+    customerName = s.CharField(required=False, allow_null=True)
+    payload = s.JSONField(required=False)
+    sla = s.JSONField(required=False, allow_null=True, help_text="Metas e tempos medidos conforme o calendário SLA configurado.")
 
 
 class PortalRequestDetail(PortalRequestItem):

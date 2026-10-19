@@ -374,6 +374,10 @@ def apply_scenario(*, scenario: QuoteScenario, reason: str | None) -> Quote:
     with transaction.atomic():
         for spec in specs:
             clean = simulator_service._validate_adjustment_spec(quote, spec)
+            if simulator_service._discount_approval_policy(quote, clean)[0]:
+                raise QuoteStateError(
+                    "O cenário contém um desconto sujeito a aprovação técnica; solicite-o pela rota de ajustes antes de aplicar o cenário"
+                )
             simulator_service._enforce_authority(quote, clean)
         baseline_context, member_ids = quote_service.build_pricing_context(quote)
         previous = simulator_service._preview_total(quote, baseline_context, member_ids)["totalAmount"]
@@ -451,8 +455,44 @@ def compare_scenarios(*, quote: Quote, scenario_ids: list[uuid.UUID] | None) -> 
     currency = first.result_json.get("currencyCode")
 
     header = []
+    from apps.business_config.application.readers import BusinessSnapshot
+
+    margin_config = BusinessSnapshot.load(on=quote.reference_date).get("quote.scenario_comparison") or {}
     for s in scenarios:
         plan_context = contexts[s.id]
+        margin = None
+        margin_unavailable_reason = (
+            "NO_LINKED_PROJECTION" if margin_config.get("margin_method") else "MARGIN_RULE_NOT_CONFIGURED"
+        )
+        projection_link = s.parameters_json.get("projection") or {}
+        if margin_config.get("margin_method") == "PREMIUM_MINUS_EXPECTED_CLAIMS" and projection_link.get("projectionRunId"):
+            from apps.claims.application.projection_service import get_run
+
+            run = get_run(projection_link["projectionRunId"])
+            projection_scenario = run.result_json.get("scenarios", {}).get(projection_link.get("scenario"), {})
+            monthly = projection_scenario.get("monthly") or []
+            horizon = len(monthly)
+            if horizon and (run.result_json.get("currencyCode") == currency):
+                expected_annual_claims = sum((Decimal(row["expectedClaims"]) for row in monthly), Decimal("0")) * Decimal("12") / Decimal(horizon)
+                premium = totals[s.id]
+                expenses_pct = Decimal(str(margin_config.get("expense_ratio_percent") or "0"))
+                commission_pct = Decimal(str(margin_config.get("commission_percent") or "0"))
+                margin_amount = premium - expected_annual_claims - premium * (expenses_pct + commission_pct) / Decimal("100")
+                margin = {
+                    "amount": str(round_amount(margin_amount)),
+                    "percent": str((margin_amount / premium * Decimal("100")).quantize(Decimal("0.01"))) if premium else None,
+                    "expectedClaimsAnnual": str(round_amount(expected_annual_claims)),
+                    "expenseRatioPercent": str(expenses_pct),
+                    "commissionPercent": str(commission_pct),
+                    "method": "PREMIUM_MINUS_EXPECTED_CLAIMS",
+                    "projectionRunId": str(run.id),
+                    "formula": "annual premium - annualized projected claims - premium × (expense ratio + commission)",
+                }
+                margin_unavailable_reason = None
+            elif run.result_json.get("currencyCode") != currency:
+                margin_unavailable_reason = "CURRENCY_MISMATCH"
+            else:
+                margin_unavailable_reason = "EMPTY_PROJECTION_HORIZON"
         header.append(
             {
                 "id": str(s.id),
@@ -471,6 +511,8 @@ def compare_scenarios(*, quote: Quote, scenario_ids: list[uuid.UUID] | None) -> 
                 "adjustments": s.parameters_json.get("adjustments", []),
                 "warnings": s.result_json.get("warnings", []),
                 "projection": s.parameters_json.get("projection"),
+                "margin": margin,
+                "marginUnavailableReason": margin_unavailable_reason,
             }
         )
 
@@ -527,6 +569,7 @@ def compare_scenarios(*, quote: Quote, scenario_ids: list[uuid.UUID] | None) -> 
             "lowest": {"id": str(lowest.id), "name": lowest.name, "totalAmount": str(round_amount(totals[lowest.id]))},
             "highest": {"id": str(highest.id), "name": highest.name, "totalAmount": str(round_amount(totals[highest.id]))},
             "spread": str(round_amount(totals[highest.id] - totals[lowest.id])),
+            "marginMethod": margin_config.get("margin_method"),
         },
         "coverages": coverages,
         "components": components,
@@ -537,12 +580,14 @@ def comparison_sheets(comparison: dict[str, Any]) -> dict[str, list[list[Any]]]:
     """Flat rows of the comparison, one sheet per section (XLSX/CSV export)."""
     scenarios = comparison["scenarios"]
     names = [s["name"] for s in scenarios]
-    summary = [["Cenário", "Prémio total", "Δ vs 1.º", "Δ % vs 1.º", "Opção de participação", "Coberturas opcionais", "Selecionado", "Desatualizado"]]
+    summary = [["Cenário", "Prémio total", "Margem", "Margem %", "Δ vs 1.º", "Δ % vs 1.º", "Opção de participação", "Coberturas opcionais", "Selecionado", "Desatualizado"]]
     for s in scenarios:
-        summary.append(
-            [s["name"], s["totalAmount"], s["deltaVsFirst"], s["deltaPercentVsFirst"], s["participationOption"],
-             ", ".join(s["optionalCoverages"]), "sim" if s["isSelected"] else "", "sim" if s["stale"] else ""]
-        )
+        margin = s.get("margin") or {}
+        summary.append([
+            s["name"], s["totalAmount"], margin.get("amount", "—"), margin.get("percent", "—"),
+            s["deltaVsFirst"], s["deltaPercentVsFirst"], s["participationOption"],
+            ", ".join(s["optionalCoverages"]), "sim" if s["isSelected"] else "", "sim" if s["stale"] else "",
+        ])
     coverage_rows: list[list[Any]] = [["Cobertura", "Categoria", "Difere", *names]]
     for cov in comparison["coverages"]:
         cells = []

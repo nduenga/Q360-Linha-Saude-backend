@@ -174,6 +174,7 @@ def project(*, proposer_id, params: dict[str, Any], policy_id=None, currency: st
         "history": {
             "claimsTotal": base["claims"]["total"], "earnedPremium": base["premium"]["earned"],
             "lossRatioPct": base["lossRatioPct"], "claimsCount": base["claims"]["count"],
+            "monthlyClaims": base["byMonth"],
         },
         "annualized": {"claims": _q(annual_claims * scale), "premium": _q(base_premium), "livesScale": str(scale.quantize(Decimal("0.0001")))},
         "targetLossRatioPct": params["targetLossRatioPct"],

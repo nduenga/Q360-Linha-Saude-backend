@@ -173,7 +173,7 @@ def test_compare_export_to_xlsx_and_csv(admin_client):
     workbook = load_workbook(io.BytesIO(xlsx.content))
     assert workbook.sheetnames == ["Resumo", "Coberturas", "Componentes"]
     summary = [[c.value for c in row] for row in workbook["Resumo"].iter_rows()]
-    assert summary[0][:3] == ["Cenário", "Prémio total", "Δ vs 1.º"]
+    assert summary[0][:5] == ["Cenário", "Prémio total", "Margem", "Margem %", "Δ vs 1.º"]
     assert summary[1][0] == "Base" and summary[2][0] == "Opção D" and summary[2][1] == "176.00"
     csv_resp = admin_client.get(f"{url}?fileType=csv")
     assert csv_resp.status_code == 200 and "# Resumo" in csv_resp.content.decode("utf-8-sig")
