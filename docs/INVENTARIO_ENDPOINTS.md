@@ -16,7 +16,7 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 - Os erros vêm em `application/problem+json` (`code`, `detail`, `correlationId`).
 - As rotas `/platform/…` usam o token da conta da plataforma; as restantes, o token do tenant.
 
-**Resumo:** 30 endpoints novos, 5 alterados no contrato, 28 alterados no comportamento (dos quais 8 obsoletos).
+**Resumo:** 35 endpoints novos, 5 alterados no contrato e 31 alterados no comportamento (dos quais 8 obsoletos).
 
 | # | Método | Endpoint | operationId | Estado |
 |---|---|---|---|---|
@@ -83,6 +83,14 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 | 61 | POST | `/pricing-parameter-sets` | postPricingParameterSetCreate | Obsoleto |
 | 62 | PATCH | `/pricing-parameter-sets/{parameter_set_id}` | patchPricingParameterSetDetail | Obsoleto |
 | 63 | DELETE | `/pricing-parameter-sets/{parameter_set_id}` | deletePricingParameterSetDetail | Obsoleto |
+| 64 | GET | `/claims/experience-rating` | getClaimsExperienceRating | Novo |
+| 65 | POST | `/customer-portal/requests/{request_number}/satisfaction` | postCustomerPortalRequestSatisfaction | Novo |
+| 66 | GET | `/portal-requests/metrics` | getPortalRequestMetrics | Novo |
+| 67 | GET | `/quote-discount-approvals` | getQuoteDiscountApprovalQueue | Novo |
+| 68 | POST | `/quote-discount-approvals/{approval_id}/decision` | postQuoteDiscountApprovalDecision | Novo |
+| 69 | POST | `/quotes/{quote_id}/adjustments` | postQuoteAdjustmentListCreate | Alterado (comportamento) |
+| 70 | GET | `/quotes/{quote_id}/scenarios/compare` | getQuoteScenarioCompare | Alterado (resposta inclui margem) |
+| 71 | GET | `/portal-requests` | getPortalRequestList | Alterado (resposta inclui métricas SLA) |
 
 ## 1. Endpoints novos
 
@@ -1334,6 +1342,62 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 | `byArea` | mapa de inteiro | sim |  |
 
 **Erros:** 401, 403.
+
+## 1.9 Sinistralidade — experience rating
+
+### `GET /claims/experience-rating`
+
+**Novo** · `getClaimsExperienceRating` · Calcular o fator configurado de experiência
+
+- **Quem pode:** scope `q360.read` e permissão `audit:read`.
+- **Parâmetros:** `proposerId` (obrigatório), `policyId` e `currency` (opcionais; AOA por omissão).
+- **Envia:** `available`, métrica observada/alvo, período consultado, `factor`, limites e indicação do cálculo; HTTP 409 quando não há dados/configuração suficiente.
+- O endpoint é informativo. O fator é aplicado à cotação pelo fluxo de tarifação.
+
+## 1.10 Portal — satisfação e SLA de pedidos
+
+### `POST /customer-portal/requests/{request_number}/satisfaction`
+
+**Novo** · `postCustomerPortalRequestSatisfaction` · Registar avaliação do pedido
+
+- **Quem pode:** cliente autenticado no Portal, dono do pedido.
+- **Cabeçalho:** `Idempotency-Key`.
+- **Recebe:** `score` e `comment` opcional. Só aceita pedidos resolvidos e uma avaliação por pedido.
+- **Envia (201):** `requestNumber`, `score`, `comment` e `createdAt`.
+
+### `GET /portal-requests/metrics`
+
+**Novo** · `getPortalRequestMetrics` · Consultar métricas de satisfação
+
+- **Quem pode:** scope `q360.read`.
+- **Envia (200):** `satisfaction.enabled`, número de respostas, média, limites configurados e distribuição por pontuação.
+
+`GET /portal-requests` também devolve, por pedido, `sla` com metas, minutos de primeira resposta/resolução, relógio usado (`BUSINESS_HOURS` ou `ELAPSED_TIME`) e estado de violação. O calendário e as prioridades vêm da configuração de negócio publicada.
+
+## 1.11 Cotações — aprovação de descontos
+
+### `GET /quote-discount-approvals`
+
+**Novo** · `getQuoteDiscountApprovalQueue` · Listar pedidos de aprovação de desconto
+
+- **Quem pode:** papel Direcção Técnica, scope `q360.approve` e permissão `quote:discount:approve`.
+- **Parâmetro:** `status` — `PENDING` (por omissão), `APPROVED`, `REJECTED` ou `ALL`.
+- **Envia (200):** `{items: QuoteDiscountApproval[]}`.
+
+### `POST /quote-discount-approvals/{approval_id}/decision`
+
+**Novo** · `postQuoteDiscountApprovalDecision` · Aprovar ou rejeitar desconto
+
+- **Quem pode:** papel Direcção Técnica, scope `q360.approve` e permissão `quote:discount:approve`; quem pediu não pode aprovar.
+- **Cabeçalho:** `Idempotency-Key`.
+- **Recebe:** `decision` (`APPROVE` ou `REJECT`) e `note` (mínimo 10 caracteres).
+- **Envia (200):** pedido de aprovação atualizado. A decisão aprovada aplica o desconto à cotação.
+
+`POST /quotes/{quote_id}/adjustments` devolve **202** e o pedido pendente quando o desconto excede o limite configurado; `dryRun=true` continua a devolver simulação e descontos abaixo do limite são aplicados imediatamente.
+
+## 1.12 Comparação de cenários — margem
+
+`GET /quotes/{quote_id}/scenarios/compare` e a respetiva exportação incluem margem estimada quando existe projeção de sinistros compatível. Sem projeção ou moeda compatível, a margem vem indisponível com o respetivo motivo.
 
 ## 2. Endpoints alterados no contrato
 
