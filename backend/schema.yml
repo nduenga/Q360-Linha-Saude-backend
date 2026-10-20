@@ -5298,22 +5298,22 @@ paths:
         name: page
         schema:
           type: integer
-        description: Página (começa em 0).
+        description: Página, começa em 0.
       - in: query
         name: proposerId
         schema:
           type: string
-        description: Filtro.
+        description: Filtra cotações por cliente.
       - in: query
         name: size
         schema:
           type: integer
-        description: Itens por página (máx. 200).
+        description: Itens por página, máximo 200.
       - in: query
         name: trendPeriod
         schema:
           type: string
-        description: Filtro.
+        description: week ou month (por omissão month).
       tags:
       - Audit
       security:
@@ -5321,6 +5321,10 @@ paths:
         - q360.read
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationalDashboard'
           description: Sucesso.
         '400':
           content:
@@ -16972,6 +16976,14 @@ components:
       required:
       - assumptions
       - name
+    AttributionStatusEnum:
+      enum:
+      - ATTRIBUTED
+      - UNATTRIBUTED
+      type: string
+      description: '* `ATTRIBUTED` - ATTRIBUTED
+
+        * `UNATTRIBUTED` - UNATTRIBUTED'
     AuditEvent:
       type: object
       properties:
@@ -18283,6 +18295,127 @@ components:
           default: ILLNESS
       required:
       - policyNumber
+    DashboardApprovalMetrics:
+      type: object
+      properties:
+        measuredQuotes:
+          type: integer
+        averageDurationSeconds:
+          type:
+          - number
+          - 'null'
+          format: double
+        averageDurationHours:
+          type:
+          - number
+          - 'null'
+          format: double
+        approvedQuotes:
+          type: integer
+        conversionRatePercent:
+          type:
+          - number
+          - 'null'
+          format: double
+        conversionDefinition:
+          type: string
+        conversionByProduct:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardProductConversion'
+        conversionByChannel:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardChannelConversion'
+      required:
+      - approvedQuotes
+      - averageDurationHours
+      - averageDurationSeconds
+      - conversionByChannel
+      - conversionByProduct
+      - conversionDefinition
+      - conversionRatePercent
+      - measuredQuotes
+    DashboardChannelConversion:
+      type: object
+      properties:
+        sourceChannel:
+          type:
+          - string
+          - 'null'
+        attributionStatus:
+          $ref: '#/components/schemas/AttributionStatusEnum'
+        quotes:
+          type: integer
+        converted:
+          type: integer
+        conversionRatePercent:
+          type:
+          - number
+          - 'null'
+          format: double
+      required:
+      - attributionStatus
+      - conversionRatePercent
+      - converted
+      - quotes
+      - sourceChannel
+    DashboardProductConversion:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        productCode:
+          type: string
+        productName:
+          type: string
+        quotes:
+          type: integer
+        converted:
+          type: integer
+        conversionRatePercent:
+          type:
+          - number
+          - 'null'
+          format: double
+      required:
+      - conversionRatePercent
+      - converted
+      - productCode
+      - productId
+      - productName
+      - quotes
+    DashboardQuotations:
+      type: object
+      properties:
+        total:
+          type: integer
+        byStatus:
+          type: object
+          additionalProperties:
+            type: integer
+        approvalMetrics:
+          $ref: '#/components/schemas/DashboardApprovalMetrics'
+        trend:
+          type: object
+          additionalProperties: {}
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        page:
+          type: object
+          additionalProperties:
+            type: integer
+      required:
+      - approvalMetrics
+      - byStatus
+      - items
+      - page
+      - total
+      - trend
     Decision328Enum:
       enum:
       - APPROVE
@@ -20015,6 +20148,21 @@ components:
       - rowVersion
     NullEnum:
       type: 'null'
+    OperationalDashboard:
+      type: object
+      properties:
+        quotations:
+          $ref: '#/components/schemas/DashboardQuotations'
+        underwriting:
+          type: object
+          additionalProperties: {}
+        subscriptions:
+          type: object
+          additionalProperties: {}
+      required:
+      - quotations
+      - subscriptions
+      - underwriting
     OwnerEnum:
       enum:
       - CODE
@@ -23335,6 +23483,10 @@ components:
         proposerId:
           type: string
           format: uuid
+        sourceChannel:
+          type:
+          - string
+          - 'null'
         planId:
           type: string
           format: uuid
@@ -23435,6 +23587,7 @@ components:
       - renewal
       - rowVersion
       - selection
+      - sourceChannel
       - sourcePolicyId
       - status
       - submittedAt
@@ -23535,6 +23688,11 @@ components:
         planId:
           type: string
           format: uuid
+        sourceChannel:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
       required:
       - planId
     QuoteDiscountApproval:
@@ -23938,6 +24096,10 @@ components:
         proposerId:
           type: string
           format: uuid
+        sourceChannel:
+          type:
+          - string
+          - 'null'
         planId:
           type: string
           format: uuid
@@ -24042,6 +24204,7 @@ components:
       - renewal
       - rowVersion
       - selection
+      - sourceChannel
       - sourcePolicyId
       - status
       - submittedAt
@@ -26440,6 +26603,11 @@ components:
           - 'null'
           default: ''
           maxLength: 60
+        address:
+          type:
+          - string
+          - 'null'
+          maxLength: 500
         attributes:
           oneOf:
           - {}

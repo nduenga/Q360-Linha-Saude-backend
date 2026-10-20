@@ -138,6 +138,7 @@ class QuoteListCreateView(APIView):
             proposer_input=data.get("proposerInput"),
             titular_member_input=data.get("titularMemberInput"),
             plan_id=data["planId"],
+            source_channel=data.get("sourceChannel"),
         )
         return Response(QuoteSerializer(quote).data, status=201)
 

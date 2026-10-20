@@ -1603,6 +1603,14 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 
 ## 3. Endpoints alterados no comportamento
 
+`POST /quotes` aceita `sourceChannel` opcional (texto até 60 caracteres, normalizado para maiúsculas) e `GET /quotes` devolve o valor guardado. O canal não tem enum global; integrações fornecem os seus códigos. Cotações antigas sem origem são agregadas como `UNATTRIBUTED`. `GET /dashboard` devolve `quotations.approvalMetrics.conversionByChannel` com cotações, convertidas e taxa para cada canal, incluindo não atribuídas.
+
+`GET /dashboard` documenta a tendência agregada e as métricas de aprovação/conversão, incluindo as dimensões por produto e canal.
+
+`POST /proposers` e `PUT /proposers/{proposer_id}` persistem `address` quando enviado. O detalhe devolve `address` para apresentação da morada; o campo é texto livre, não se interpreta como província/município.
+
+O histórico de conversas do Portal agora deixa eventos `customer_portal.message_sent` em auditoria, sem gravar o texto da mensagem nos metadados.
+
 O formato destes endpoints no contrato é o mesmo, ou a resposta não tem tipo no contrato. Mudou o que aceitam, o que devolvem dentro de campos livres (JSON) ou as regras que aplicam.
 
 ### `GET /business-config/catalog`

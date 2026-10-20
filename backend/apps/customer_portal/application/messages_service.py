@@ -16,12 +16,15 @@ from apps.customer_portal.domain.errors import PortalResourceNotFoundError
 from apps.customer_portal.domain.requests import PortalRequestInvalidError
 from apps.customer_portal.infrastructure.models import PortalMessage, PortalRequest
 from apps.foundation.application.context import CurrentTenantProvider
+from apps.foundation.application.audit_service import AuditService
+from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.policy.infrastructure.models import Policy
 from apps.quote.domain.enums import QuoteStatus
 from apps.quote.infrastructure.models import Quote
 
 CONTEXT_TYPES = ("QUOTE", "POLICY", "REQUEST")
 MAX_BODY = 4000
+_audit = AuditService(DjangoAuditRepositoryAdapter())
 
 
 def _tenant_id():
@@ -82,6 +85,10 @@ def customer_send(*, account_id: uuid.UUID, context_type: str, context_ref: str,
     )
     if context_type == "REQUEST":
         requests_service.reopen_on_customer_reply(request=row, account_id=account_id)
+    _audit.record(
+        action="customer_portal.message_sent", entity_type="PortalMessage", entity_id=str(message.id),
+        metadata={"contextType": context_type, "result": "SUCCESS"},
+    )
     return _item(message)
 
 
@@ -142,6 +149,10 @@ def staff_send(*, context_type: str, context_ref: str, body: str, actor_ref: str
                 title="Nova mensagem da Q360", body=body[:200],
                 link=f"/portal/mensagens/{context_type.lower()}/{context_ref}",
             )
+    _audit.record(
+        action="customer_portal.message_sent", entity_type="PortalMessage", entity_id=str(message.id),
+        metadata={"contextType": context_type, "result": "SUCCESS"},
+    )
     return _item(message)
 
 

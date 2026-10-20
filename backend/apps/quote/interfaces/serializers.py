@@ -28,6 +28,7 @@ class QuoteSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     quoteNumber = serializers.CharField(source="quote_number", allow_null=True)
     proposerId = serializers.UUIDField(source="proposer_id")
+    sourceChannel = serializers.CharField(source="source_channel", allow_null=True, allow_blank=True)
     planId = serializers.UUIDField(source="plan_id")
     status = serializers.ChoiceField(choices=[s.value for s in QuoteStatus])
     # Sem data de efeito (decisão de 2026-10-15): data de criação e validade.
@@ -132,6 +133,7 @@ class _ProposerInputSerializer(serializers.Serializer):
     dateOfBirth = serializers.DateField(required=False, allow_null=True, default=None)
     email = serializers.CharField(max_length=200, required=False, default="", allow_null=True, allow_blank=True)
     phone = serializers.CharField(max_length=60, required=False, default="", allow_null=True, allow_blank=True)
+    address = serializers.CharField(max_length=500, required=False, default=None, allow_null=True, allow_blank=True)
     attributes = serializers.JSONField(required=False, default=None, allow_null=True)
 
 
@@ -149,8 +151,11 @@ class QuoteCreateRequestSerializer(serializers.Serializer):
     proposerInput = _ProposerInputSerializer(required=False, default=None, allow_null=True)
     titularMemberInput = _TitularMemberInputSerializer(required=False, default=None, allow_null=True)
     planId = serializers.UUIDField()
+    sourceChannel = serializers.CharField(max_length=60, required=False, allow_null=True, allow_blank=True, default=None)
 
     def validate(self, attrs: dict) -> dict:
+        if attrs.get("sourceChannel") is not None:
+            attrs["sourceChannel"] = " ".join(attrs["sourceChannel"].split()).upper() or None
         if attrs.get("proposerId") is None and attrs.get("proposerInput") is None:
             raise serializers.ValidationError(
                 "proposerId ou proposerInput deve ser fornecido (não ambos são nulos)."

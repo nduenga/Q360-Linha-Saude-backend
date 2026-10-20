@@ -206,6 +206,7 @@ def create_quote(
     # falhar, nada fica para trás e nenhuma pessoa/proponente órfão é criada.
     proposer_input: dict[str, Any] | None = None,
     titular_member_input: dict[str, Any] | None = None,
+    source_channel: str | None = None,
 ) -> Quote:
     tenant_id = CurrentTenantProvider.require()
     actor = CurrentActorProvider.get()
@@ -236,6 +237,7 @@ def create_quote(
                     registration_number=proposer_input["registrationNumber"],
                     email=proposer_input.get("email") or "",
                     phone=proposer_input.get("phone") or "",
+                    address=proposer_input.get("address"),
                     attributes=(
                         proposer_input.get("attributes") if "attributes" in proposer_input else None
                     ),
@@ -319,6 +321,7 @@ def create_quote(
                 tenant_id=tenant_id.value,
                 proposer=proposer,
                 plan=plan,
+                source_channel=source_channel,
                 status=QuoteStatus.DRAFT.value,
                 quote_number=quote_number,
                 valid_until=_default_valid_until(today),

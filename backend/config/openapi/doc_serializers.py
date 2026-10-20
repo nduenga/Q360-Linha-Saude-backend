@@ -901,6 +901,55 @@ class PortalRequestMetrics(s.Serializer):
     serviceTime = ServiceTimeMetrics()
 
 
+class DashboardProductConversion(s.Serializer):
+    productId = s.UUIDField()
+    productCode = s.CharField()
+    productName = s.CharField()
+    quotes = s.IntegerField()
+    converted = s.IntegerField()
+    conversionRatePercent = s.FloatField(allow_null=True)
+
+
+class DashboardChannelConversion(s.Serializer):
+    sourceChannel = s.CharField(allow_null=True)
+    attributionStatus = s.ChoiceField(choices=["ATTRIBUTED", "UNATTRIBUTED"])
+    quotes = s.IntegerField()
+    converted = s.IntegerField()
+    conversionRatePercent = s.FloatField(allow_null=True)
+
+
+class DashboardApprovalMetrics(s.Serializer):
+    measuredQuotes = s.IntegerField()
+    averageDurationSeconds = s.FloatField(allow_null=True)
+    averageDurationHours = s.FloatField(allow_null=True)
+    approvedQuotes = s.IntegerField()
+    conversionRatePercent = s.FloatField(allow_null=True)
+    conversionDefinition = s.CharField()
+    conversionByProduct = DashboardProductConversion(many=True)
+    conversionByChannel = DashboardChannelConversion(many=True)
+
+
+class DashboardTrendItem(s.Serializer):
+    periodStart = s.DateField()
+    created = s.IntegerField()
+    approved = s.IntegerField()
+
+
+class DashboardQuotations(s.Serializer):
+    total = s.IntegerField()
+    byStatus = s.DictField(child=s.IntegerField())
+    approvalMetrics = DashboardApprovalMetrics()
+    trend = s.DictField(child=s.JSONField())
+    items = s.ListField(child=s.DictField())
+    page = s.DictField(child=s.IntegerField())
+
+
+class OperationalDashboard(s.Serializer):
+    quotations = DashboardQuotations()
+    underwriting = s.DictField(child=s.JSONField())
+    subscriptions = s.DictField(child=s.JSONField())
+
+
 class ProfitSharing(s.Serializer):
     proposerId = s.UUIDField()
     currencyCode = s.CharField()

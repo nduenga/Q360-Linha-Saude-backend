@@ -108,6 +108,7 @@ class ProposerCreateRequestSerializer(_ProposerNifRequestSerializer):
             "registration_number": registration_number,
             "email": attrs["email"],
             "phone": attrs["phone"],
+            "address": attrs.get("address", self.context.get("address")),
             "attributes": attrs["attributes"],
             "date_of_birth": self._validated_birth_date(attrs),
             "require_birth_date": True,
@@ -123,7 +124,6 @@ class ProposerUpdateRequestSerializer(_ProposerNifRequestSerializer):
         required=False,
         allow_null=True,
         allow_blank=True,
-        default=None,
     )
     attributes = serializers.JSONField(required=False, default=dict)
     rowVersion = serializers.IntegerField(min_value=0)
@@ -136,6 +136,7 @@ class ProposerUpdateRequestSerializer(_ProposerNifRequestSerializer):
             "registration_number": registration_number,
             "email": attrs["email"],
             "phone": attrs["phone"],
+            "address": attrs.get("address", self.context.get("address")),
             "attributes": attrs["attributes"],
             "row_version": attrs["rowVersion"],
             "date_of_birth": self._validated_birth_date(attrs),

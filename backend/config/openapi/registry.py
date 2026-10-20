@@ -201,6 +201,13 @@ REGISTRY: dict[str, dict] = {
                     "from": ("string", False, "YYYY-MM-DD."), "to": ("string", False, "YYYY-MM-DD."),
                     "currency": ("string", False, "AOA (por omissão) ou USD.")},
     },
+    "DashboardView.get": {
+        "response": d.OperationalDashboard,
+        "queries": {"page": ("integer", False, "Página, começa em 0."),
+                    "size": ("integer", False, "Itens por página, máximo 200."),
+                    "proposerId": ("string", False, "Filtra cotações por cliente."),
+                    "trendPeriod": ("string", False, "week ou month (por omissão month).")},
+    },
     # ------------------------------------------------------------------ portal
     "CustomerPortalPlanBenefitsView.get": {
         "response": d.PortalPlanBenefits, "queries": {"policyNumber": ("string", True, "Número da apólice do cliente.")},
@@ -459,7 +466,6 @@ RETIRED_SCHEMAS = {"QuoteUpdateRequest"}
 # than the code exposes through a serializer: keep the contract's version.
 KEEP_CONTRACT = {
     ("/api/v1/me", "get"),
-    ("/api/v1/dashboard", "get"),
     ("/api/v1/customer-portal/{tenant_id}/auth/request-access", "post"),
     ("/api/v1/customer-portal/{tenant_id}/auth/verify-otp", "post"),
     ("/api/v1/customer-portal/me", "get"),

@@ -48,6 +48,7 @@ class Quote(TenantScopedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
     quote_number = models.CharField(max_length=100, null=True, blank=True)
+    source_channel = models.CharField(max_length=60, null=True, blank=True)
     proposer = models.ForeignKey(Proposer, on_delete=models.DO_NOTHING, db_column="proposer_id")
     # DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): no more ProductVersion —
     # `plan.product_id` already resolves the product. Kept nullable only

@@ -328,6 +328,18 @@ class DashboardView(APIView):
                 "converted": row["converted"],
                 "conversionRatePercent": round(row["converted"] / row["total"] * 100, 2) if row["total"] else None,
             })
+        channel_conversion = []
+        for row in quotes.values("source_channel").annotate(
+            total=Count("id"),
+            converted=Count("id", filter=Q(status__in=("APPROVED", "BOUND"))),
+        ).order_by("source_channel"):
+            channel_conversion.append({
+                "sourceChannel": row["source_channel"],
+                "attributionStatus": "UNATTRIBUTED" if row["source_channel"] is None else "ATTRIBUTED",
+                "quotes": row["total"],
+                "converted": row["converted"],
+                "conversionRatePercent": round(row["converted"] / row["total"] * 100, 2) if row["total"] else None,
+            })
         quotations = {
             "total": quote_paginator.total_elements,
 
@@ -341,8 +353,7 @@ class DashboardView(APIView):
                 "conversionRatePercent": round(approved_quotes / total_quotes * 100, 2) if total_quotes else None,
                 "conversionDefinition": "APPROVED or BOUND / all quotes in the current filter",
                 "conversionByProduct": product_conversion,
-                "channelConversion": None,
-                "channelConversionNote": "Indisponível: o modelo de cotação ainda não regista o canal de origem.",
+                "conversionByChannel": channel_conversion,
             },
             "trend": {"period": trend_period.upper(), "items": trend},
 
