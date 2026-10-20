@@ -10564,6 +10564,17 @@ paths:
       operationId: getPortalRequestMetrics
       description: 'Requer: scope q360.read.'
       summary: Obter portal request metrics
+      parameters:
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: Filtra as métricas temporais pelo estado do pedido.
+      - in: query
+        name: type
+        schema:
+          type: string
+        description: Filtra as métricas temporais pelo tipo do pedido.
       tags:
       - Customer Portal Support
       security:
@@ -10576,6 +10587,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortalRequestMetrics'
           description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
         '401':
           content:
             application/problem+json:
@@ -29069,8 +29086,11 @@ components:
             oneOf:
             - {}
             - type: 'null'
+        serviceTime:
+          $ref: '#/components/schemas/ServiceTimeMetrics'
       required:
       - satisfaction
+      - serviceTime
     QuoteDiscountApprovalQueue:
       type: object
       properties:
@@ -29107,6 +29127,58 @@ components:
       - createdAt
       - requestNumber
       - score
+    ClockEnum:
+      enum:
+      - BUSINESS_HOURS
+      - ELAPSED_TIME
+      type: string
+      description: '* `BUSINESS_HOURS` - BUSINESS_HOURS
+
+        * `ELAPSED_TIME` - ELAPSED_TIME'
+    ServiceTimeAverage:
+      type: object
+      properties:
+        measuredRequests:
+          type: integer
+        averageMinutes:
+          type:
+          - number
+          - 'null'
+          format: double
+      required:
+      - averageMinutes
+      - measuredRequests
+    ServiceTimeItem:
+      type: object
+      properties:
+        clock:
+          $ref: '#/components/schemas/ClockEnum'
+        priority:
+          type: string
+        measuredRequests:
+          type: integer
+        firstResponse:
+          $ref: '#/components/schemas/ServiceTimeAverage'
+        resolution:
+          $ref: '#/components/schemas/ServiceTimeAverage'
+      required:
+      - clock
+      - firstResponse
+      - measuredRequests
+      - priority
+      - resolution
+    ServiceTimeMetrics:
+      type: object
+      properties:
+        definition:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceTimeItem'
+      required:
+      - definition
+      - items
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

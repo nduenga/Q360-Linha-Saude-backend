@@ -9,6 +9,7 @@ from django.db.models import Avg, Count
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from apps.customer_portal.application import messages_service, requests_service
 from apps.customer_portal.domain import requests as rules
@@ -40,6 +41,10 @@ class PortalRequestListView(APIView):
 class PortalRequestMetricsView(APIView):
     permission_classes = [require_scope(Scope.READ)]
 
+    @extend_schema(parameters=[
+        OpenApiParameter("status", str, description="Filtra as métricas temporais pelo estado do pedido."),
+        OpenApiParameter("type", str, description="Filtra as métricas temporais pelo tipo do pedido."),
+    ])
     def get(self, request):
         from apps.business_config.application.readers import BusinessSnapshot
 
@@ -48,6 +53,51 @@ class PortalRequestMetricsView(APIView):
         distribution = list(
             PortalRequestSatisfaction.objects.values("score").annotate(count=Count("id")).order_by("score")
         )
+        # Use the same per-request SLA clock and pause rules as the queue so
+        # aggregate durations cannot silently mix business and elapsed time.
+        status_filter = request.query_params.get("status")
+        type_filter = request.query_params.get("type")
+        if status_filter and status_filter not in rules.STATUS_LABELS:
+            raise ValidationError({"status": f"Must be one of {sorted(rules.STATUS_LABELS)}."})
+        if type_filter and type_filter not in rules.REQUEST_TYPES:
+            raise ValidationError({"type": f"Must be one of {sorted(rules.REQUEST_TYPES)}."})
+        rows = requests_service.staff_list(status=status_filter, request_type=type_filter)
+        service_groups = {}
+        for row in rows:
+            sla = row.get("sla")
+            if not sla or sla.get("measurementStatus") != "MEASURED":
+                continue
+            key = (sla.get("clock"), sla.get("priority"))
+            group = service_groups.setdefault(key, {
+                "clock": key[0], "priority": key[1], "requests": 0,
+                "firstResponseTotal": 0, "firstResponseCount": 0,
+                "resolutionTotal": 0, "resolutionCount": 0,
+            })
+            group["requests"] += 1
+            for field, total_key, count_key in (
+                ("firstResponseMinutes", "firstResponseTotal", "firstResponseCount"),
+                ("resolutionMinutes", "resolutionTotal", "resolutionCount"),
+            ):
+                value = sla.get(field)
+                if value is not None:
+                    group[total_key] += value
+                    group[count_key] += 1
+        service_time = []
+        for group in sorted(service_groups.values(), key=lambda item: (item["clock"], item["priority"])):
+            service_time.append({
+                "clock": group["clock"], "priority": group["priority"],
+                "measuredRequests": group["requests"],
+                "firstResponse": {
+                    "measuredRequests": group["firstResponseCount"],
+                    "averageMinutes": round(group["firstResponseTotal"] / group["firstResponseCount"], 2)
+                    if group["firstResponseCount"] else None,
+                },
+                "resolution": {
+                    "measuredRequests": group["resolutionCount"],
+                    "averageMinutes": round(group["resolutionTotal"] / group["resolutionCount"], 2)
+                    if group["resolutionCount"] else None,
+                },
+            })
         return Response({
             "satisfaction": {
                 "enabled": bool(config.get("enabled")),
@@ -56,7 +106,11 @@ class PortalRequestMetricsView(APIView):
                 "minimumScore": config.get("minimum_score"),
                 "maximumScore": config.get("maximum_score"),
                 "distribution": distribution,
-            }
+            },
+            "serviceTime": {
+                "definition": "Médias calculadas com os mesmos relógios SLA dos pedidos; pedidos não medidos são excluídos.",
+                "items": service_time,
+            },
         })
 
 

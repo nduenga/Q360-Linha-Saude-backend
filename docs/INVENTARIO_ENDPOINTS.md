@@ -1367,12 +1367,19 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 
 ### `GET /portal-requests/metrics`
 
-**Novo** · `getPortalRequestMetrics` · Consultar métricas de satisfação
+**Novo** · `getPortalRequestMetrics` · Consultar métricas de satisfação e atendimento
 
 - **Quem pode:** scope `q360.read`.
-- **Envia (200):** `satisfaction.enabled`, número de respostas, média, limites configurados e distribuição por pontuação.
+- **Filtros opcionais:** `status` e `type`, aplicados às métricas temporais.
+- **Envia (200):** `satisfaction.enabled`, número de respostas, média, limites configurados e distribuição por pontuação; `serviceTime.items` agrega primeira resposta e resolução por prioridade e relógio SLA (`BUSINESS_HOURS` ou `ELAPSED_TIME`). Só inclui durações medidas; cada duração indica a quantidade de pedidos usada na média.
 
 `GET /portal-requests` também devolve, por pedido, `sla` com metas, minutos de primeira resposta/resolução, relógio usado (`BUSINESS_HOURS` ou `ELAPSED_TIME`) e estado de violação. O calendário e as prioridades vêm da configuração de negócio publicada.
+
+`GET /dashboard` agrega tendência por semana/mês, duração média entre submissão e aprovação e conversão aprovada/total por produto. Conversão por canal está indisponível até o modelo da cotação registar o canal de origem. O tempo médio de aprovação usa timestamps persistidos e não estima valores ausentes.
+
+`GET /claims/projections/{run_id}` inclui, em cada cenário, `timeSeries`: sinistros reais mensais históricos seguidos dos sinistros projetados mensais. `periodStart` é o primeiro dia do mês; `actualClaims` ou `projectedClaims` fica nulo quando o ponto pertence ao outro trecho da série.
+
+**Versões de produto:** o fluxo `ProductVersion` foi retirado; `Plan` está ligado diretamente a `Product`. Não há endpoint de histórico de versões do produto com autor/data/diff. As rotas `configuration/{type}/{id}/versions` versionam configurações e não representam versões do catálogo de produtos.
 
 ## 1.11 Cotações — aprovação de descontos
 

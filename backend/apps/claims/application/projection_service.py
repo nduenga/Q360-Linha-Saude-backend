@@ -107,6 +107,11 @@ def _q(value: Decimal) -> str:
     return str(value.quantize(TWO))
 
 
+def _month_start_after(value: datetime.date, offset: int = 1) -> datetime.date:
+    month_index = value.year * 12 + value.month - 1 + offset
+    return datetime.date(month_index // 12, month_index % 12 + 1, 1)
+
+
 def project(*, proposer_id, params: dict[str, Any], policy_id=None, currency: str = "AOA") -> dict[str, Any]:
     months_available = summary_service.history_months(proposer_id=proposer_id, currency=currency)
     if months_available == 0:
@@ -151,10 +156,27 @@ def project(*, proposer_id, params: dict[str, Any], policy_id=None, currency: st
         growth = growth_year ** (Decimal(horizon) / Decimal(12))
         projected = annual_claims * scale * growth
         required = projected / (target / Decimal(100))
-        monthly = [
-            {"month": m, "expectedClaims": _q(annual_claims * scale / Decimal(12) * (growth_year ** (Decimal(m) / Decimal(12))))}
-            for m in range(1, horizon + 1)
-        ]
+        monthly = []
+        for m in range(1, horizon + 1):
+            amount = annual_claims * scale / Decimal(12) * (growth_year ** (Decimal(m) / Decimal(12)))
+            monthly.append({
+                "month": m,
+                "periodStart": _month_start_after(end, m).isoformat(),
+                "expectedClaims": _q(amount),
+            })
+        # An aligned chart series: historical actuals followed by forecast
+        # months on the same YYYY-MM-01 axis. Missing actual months are zero;
+        # projected values are null for historical periods and vice versa.
+        actual_by_month = {row["month"]: row["total"] for row in base["byMonth"]}
+        first_month_index = start.year * 12 + start.month - 1
+        last_month_index = end.year * 12 + end.month - 1
+        time_series = []
+        for month_index in range(first_month_index, last_month_index + 1):
+            month = datetime.date(month_index // 12, month_index % 12 + 1, 1).isoformat()
+            time_series.append({"periodStart": month, "actualClaims": actual_by_month.get(month[:7], "0.00"), "projectedClaims": None})
+        time_series.extend({
+            "periodStart": row["periodStart"], "actualClaims": None, "projectedClaims": row["expectedClaims"],
+        } for row in monthly)
         scenarios[name] = {
             "medicalInflationPct": spec["medicalInflationPct"],
             "frequencyTrendPct": spec["frequencyTrendPct"],
@@ -164,6 +186,7 @@ def project(*, proposer_id, params: dict[str, Any], policy_id=None, currency: st
             "requiredPremium": _q(required),
             "premiumImpactPct": _q((required / base_premium - Decimal(1)) * Decimal("100")),
             "monthly": monthly,
+            "timeSeries": time_series,
         }
     return {
         "method": METHOD,

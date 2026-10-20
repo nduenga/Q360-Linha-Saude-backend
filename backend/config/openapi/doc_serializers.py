@@ -878,8 +878,27 @@ class RequestSatisfactionResult(s.Serializer):
     createdAt = s.DateTimeField()
 
 
+class ServiceTimeAverage(s.Serializer):
+    measuredRequests = s.IntegerField()
+    averageMinutes = s.FloatField(allow_null=True)
+
+
+class ServiceTimeItem(s.Serializer):
+    clock = s.ChoiceField(choices=["BUSINESS_HOURS", "ELAPSED_TIME"])
+    priority = s.CharField()
+    measuredRequests = s.IntegerField()
+    firstResponse = ServiceTimeAverage()
+    resolution = ServiceTimeAverage()
+
+
+class ServiceTimeMetrics(s.Serializer):
+    definition = s.CharField()
+    items = ServiceTimeItem(many=True)
+
+
 class PortalRequestMetrics(s.Serializer):
     satisfaction = s.DictField(child=s.JSONField(allow_null=True))
+    serviceTime = ServiceTimeMetrics()
 
 
 class ProfitSharing(s.Serializer):

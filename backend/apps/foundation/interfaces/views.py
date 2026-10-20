@@ -315,6 +315,19 @@ class DashboardView(APIView):
             {"periodStart": day, "created": created_buckets.get(day, 0), "approved": approved_buckets.get(day, 0)}
             for day in sorted(created_buckets.keys() | approved_buckets.keys())
         ]
+        product_conversion = []
+        for row in quotes.values("plan__product_id", "plan__product__code", "plan__product__name").annotate(
+            total=Count("id"),
+            converted=Count("id", filter=Q(status__in=("APPROVED", "BOUND"))),
+        ).order_by("plan__product__code"):
+            product_conversion.append({
+                "productId": str(row["plan__product_id"]),
+                "productCode": row["plan__product__code"],
+                "productName": row["plan__product__name"],
+                "quotes": row["total"],
+                "converted": row["converted"],
+                "conversionRatePercent": round(row["converted"] / row["total"] * 100, 2) if row["total"] else None,
+            })
         quotations = {
             "total": quote_paginator.total_elements,
 
@@ -327,6 +340,9 @@ class DashboardView(APIView):
                 "approvedQuotes": approved_quotes,
                 "conversionRatePercent": round(approved_quotes / total_quotes * 100, 2) if total_quotes else None,
                 "conversionDefinition": "APPROVED or BOUND / all quotes in the current filter",
+                "conversionByProduct": product_conversion,
+                "channelConversion": None,
+                "channelConversionNote": "Indisponível: o modelo de cotação ainda não regista o canal de origem.",
             },
             "trend": {"period": trend_period.upper(), "items": trend},
 
