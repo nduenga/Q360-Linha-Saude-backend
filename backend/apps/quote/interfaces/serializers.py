@@ -134,6 +134,8 @@ class _ProposerInputSerializer(serializers.Serializer):
     email = serializers.CharField(max_length=200, required=False, default="", allow_null=True, allow_blank=True)
     phone = serializers.CharField(max_length=60, required=False, default="", allow_null=True, allow_blank=True)
     address = serializers.CharField(max_length=500, required=False, default=None, allow_null=True, allow_blank=True)
+    province = serializers.CharField(max_length=100, required=False, default=None, allow_null=True, allow_blank=True)
+    municipality = serializers.CharField(max_length=100, required=False, default=None, allow_null=True, allow_blank=True)
     attributes = serializers.JSONField(required=False, default=None, allow_null=True)
 
 

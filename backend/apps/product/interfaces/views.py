@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 
 from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
+from apps.foundation.infrastructure.models import AuditEvent
 from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
 from apps.product.application import product_service
@@ -52,6 +53,7 @@ from apps.product.interfaces.serializers import (
     PricingParameterSetRequestSerializer,
     PricingParameterSetUpdateRequestSerializer,
     ProductCreateRequestSerializer,
+    ProductHistoryEntrySerializer,
     ProductSerializer,
     ProductUpdateRequestSerializer,
     VersionedConfigHeaderSerializer,
@@ -93,8 +95,8 @@ class ProductListCreateView(APIView):
 class ProductDetailView(APIView):
     """ART-006 `/api/v1/products/{productId}`: `getProduct` (GET),
     `updateProduct` (PUT). `DELETE` is a pragmatic V1 addition, not in
-    ART-006 - only works while the product has no ProductVersion yet (409
-    CONFLICT otherwise; see product_service.delete_product)."""
+    ART-006; it returns 409 when plans are already referenced by quotes,
+    pricing runs or eligibility evaluations."""
 
     def get_permissions(self):
         if self.request.method in ("PUT", "DELETE"):
@@ -117,6 +119,35 @@ class ProductDetailView(APIView):
         product_service.delete_product(product=product)
         return Response(status=204)
 
+
+class ProductHistoryView(APIView):
+    """Read-only change history for product identity/status fields.
+
+    ProductVersion was retired. This view exposes the existing audit trail
+    with before/after values for product edits; tariff/configuration versions
+    remain available through their dedicated configuration history routes.
+    """
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, product_id):
+        get_object_or_404(Product, id=product_id)
+        events = AuditEvent.objects.filter(entity_type="Product", entity_id=str(product_id)).order_by("-occurred_at")
+        paginator = Q360PageNumberPagination()
+        page = paginator.paginate_queryset(events, request)
+        items = []
+        for event in page:
+            metadata = event.metadata_json or {}
+            items.append({
+                "action": event.action,
+                "actorType": event.actor_type,
+                "changedBy": event.actor_id,
+                "occurredAt": event.occurred_at,
+                "rowVersion": metadata.get("rowVersion"),
+                "snapshot": metadata.get("snapshot"),
+                "changes": metadata.get("changes"),
+            })
+        return paginator.get_paginated_response(ProductHistoryEntrySerializer(items, many=True).data)
 
 class PlanListCreateView(APIView):
     """ART-006 `/api/v1/plans`: `listPlans` (GET), `createPlan` (POST).

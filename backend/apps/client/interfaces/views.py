@@ -112,7 +112,12 @@ class ProposerDetailView(APIView):
 
         body = ProposerUpdateRequestSerializer(
             data=request.data,
-            context={"proposer_type": proposer.proposer_type, "address": proposer.address},
+            context={
+                "proposer_type": proposer.proposer_type,
+                "address": proposer.address,
+                "province": proposer.province,
+                "municipality": proposer.municipality,
+            },
         )
 
         body.is_valid(

@@ -1081,9 +1081,31 @@ class PortalDocuments(s.Serializer):
     documents = s.ListField(child=s.DictField(), help_text="Hoje só propostas geradas.")
 
 
+class PortalProfileProposer(s.Serializer):
+    name = s.CharField()
+    type = s.CharField()
+    nif = s.CharField(allow_null=True)
+    registrationNumber = s.CharField(allow_null=True)
+    email = s.CharField(allow_null=True)
+    phone = s.CharField(allow_null=True)
+    address = s.CharField(allow_null=True)
+    province = s.CharField(allow_null=True)
+    municipality = s.CharField(allow_null=True)
+
+
+class ProductHistoryEntry(s.Serializer):
+    action = s.CharField()
+    actorType = s.CharField()
+    changedBy = s.CharField(allow_null=True)
+    occurredAt = s.DateTimeField()
+    rowVersion = s.IntegerField(allow_null=True)
+    snapshot = s.JSONField(allow_null=True)
+    changes = s.JSONField(allow_null=True)
+
+
 class PortalProfile(s.Serializer):
     accountEmail = s.CharField(allow_null=True)
-    proposers = s.ListField(child=s.DictField())
+    proposers = PortalProfileProposer(many=True)
 
 
 # ----------------------------------------- portal: pedidos, mensagens, etc.

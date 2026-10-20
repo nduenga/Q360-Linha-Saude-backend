@@ -11518,6 +11518,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/products/{product_id}/history:
+    get:
+      operationId: getProductHistory
+      summary: Consultar histórico do produto
+      description: Eventos de criação e alteração de nome, descrição e estado, com valores anteriores e novos. Não cria versões de produto; a tarifa e configurações têm históricos próprios.
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: page
+        schema: {type: integer, minimum: 0}
+      - in: query
+        name: size
+        schema: {type: integer, minimum: 1, maximum: 200}
+      tags: [Products]
+      security:
+      - oauth2: [q360.read]
+      responses:
+        '200':
+          description: Sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductHistoryPage'
+        '401':
+          description: Não autenticado.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/ProblemDetail'}
+        '403':
+          description: Sem autorização.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/ProblemDetail'}
+        '404':
+          description: Produto não encontrado.
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/ProblemDetail'}
   /api/v1/products/{product_id}:
     get:
       operationId: getProductDetail
@@ -11525,9 +11568,7 @@ paths:
 
         `updateProduct` (PUT). `DELETE` is a pragmatic V1 addition, not in
 
-        ART-006 - only works while the product has no ProductVersion yet (409
-
-        CONFLICT otherwise; see product_service.delete_product).
+        ART-006 - deletion returns 409 when the product is referenced by quotes, pricing or eligibility records (see product_service.delete_product).
 
 
         Requer: scope q360.read.'
@@ -11575,9 +11616,7 @@ paths:
 
         `updateProduct` (PUT). `DELETE` is a pragmatic V1 addition, not in
 
-        ART-006 - only works while the product has no ProductVersion yet (409
-
-        CONFLICT otherwise; see product_service.delete_product).
+        ART-006 - deletion returns 409 when the product is referenced by quotes, pricing or eligibility records (see product_service.delete_product).
 
 
         Requer: scope q360.write, permissão product:manage.'
@@ -11649,9 +11688,7 @@ paths:
 
         `updateProduct` (PUT). `DELETE` is a pragmatic V1 addition, not in
 
-        ART-006 - only works while the product has no ProductVersion yet (409
-
-        CONFLICT otherwise; see product_service.delete_product).
+        ART-006 - deletion returns 409 when the product is referenced by quotes, pricing or eligibility records (see product_service.delete_product).
 
 
         Requer: scope q360.write, permissão product:manage.'
@@ -21884,7 +21921,17 @@ components:
           type: array
           items:
             type: object
-            additionalProperties: {}
+            properties:
+              name: {type: string}
+              type: {type: string}
+              nif: {type: [string, 'null']}
+              registrationNumber: {type: [string, 'null']}
+              email: {type: [string, 'null']}
+              phone: {type: [string, 'null']}
+              address: {type: [string, 'null']}
+              province: {type: [string, 'null']}
+              municipality: {type: [string, 'null']}
+            required: [name, type, nif, registrationNumber, email, phone, address, province, municipality]
       required:
       - accountEmail
       - proposers
@@ -22754,6 +22801,25 @@ components:
       - correlationId
       - status
       - title
+    ProductHistoryEntry:
+      type: object
+      properties:
+        action: {type: string}
+        actorType: {type: string}
+        changedBy: {type: [string, 'null']}
+        occurredAt: {type: string, format: date-time}
+        rowVersion: {type: [integer, 'null']}
+        snapshot: {type: [object, 'null'], additionalProperties: true}
+        changes: {type: [object, 'null'], additionalProperties: true}
+      required: [action, actorType, changedBy, occurredAt, rowVersion, snapshot, changes]
+    ProductHistoryPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/ProductHistoryEntry'}
+        page: {$ref: '#/components/schemas/PageMeta'}
+      required: [items, page]
     Product:
       type: object
       properties:
@@ -23332,6 +23398,16 @@ components:
           type:
           - string
           - 'null'
+        province:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        municipality:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
         attributes: {}
         status:
           $ref: '#/components/schemas/PlanStatusEnum'
@@ -23347,6 +23423,8 @@ components:
       - id
       - nif
       - phone
+      - province
+      - municipality
       - proposerType
       - registrationNumber
       - rowVersion
@@ -23397,6 +23475,16 @@ components:
           - string
           - 'null'
           maxLength: 500
+        province:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        municipality:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
         attributes: {}
       required:
       - displayName
@@ -23458,6 +23546,16 @@ components:
           - string
           - 'null'
           maxLength: 500
+        province:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        municipality:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
         attributes: {}
         rowVersion:
           type: integer
@@ -26608,6 +26706,16 @@ components:
           - string
           - 'null'
           maxLength: 500
+        province:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        municipality:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
         attributes:
           oneOf:
           - {}

@@ -374,7 +374,9 @@ def get_my_profile(*, account_email: str | None = None) -> dict:
                 "registrationNumber": p.registration_number,
                 "email": p.email,
                 "phone": p.phone,
-                "address": (p.attributes_json or {}).get("address"),
+                "address": p.address,
+                "province": p.province,
+                "municipality": p.municipality,
             }
             for p in proposers
         ],

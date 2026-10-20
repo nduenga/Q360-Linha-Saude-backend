@@ -41,6 +41,8 @@ class Proposer(TenantScopedModel):
         null=True,
         blank=True,
     )
+    province = models.CharField(max_length=100, null=True, blank=True)
+    municipality = models.CharField(max_length=100, null=True, blank=True)
     attributes_json = models.JSONField(default=dict)
     status = models.CharField(
         max_length=20, choices=[(s.value, s.value) for s in ProposerStatus], default=ProposerStatus.ACTIVE.value

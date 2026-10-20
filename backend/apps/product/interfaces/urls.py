@@ -24,6 +24,7 @@ from apps.product.interfaces.views import (
     PricingParameterSetCreateView,
     PricingParameterSetDetailView,
     ProductDetailView,
+    ProductHistoryView,
     ProductListCreateView,
 )
 
@@ -64,6 +65,7 @@ urlpatterns = [
     ),
     path("product-templates/market", MarketTemplatesView.as_view(), name="product-templates-market"),
     path("products", ProductListCreateView.as_view(), name="product-list-create"),
+    path("products/<uuid:product_id>/history", ProductHistoryView.as_view(), name="product-history"),
     path("products/<uuid:product_id>", ProductDetailView.as_view(), name="product-detail"),
     path("plans", PlanListCreateView.as_view(), name="plan-list-create"),
     path("plans/<uuid:plan_id>", PlanDetailView.as_view(), name="plan-detail"),

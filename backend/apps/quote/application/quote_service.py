@@ -238,6 +238,8 @@ def create_quote(
                     email=proposer_input.get("email") or "",
                     phone=proposer_input.get("phone") or "",
                     address=proposer_input.get("address"),
+                    province=proposer_input.get("province"),
+                    municipality=proposer_input.get("municipality"),
                     attributes=(
                         proposer_input.get("attributes") if "attributes" in proposer_input else None
                     ),

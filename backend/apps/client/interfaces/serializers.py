@@ -24,6 +24,8 @@ class ProposerSerializer(serializers.Serializer):
         allow_null=True,
         allow_blank=True,
     )
+    province = serializers.CharField(allow_null=True, allow_blank=True)
+    municipality = serializers.CharField(allow_null=True, allow_blank=True)
     attributes = serializers.JSONField(source="attributes_json")
     status = serializers.ChoiceField(choices=[s.value for s in ProposerStatus])
     rowVersion = serializers.IntegerField(source="row_version")
@@ -96,6 +98,8 @@ class ProposerCreateRequestSerializer(_ProposerNifRequestSerializer):
         allow_blank=True,
         default=None,
     )
+    province = serializers.CharField(max_length=100, required=False, allow_null=True, allow_blank=True, default=None)
+    municipality = serializers.CharField(max_length=100, required=False, allow_null=True, allow_blank=True, default=None)
     attributes = serializers.JSONField(required=False, default=dict)
 
     def validate(self, attrs: dict) -> dict:
@@ -109,6 +113,8 @@ class ProposerCreateRequestSerializer(_ProposerNifRequestSerializer):
             "email": attrs["email"],
             "phone": attrs["phone"],
             "address": attrs.get("address", self.context.get("address")),
+            "province": attrs.get("province", self.context.get("province")),
+            "municipality": attrs.get("municipality", self.context.get("municipality")),
             "attributes": attrs["attributes"],
             "date_of_birth": self._validated_birth_date(attrs),
             "require_birth_date": True,
@@ -125,6 +131,8 @@ class ProposerUpdateRequestSerializer(_ProposerNifRequestSerializer):
         allow_null=True,
         allow_blank=True,
     )
+    province = serializers.CharField(max_length=100, required=False, allow_null=True, allow_blank=True)
+    municipality = serializers.CharField(max_length=100, required=False, allow_null=True, allow_blank=True)
     attributes = serializers.JSONField(required=False, default=dict)
     rowVersion = serializers.IntegerField(min_value=0)
 
@@ -137,6 +145,8 @@ class ProposerUpdateRequestSerializer(_ProposerNifRequestSerializer):
             "email": attrs["email"],
             "phone": attrs["phone"],
             "address": attrs.get("address", self.context.get("address")),
+            "province": attrs.get("province", self.context.get("province")),
+            "municipality": attrs.get("municipality", self.context.get("municipality")),
             "attributes": attrs["attributes"],
             "row_version": attrs["rowVersion"],
             "date_of_birth": self._validated_birth_date(attrs),

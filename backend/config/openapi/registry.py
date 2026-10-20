@@ -38,6 +38,7 @@ REGISTRY: dict[str, dict] = {
     },
     "PendingApprovalsCountView.get": {"response": d.PendingApprovalsCount},
     "ProductTariffView.get": {"response": d.ProductTariff},
+    "ProductHistoryView.get": {"response": d.ProductHistoryEntry, "many": True, "notes": "Histórico de nome, descrição e estado do produto a partir de eventos de auditoria; não representa versões de tarifa ou configurações."},
     "ProductTariffSimulationView.post": {"response": d.TariffSimulationResult},
     "FormulaTestView.post": {"response": d.FormulaTestResult},
     "PendingApprovalsView.get": {"response": d.PendingApprovals, "queries": {"area": ("string", False, "ORGANIZATION, PRODUCTS, TARIFF, RULES, PARAMETERS ou DOCUMENTS.")}},

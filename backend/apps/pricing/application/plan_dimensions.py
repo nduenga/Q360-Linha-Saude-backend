@@ -4,7 +4,9 @@ Lê `Plan.settings_json` e `PlanBenefit.configuration_json` (PDF "Coberturas e
 Capitais") e devolve:
 
   - **dimensões** (`segment`, `tier`, `category`, `accessSystem`,
-    `participationOption`, `capital.<COBERTURA>`) que se juntam ao contexto de
+    `participationOption`, `capital.<COBERTURA>`,
+    `annualDeductible.<COBERTURA>.<SISTEMA>`,
+    `perEventDeductible.<COBERTURA>.<SISTEMA>` e `copay.<COBERTURA>`) que se juntam ao contexto de
     cada membro. Os `RatingFactor` do GTE casam com elas por
     `dimension_json` (subconjunto do contexto) — é assim que o prémio varia
     com o escalão do plano e com os capitais **sem nenhuma tabela hardcoded**;
@@ -139,6 +141,17 @@ def resolve_plan_pricing_context(
             capital = main_capital(config)
             if capital is not None:
                 dims[f"capital.{code}"] = capital
+        participation = config.get("participation", {})
+        if isinstance(participation, dict):
+            for system, spec in participation.items():
+                if not isinstance(spec, dict):
+                    continue
+                for field in ("annualDeductible", "perEventDeductible"):
+                    value = spec.get(field)
+                    if value is not None:
+                        dims[f"{field}.{code}.{system}"] = str(value)
+                if system == "NETWORK" and spec.get("type") == "COPAY_FIXED" and spec.get("copayAmount") is not None:
+                    dims[f"copay.{code}"] = str(spec["copayAmount"])
 
     details = tuple(
         {

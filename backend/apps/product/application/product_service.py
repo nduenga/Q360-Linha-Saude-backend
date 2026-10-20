@@ -70,7 +70,10 @@ def create_product(*, code: str, name: str, description: str | None) -> Product:
     except IntegrityError as exc:
         raise DuplicateCodeError(f"O código de produto '{code}' já existe neste tenant") from exc
 
-    _audit.record(action="product.created", entity_type="Product", entity_id=str(product.id))
+    _audit.record(
+        action="product.created", entity_type="Product", entity_id=str(product.id),
+        metadata={"snapshot": {"code": product.code, "name": product.name, "description": product.description, "status": product.status}},
+    )
     return product
 
 
@@ -93,6 +96,7 @@ def update_product(
     # The Product row is simply updated in place; its Plans are untouched
     # and immediately reflect the new Product name/description on their
     # next read (they reference the Product directly now).
+    before = {"name": product.name, "description": product.description, "status": product.status}
     fields = {"name": name, "description": description, "row_version": row_version + 1}
     if status is not None:
         fields["status"] = status
@@ -102,11 +106,17 @@ def update_product(
             f"A versão do produto {product.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
         )
     product.refresh_from_db()
+    after = {"name": product.name, "description": product.description, "status": product.status}
+    changes = {
+        key: {"from": before[key], "to": after[key]}
+        for key in before
+        if before[key] != after[key]
+    }
     _audit.record(
         action="product.updated",
         entity_type="Product",
         entity_id=str(product.id),
-        metadata={"rowVersion": product.row_version},
+        metadata={"rowVersion": product.row_version, "changes": changes},
     )
     return product
 

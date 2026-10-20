@@ -18,6 +18,16 @@ from apps.product.domain.enums import (
     VersionedConfigStatus,
 )
 
+
+class ProductHistoryEntrySerializer(serializers.Serializer):
+    action = serializers.CharField()
+    actorType = serializers.CharField()
+    changedBy = serializers.CharField(allow_null=True)
+    occurredAt = serializers.DateTimeField()
+    rowVersion = serializers.IntegerField(allow_null=True)
+    snapshot = serializers.JSONField(allow_null=True)
+    changes = serializers.JSONField(allow_null=True)
+
 # ART-005/ART-006 "decimal exacto serializado como string; nunca binary
 # floating point" convention (DOC-004 s5 Money principle; demonstrated
 # explicitly on ART-006's RatingFactor.factorValue). Applied here to
