@@ -91,6 +91,7 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 | 69 | POST | `/quotes/{quote_id}/adjustments` | postQuoteAdjustmentListCreate | Alterado (comportamento) |
 | 70 | GET | `/quotes/{quote_id}/scenarios/compare` | getQuoteScenarioCompare | Alterado (resposta inclui margem) |
 | 71 | GET | `/portal-requests` | getPortalRequestList | Alterado (resposta inclui métricas SLA) |
+| 72 | GET | `/products/{product_id}/history` | getProductHistory | Novo |
 
 ## 1. Endpoints novos
 
@@ -1375,11 +1376,11 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 
 `GET /portal-requests` também devolve, por pedido, `sla` com metas, minutos de primeira resposta/resolução, relógio usado (`BUSINESS_HOURS` ou `ELAPSED_TIME`) e estado de violação. O calendário e as prioridades vêm da configuração de negócio publicada.
 
-`GET /dashboard` agrega tendência por semana/mês, duração média entre submissão e aprovação e conversão aprovada/total por produto. Conversão por canal está indisponível até o modelo da cotação registar o canal de origem. O tempo médio de aprovação usa timestamps persistidos e não estima valores ausentes.
+`GET /dashboard` agrega tendencia por semana/mes, duracao media entre submissao e aprovacao e conversao aprovada/total por produto e canal. `POST /quotes` pode registar `sourceChannel`; cotacoes sem origem permanecem no grupo nao atribuido. O tempo medio de aprovacao usa timestamps persistidos e nao estima valores ausentes.
 
-`GET /claims/projections/{run_id}` inclui, em cada cenário, `timeSeries`: sinistros reais mensais históricos seguidos dos sinistros projetados mensais. `periodStart` é o primeiro dia do mês; `actualClaims` ou `projectedClaims` fica nulo quando o ponto pertence ao outro trecho da série.
+`GET /claims/projections/{run_id}` inclui, em cada cenario, `timeSeries`: sinistros reais mensais historicos seguidos dos sinistros projetados mensais. `periodStart` e o primeiro dia do mes; `actualClaims` ou `projectedClaims` fica nulo quando o ponto pertence ao outro trecho da serie.
 
-**Versões de produto:** o fluxo `ProductVersion` foi retirado; `Plan` está ligado diretamente a `Product`. Não há endpoint de histórico de versões do produto com autor/data/diff. As rotas `configuration/{type}/{id}/versions` versionam configurações e não representam versões do catálogo de produtos.
+**Historico do produto:** o fluxo `ProductVersion` foi retirado; `Plan` esta ligado diretamente a `Product`. `GET /products/{product_id}/history` expoe eventos de criacao e alteracoes de nome, descricao e estado com autor/data/diff. As rotas `configuration/{type}/{id}/versions` versionam configuracoes e nao representam versoes do catalogo de produtos.
 
 ## 1.11 Cotações — aprovação de descontos
 
@@ -1607,7 +1608,9 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 
 `GET /dashboard` documenta a tendência agregada e as métricas de aprovação/conversão, incluindo as dimensões por produto e canal.
 
-`POST /proposers` e `PUT /proposers/{proposer_id}` persistem `address` quando enviado. O detalhe devolve `address` para apresentação da morada; o campo é texto livre, não se interpreta como província/município.
+`POST /proposers` e `PUT /proposers/{proposer_id}` persistem `address`, `province` e `municipality` quando enviados. `province` e `municipality` são campos de texto opcionais, apresentados separadamente da morada livre. `GET /customer-portal/profile` devolve os três campos para cada proponente.
+
+`GET /products/{product_id}/history` devolve eventos de criação/edição do produto com autor, instante, snapshot inicial e diferenças de nome, descrição e estado. Continua a não criar `ProductVersion`: versões de tarifa e configurações são consultadas nas respetivas rotas de histórico.
 
 O histórico de conversas do Portal agora deixa eventos `customer_portal.message_sent` em auditoria, sem gravar o texto da mensagem nos metadados.
 
@@ -1759,3 +1762,13 @@ O formato destes endpoints no contrato é o mesmo, ou a resposta não tem tipo n
 
 - **Recebe/Envia:** igual.
 - **Mudança:** marcadas `deprecated: true` no contrato. A tarifa antiga converte-se com `manage.py migrate_legacy_tariffs` e deixa de ser usada quando o tenant publica `pricing.reference_premiums`.
+
+
+### `GET /products/{product_id}/history`
+
+**Novo** - `getProductHistory` - Consultar alteracoes de nome, descricao e estado do produto
+
+- **Quem pode:** scope `q360.read`.
+- **Parametros:** `page` e `size` (paginacao padrao).
+- **Envia:** eventos `product.created` e `product.updated`, com tipo do ator, referencia do autor, data/hora, numero da revisao, snapshot inicial ou diferencas `from`/`to`.
+- O historico de tarifa e configuracoes continua nas rotas proprias de versoes/diff. Esta rota nao reintroduz `ProductVersion`.
