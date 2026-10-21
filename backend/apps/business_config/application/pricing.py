@@ -410,7 +410,9 @@ def resolve_actuarial_group_adjustment(
     adhesion = str(profile.get("adhesion", "")).strip().upper()
     if not industry or not region or adhesion not in {"MANDATORY", "VOLUNTARY"}:
         raise PricingConfigError(
-            "O pricing SAG exige actuarialProfile.industry, region e adhesion (MANDATORY/VOLUNTARY)."
+            "Não foi possível calcular o preço deste plano de grupo porque faltam dados de tarifação "
+            "do proponente: sector de actividade, região e tipo de adesão. Peça ao administrador "
+            "para completar o perfil actuarial ou as predefinições do produto."
         )
 
     size_row = next((

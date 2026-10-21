@@ -5,6 +5,11 @@ alteração é uma versão proposta por uma conta da plataforma e aprovada por
 outra; a versão em vigor é a publicada mais recente cuja vigência começou."""
 from __future__ import annotations
 
+from io import BytesIO
+
+from django.http import HttpResponse
+from rest_framework.parsers import MultiPartParser
+
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -206,6 +211,58 @@ class PlatformReferenceTableListView(APIView):
         )
         _table_audit(request, "platform_reference_table.proposed", created)
         return Response(created, status=status.HTTP_201_CREATED)
+
+
+class PlatformReferenceTableImportTemplateView(APIView):
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request):
+        from openpyxl import Workbook
+
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Tabela de referência"
+        sheet.append(["Código", "Valor"])
+        sheet.append(["LUANDA", 1])
+        instructions = workbook.create_sheet("Instruções")
+        instructions.append(["Campo", "Formato e valores permitidos"])
+        instructions.append(["Código", "Texto único por linha; pode ser usado como coluna-chave."])
+        instructions.append(["Valor", "Texto ou número. Acrescente colunas próprias quando necessário."])
+        out = BytesIO()
+        workbook.save(out)
+        response = HttpResponse(out.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response["Content-Disposition"] = 'attachment; filename="modelo-tabela-referencia.xlsx"'
+        return response
+
+
+class PlatformReferenceTableImportPreviewView(APIView):
+    permission_classes = [IsPlatformAdmin]
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+        uploaded = request.FILES.get("file")
+        if uploaded is None or not uploaded.name.lower().endswith(".xlsx"):
+            return Response({"detail": "Carregue um ficheiro Excel .xlsx."}, status=400)
+        if uploaded.size > 10 * 1024 * 1024:
+            return Response({"detail": "O ficheiro Excel não pode exceder 10 MB."}, status=400)
+        from openpyxl import load_workbook
+
+        try:
+            sheet = load_workbook(uploaded, read_only=True, data_only=True).worksheets[0]
+            iterator = iter(sheet.iter_rows(values_only=True))
+            first = next(iterator, ())
+            headers = [str(value or "").strip() for value in first]
+            data = []
+            for row in iterator:
+                if any(value not in (None, "") for value in row):
+                    data.append(["" if value is None else str(value).strip() for value in row[:len(headers)]])
+                    if len(data) >= 5001:
+                        break
+        except Exception:
+            return Response({"detail": "Não foi possível ler o ficheiro Excel. Verifique se está válido."}, status=400)
+        if not headers or not any(headers) or not data:
+            return Response({"detail": "O Excel tem de conter cabeçalhos e pelo menos uma linha de dados."}, status=400)
+        return Response({"fileName": uploaded.name, "headers": headers, "rows": data[:5000], "truncated": len(data) > 5000})
 
 
 class PlatformReferenceTableDetailView(APIView):

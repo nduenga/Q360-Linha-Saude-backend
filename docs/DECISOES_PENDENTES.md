@@ -37,7 +37,7 @@ Empresa e apagaria a da Ana se partilhassem o endereço.
 | Maioridade e idade com prova | Valores do código: maioridade 18 (art. 130.º CC), teto com prova 27 (permite as exceções corporativas atuais). A confirmar pelo jurídico |
 | Teto da comissão de mediação | Por omissão 100 % (sem teto). Só fixar se houver norma |
 | Câmbio e inflação | Valores iniciais do Excel (30/06/2026): 931,27 Kz/USD e 10,9 %. Atualização manual com aprovação; ligação automática ao BNA/INE fica para depois |
-| Fatores regionais vs. províncias oficiais | O modelo actuarial agrupa regiões («Luanda (Grande Luanda)»); não se validam contra a lista oficial de províncias para não partir o modelo. Decidir se o modelo passa a usar províncias |
+| Fatores regionais vs. províncias oficiais | Decisão (2026-10-21): manter as zonas do modelo actuarial como região de tarifação, sem as substituir por província/município. A organização escolhe a região numa lista alimentada pela tabela actuarial publicada; morada, província e município continuam campos distintos. O segmento individual usa a predefinição SAU do modelo quando não há região explícita. Não existe conversão automática entre geografia administrativa e zona actuarial. |
 | SAG com menos de 5 colaboradores | A tabela de dimensão do Excel começa nos 5 («abaixo de 5 → SAU individual»); o cálculo recusa grupos menores com erro explícito |
 
 ## Limitações técnicas conhecidas

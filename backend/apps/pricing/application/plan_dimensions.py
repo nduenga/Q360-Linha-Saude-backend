@@ -44,6 +44,7 @@ class ParticipationOption:
 @dataclass(frozen=True)
 class PlanPricingContext:
     dimensions: dict[str, str] = field(default_factory=dict)
+    group_adhesion: str | None = None
     participation_option: ParticipationOption | None = None
     optional_coverage_codes: tuple[str, ...] = ()
     selection: dict[str, Any] = field(default_factory=dict)
@@ -178,6 +179,7 @@ def resolve_plan_pricing_context(
         normalised_selection.update(_product_selection(plan, selection, effective_date))
     return PlanPricingContext(
         dimensions=dims,
+        group_adhesion=(settings.get("group") or {}).get("adhesion"),
         participation_option=option,
         optional_coverage_codes=chosen_codes,
         selection=normalised_selection,

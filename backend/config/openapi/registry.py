@@ -61,6 +61,7 @@ REGISTRY: dict[str, dict] = {
     "BenefitImportView.post": {"request": d.BenefitImportRequest, "response": d.BenefitImportResult},
     "BenefitUsageView.get": {"response": d.BenefitUsage},
     "MemberImportUploadView.post": {"request": d.MemberImportRequest, "status": 202},
+    "ImportTemplateView.get": {"media": XLSX, "notes": "Modelo Excel .xlsx com cabeçalhos, exemplo e instruções em português. kind: MEMBERS, CLAIMS, PREMIUMS ou BENEFITS."},
     "PlanValidationView.get": {"response": d.PlanValidation},
     "MarketTemplatesView.post": {"request": d.EmptyRequest, "response": d.MarketTemplatesResult},
     # -------------------------------------------------------- configuration
@@ -178,8 +179,8 @@ REGISTRY: dict[str, dict] = {
     "ClaimsImportListCreateView.post": {"request": d.ClaimsImportRequest, "response": {201: d.ClaimsImportResult, 200: d.ClaimsImportResult}},
     "ClaimsMethodologyView.get": {"response": d.ClaimsMethodology},
     "ClaimsImportTemplateView.get": {
-        "media": "text/csv", "queries": {"kind": ("string", False, "CLAIMS (por omissão) ou PREMIUMS.")},
-        "notes": "CSV com o cabeçalho aceito e uma linha de exemplo fictícia.",
+        "media": XLSX, "queries": {"kind": ("string", False, "CLAIMS (por omissão) ou PREMIUMS.")},
+        "notes": "Excel .xlsx com cabeçalhos, exemplo e instruções em português.",
     },
     "ClaimsSummaryView.get": {
         "response": d.ClaimsSummary,
@@ -417,6 +418,8 @@ REGISTRY.update(
             "request": d.ReferenceTableProposal, "response": d.ReferenceTableVersion, "status": 201,
             "notes": "Versão nova da tabela inteira, PENDING_APPROVAL até outra conta a aprovar.",
         },
+        "PlatformReferenceTableImportTemplateView.get": {"media": XLSX, "notes": "Modelo Excel em português para propor uma tabela de referência."},
+        "PlatformReferenceTableImportPreviewView.post": {"request": d.PlatformReferenceTableImportPreviewRequest, "response": d.PlatformReferenceTableImportPreviewResult},
         "PlatformReferenceTableDetailView.get": {"response": d.ReferenceTableDetail},
         "PlatformReferenceTableVersionsView.get": {"response": d.ReferenceTableVersion, "many": True},
         "PlatformReferenceTableApproveView.post": {

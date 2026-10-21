@@ -68,6 +68,9 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 | 46 | GET | `/quotes/{quote_id}/requirements` | getQuoteRequirements | Alterado (comportamento) |
 | 47 | POST | `/quotes/{quote_id}/submit` | postQuoteSubmit | Alterado (comportamento) |
 | 48 | POST | `/quotes/{quote_id}/decision` | postQuoteDecision | Alterado (comportamento) |
+| 49 | GET | `/import-templates/{kind}` | getImportTemplate | Novo |
+| 50 | GET | `/platform/reference-tables/import-template` | getPlatformReferenceTableImportTemplate | Novo |
+| 51 | POST | `/platform/reference-tables/import-preview` | postPlatformReferenceTableImportPreview | Novo |
 | 49 | POST | `/eligibility/evaluate` | postEligibilityEvaluate | Alterado (comportamento) |
 | 50 | POST | `/configuration/{config_type}/{config_id}/publish` | postConfigurationPublish | Alterado (comportamento) |
 | 51 | POST | `/quotes/{quote_id}/price` | postQuotePrice | Alterado (comportamento) |
@@ -1772,3 +1775,18 @@ O formato destes endpoints no contrato é o mesmo, ou a resposta não tem tipo n
 - **Parametros:** `page` e `size` (paginacao padrao).
 - **Envia:** eventos `product.created` e `product.updated`, com tipo do ator, referencia do autor, data/hora, numero da revisao, snapshot inicial ou diferencas `from`/`to`.
 - O historico de tarifa e configuracoes continua nas rotas proprias de versoes/diff. Esta rota nao reintroduz `ProductVersion`.
+
+### `GET /import-templates/{kind}`
+
+**Novo** - `getImportTemplate` - Descarregar um modelo Excel de importação de dados
+
+- **Quem pode:** utilizador autenticado com scope `q360.read`.
+- **Parâmetro de caminho:** `kind`, um de `MEMBERS`, `CLAIMS`, `PREMIUMS` ou `BENEFITS`.
+- **Envia:** ficheiro `.xlsx` com cabeçalhos em português, uma linha fictícia de exemplo e folha de instruções com formatos e valores aceites.
+- O modelo actuarial continua a usar `GET /business-config/actuarial-model/template`; os modelos de sinistros e prémios também podem ser descarregados em `GET /claims/import-template?kind=CLAIMS|PREMIUMS`.
+
+### Importações de dados apenas em Excel
+
+Os endpoints existentes `POST /member-imports`, `POST /benefits/import` e `POST /claims/imports` passam a aceitar apenas `.xlsx`. Cabeçalhos traduzidos do modelo são convertidos pelo backend para os campos internos. Os uploads de documentos (PDF, imagem ou anexos de configuração) não são importações de dados e mantêm os seus formatos próprios.
+
+O modelo e a pré-validação Excel das tabelas de referência da plataforma usam `GET /platform/reference-tables/import-template` e `POST /platform/reference-tables/import-preview`; a pré-validação lê no máximo 5.000 linhas e não grava nem propõe a tabela.

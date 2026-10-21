@@ -348,21 +348,18 @@ def _parse_rows(*, filename: str, content: bytes) -> list[dict[str, str]]:
 
         sheet = load_workbook(io.BytesIO(content), read_only=True, data_only=True).active
         iterator = sheet.iter_rows(values_only=True)
-        header = [str(h or "").strip().lower() for h in next(iterator, [])]
+        aliases = {
+            "código": "code", "codigo": "code", "nome": "name", "descrição": "description",
+            "descricao": "description", "definição (json)": "definition_json",
+            "definicao (json)": "definition_json", "categoria": "category",
+        }
+        header = [aliases.get(str(h or "").strip().casefold(), str(h or "").strip().lower()) for h in next(iterator, [])]
         return [
             {header[i]: ("" if v is None else str(v)).strip() for i, v in enumerate(row) if i < len(header)}
             for row in iterator
             if any(v not in (None, "") for v in row)
         ]
-    if name.endswith(".csv"):
-        text = content.decode("utf-8-sig")
-        reader = csv.DictReader(io.StringIO(text))
-        return [
-            {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
-            for row in reader
-            if any((v or "").strip() for v in row.values())
-        ]
-    raise InvalidBenefitDefinitionError("Tipo de ficheiro não suportado: use .xlsx ou .csv")
+    raise InvalidBenefitDefinitionError("Formato não suportado. Carregue o modelo Excel .xlsx.")
 
 
 def import_benefits(*, filename: str, content: bytes, dry_run: bool) -> dict[str, Any]:
@@ -398,7 +395,9 @@ def import_benefits(*, filename: str, content: bytes, dry_run: bool) -> dict[str
             description = row.get("description") or None
             existing = Benefit.objects.filter(code=code).first()
             if existing is None:
-                if (row.get("category") or COMPLEMENTARY).upper() == BASE:
+                category = (row.get("category") or "COMPLEMENTAR").upper()
+                category = {"COMPLEMENTAR": COMPLEMENTARY, "BASE": BASE}.get(category, category)
+                if category == BASE:
                     raise InvalidBenefitDefinitionError("Uma cobertura BASE não pode ser criada por importação")
                 if not dry_run:
                     create_benefit(code=code, name=name, description=description, definition=definition)

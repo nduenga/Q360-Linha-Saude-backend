@@ -301,6 +301,16 @@ def create_quote(
                     f"O plano {plan_id} está em {plan.status}; só um plano ativo (ACTIVE) pode iniciar uma nova cotação"
                 )
 
+            # Evita descobrir só no cálculo que o tipo de tomador não pode
+            # aderir ao segmento do plano escolhido.
+            segment = (plan.settings_json or {}).get("segment")
+            expected_proposer_type = {"INDIVIDUAL": "INDIVIDUAL", "GROUP": "ORGANISATION"}.get(segment)
+            if expected_proposer_type and proposer.proposer_type != expected_proposer_type:
+                expected_label = "pessoa individual" if expected_proposer_type == "INDIVIDUAL" else "organização"
+                raise ReferencedEntityNotFoundError(
+                    f"Este plano destina-se a {expected_label}. Seleccione um proponente desse tipo."
+                )
+
             # Sem data de efeito (decisão de 2026-10-15): a referência é o dia de criação.
             today = timezone_localdate()
             available, why = plan_availability(plan, today)

@@ -1,6 +1,8 @@
 from django.urls import path
 
 from apps.platform_admin.interfaces.parameter_views import (
+    PlatformReferenceTableImportPreviewView,
+    PlatformReferenceTableImportTemplateView,
     PlatformFormulaEngineView,
     PlatformParameterApproveView,
     PlatformParameterDetailView,
@@ -34,6 +36,8 @@ from apps.platform_admin.interfaces.views import (
 )
 
 urlpatterns = [
+    path("platform/reference-tables/import-template", PlatformReferenceTableImportTemplateView.as_view(), name="platform-reference-table-import-template"),
+    path("platform/reference-tables/import-preview", PlatformReferenceTableImportPreviewView.as_view(), name="platform-reference-table-import-preview"),
     path("platform/auth/login", PlatformLoginView.as_view(), name="platform-login"),
     path("platform/me", PlatformMeView.as_view(), name="platform-me"),
     path("platform/me/password", PlatformChangePasswordView.as_view(), name="platform-change-password"),

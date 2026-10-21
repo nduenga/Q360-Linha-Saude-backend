@@ -264,6 +264,24 @@ def _execute(
     if missing:
         raise ReferencedEntityNotFoundError(f"memberIds desconhecidos: {', '.join(missing)}")
 
+    # O segmento do plano determina o tipo de tomador admitido. Validar aqui
+    # também protege o endpoint de cálculo directo, além do fluxo de criação
+    # de cotações, que não envia o tipo do proponente no payload de pricing.
+    plan_segment = plan_context.dimensions.get("segment")
+    expected_proposer_type = {"INDIVIDUAL": "INDIVIDUAL", "GROUP": "ORGANISATION"}.get(plan_segment)
+    if expected_proposer_type:
+        proposer_ids = {member.proposer_id for member in members}
+        if len(proposer_ids) != 1:
+            raise ReferencedEntityNotFoundError(
+                "Seleccione membros de um único proponente para calcular a tarifação."
+            )
+        proposer = members[0].proposer
+        if proposer.proposer_type != expected_proposer_type:
+            expected_label = "pessoa individual" if expected_proposer_type == "INDIVIDUAL" else "organização"
+            raise ReferencedEntityNotFoundError(
+                f"Este plano destina-se a {expected_label}. Seleccione um proponente desse tipo."
+            )
+
     # A configuração de negócio publicada é a fonte de verdade do cálculo.
     # O caminho legado só é usado para compatibilidade com cotações/integrações
     # que ainda enviam explicitamente RatingTable/PricingParameterSet.
@@ -489,11 +507,24 @@ def _run_calculation(
     actuarial_model = business_pricing.actuarial_model if business_pricing is not None else None
     actuarial_group_adjustment = None
     if actuarial_model is not None:
-        profile = context.get("actuarialProfile") or {}
-        if not isinstance(profile, dict):
+        supplied_profile = context.get("actuarialProfile") or {}
+        if not isinstance(supplied_profile, dict):
             raise PricingConfigError("context.actuarialProfile deve ser um objecto.")
+        proposer_attributes = (members[0].proposer.attributes_json or {})
+        saved_profile = proposer_attributes.get("actuarialProfile") or {}
+        if not isinstance(saved_profile, dict):
+            raise PricingConfigError("O perfil actuarial guardado no proponente tem de ser um objecto.")
+        profile = {**saved_profile, **supplied_profile}
         plan_mapping = actuarial_model.get("plan_code_mapping", {}).get(str(plan.code), {})
         segment = plan_mapping.get("segment")
+        if segment == "SAG":
+            # A adesão é uma regra do plano. O catálogo de planos usa OPTIONAL
+            # para adesão facultativa; o modelo actuarial chama-lhe VOLUNTARY.
+            plan_adhesion = plan_context.group_adhesion
+            if plan_adhesion == "MANDATORY":
+                profile["adhesion"] = "MANDATORY"
+            elif plan_adhesion in {"OPTIONAL", "VOLUNTARY"}:
+                profile["adhesion"] = "VOLUNTARY"
         # A4: campos do perfil em falta vêm dos valores por omissão configurados no modelo.
         profile, defaults_used = profile_with_defaults(actuarial_model, str(segment), profile)
         trace("ACTUARIAL_PROFILE_RESOLVED",

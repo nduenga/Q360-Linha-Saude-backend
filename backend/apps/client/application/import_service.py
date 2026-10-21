@@ -14,9 +14,7 @@ for transparency (see OPEN_DECISIONS.md#S03-IMPORT-001):
   since no approved "import template" exists. The free-form `attributes`
   object is not supported via file import in V1.
 
-UPDATED 2026-09-21 (OD-004, Product Owner decision): Excel (`.xlsx`) is
-now the preferred/first format — `.csv` still works as a fallback for
-anyone without Excel. A basic ETL pass now rejects an entire row (not
+Excel (`.xlsx`) is the only supported import format. A basic ETL pass now rejects an entire row (not
 just missing/malformed dates) whenever any expected field contains a
 literal null-looking placeholder (`null`, `n/a`, `nan`, `none`, `-`,
 case-insensitive) instead of being left genuinely empty, and
@@ -26,7 +24,6 @@ at commit time.
 """
 from __future__ import annotations
 
-import csv
 import hashlib
 import io
 from dataclasses import dataclass, field
@@ -55,7 +52,13 @@ from apps.client.infrastructure.models import ImportJob, ImportRowError, Insured
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
 _EXPECTED_COLUMNS = ["relationshipCode", "firstName", "lastName", "dateOfBirth", "sexCode", "externalReference"]
-_XLSX_EXTENSIONS = (".xlsx", ".xlsm")
+_XLSX_EXTENSIONS = (".xlsx",)
+_HEADERS_PT = {
+    "relação com o titular": "relationshipCode", "relacao com o titular": "relationshipCode",
+    "relação": "relationshipCode", "relacao": "relationshipCode", "nome": "firstName",
+    "apelido": "lastName", "data de nascimento": "dateOfBirth", "sexo": "sexCode",
+    "referência externa": "externalReference", "referencia externa": "externalReference",
+}
 # Common ETL "looks like a null but isn't really empty" placeholders that
 # spreadsheet exports/manual entry tend to leave behind - OD-004 asks that
 # these be caught explicitly, not silently treated as valid text values.
@@ -94,6 +97,7 @@ def _rows_from_xlsx(content: bytes) -> list[dict[str, str]]:
     rows_iter = sheet.iter_rows(values_only=True)
     try:
         header = [str(cell).strip() if cell is not None else "" for cell in next(rows_iter)]
+        header = [_HEADERS_PT.get(name.casefold(), name) for name in header]
     except StopIteration:
         return []
 
@@ -115,22 +119,13 @@ def _rows_from_xlsx(content: bytes) -> list[dict[str, str]]:
     return rows
 
 
-def _rows_from_csv(content: bytes) -> list[dict[str, str]]:
-    try:
-        reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")))
-        return [dict(raw) for raw in reader]
-    except (UnicodeDecodeError, csv.Error) as exc:
-        raise ImportFileParseError(str(exc)) from exc
-
-
 def _parse_uploaded_rows(*, filename: str, content: bytes) -> list[dict[str, str]]:
-    """OD-004: Excel (`.xlsx`/`.xlsm`) is the preferred format; `.csv` is
-    kept as a fallback. Both produce the same `dict[columnName, value]`
-    shape so `_validate_row` never needs to know which format was used."""
+    """Accept only the published Excel template; Portuguese headers map to the
+    canonical field names used by validation."""
     lowered = (filename or "").lower()
     if lowered.endswith(_XLSX_EXTENSIONS):
         return _rows_from_xlsx(content)
-    return _rows_from_csv(content)
+    raise ImportFileParseError("Formato não suportado. Carregue o modelo Excel .xlsx.")
 
 
 def _parse_date(raw: str) -> tuple[object | None, str | None]:
