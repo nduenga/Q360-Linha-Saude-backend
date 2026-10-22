@@ -1,8 +1,6 @@
 from django.urls import path
 
 from apps.platform_admin.interfaces.parameter_views import (
-    PlatformReferenceTableImportPreviewView,
-    PlatformReferenceTableImportTemplateView,
     PlatformFormulaEngineView,
     PlatformParameterApproveView,
     PlatformParameterDetailView,
@@ -12,6 +10,8 @@ from apps.platform_admin.interfaces.parameter_views import (
     PlatformParameterVersionsView,
     PlatformReferenceTableApproveView,
     PlatformReferenceTableDetailView,
+    PlatformReferenceTableImportPreviewView,
+    PlatformReferenceTableImportTemplateView,
     PlatformReferenceTableListView,
     PlatformReferenceTableRejectView,
     PlatformReferenceTableVersionsView,
@@ -36,8 +36,6 @@ from apps.platform_admin.interfaces.views import (
 )
 
 urlpatterns = [
-    path("platform/reference-tables/import-template", PlatformReferenceTableImportTemplateView.as_view(), name="platform-reference-table-import-template"),
-    path("platform/reference-tables/import-preview", PlatformReferenceTableImportPreviewView.as_view(), name="platform-reference-table-import-preview"),
     path("platform/auth/login", PlatformLoginView.as_view(), name="platform-login"),
     path("platform/me", PlatformMeView.as_view(), name="platform-me"),
     path("platform/me/password", PlatformChangePasswordView.as_view(), name="platform-change-password"),
@@ -52,6 +50,13 @@ urlpatterns = [
     path("platform/audit", PlatformAuditView.as_view(), name="platform-audit"),
     path("platform/formula-engine", PlatformFormulaEngineView.as_view(), name="platform-formula-engine"),
     path("platform/reference-tables", PlatformReferenceTableListView.as_view(), name="platform-reference-tables"),
+    # Estes dois têm de vir antes de <str:code>: senão "import-preview" e
+    # "import-template" são apanhados como se fossem o código de uma tabela,
+    # e o pedido falha com 405 (a view de detalhe só tem GET).
+    path("platform/reference-tables/import-preview", PlatformReferenceTableImportPreviewView.as_view(),
+         name="platform-reference-table-import-preview"),
+    path("platform/reference-tables/import-template", PlatformReferenceTableImportTemplateView.as_view(),
+         name="platform-reference-table-import-template"),
     path("platform/reference-tables/<str:code>", PlatformReferenceTableDetailView.as_view(),
          name="platform-reference-table-detail"),
     path("platform/reference-tables/<str:code>/versions", PlatformReferenceTableVersionsView.as_view(),

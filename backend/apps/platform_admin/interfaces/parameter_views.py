@@ -5,12 +5,14 @@ alteração é uma versão proposta por uma conta da plataforma e aprovada por
 outra; a versão em vigor é a publicada mais recente cuja vigência começou."""
 from __future__ import annotations
 
-from io import BytesIO
+import io
 
-from django.http import HttpResponse
-from rest_framework.parsers import MultiPartParser
+from django.http import FileResponse
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from rest_framework import serializers, status
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -19,6 +21,8 @@ from apps.foundation.application import platform_reference_service as reference_
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.platform_admin.application.audit_service import record_platform_audit
 from apps.platform_admin.interfaces.permissions import IsPlatformAdmin
+
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 class PlatformParameterProposalSerializer(serializers.Serializer):
@@ -213,56 +217,55 @@ class PlatformReferenceTableListView(APIView):
         return Response(created, status=status.HTTP_201_CREATED)
 
 
-class PlatformReferenceTableImportTemplateView(APIView):
-    permission_classes = [IsPlatformAdmin]
+class ReferenceTableImportSerializer(serializers.Serializer):
+    file = serializers.FileField(help_text="Excel .xlsx com os cabeçalhos na primeira linha (máx. 10 MB)")
 
-    def get(self, request):
-        from openpyxl import Workbook
 
-        workbook = Workbook()
-        sheet = workbook.active
-        sheet.title = "Tabela de referência"
-        sheet.append(["Código", "Valor"])
-        sheet.append(["LUANDA", 1])
-        instructions = workbook.create_sheet("Instruções")
-        instructions.append(["Campo", "Formato e valores permitidos"])
-        instructions.append(["Código", "Texto único por linha; pode ser usado como coluna-chave."])
-        instructions.append(["Valor", "Texto ou número. Acrescente colunas próprias quando necessário."])
-        out = BytesIO()
-        workbook.save(out)
-        response = HttpResponse(out.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        response["Content-Disposition"] = 'attachment; filename="modelo-tabela-referencia.xlsx"'
-        return response
+_IMPORT_PREVIEW = inline_serializer("ParsedReferenceTableWorkbook", fields={
+    "fileName": serializers.CharField(),
+    "headers": serializers.ListField(child=serializers.CharField()),
+    "rows": serializers.ListField(child=serializers.ListField(child=serializers.CharField())),
+    "truncated": serializers.BooleanField(),
+})
 
 
 class PlatformReferenceTableImportPreviewView(APIView):
+    """Lê um .xlsx enviado pelo browser e devolve cabeçalhos/linhas em
+    texto, para o formulário de "Propor tabela" pré-preencher a
+    pré-visualização e o payload da proposta — não grava nada."""
+
     permission_classes = [IsPlatformAdmin]
     parser_classes = [MultiPartParser]
 
+    @extend_schema(operation_id="postPlatformReferenceTableImportPreview", tags=["Platform"],
+                   summary="Pré-validar um Excel de tabela de referência",
+                   request={"multipart/form-data": ReferenceTableImportSerializer},
+                   responses={200: _IMPORT_PREVIEW})
     def post(self, request):
-        uploaded = request.FILES.get("file")
-        if uploaded is None or not uploaded.name.lower().endswith(".xlsx"):
-            return Response({"detail": "Carregue um ficheiro Excel .xlsx."}, status=400)
-        if uploaded.size > 10 * 1024 * 1024:
-            return Response({"detail": "O ficheiro Excel não pode exceder 10 MB."}, status=400)
-        from openpyxl import load_workbook
+        body = ReferenceTableImportSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        upload = body.validated_data["file"]
+        if upload.size > reference_service.MAX_WORKBOOK_BYTES:
+            return Response(
+                {"detail": f"O ficheiro excede {reference_service.MAX_WORKBOOK_BYTES // (1024 * 1024)} MB."},
+                status=400,
+            )
+        parsed = reference_service.parse_workbook_preview(upload.read())
+        return Response({**parsed, "fileName": upload.name})
 
-        try:
-            sheet = load_workbook(uploaded, read_only=True, data_only=True).worksheets[0]
-            iterator = iter(sheet.iter_rows(values_only=True))
-            first = next(iterator, ())
-            headers = [str(value or "").strip() for value in first]
-            data = []
-            for row in iterator:
-                if any(value not in (None, "") for value in row):
-                    data.append(["" if value is None else str(value).strip() for value in row[:len(headers)]])
-                    if len(data) >= 5001:
-                        break
-        except Exception:
-            return Response({"detail": "Não foi possível ler o ficheiro Excel. Verifique se está válido."}, status=400)
-        if not headers or not any(headers) or not data:
-            return Response({"detail": "O Excel tem de conter cabeçalhos e pelo menos uma linha de dados."}, status=400)
-        return Response({"fileName": uploaded.name, "headers": headers, "rows": data[:5000], "truncated": len(data) > 5000})
+
+class PlatformReferenceTableImportTemplateView(APIView):
+    """Descarregar um .xlsx de exemplo com os cabeçalhos esperados."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    @extend_schema(operation_id="getPlatformReferenceTableImportTemplate", tags=["Platform"],
+                   summary="Descarregar o Excel modelo para importar uma tabela de referência",
+                   responses={(200, XLSX): OpenApiTypes.BINARY})
+    def get(self, request):
+        content = reference_service.build_import_template()
+        return FileResponse(io.BytesIO(content), as_attachment=True,
+                             filename="modelo-tabela-referencia.xlsx", content_type=XLSX)
 
 
 class PlatformReferenceTableDetailView(APIView):

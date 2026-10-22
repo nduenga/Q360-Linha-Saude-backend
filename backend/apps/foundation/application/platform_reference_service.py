@@ -31,11 +31,93 @@ from apps.foundation.infrastructure.models import PlatformReferenceTableVersion 
 COLUMN_TYPES = ("NUMBER", "TEXT")
 MAX_COLUMNS = 20
 MAX_ROWS = 5000
+# Mesmo limite usado em actuarial_import.py — sem isto, um ficheiro enorme
+# seria lido inteiro para memória antes do openpyxl sequer começar a parsear.
+MAX_WORKBOOK_BYTES = 10 * 1024 * 1024
 _CODE = re.compile(r"^[a-z][a-z0-9_]{0,59}$")
 
 
 def _invalid(message: str) -> InvalidSystemParameterError:
     return InvalidSystemParameterError(message)
+
+
+def _cell_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (datetime.datetime, datetime.date)):
+        return value.isoformat()
+    return str(value).strip()
+
+
+def parse_workbook_preview(content: bytes) -> dict[str, Any]:
+    """Lê a primeira folha de um .xlsx enviado pelo browser e devolve
+    cabeçalhos + linhas em texto, prontos para a pré-visualização e para a
+    proposta em si (o frontend usa esta resposta directamente como
+    `columns`/`rows`, não só como mostra). Mesma leitura (`openpyxl`,
+    `read_only`, `data_only`) já usada em `claims/application/import_service.py`
+    para não introduzir uma segunda forma de ler Excel no projecto."""
+    import io
+    import zipfile
+
+    from openpyxl import load_workbook
+    from openpyxl.utils.exceptions import InvalidFileException
+
+    try:
+        sheet = load_workbook(io.BytesIO(content), read_only=True, data_only=True).active
+    except (InvalidFileException, OSError, KeyError, zipfile.BadZipFile) as exc:
+        # BadZipFile (um .xlsx é um zip) e KeyError (zip válido mas sem as
+        # partes que um workbook exige) são tão comuns como
+        # InvalidFileException num ficheiro mal escolhido pelo utilizador
+        # (ex.: um .csv ou .xls antigo com a extensão trocada) — sem isto
+        # davam 500 em vez de uma mensagem clara.
+        raise _invalid("O ficheiro não é um .xlsx válido.") from exc
+
+    iterator = sheet.iter_rows(values_only=True)
+    header_row = next(iterator, None)
+    if header_row is None:
+        raise _invalid("O ficheiro está vazio.")
+    headers = [_cell_text(cell) for cell in header_row]
+    headers = headers[: next((i for i in range(len(headers), 0, -1) if headers[i - 1]), 0)]
+    if not headers or any(not h for h in headers):
+        raise _invalid("A primeira linha tem de ter um nome em cada coluna, sem células vazias.")
+    if len(headers) > MAX_COLUMNS:
+        raise _invalid(f"Máximo de {MAX_COLUMNS} colunas (o ficheiro tem {len(headers)}).")
+
+    rows: list[list[str]] = []
+    truncated = False
+    width = len(headers)
+    for raw_row in iterator:
+        if raw_row is None or not any(cell not in (None, "") for cell in raw_row):
+            continue
+        if len(rows) >= MAX_ROWS:
+            truncated = True
+            break
+        cells = [_cell_text(raw_row[i]) if i < len(raw_row) else "" for i in range(width)]
+        rows.append(cells)
+
+    if not rows:
+        raise _invalid("O ficheiro não tem linhas de dados.")
+
+    return {"headers": headers, "rows": rows, "truncated": truncated}
+
+
+def build_import_template() -> bytes:
+    """Gera, em memória, um .xlsx de exemplo para a importação — não há
+    ficheiro estático para manter sincronizado, e a estrutura esperada é
+    sempre a mesma (cabeçalhos na primeira linha, uma coluna-chave)."""
+    import io
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Tabela de referência"
+    sheet.append(["codigo", "nome", "fator"])
+    sheet.append(["LUA", "Luanda", 1.10])
+    sheet.append(["BEN", "Benguela", 1.00])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 def validate_table(*, code: str, name: str, key_column: str, columns: Any, rows: Any) -> tuple[list[dict], list[dict]]:
