@@ -1,4 +1,4 @@
-"""Importação de sinistros e de prémios (R2), CSV ou XLSX.
+"""Importação de sinistros e de prémios (R2), apenas Excel (.xlsx).
 
 O formato exacto dos dados históricos do cliente ainda é uma decisão em
 aberto (OPEN_DECISIONS); este é o formato **documentado** que o simulador
@@ -17,7 +17,6 @@ seguradora (`source=OTHER_INSURER`).
 """
 from __future__ import annotations
 
-import csv
 import datetime
 import io
 from decimal import Decimal, InvalidOperation
@@ -61,7 +60,18 @@ def _rows(filename: str, content: bytes) -> list[dict[str, str]]:
 
         sheet = load_workbook(io.BytesIO(content), read_only=True, data_only=True).active
         iterator = sheet.iter_rows(values_only=True)
-        header = [str(h or "").strip().lower() for h in next(iterator, [])]
+        aliases = {
+            "data de ocorrência": "occurrence_date", "data de ocorrencia": "occurrence_date",
+            "código da cobertura": "benefit_code", "codigo da cobertura": "benefit_code",
+            "valor pago": "paid_amount", "referência do membro": "member_reference",
+            "referencia do membro": "member_reference", "valor provisionado": "provision_amount",
+            "moeda": "currency", "estado": "status", "início do período": "period_start",
+            "inicio do período": "period_start", "inicio do periodo": "period_start",
+            "fim do período": "period_end", "fim do periodo": "period_end",
+            "valor do prémio": "premium_amount", "valor do premio": "premium_amount",
+            "número de segurados": "insured_count", "numero de segurados": "insured_count",
+        }
+        header = [aliases.get(str(h or "").strip().casefold(), str(h or "").strip().lower()) for h in next(iterator, [])]
         out = []
         for row in iterator:
             if not any(v not in (None, "") for v in row):
@@ -69,31 +79,30 @@ def _rows(filename: str, content: bytes) -> list[dict[str, str]]:
             out.append({header[i]: ("" if v is None else (v.date().isoformat() if isinstance(v, datetime.datetime) else str(v))).strip()
                         for i, v in enumerate(row) if i < len(header)})
         return out
-    if name.endswith(".csv"):
-        reader = csv.DictReader(io.StringIO(content.decode("utf-8-sig")), delimiter=";" if b";" in content.split(b"\n")[0] else ",")
-        return [{(k or "").strip().lower(): (v or "").strip() for k, v in row.items()} for row in reader if any((v or "").strip() for v in row.values())]
-    raise ClaimsImportError("Tipo de ficheiro não suportado: use .xlsx ou .csv")
+    raise ClaimsImportError("Formato não suportado. Carregue o modelo Excel .xlsx.")
 
 
 def _date(raw: str, field: str) -> datetime.date:
+    field_label = {"occurrence_date": "Data de ocorrência", "period_start": "Início do período", "period_end": "Fim do período"}.get(field, field)
     for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
         try:
             return datetime.datetime.strptime(raw, fmt).date()
         except ValueError:
             continue
-    raise ValueError(f"{field} '{raw}' não é uma data (use AAAA-MM-DD ou DD/MM/AAAA)")
+    raise ValueError(f"{field_label} '{raw}' não é uma data (use AAAA-MM-DD ou DD/MM/AAAA)")
 
 
 def _amount(raw: str, field: str, *, allow_zero: bool = True) -> Decimal:
+    field_label = {"paid_amount": "Valor pago", "provision_amount": "Valor provisionado", "premium_amount": "Valor do prémio"}.get(field, field)
     text = raw.replace(" ", "")
     if "," in text and "." not in text:
         text = text.replace(",", ".")
     try:
         value = Decimal(text)
     except InvalidOperation as exc:
-        raise ValueError(f"{field} '{raw}' não é um número") from exc
+        raise ValueError(f"{field_label} '{raw}' não é um número") from exc
     if not value.is_finite() or value < 0 or (value == 0 and not allow_zero):
-        raise ValueError(f"{field} tem de ser {'>= 0' if allow_zero else '> 0'}")
+        raise ValueError(f"{field_label} tem de ser {'igual ou superior a zero' if allow_zero else 'superior a zero'}")
     return value
 
 
@@ -110,9 +119,13 @@ def import_file(
     rows = _rows(filename, content)
     if not rows:
         raise ClaimsImportError("O ficheiro não tem linhas de dados")
-    missing = [c for c in _REQUIRED[kind] if c not in rows[0]]
+    field_labels = {
+        "occurrence_date": "Data de ocorrência", "benefit_code": "Código da cobertura", "paid_amount": "Valor pago",
+        "period_start": "Início do período", "period_end": "Fim do período", "premium_amount": "Valor do prémio",
+    }
+    missing = [field_labels[c] for c in _REQUIRED[kind] if c not in rows[0]]
     if missing:
-        raise ClaimsImportError(f"Faltam colunas obrigatórias: {missing}")
+        raise ClaimsImportError(f"Faltam campos obrigatórios no Excel: {', '.join(missing)}")
 
     tenant_id = CurrentTenantProvider.require().value
     ensure_market_catalog(tenant_id)
@@ -123,14 +136,15 @@ def import_file(
         try:
             currency = (row.get("currency") or "AOA").upper()
             if currency not in _CURRENCIES:
-                raise ValueError(f"A moeda (currency) tem de ser uma de {list(_CURRENCIES)}")
+                raise ValueError("A moeda tem de ser AOA ou USD")
             if kind == "CLAIMS":
                 code = (row.get("benefit_code") or "").upper()
                 if code not in known_benefits:
-                    raise ValueError(f"benefit_code '{code}' não é uma cobertura da biblioteca")
-                status = (row.get("status") or "PAID").upper()
+                    raise ValueError(f"O código '{code}' não corresponde a uma cobertura disponível")
+                status = (row.get("status") or "PAGO").upper()
+                status = {"PAGO": "PAID", "ABERTO": "OPEN", "REJEITADO": "REJECTED"}.get(status, status)
                 if status not in _STATUSES:
-                    raise ValueError(f"O estado (status) tem de ser um de {list(_STATUSES)}")
+                    raise ValueError("O Estado tem de ser PAGO, ABERTO ou REJEITADO")
                 valid.append(
                     {
                         "occurrence_date": _date(row["occurrence_date"], "occurrence_date"),
@@ -204,25 +218,17 @@ def get_import(import_id) -> ClaimsImport:
 
 IMPORT_FORMATS: dict[str, dict[str, Any]] = {
     "CLAIMS": {
-        "required": ["occurrence_date", "benefit_code", "paid_amount"],
-        "optional": ["member_reference", "provision_amount", "currency", "status"],
-        "example": ["2026-03-31", "HOSPITALIZATION", "150000.00", "PESS-001", "0", "AOA", "PAID"],
+        "fileFormat": ".xlsx",
+        "required": ["Data de ocorrência", "Código da cobertura", "Valor pago"],
+        "optional": ["Referência do membro", "Valor provisionado", "Moeda", "Estado"],
+        "allowedValues": {"Moeda": ["AOA", "USD"], "Estado": ["PAGO", "ABERTO", "REJEITADO"]},
+        "example": ["2026-03-31", "HOSPITALIZATION", "150000,00", "PESS-001", "0", "AOA", "PAGO"],
     },
     "PREMIUMS": {
-        "required": ["period_start", "period_end", "premium_amount"],
-        "optional": ["insured_count", "currency"],
-        "example": ["2026-01-01", "2026-12-31", "1200000.00", "25", "AOA"],
+        "fileFormat": ".xlsx",
+        "required": ["Início do período", "Fim do período", "Valor do prémio"],
+        "optional": ["Número de segurados", "Moeda"],
+        "allowedValues": {"Moeda": ["AOA", "USD"]},
+        "example": ["2026-01-01", "2026-12-31", "1200000,00", "25", "AOA"],
     },
 }
-
-
-def import_template_csv(kind: str) -> str:
-    """CSV com o cabeçalho aceito e uma linha de exemplo (dados fictícios)."""
-    if kind not in IMPORT_FORMATS:
-        raise ClaimsImportError(f"O tipo (kind) tem de ser um de {list(KINDS)}")
-    spec = IMPORT_FORMATS[kind]
-    out = io.StringIO()
-    writer = csv.writer(out)
-    writer.writerow([*spec["required"], *spec["optional"]])
-    writer.writerow(spec["example"])
-    return out.getvalue()

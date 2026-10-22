@@ -10,8 +10,10 @@ from apps.foundation.interfaces.system_parameter_views import (
     SystemParameterRollbackView,
 )
 from apps.foundation.interfaces.views import AuditEventListView, DashboardView, LiveHealthView, MeView, ReadyHealthView
+from apps.foundation.interfaces.import_template_views import ImportTemplateView
 
 urlpatterns = [
+    path("import-templates/<str:kind>", ImportTemplateView.as_view(), name="import-template"),
     # No trailing slash: ART-006 defines the path as exactly `/api/v1/me`.
     path("me", MeView.as_view(), name="me"),
     path("auth/dev-login", DevLoginView.as_view(), name="auth-dev-login"),

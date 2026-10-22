@@ -348,6 +348,17 @@ class ReferenceTableDetail(s.Serializer):
     pendingVersions = ReferenceTableVersion(many=True)
 
 
+class PlatformReferenceTableImportPreviewRequest(s.Serializer):
+    file = s.FileField(help_text="Excel .xlsx com os dados da tabela de referência.")
+
+
+class PlatformReferenceTableImportPreviewResult(s.Serializer):
+    fileName = s.CharField()
+    headers = s.ListField(child=s.CharField())
+    rows = s.ListField(child=s.ListField(child=s.CharField()))
+    truncated = s.BooleanField(help_text="Verdadeiro se o ficheiro ultrapassar 5.000 linhas de dados.")
+
+
 class TemplateSummary(s.Serializer):
     code = s.CharField()
     name = s.CharField()
@@ -478,7 +489,7 @@ class PendingApprovalsCount(s.Serializer):
 
 # ------------------------------------------------------------ benefits/plans
 class BenefitImportRequest(s.Serializer):
-    file = s.FileField(help_text="CSV ou XLSX com as colunas code, name, category, description, status, definition_json.")
+    file = s.FileField(help_text="Excel .xlsx com cabeçalhos em português: Código, Nome, Descrição, Definição (JSON), Categoria.")
     dryRun = s.BooleanField(required=False, default=False)
 
 
@@ -541,7 +552,7 @@ class MarketTemplatesResult(s.Serializer):
 
 
 class MemberImportRequest(s.Serializer):
-    file = s.FileField(help_text="CSV ou XLSX com a população a importar.")
+    file = s.FileField(help_text="Excel .xlsx com cabeçalhos em português e a população a importar.")
     proposerId = s.UUIDField(required=False, help_text="Proponente a que os membros pertencem.")
 
 
@@ -778,7 +789,7 @@ class PolicyCoverage(CoverageResult):
 
 # ----------------------------------------------------------------- claims
 class ClaimsImportRequest(s.Serializer):
-    file = s.FileField(help_text="CSV ou XLSX; colunas por nome (ver descrição).")
+    file = s.FileField(help_text="Excel .xlsx; cabeçalhos em português no modelo de sinistros ou prémios.")
     kind = s.ChoiceField(choices=["CLAIMS", "PREMIUMS"])
     proposerId = s.UUIDField()
     policyId = s.UUIDField(required=False, allow_null=True)

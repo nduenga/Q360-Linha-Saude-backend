@@ -31,6 +31,9 @@ from apps.foundation.infrastructure.models import PlatformReferenceTableVersion 
 COLUMN_TYPES = ("NUMBER", "TEXT")
 MAX_COLUMNS = 20
 MAX_ROWS = 5000
+# Mesmo limite usado em actuarial_import.py — sem isto, um ficheiro enorme
+# seria lido inteiro para memória antes do openpyxl sequer começar a parsear.
+MAX_WORKBOOK_BYTES = 10 * 1024 * 1024
 _CODE = re.compile(r"^[a-z][a-z0-9_]{0,59}$")
 
 

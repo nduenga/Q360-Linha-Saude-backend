@@ -74,6 +74,23 @@ _IMPORT_PREVIEW = inline_serializer("ActuarialImportPreview", fields={
 })
 
 
+class ActuarialAllowedValuesSerializer(serializers.Serializer):
+    region = serializers.ListField(child=serializers.CharField())
+    industry = serializers.ListField(child=serializers.CharField())
+    crossSell = serializers.ListField(child=serializers.CharField())
+    costSharing = serializers.JSONField()
+
+
+ActuarialModelCatalogSerializer = inline_serializer("ActuarialModelCatalog", fields={
+    "configKey": serializers.CharField(),
+    "sections": serializers.ListField(child=serializers.JSONField()),
+    "calculationSettings": serializers.JSONField(),
+    "publishedVersion": serializers.JSONField(allow_null=True),
+    "allowedValues": ActuarialAllowedValuesSerializer(),
+    "import": serializers.JSONField(),
+})
+
+
 class ActuarialModelImportView(_ConfigPermissions, APIView):
     parser_classes = [MultiPartParser]
 
@@ -111,7 +128,8 @@ class ActuarialModelTemplateView(_ConfigPermissions, APIView):
 
 class ActuarialModelCatalogView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="getActuarialModelCatalog", tags=["Configuration"],
-                   summary="Secções editáveis e opções de cálculo do modelo actuarial")
+                   summary="Secções editáveis e opções de cálculo do modelo actuarial",
+                   responses=ActuarialModelCatalogSerializer)
     def get(self, request):
         published = BusinessConfigurationResolver.get(CONFIG_KEY, effective_date=date.today())
         model = published.value_json if published is not None and isinstance(published.value_json, dict) else {}

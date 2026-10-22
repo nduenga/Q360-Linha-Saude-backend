@@ -1,0 +1,23 @@
+PACOTE DE MODELOS DE IMPORTAÇÃO Q360
+
+01 Modelo actuarial de referência SAU/SAG (dados indicativos do projecto).
+02 Exemplo sintético de membros para testes.
+03 Modelo vazio de membros para produção.
+04 Exemplo sintético de 36 meses de sinistros (2023–2025).
+05 Modelo vazio de sinistros para produção.
+06 Exemplo sintético de 36 meses de prémios (2023–2025).
+07 Modelo vazio de prémios para produção.
+08 Exemplo sintético de coberturas complementares.
+09 Modelo vazio de coberturas para produção.
+10 Exemplo de tabela de referência (fatores fictícios).
+11 Modelo vazio de tabela de referência para produção.
+
+UTILIZAÇÃO
+- Modelo actuarial: Administração > Tarifação/Modelo actuarial. A importação cria rascunho; publicação depende de aprovação actuarial.
+- Membros: importar no proponente e confirmar a importação.
+- Sinistros/prémios: Sinistralidade > Importações; para análise de experiência, usar períodos correspondentes.
+- Coberturas: Administração > Produtos/Coberturas > Importar.
+- Tabela de referência: Plataforma > Tabelas de referência; seleccionar coluna-chave e submeter para aprovação.
+
+PRODUÇÃO
+Os ficheiros TESTE/EXEMPLO têm dados inventados: não os carregue num tenant de produção. Os modelos VAZIO_PRODUCAO contêm cabeçalhos e instruções, sem registos de teste; preencha-os com dados reais, autorizados e validados. O modelo actuarial de referência contém pressupostos indicativos, não dados reais nem aprovação actuarial; deve ser calibrado pelo atuário antes de publicação. Este pacote não contém dados reais de pessoas ou seguradoras.

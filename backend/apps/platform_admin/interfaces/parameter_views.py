@@ -10,6 +10,7 @@ import io
 from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, inline_serializer
+
 from rest_framework import serializers, status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
@@ -217,7 +218,7 @@ class PlatformReferenceTableListView(APIView):
 
 
 class ReferenceTableImportSerializer(serializers.Serializer):
-    file = serializers.FileField(help_text="Excel .xlsx com os cabeçalhos na primeira linha")
+    file = serializers.FileField(help_text="Excel .xlsx com os cabeçalhos na primeira linha (máx. 10 MB)")
 
 
 _IMPORT_PREVIEW = inline_serializer("ParsedReferenceTableWorkbook", fields={
@@ -244,6 +245,11 @@ class PlatformReferenceTableImportPreviewView(APIView):
         body = ReferenceTableImportSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         upload = body.validated_data["file"]
+        if upload.size > reference_service.MAX_WORKBOOK_BYTES:
+            return Response(
+                {"detail": f"O ficheiro excede {reference_service.MAX_WORKBOOK_BYTES // (1024 * 1024)} MB."},
+                status=400,
+            )
         parsed = reference_service.parse_workbook_preview(upload.read())
         return Response({**parsed, "fileName": upload.name})
 

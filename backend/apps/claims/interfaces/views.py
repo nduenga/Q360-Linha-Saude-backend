@@ -123,7 +123,7 @@ def _decimal_param(request, name, default):
 @requires_idempotency
 class ClaimsImportListCreateView(APIView):
     """POST (multipart: `file`, `kind`=CLAIMS|PREMIUMS, `proposerId`, optional
-    `policyId`, `source`=INTERNAL|OTHER_INSURER, `dryRun`) imports CSV/XLSX;
+    `policyId`, `source`=INTERNAL|OTHER_INSURER, `dryRun`) imports Excel (.xlsx);
     invalid rows are reported and skipped. GET lists imports and accepts
     optional `proposerId` and `policyId` filters."""
 
@@ -214,19 +214,18 @@ class ClaimsMethodologyView(APIView):
 
 
 class ClaimsImportTemplateView(APIView):
-    """GET /claims/import-template?kind=CLAIMS|PREMIUMS - a CSV with the
-    accepted header and one example row."""
+    """GET /claims/import-template?kind=CLAIMS|PREMIUMS - Portuguese Excel template."""
 
     permission_classes = READ
 
     def get(self, request):
-        from django.http import HttpResponse
-
-        from apps.claims.application import import_service
-
         kind = request.query_params.get("kind", "CLAIMS").upper()
-        response = HttpResponse(import_service.import_template_csv(kind), content_type="text/csv; charset=utf-8")
-        response["Content-Disposition"] = f'attachment; filename="modelo-{kind.lower()}.csv"'
+        from django.http import HttpResponse
+        from apps.foundation.interfaces.import_template_views import build_template, XLSX
+        if kind not in ("CLAIMS", "PREMIUMS"):
+            return Response({"detail": "Use kind=CLAIMS ou kind=PREMIUMS."}, status=400)
+        response = HttpResponse(build_template(kind), content_type=XLSX)
+        response["Content-Disposition"] = f'attachment; filename="modelo-{kind.lower()}.xlsx"'
         return response
 
 

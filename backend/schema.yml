@@ -1106,19 +1106,11 @@ paths:
         - q360.read
       responses:
         '200':
-          description: Sucesso.
-        '401':
           content:
-            application/problem+json:
+            application/json:
               schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
+                $ref: '#/components/schemas/ActuarialModelCatalog'
+          description: ''
   /api/v1/business-config/actuarial-model/import:
     post:
       operationId: importActuarialModelWorkbook
@@ -2590,15 +2582,13 @@ paths:
   /api/v1/claims/import-template:
     get:
       operationId: getClaimsImportTemplate
-      description: 'GET /claims/import-template?kind=CLAIMS|PREMIUMS - a CSV with the
-
-        accepted header and one example row.
+      description: 'GET /claims/import-template?kind=CLAIMS|PREMIUMS - Portuguese Excel template.
 
 
         Requer: scope q360.read, permissão audit:read.
 
 
-        CSV com o cabeçalho aceito e uma linha de exemplo fictícia.'
+        Excel .xlsx com cabeçalhos, exemplo e instruções em português.'
       summary: Obter claims import template
       parameters:
       - in: query
@@ -2642,7 +2632,7 @@ paths:
       operationId: getClaimsImportListCreate
       description: 'POST (multipart: `file`, `kind`=CLAIMS|PREMIUMS, `proposerId`, optional
 
-        `policyId`, `source`=INTERNAL|OTHER_INSURER, `dryRun`) imports CSV/XLSX;
+        `policyId`, `source`=INTERNAL|OTHER_INSURER, `dryRun`) imports Excel (.xlsx);
 
         invalid rows are reported and skipped. GET lists imports and accepts
 
@@ -2690,7 +2680,7 @@ paths:
       operationId: postClaimsImportListCreate
       description: 'POST (multipart: `file`, `kind`=CLAIMS|PREMIUMS, `proposerId`, optional
 
-        `policyId`, `source`=INTERNAL|OTHER_INSURER, `dryRun`) imports CSV/XLSX;
+        `policyId`, `source`=INTERNAL|OTHER_INSURER, `dryRun`) imports Excel (.xlsx);
 
         invalid rows are reported and skipped. GET lists imports and accepts
 
@@ -6589,6 +6579,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatusOk'
           description: Resposta.
+  /api/v1/import-templates/{kind}:
+    get:
+      operationId: getImportTemplate
+      description: 'Requer: scope q360.read.
+
+
+        Modelo Excel .xlsx com cabeçalhos, exemplo e instruções em português. kind: MEMBERS, CLAIMS, PREMIUMS ou
+        BENEFITS.'
+      summary: Obter import template
+      parameters:
+      - in: path
+        name: kind
+        schema:
+          type: string
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/installments:
     get:
       operationId: getInstallmentList
@@ -8823,6 +8859,88 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/reference-tables/import-preview:
+    post:
+      operationId: postPlatformReferenceTableImportPreview
+      summary: Criar platform reference table import preview
+      tags:
+      - Other
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PlatformReferenceTableImportPreviewRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformReferenceTableImportPreviewResult'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+        '422':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Configuração/cálculo impossível (PRICING-CONFIG, PRICING-FAILED).
+  /api/v1/platform/reference-tables/import-template:
+    get:
+      operationId: getPlatformReferenceTableImportTemplate
+      description: Modelo Excel em português para propor uma tabela de referência.
+      summary: Obter platform reference table import template
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/platform/system-parameters:
     get:
       operationId: getPlatformParameterList
@@ -11518,49 +11636,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
-  /api/v1/products/{product_id}/history:
-    get:
-      operationId: getProductHistory
-      summary: Consultar histórico do produto
-      description: Eventos de criação e alteração de nome, descrição e estado, com valores anteriores e novos. Não cria versões de produto; a tarifa e configurações têm históricos próprios.
-      parameters:
-      - in: path
-        name: product_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      - in: query
-        name: page
-        schema: {type: integer, minimum: 0}
-      - in: query
-        name: size
-        schema: {type: integer, minimum: 1, maximum: 200}
-      tags: [Products]
-      security:
-      - oauth2: [q360.read]
-      responses:
-        '200':
-          description: Sucesso.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProductHistoryPage'
-        '401':
-          description: Não autenticado.
-          content:
-            application/problem+json:
-              schema: {$ref: '#/components/schemas/ProblemDetail'}
-        '403':
-          description: Sem autorização.
-          content:
-            application/problem+json:
-              schema: {$ref: '#/components/schemas/ProblemDetail'}
-        '404':
-          description: Produto não encontrado.
-          content:
-            application/problem+json:
-              schema: {$ref: '#/components/schemas/ProblemDetail'}
   /api/v1/products/{product_id}:
     get:
       operationId: getProductDetail
@@ -11568,7 +11643,9 @@ paths:
 
         `updateProduct` (PUT). `DELETE` is a pragmatic V1 addition, not in
 
-        ART-006 - deletion returns 409 when the product is referenced by quotes, pricing or eligibility records (see product_service.delete_product).
+        ART-006; it returns 409 when plans are already referenced by quotes,
+
+        pricing runs or eligibility evaluations.
 
 
         Requer: scope q360.read.'
@@ -11616,7 +11693,9 @@ paths:
 
         `updateProduct` (PUT). `DELETE` is a pragmatic V1 addition, not in
 
-        ART-006 - deletion returns 409 when the product is referenced by quotes, pricing or eligibility records (see product_service.delete_product).
+        ART-006; it returns 409 when plans are already referenced by quotes,
+
+        pricing runs or eligibility evaluations.
 
 
         Requer: scope q360.write, permissão product:manage.'
@@ -11688,7 +11767,9 @@ paths:
 
         `updateProduct` (PUT). `DELETE` is a pragmatic V1 addition, not in
 
-        ART-006 - deletion returns 409 when the product is referenced by quotes, pricing or eligibility records (see product_service.delete_product).
+        ART-006; it returns 409 when plans are already referenced by quotes,
+
+        pricing runs or eligibility evaluations.
 
 
         Requer: scope q360.write, permissão product:manage.'
@@ -11738,6 +11819,74 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/products/{product_id}/history:
+    get:
+      operationId: getProductHistory
+      description: 'Read-only change history for product identity/status fields.
+
+
+        ProductVersion was retired. This view exposes the existing audit trail
+
+        with before/after values for product edits; tariff/configuration versions
+
+        remain available through their dedicated configuration history routes.
+
+
+        Requer: scope q360.read.
+
+
+        Histórico de nome, descrição e estado do produto a partir de eventos de auditoria; não representa versões
+        de tarifa ou configurações.'
+      summary: Listar product history
+      parameters:
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Página (começa em 0).
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: size
+        schema:
+          type: integer
+        description: Itens por página (máx. 200).
+      tags:
+      - Products
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductHistoryEntry'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/products/{product_id}/pricing-setup:
     get:
       operationId: getProductPricingSetup
@@ -16827,6 +16976,27 @@ components:
       description: '* `submit` - submit
 
         * `retire` - retire'
+    ActuarialAllowedValues:
+      type: object
+      properties:
+        region:
+          type: array
+          items:
+            type: string
+        industry:
+          type: array
+          items:
+            type: string
+        crossSell:
+          type: array
+          items:
+            type: string
+        costSharing: {}
+      required:
+      - costSharing
+      - crossSell
+      - industry
+      - region
     ActuarialImport:
       type: object
       properties:
@@ -16863,6 +17033,29 @@ components:
       - keptFromPublished
       - summary
       - valid
+    ActuarialModelCatalog:
+      type: object
+      properties:
+        configKey:
+          type: string
+        sections:
+          type: array
+          items: {}
+        calculationSettings: {}
+        publishedVersion:
+          oneOf:
+          - {}
+          - type: 'null'
+        allowedValues:
+          $ref: '#/components/schemas/ActuarialAllowedValues'
+        import: {}
+      required:
+      - allowedValues
+      - calculationSettings
+      - configKey
+      - import
+      - publishedVersion
+      - sections
     AddPlanBenefitRequest:
       type: object
       properties:
@@ -17148,7 +17341,7 @@ components:
         file:
           type: string
           format: uri
-          description: CSV ou XLSX com as colunas code, name, category, description, status, definition_json.
+          description: 'Excel .xlsx com cabeçalhos em português: Código, Nome, Descrição, Definição (JSON), Categoria.'
         dryRun:
           type: boolean
           default: false
@@ -17626,7 +17819,7 @@ components:
         file:
           type: string
           format: uri
-          description: CSV ou XLSX; colunas por nome (ver descrição).
+          description: Excel .xlsx; cabeçalhos em português no modelo de sinistros ou prémios.
         kind:
           $ref: '#/components/schemas/ClaimsImportRequestKindEnum'
         proposerId:
@@ -20084,7 +20277,7 @@ components:
         file:
           type: string
           format: uri
-          description: CSV ou XLSX com a população a importar.
+          description: Excel .xlsx com cabeçalhos em português e a população a importar.
         proposerId:
           type: string
           format: uuid
@@ -21113,6 +21306,38 @@ components:
       - status
       - value
       - versionNo
+    PlatformReferenceTableImportPreviewRequest:
+      type: object
+      properties:
+        file:
+          type: string
+          format: uri
+          description: Excel .xlsx com os dados da tabela de referência.
+      required:
+      - file
+    PlatformReferenceTableImportPreviewResult:
+      type: object
+      properties:
+        fileName:
+          type: string
+        headers:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+        truncated:
+          type: boolean
+          description: Verdadeiro se o ficheiro ultrapassar 5.000 linhas de dados.
+      required:
+      - fileName
+      - headers
+      - rows
+      - truncated
     PlatformVersionStatusEnum:
       enum:
       - PENDING_APPROVAL
@@ -21920,21 +22145,55 @@ components:
         proposers:
           type: array
           items:
-            type: object
-            properties:
-              name: {type: string}
-              type: {type: string}
-              nif: {type: [string, 'null']}
-              registrationNumber: {type: [string, 'null']}
-              email: {type: [string, 'null']}
-              phone: {type: [string, 'null']}
-              address: {type: [string, 'null']}
-              province: {type: [string, 'null']}
-              municipality: {type: [string, 'null']}
-            required: [name, type, nif, registrationNumber, email, phone, address, province, municipality]
+            $ref: '#/components/schemas/PortalProfileProposer'
       required:
       - accountEmail
       - proposers
+    PortalProfileProposer:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        nif:
+          type:
+          - string
+          - 'null'
+        registrationNumber:
+          type:
+          - string
+          - 'null'
+        email:
+          type:
+          - string
+          - 'null'
+        phone:
+          type:
+          - string
+          - 'null'
+        address:
+          type:
+          - string
+          - 'null'
+        province:
+          type:
+          - string
+          - 'null'
+        municipality:
+          type:
+          - string
+          - 'null'
+      required:
+      - address
+      - email
+      - municipality
+      - name
+      - nif
+      - phone
+      - province
+      - registrationNumber
+      - type
     PortalQuote:
       type: object
       properties:
@@ -22801,25 +23060,6 @@ components:
       - correlationId
       - status
       - title
-    ProductHistoryEntry:
-      type: object
-      properties:
-        action: {type: string}
-        actorType: {type: string}
-        changedBy: {type: [string, 'null']}
-        occurredAt: {type: string, format: date-time}
-        rowVersion: {type: [integer, 'null']}
-        snapshot: {type: [object, 'null'], additionalProperties: true}
-        changes: {type: [object, 'null'], additionalProperties: true}
-      required: [action, actorType, changedBy, occurredAt, rowVersion, snapshot, changes]
-    ProductHistoryPage:
-      type: object
-      properties:
-        items:
-          type: array
-          items: {$ref: '#/components/schemas/ProductHistoryEntry'}
-        page: {$ref: '#/components/schemas/PageMeta'}
-      required: [items, page]
     Product:
       type: object
       properties:
@@ -22865,6 +23105,40 @@ components:
       required:
       - code
       - name
+    ProductHistoryEntry:
+      type: object
+      properties:
+        action:
+          type: string
+        actorType:
+          type: string
+        changedBy:
+          type:
+          - string
+          - 'null'
+        occurredAt:
+          type: string
+          format: date-time
+        rowVersion:
+          type:
+          - integer
+          - 'null'
+        snapshot:
+          oneOf:
+          - {}
+          - type: 'null'
+        changes:
+          oneOf:
+          - {}
+          - type: 'null'
+      required:
+      - action
+      - actorType
+      - changedBy
+      - changes
+      - occurredAt
+      - rowVersion
+      - snapshot
     ProductPage:
       type: object
       description: Página de ProductSerializer.
@@ -23402,12 +23676,10 @@ components:
           type:
           - string
           - 'null'
-          maxLength: 100
         municipality:
           type:
           - string
           - 'null'
-          maxLength: 100
         attributes: {}
         status:
           $ref: '#/components/schemas/PlanStatusEnum'
@@ -23421,11 +23693,11 @@ components:
       - email
       - externalReference
       - id
+      - municipality
       - nif
       - phone
-      - province
-      - municipality
       - proposerType
+      - province
       - registrationNumber
       - rowVersion
       - status
