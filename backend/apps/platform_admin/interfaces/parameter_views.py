@@ -5,7 +5,13 @@ alteração é uma versão proposta por uma conta da plataforma e aprovada por
 outra; a versão em vigor é a publicada mais recente cuja vigência começou."""
 from __future__ import annotations
 
+import io
+
+from django.http import FileResponse
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers, status
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -14,6 +20,8 @@ from apps.foundation.application import platform_reference_service as reference_
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.platform_admin.application.audit_service import record_platform_audit
 from apps.platform_admin.interfaces.permissions import IsPlatformAdmin
+
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 class PlatformParameterProposalSerializer(serializers.Serializer):
@@ -206,6 +214,52 @@ class PlatformReferenceTableListView(APIView):
         )
         _table_audit(request, "platform_reference_table.proposed", created)
         return Response(created, status=status.HTTP_201_CREATED)
+
+
+class ReferenceTableImportSerializer(serializers.Serializer):
+    file = serializers.FileField(help_text="Excel .xlsx com os cabeçalhos na primeira linha")
+
+
+_IMPORT_PREVIEW = inline_serializer("ParsedReferenceTableWorkbook", fields={
+    "fileName": serializers.CharField(),
+    "headers": serializers.ListField(child=serializers.CharField()),
+    "rows": serializers.ListField(child=serializers.ListField(child=serializers.CharField())),
+    "truncated": serializers.BooleanField(),
+})
+
+
+class PlatformReferenceTableImportPreviewView(APIView):
+    """Lê um .xlsx enviado pelo browser e devolve cabeçalhos/linhas em
+    texto, para o formulário de "Propor tabela" pré-preencher a
+    pré-visualização e o payload da proposta — não grava nada."""
+
+    permission_classes = [IsPlatformAdmin]
+    parser_classes = [MultiPartParser]
+
+    @extend_schema(operation_id="postPlatformReferenceTableImportPreview", tags=["Platform"],
+                   summary="Pré-validar um Excel de tabela de referência",
+                   request={"multipart/form-data": ReferenceTableImportSerializer},
+                   responses={200: _IMPORT_PREVIEW})
+    def post(self, request):
+        body = ReferenceTableImportSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        upload = body.validated_data["file"]
+        parsed = reference_service.parse_workbook_preview(upload.read())
+        return Response({**parsed, "fileName": upload.name})
+
+
+class PlatformReferenceTableImportTemplateView(APIView):
+    """Descarregar um .xlsx de exemplo com os cabeçalhos esperados."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    @extend_schema(operation_id="getPlatformReferenceTableImportTemplate", tags=["Platform"],
+                   summary="Descarregar o Excel modelo para importar uma tabela de referência",
+                   responses={(200, XLSX): OpenApiTypes.BINARY})
+    def get(self, request):
+        content = reference_service.build_import_template()
+        return FileResponse(io.BytesIO(content), as_attachment=True,
+                             filename="modelo-tabela-referencia.xlsx", content_type=XLSX)
 
 
 class PlatformReferenceTableDetailView(APIView):
