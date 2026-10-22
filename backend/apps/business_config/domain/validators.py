@@ -130,6 +130,11 @@ def _check_rules(key: str, value: dict[str, Any]) -> None:
                 raise InvalidConfiguration("age_limits: a idade máxima de renovação não pode ser inferior à de entrada")
     if key == "rules.custom":
         validate_rules(value)
+    if key == "policy.endorsements":
+        if value.get("minimum_premium") not in (None, "") and _decimal(value["minimum_premium"], "endorsements.minimum_premium") < 0:
+            raise InvalidConfiguration("endorsements.minimum_premium: não pode ser negativo")
+        if value.get("acceptance_days") == 0:
+            raise InvalidConfiguration("endorsements.acceptance_days: indique pelo menos 1 dia")
     if key == "pricing.fractionation":
         frequencies = [row.get("frequency") for row in value.get("installments") or []]
         if len(frequencies) != len(set(frequencies)):

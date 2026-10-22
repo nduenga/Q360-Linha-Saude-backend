@@ -33,6 +33,7 @@ CONFIG_CATALOG=[
 {"key":"pricing.experience_rating","category":"PRICING","label":"Experience rating","priority":"HIGH","value_type":"object"},
 {"key":"quote.scenario_comparison","category":"PRICING","label":"Comparação de cenários","priority":"MEDIUM","value_type":"object"},
 {"key":"claims.projections","category":"CLAIMS","label":"Projeções de sinistralidade","priority":"MEDIUM","value_type":"object"},
+{"key":"policy.endorsements","category":"POLICY","label":"Endossos de inclusão (pro-rata, recém-nascidos, aceitação)","priority":"HIGH","value_type":"object"},
 ]
 CATALOG_BY_KEY={x["key"]:x for x in CONFIG_CATALOG}
 
@@ -71,6 +72,7 @@ _AREA_BY_CATEGORY = {
     "APPROVALS": "APPROVALS",
     "SERVICE": "PARAMETERS",
     "CLAIMS": "PARAMETERS",
+    "POLICY": "RULES",
 }
 
 

@@ -80,6 +80,9 @@ class Quote(TenantScopedModel):
     quote_type = models.CharField(max_length=20, default="NEW")
     source_policy_id = models.UUIDField(null=True, blank=True)
     renewal_json = models.JSONField(default=dict)
+    # Endosso (quote_type=ENDORSEMENT): data de inclusão, cálculo pro-rata
+    # congelado na submissão e prazo de aceitação do cliente.
+    endorsement_json = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     row_version = models.BigIntegerField(default=0)
@@ -112,6 +115,12 @@ class Quote(TenantScopedModel):
         Depois de submetida o prémio fica congelado: vale o dia do último
         cálculo, para documentos, emissão e reavaliações baterem com ele.
         (A cotação não tem data de efeito; a validade conta da criação.)"""
+        if self.quote_type == "ENDORSEMENT":
+            # Endosso: tarifa, idades e regras da data de inclusão, sempre
+            # (decisão de 2026-10-22: tarifa em vigor na data de inclusão).
+            inclusion = (self.endorsement_json or {}).get("inclusionDate")
+            if inclusion:
+                return datetime.date.fromisoformat(inclusion)
         if self.status in ("DRAFT", "READY") or self.latest_pricing_run_id is None:
             return pricing_today()
         return self.latest_pricing_run.effective_date

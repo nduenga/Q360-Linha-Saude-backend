@@ -28,6 +28,17 @@ Empresa e apagaria a da Ana se partilhassem o endereço.
 
 - **Taxas legais (2026-10-15):** o imposto do selo e a taxa ARSEG são configurados pelo fornecedor em `/platform/system-parameters` (versão proposta por uma conta da plataforma e aprovada por outra, com vigência); os tenants só as consultam. Valores iniciais: selo 0 %, ARSEG 1 % (do modelo actuarial).
 
+- **Endosso de inclusão (2026-10-22):**
+  - tarifa e idades da data de inclusão, que é indicada antes de calcular;
+  - pro-rata pelos dias reais do período da apólice (366 num ano bissexto), com as opções de 366, 365 ou 360 fixos;
+  - cobrança repartida pelas prestações que ainda vão vencer, com o encargo de fracionamento da periodicidade (ligado por omissão; configurável);
+  - prémio mínimo do endosso configurável;
+  - nenhuma data de inclusão no passado;
+  - recém-nascidos com inclusão automática até X dias após o nascimento (configurável; 0 = desligado);
+  - prazo de aceitação do cliente configurável (30 dias por omissão), nunca depois da data de inclusão.
+
+  Tudo em `policy.endorsements`. A expiração diária das propostas corre com `manage.py expire_endorsement_offers`.
+
 ## Em aberto
 
 | Tema | Situação |

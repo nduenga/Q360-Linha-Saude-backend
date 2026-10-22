@@ -1,6 +1,13 @@
 from django.urls import path
 
 from apps.policy.interfaces.coverage_views import CoverageLookupView, PolicyCoverageView
+from apps.policy.interfaces.endorsement_views import (
+    PolicyEndorsementListView,
+    PolicyInclusionView,
+    QuoteEndorsementDocumentView,
+    QuoteEndorsementResponseView,
+    QuoteEndorsementView,
+)
 from apps.policy.interfaces.member_document_views import (
     MemberDocumentDownloadView,
     MemberDocumentListCreateView,
@@ -35,6 +42,13 @@ urlpatterns = [
     path("policies", PolicyListView.as_view(), name="policy-list"),
     path("policies/<uuid:policy_id>", PolicyDetailView.as_view(), name="policy-detail"),
     path("policies/<uuid:policy_id>/members", PolicyMemberListView.as_view(), name="policy-member-list"),
+    path("policies/<uuid:policy_id>/endorsements", PolicyEndorsementListView.as_view(), name="policy-endorsements"),
+    path("policies/<uuid:policy_id>/endorsements/inclusions", PolicyInclusionView.as_view(), name="policy-inclusion"),
+    path("quotes/<uuid:quote_id>/endorsement", QuoteEndorsementView.as_view(), name="quote-endorsement"),
+    path("quotes/<uuid:quote_id>/endorsement/response", QuoteEndorsementResponseView.as_view(),
+         name="quote-endorsement-response"),
+    path("quotes/<uuid:quote_id>/endorsement/document", QuoteEndorsementDocumentView.as_view(),
+         name="quote-endorsement-document"),
     path("policies/<uuid:policy_id>/coverage", PolicyCoverageView.as_view(), name="policy-coverage"),
     path("policies/<uuid:policy_id>/signature", PolicySignatureView.as_view(), name="policy-signature"),
     path(

@@ -4197,6 +4197,143 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/customer-portal/endorsements:
+    get:
+      operationId: getCustomerPortalEndorsementList
+      description: Propostas de endosso de inclusão à espera da resposta do cliente.
+      summary: Listar customer portal endorsement list
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EndorsementState'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/customer-portal/endorsements/{quote_id}/document:
+    get:
+      operationId: getCustomerPortalEndorsementDocument
+      description: PDF da proposta de endosso (ou da ata adicional) do próprio cliente.
+      summary: Obter customer portal endorsement document
+      parameters:
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/customer-portal/endorsements/{quote_id}/response:
+    post:
+      operationId: postCustomerPortalEndorsementResponse
+      description: O cliente aceita (o endosso aplica-se à apólice) ou recusa a proposta.
+      summary: Criar customer portal endorsement response
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndorsementClientResponse'
+        required: true
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndorsementState'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/customer-portal/me:
     get:
       operationId: getCustomerPortalMe
@@ -10247,6 +10384,118 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/policies/{policy_id}/endorsements:
+    get:
+      operationId: getPolicyEndorsementList
+      description: 'Requer: scope q360.read.'
+      summary: Listar policy endorsement list
+      parameters:
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyEndorsements'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/policies/{policy_id}/endorsements/inclusions:
+    post:
+      operationId: postPolicyInclusion
+      description: 'Requer: scope q360.write, permissão quote:create.
+
+
+        Cria a cotação de endosso (ENDORSEMENT) ligada à apólice ativa, com a data de inclusão como data de referência
+        do cálculo, e calcula logo o prémio anual das pessoas indicadas.'
+      summary: Criar policy inclusion
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndorsementInclusionRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndorsementState'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/policies/{policy_id}/installments:
     get:
       operationId: getPolicyInstallmentList
@@ -13320,6 +13569,251 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Quote'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/quotes/{quote_id}/endorsement:
+    get:
+      operationId: getQuoteEndorsement
+      description: 'Requer: scope q360.read.'
+      summary: Obter quote endorsement
+      parameters:
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndorsementState'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    put:
+      operationId: putQuoteEndorsement
+      description: 'Requer: scope q360.write, permissão quote:edit.
+
+
+        Só antes de submeter. Reavalia a elegibilidade e recalcula na nova data.'
+      summary: Substituir quote endorsement
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndorsementDateRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndorsementState'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/quotes/{quote_id}/endorsement/document:
+    get:
+      operationId: getQuoteEndorsementDocument
+      description: '`GET /quotes/{quoteId}/endorsement/document?fileType=pdf|html|docx` —
+
+        proposta de endosso (antes da aceitação) ou ata adicional (depois).
+
+
+        Requer: scope q360.read.
+
+
+        Proposta de endosso; depois de aplicado, ata adicional.'
+      summary: Obter quote endorsement document
+      parameters:
+      - in: query
+        name: fileType
+        schema:
+          type: string
+        description: pdf (por omissão), html ou docx.
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/quotes/{quote_id}/endorsement/response:
+    post:
+      operationId: postQuoteEndorsementResponse
+      description: 'O GTE regista a resposta do cliente (aceitação aplica o endosso à apólice).
+
+
+        Requer: scope q360.approve, permissão quote:approve.
+
+
+        Resposta do cliente registada pelo GTE. ACCEPT aplica o endosso (pessoas, carências, prestações, endosso
+        ADD_MEMBER); REFUSE cancela.'
+      summary: Criar quote endorsement response
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndorsementClientResponse'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndorsementState'
           description: Sucesso.
         '400':
           content:
@@ -18155,6 +18649,7 @@ components:
       - pricing.experience_rating
       - quote.scenario_comparison
       - claims.projections
+      - policy.endorsements
       type: string
       description: '* `product.plans` - product.plans
 
@@ -18222,7 +18717,9 @@ components:
 
         * `quote.scenario_comparison` - quote.scenario_comparison
 
-        * `claims.projections` - claims.projections'
+        * `claims.projections` - claims.projections
+
+        * `policy.endorsements` - policy.endorsements'
     ConfigurationChange:
       type: object
       properties:
@@ -19152,6 +19649,248 @@ components:
       - startDate
       - status
       - termMonths
+    EndorsementCalculation:
+      type: object
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        policy:
+          type: object
+          additionalProperties: {}
+          description: id, number, startDate, endDate, paymentFrequency, activeMembers, currentAnnualPremium.
+        inclusionDate:
+          type: string
+          format: date
+        currencyCode:
+          type: string
+        pricingRunId:
+          type: string
+          format: uuid
+        tariffDate:
+          type: string
+          format: date
+          description: Data da tarifa usada (a de inclusão).
+        annualPremium:
+          type: string
+          description: Prémio anual das pessoas novas.
+        days:
+          type: object
+          additionalProperties: {}
+          description: remaining, basis, basisCode (ACTUAL_PERIOD, FIXED_366, FIXED_365, FIXED_360), factor.
+        proRataPremium:
+          type: string
+        minimumPremium:
+          type: string
+        minimumApplied:
+          type: boolean
+        endorsementPremium:
+          type: string
+          description: max(pro-rata, mínimo).
+        fractionation:
+          type: object
+          additionalProperties: {}
+          description: frequency, loading (fração), applied, installments.
+        totalCharged:
+          type: string
+        installments:
+          type: array
+          items:
+            $ref: '#/components/schemas/EndorsementInstallment'
+        newAnnualPremiumReference:
+          type:
+          - string
+          - 'null'
+          description: Prémio anual da apólice com as pessoas novas (referência para a renovação).
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/EndorsementMember'
+        newbornAutoInclusion:
+          type: boolean
+      required:
+      - annualPremium
+      - currencyCode
+      - days
+      - endorsementPremium
+      - fractionation
+      - inclusionDate
+      - installments
+      - members
+      - minimumApplied
+      - minimumPremium
+      - newAnnualPremiumReference
+      - newbornAutoInclusion
+      - policy
+      - pricingRunId
+      - proRataPremium
+      - quoteId
+      - tariffDate
+      - totalCharged
+    EndorsementClientResponse:
+      type: object
+      properties:
+        decision:
+          $ref: '#/components/schemas/EndorsementDecisionEnum'
+        reason:
+          type:
+          - string
+          - 'null'
+          description: Obrigatório ao recusar (mínimo 10 caracteres).
+      required:
+      - decision
+    EndorsementDateRequest:
+      type: object
+      properties:
+        inclusionDate:
+          type: string
+          format: date
+      required:
+      - inclusionDate
+    EndorsementDecisionEnum:
+      enum:
+      - ACCEPT
+      - REFUSE
+      type: string
+      description: '* `ACCEPT` - ACCEPT
+
+        * `REFUSE` - REFUSE'
+    EndorsementInclusionRequest:
+      type: object
+      properties:
+        inclusionDate:
+          type: string
+          format: date
+          description: Data de inclusão = data de referência do cálculo. Nunca no passado; dentro do período da
+            apólice.
+        memberIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Pessoas novas do tomador (podem juntar-se depois em /quotes/{id}/members).
+      required:
+      - inclusionDate
+    EndorsementInstallment:
+      type: object
+      properties:
+        sequence:
+          type: integer
+        dueDate:
+          type: string
+          format: date
+        periodFrom:
+          type: string
+          format: date
+        periodTo:
+          type: string
+          format: date
+        amount:
+          type: string
+      required:
+      - amount
+      - dueDate
+      - periodFrom
+      - periodTo
+      - sequence
+    EndorsementMember:
+      type: object
+      properties:
+        memberId:
+          type: string
+          format: uuid
+        name:
+          type:
+          - string
+          - 'null'
+        relationshipCode:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          type:
+          - string
+          - 'null'
+          format: date
+        ageAtInclusion:
+          type:
+          - integer
+          - 'null'
+        eligibilityDecision:
+          type:
+          - string
+          - 'null'
+        quoteMemberStatus:
+          type: string
+        newborn:
+          type: boolean
+          description: Recém-nascido dentro da janela de inclusão automática.
+      required:
+      - ageAtInclusion
+      - dateOfBirth
+      - eligibilityDecision
+      - memberId
+      - name
+      - newborn
+      - quoteMemberStatus
+      - relationshipCode
+    EndorsementState:
+      type: object
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          description: DRAFT, READY, IN_REVIEW, APPROVED (à espera do cliente), BOUND (aplicado), CANCELLED (recusado),
+            EXPIRED.
+        inclusionDate:
+          type:
+          - string
+          - 'null'
+          format: date
+        policyId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        policyNumber:
+          type:
+          - string
+          - 'null'
+        acceptanceDeadline:
+          type:
+          - string
+          - 'null'
+          format: date
+        clientResponse:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          description: decision, reason, channel (STAFF/PORTAL), at, by.
+        autoApproved:
+          type: boolean
+        appliedEndorsementNo:
+          type:
+          - integer
+          - 'null'
+        calculation:
+          oneOf:
+          - $ref: '#/components/schemas/EndorsementCalculation'
+          - type: 'null'
+          description: Congelado na submissão; antes disso, o cálculo atual.
+      required:
+      - acceptanceDeadline
+      - appliedEndorsementNo
+      - autoApproved
+      - calculation
+      - clientResponse
+      - inclusionDate
+      - policyId
+      - policyNumber
+      - quoteId
+      - status
     EventTypeEnum:
       enum:
       - ACCIDENT
@@ -21607,6 +22346,95 @@ components:
       - memberId
       - name
       - policyStatus
+    PolicyEndorsementItem:
+      type: object
+      properties:
+        endorsementNo:
+          type: integer
+        type:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        createdBy:
+          type: string
+        createdAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        payload:
+          type: object
+          additionalProperties: {}
+      required:
+      - createdAt
+      - createdBy
+      - effectiveDate
+      - endorsementNo
+      - payload
+      - type
+    PolicyEndorsementQuoteItem:
+      type: object
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        quoteNumber:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+        inclusionDate:
+          type:
+          - string
+          - 'null'
+          format: date
+        acceptanceDeadline:
+          type:
+          - string
+          - 'null'
+          format: date
+        totalCharged:
+          type:
+          - string
+          - 'null'
+        createdAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - acceptanceDeadline
+      - createdAt
+      - inclusionDate
+      - quoteId
+      - quoteNumber
+      - status
+      - totalCharged
+    PolicyEndorsements:
+      type: object
+      properties:
+        policyId:
+          type: string
+          format: uuid
+        policyNumber:
+          type:
+          - string
+          - 'null'
+        endorsements:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyEndorsementItem'
+        quotes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyEndorsementQuoteItem'
+      required:
+      - endorsements
+      - policyId
+      - policyNumber
+      - quotes
     PolicyMember:
       type: object
       properties:

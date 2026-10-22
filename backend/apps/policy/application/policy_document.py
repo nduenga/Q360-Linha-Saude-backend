@@ -11,6 +11,7 @@ servido tal e qual; sem ficheiro, gera-se na hora.
 from __future__ import annotations
 
 import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable
 
@@ -359,3 +360,84 @@ def statement_document(policy: Policy, *, kind: str, installment_no: int | None 
     data, content_type, _ = _render(blocks, title, "PDF", _policy_template(policy))
     prefix = "declaracao-cobertura" if kind == "COVERAGE" else "comprovativo-pagamento"
     return data, content_type, f"{prefix}-{_safe(policy.policy_number)}.pdf"
+
+
+# --------------------------------------------------------------- endosso
+ENDORSEMENT_STATUS_TEXT = {
+    "DRAFT": "Em preparação", "READY": "Calculado", "IN_REVIEW": "Em análise pela subscrição",
+    "APPROVED": "Aprovado — a aguardar a resposta do cliente", "BOUND": "Aceite e aplicado à apólice",
+    "CANCELLED": "Recusado / cancelado", "EXPIRED": "Expirado (prazo de aceitação terminado)", "REJECTED": "Rejeitado",
+}
+BASIS_TEXT = {"ACTUAL_PERIOD": "dias reais do período", "FIXED_366": "366 dias", "FIXED_365": "365 dias",
+              "FIXED_360": "360 dias"}
+
+
+def endorsement_blocks(quote) -> tuple[list[tuple], str]:
+    """Proposta de endosso de inclusão (antes da aceitação) ou ata adicional
+    (depois de aplicada): pessoas novas, cálculo pro-rata e prestações."""
+    from apps.policy.application import endorsement_service
+
+    data = endorsement_service.describe(quote)
+    calc = data.get("calculation")
+    if not calc:
+        raise PolicyStateError("O endosso ainda não tem cálculo: calcule o prémio das pessoas novas primeiro")
+    policy = endorsement_service.policy_of(quote)
+    content = _policy_content(policy)
+    holder, plan = content["client"], content["plan"]
+    currency = calc.get("currencyCode") or policy.currency_code or "AOA"
+    applied = data.get("appliedEndorsementNo")
+    title = (f"Ata adicional n.º {applied} — apólice {policy.policy_number}" if applied
+             else f"Proposta de endosso de inclusão — apólice {policy.policy_number}")
+    days = calc["days"]
+    blocks: list[tuple] = _brand_block(content) + [
+        ("title", title),
+        ("kv", [
+            ("Apólice n.º", policy.policy_number or "—"),
+            ("Tomador", holder["name"]),
+            ("Plano", f"{plan['name']} ({plan['product']})"),
+            ("Período da apólice", f"{_day(policy.start_date)} a {_day(policy.end_date)}"),
+            ("Data de inclusão", _day(datetime.date.fromisoformat(calc["inclusionDate"]))),
+            ("Estado", ENDORSEMENT_STATUS_TEXT.get(data["status"], data["status"])),
+            ("Responder até", _day(datetime.date.fromisoformat(data["acceptanceDeadline"])) if data.get("acceptanceDeadline") else "—"),
+        ]),
+        ("heading", "Pessoas a incluir"),
+        ("table", ["Pessoa segura", "Parentesco", "Nascimento", "Idade na inclusão"], [
+            [m["name"] or "—", m["relationshipCode"] or "—",
+             _day(datetime.date.fromisoformat(m["dateOfBirth"])) if m["dateOfBirth"] else "—",
+             str(m["ageAtInclusion"]) if m["ageAtInclusion"] is not None else "—"]
+            for m in calc["members"]
+        ]),
+        ("heading", "Cálculo do prémio"),
+        ("kv", [
+            ("Prémio anual das pessoas a incluir", proposal_content.money(calc["annualPremium"], currency)),
+            ("Dias de cobertura até ao fim da apólice", f"{days['remaining']} de {days['basis']} ({BASIS_TEXT.get(days['basisCode'], days['basisCode'])})"),
+            ("Prémio pro-rata", proposal_content.money(calc["proRataPremium"], currency)),
+            ("Prémio mínimo do endosso", proposal_content.money(calc["minimumPremium"], currency)
+             + (" (aplicado)" if calc["minimumApplied"] else "")),
+            ("Encargo de fracionamento", f"{(Decimal(calc['fractionation']['loading']) * 100).normalize()} %"
+             if calc["fractionation"]["applied"] else "Não aplicado"),
+            ("Total a cobrar", proposal_content.money(calc["totalCharged"], currency)),
+        ]),
+        ("heading", "Prestações do endosso"),
+        ("table", ["N.º", "Vencimento", "Período", "Valor"], [
+            [str(i["sequence"]), _day(datetime.date.fromisoformat(i["dueDate"])),
+             f"{_day(datetime.date.fromisoformat(i['periodFrom']))} a {_day(datetime.date.fromisoformat(i['periodTo']))}",
+             proposal_content.money(i["amount"], currency)]
+            for i in calc["installments"]
+        ]),
+        ("note", "As pessoas incluídas ficam cobertas a partir da data de inclusão, com as carências do plano a contar dessa "
+                 "data. As restantes condições da apólice mantêm-se. Na renovação, todas as pessoas seguras são tarifadas pelo "
+                 "ano completo."),
+    ]
+    if data.get("autoApproved"):
+        blocks.append(("note", "Inclusão automática de recém-nascido, sem questionário clínico."))
+    return blocks, title
+
+
+def endorsement_document(quote, fmt: str = "PDF") -> tuple[bytes, str, str]:
+    from apps.policy.application import endorsement_service
+
+    blocks, title = endorsement_blocks(quote)
+    policy = endorsement_service.policy_of(quote)
+    data, content_type, ext = _render(blocks, title, fmt, _policy_template(policy) if fmt.upper() == "PDF" else None)
+    return data, content_type, f"endosso-{_safe(policy.policy_number)}-{str(quote.id)[:8]}.{ext}"

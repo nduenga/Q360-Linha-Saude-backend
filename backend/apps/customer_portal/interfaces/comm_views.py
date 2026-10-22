@@ -136,3 +136,54 @@ class CustomerPortalPlanCompareView(_PortalView):
         if not policy_number:
             raise ValidationError({"policyNumber": "This query parameter is required."})
         return Response(renewal_service.compare_plans(policy_number))
+
+
+class CustomerPortalEndorsementListView(_PortalView):
+    """Propostas de endosso de inclusão à espera da resposta do cliente."""
+
+    def get(self, request):
+        from apps.customer_portal.application.self_service import _scoped_proposer_ids
+        from apps.policy.application import endorsement_service
+
+        return Response(endorsement_service.offers_for_proposers(_scoped_proposer_ids()))
+
+
+@requires_idempotency
+class CustomerPortalEndorsementResponseView(_PortalView):
+    """O cliente aceita (o endosso aplica-se à apólice) ou recusa a proposta."""
+
+    def post(self, request, quote_id):
+        from apps.customer_portal.application.self_service import _scoped_proposer_ids
+        from apps.policy.application import endorsement_service
+        from apps.policy.application.endorsement_service import EndorsementNotFoundError
+        from apps.quote.infrastructure.models import Quote
+
+        decision = request.data.get("decision")
+        if decision not in ("ACCEPT", "REFUSE"):
+            raise ValidationError({"decision": "Must be ACCEPT or REFUSE."})
+        quote = Quote.objects.filter(id=quote_id, quote_type="ENDORSEMENT", proposer_id__in=_scoped_proposer_ids()).first()
+        if quote is None:
+            raise EndorsementNotFoundError("Proposta de endosso não encontrada")
+        return Response(endorsement_service.respond(
+            quote=quote, decision=decision, reason=request.data.get("reason"), channel="PORTAL", correlation_id=None,
+        ))
+
+
+class CustomerPortalEndorsementDocumentView(_PortalView):
+    """PDF da proposta de endosso (ou da ata adicional) do próprio cliente."""
+
+    def get(self, request, quote_id):
+        from django.http import HttpResponse
+
+        from apps.customer_portal.application.self_service import _scoped_proposer_ids
+        from apps.policy.application import policy_document
+        from apps.policy.application.endorsement_service import EndorsementNotFoundError
+        from apps.quote.infrastructure.models import Quote
+
+        quote = Quote.objects.filter(id=quote_id, quote_type="ENDORSEMENT", proposer_id__in=_scoped_proposer_ids()).first()
+        if quote is None or quote.status in ("DRAFT", "READY", "IN_REVIEW"):
+            raise EndorsementNotFoundError("Proposta de endosso não encontrada")
+        data, content_type, name = policy_document.endorsement_document(quote, "PDF")
+        response = HttpResponse(data, content_type=content_type)
+        response["Content-Disposition"] = f'inline; filename="{name}"'
+        return response

@@ -420,6 +420,10 @@ def add_quote_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str 
             f"memberId {member_id} is {member.status} and cannot be added to a quote. "
             "Ative o membro primeiro antes de o adicionar a cotações."
         )
+    if quote.quote_type == "ENDORSEMENT":
+        from apps.policy.application import endorsement_service
+
+        endorsement_service.assert_member_can_join(quote, member)
 
     evaluation = EvaluateEligibilityUseCase().execute(
         proposer_id=quote.proposer_id,
@@ -974,6 +978,11 @@ def submit_quote(*, quote: Quote, row_version: int, correlation_id: str | None) 
     from apps.quote.application import requirements_service
 
     requirements_service.enforce_requirements(quote)
+    if quote.quote_type == "ENDORSEMENT":
+        # Valida a data de inclusão e congela o cálculo pro-rata.
+        from apps.policy.application import endorsement_service
+
+        endorsement_service.before_submit(quote)
 
     actor = CurrentActorProvider.get()
     actor_id = actor.actor_id if actor else "unknown"
@@ -1006,6 +1015,11 @@ def submit_quote(*, quote: Quote, row_version: int, correlation_id: str | None) 
             "submittedAt": quote.submitted_at.isoformat() if quote.submitted_at else None,
         },
     )
+    if quote.quote_type == "ENDORSEMENT":
+        # Recém-nascidos dentro da janela: aprovação automática.
+        from apps.policy.application import endorsement_service
+
+        quote = endorsement_service.after_submit(quote, correlation_id=correlation_id)
     return quote
 
 
@@ -1179,6 +1193,12 @@ def decide_quote(
         correlation_id=correlation_id,
         payload=outbox_payload,
     )
+    if decision == QuoteDecisionType.APPROVE.value and quote.quote_type == "ENDORSEMENT":
+        # A proposta de endosso segue para o cliente, com prazo de aceitação.
+        from apps.policy.application import endorsement_service
+
+        endorsement_service.after_approval(quote)
+        quote.refresh_from_db()
     return quote
 
 

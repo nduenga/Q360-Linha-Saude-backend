@@ -250,6 +250,7 @@ SPECTACULAR_SETTINGS = {
         "PlatformVersionStatusEnum": ["PENDING_APPROVAL", "PUBLISHED", "REJECTED"],
         "TemplateKindEnum": ["PRODUCT", "ACTUARIAL_MODEL", "FORMULA_SET", "COVERAGE_LIBRARY"],
         "ScopeEnum": ["QUOTE", "MEMBER"],
+        "EndorsementDecisionEnum": ["ACCEPT", "REFUSE"],
     },
     "SCHEMA_PATH_PREFIX": "/api/v1",
     "SECURITY": [{"oauth2": ["q360.read"]}],

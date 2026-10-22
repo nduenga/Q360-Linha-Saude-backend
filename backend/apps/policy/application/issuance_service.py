@@ -133,6 +133,11 @@ def issue_policy(
     row_version: int,
     correlation_id: str | None,
 ) -> Policy:
+    if quote.quote_type == "ENDORSEMENT":
+        raise PolicyStateError(
+            f"A cotação {quote.id} é um endosso de inclusão: aplica-se à apólice com a aceitação do cliente "
+            "(POST /quotes/{id}/endorsement/response), não origina uma apólice nova"
+        )
     if quote.status != QuoteStatus.APPROVED.value:
         raise PolicyStateError(f"A cotação {quote.id} está em {quote.status}; só uma cotação APROVADA (APPROVED) pode ser assinada")
     if quote.valid_until is not None and signed_at.date() > quote.valid_until:

@@ -16,7 +16,7 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 - Os erros vêm em `application/problem+json` (`code`, `detail`, `correlationId`).
 - As rotas `/platform/…` usam o token da conta da plataforma; as restantes, o token do tenant.
 
-**Resumo:** 35 endpoints novos, 5 alterados no contrato e 31 alterados no comportamento (dos quais 8 obsoletos).
+**Resumo:** 44 endpoints novos, 5 alterados no contrato e 36 alterados no comportamento (dos quais 8 obsoletos).
 
 | # | Método | Endpoint | operationId | Estado |
 |---|---|---|---|---|
@@ -95,6 +95,20 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 | 70 | GET | `/quotes/{quote_id}/scenarios/compare` | getQuoteScenarioCompare | Alterado (resposta inclui margem) |
 | 71 | GET | `/portal-requests` | getPortalRequestList | Alterado (resposta inclui métricas SLA) |
 | 72 | GET | `/products/{product_id}/history` | getProductHistory | Novo |
+| 73 | POST | `/policies/{policy_id}/endorsements/inclusions` | postPolicyInclusion | Novo |
+| 74 | GET | `/policies/{policy_id}/endorsements` | getPolicyEndorsementList | Novo |
+| 75 | GET | `/quotes/{quote_id}/endorsement` | getQuoteEndorsement | Novo |
+| 76 | PUT | `/quotes/{quote_id}/endorsement` | putQuoteEndorsement | Novo |
+| 77 | POST | `/quotes/{quote_id}/endorsement/response` | postQuoteEndorsementResponse | Novo |
+| 78 | GET | `/quotes/{quote_id}/endorsement/document` | getQuoteEndorsementDocument | Novo |
+| 79 | GET | `/customer-portal/endorsements` | getCustomerPortalEndorsementList | Novo |
+| 80 | POST | `/customer-portal/endorsements/{quote_id}/response` | postCustomerPortalEndorsementResponse | Novo |
+| 81 | GET | `/customer-portal/endorsements/{quote_id}/document` | getCustomerPortalEndorsementDocument | Novo |
+| 82 | POST | `/quotes/{quote_id}/members` | postQuoteMemberListCreate | Alterado (comportamento: endosso) |
+| 83 | POST | `/quotes/{quote_id}/submit` | postQuoteSubmit | Alterado (comportamento: endosso) |
+| 84 | POST | `/quotes/{quote_id}/decision` | postQuoteDecision | Alterado (comportamento: endosso) |
+| 85 | GET | `/quotes/{quote_id}/requirements` | getQuoteRequirements | Alterado (comportamento: recém-nascidos) |
+| 86 | POST | `/quotes/{quote_id}/policy` | postIssuePolicy | Alterado (comportamento: endosso) |
 
 ## 1. Endpoints novos
 
@@ -1410,6 +1424,159 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 
 `GET /quotes/{quote_id}/scenarios/compare` e a respetiva exportação incluem margem estimada quando existe projeção de sinistros compatível. Sem projeção ou moeda compatível, a margem vem indisponível com o respetivo motivo.
 
+## 1.13 Apólices — endosso de inclusão (pro-rata)
+
+Pessoas novas numa apólice ativa a meio do período. O endosso é uma cotação de tipo `ENDORSEMENT` ligada à apólice. A **data de inclusão** é a data de referência do cálculo: tarifa, idades e regras dessa data. O prémio anual das pessoas novas é cobrado em pro-rata pelos dias que faltam até ao fim da apólice, repartido pelas prestações que ainda vão vencer. Configuração do tenant: `policy.endorsements` (base dos dias, prémio mínimo, encargo de fracionamento, janela dos recém-nascidos, prazo de aceitação).
+
+Fluxo:
+1. `POST /policies/{id}/endorsements/inclusions`
+2. (opcional) `POST /quotes/{id}/members` e `PUT /quotes/{id}/endorsement`
+3. `POST /quotes/{id}/price`
+4. `POST /quotes/{id}/submit`
+5. `POST /quotes/{id}/decision`
+6. resposta do cliente: `POST /quotes/{id}/endorsement/response` ou no portal.
+
+### `POST /policies/{policy_id}/endorsements/inclusions`
+
+**Novo** · `postPolicyInclusion` · Criar endosso de inclusão
+
+- **Quem pode:** scope `q360.write`, permissão `quote:create`.
+- **Parâmetros no caminho:** `policy_id` (UUID).
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`application/json`, `EndorsementInclusionRequest`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `inclusionDate` | texto (data) | sim | Data de inclusão = data de referência do cálculo. Nunca no passado; dentro do período da apólice |
+| `memberIds` | lista de texto (UUID) | não | Pessoas novas do tomador (podem juntar-se depois) |
+
+**Envia** (201, `application/json`, `EndorsementState`): ver o formato em `GET /quotes/{quote_id}/endorsement`.
+
+**Erros:**
+- 400: data no passado ou fora do período, ou pessoa já na apólice;
+- 404: apólice inexistente;
+- 409: apólice não ativa, ou já há um endosso em curso.
+
+### `GET /policies/{policy_id}/endorsements`
+
+**Novo** · `getPolicyEndorsementList` · Endossos da apólice
+
+- **Quem pode:** scope `q360.read`.
+- **Recebe:** nada.
+
+**Envia** (200, `PolicyEndorsements`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `policyId` | texto (UUID) | sim | |
+| `policyNumber` | texto ou null | sim | |
+| `endorsements[]` | lista de `PolicyEndorsementItem` | sim | Endossos aplicados (`endorsementNo`, `type` ADD_MEMBER…, `effectiveDate`, `createdBy`, `createdAt`, `payload` com o cálculo e as prestações criadas) |
+| `quotes[]` | lista de `PolicyEndorsementQuoteItem` | sim | Cotações de endosso (`quoteId`, `quoteNumber`, `status`, `inclusionDate`, `acceptanceDeadline`, `totalCharged`, `createdAt`) |
+
+### `GET /quotes/{quote_id}/endorsement`
+
+**Novo** · `getQuoteEndorsement` · Estado e cálculo do endosso
+
+- **Quem pode:** scope `q360.read`.
+- **Recebe:** nada.
+
+**Envia** (200, `EndorsementState`):
+
+| Campo | Tipo | Sempre presente | Descrição |
+|---|---|---|---|
+| `quoteId` | texto (UUID) | sim | |
+| `status` | texto | sim | DRAFT, READY, IN_REVIEW, APPROVED (à espera do cliente), BOUND (aplicado), CANCELLED (recusado), EXPIRED |
+| `inclusionDate` | texto (data) ou null | sim | |
+| `policyId` / `policyNumber` | texto ou null | sim | |
+| `acceptanceDeadline` | texto (data) ou null | sim | Prazo do cliente (a partir da aprovação; nunca depois da data de inclusão) |
+| `clientResponse` | objeto ou null | sim | `decision`, `reason`, `channel` (STAFF/PORTAL), `at`, `by` |
+| `autoApproved` | booleano | sim | Recém-nascido aprovado automaticamente |
+| `appliedEndorsementNo` | inteiro ou null | sim | N.º do endosso na apólice, depois de aceite |
+| `calculation` | objeto `EndorsementCalculation` ou null | sim | Congelado na submissão; antes, o cálculo atual |
+| `calculation.annualPremium` | texto (decimal) | sim | Prémio anual das pessoas novas na data de inclusão |
+| `calculation.tariffDate` | texto (data) | sim | Data da tarifa usada |
+| `calculation.days` | objeto | sim | `remaining`, `basis`, `basisCode` (ACTUAL_PERIOD, FIXED_366, FIXED_365, FIXED_360), `factor` |
+| `calculation.proRataPremium` | texto (decimal) | sim | anual × dias que faltam ÷ base |
+| `calculation.minimumPremium` / `minimumApplied` | texto / booleano | sim | Prémio mínimo do endosso e se foi aplicado |
+| `calculation.endorsementPremium` | texto (decimal) | sim | max(pro-rata, mínimo) |
+| `calculation.fractionation` | objeto | sim | `frequency`, `loading` (fração), `applied`, `installments` |
+| `calculation.totalCharged` | texto (decimal) | sim | Total a cobrar (com encargo de fracionamento) |
+| `calculation.installments[]` | lista de `EndorsementInstallment` | sim | `sequence`, `dueDate`, `periodFrom`, `periodTo`, `amount` |
+| `calculation.members[]` | lista de `EndorsementMember` | sim | `memberId`, `name`, `relationshipCode`, `dateOfBirth`, `ageAtInclusion`, `eligibilityDecision`, `quoteMemberStatus`, `newborn` |
+| `calculation.policy` | objeto | sim | `id`, `number`, `startDate`, `endDate`, `paymentFrequency`, `activeMembers`, `currentAnnualPremium` |
+| `calculation.newAnnualPremiumReference` | texto ou null | sim | Prémio anual da apólice com as pessoas novas (referência para a renovação) |
+| `calculation.newbornAutoInclusion` | booleano | sim | Todas as pessoas são recém-nascidos dentro da janela |
+
+### `PUT /quotes/{quote_id}/endorsement`
+
+**Novo** · `putQuoteEndorsement` · Mudar a data de inclusão
+
+- **Quem pode:** scope `q360.write`, permissão `quote:edit`. Só antes da submissão (DRAFT ou READY).
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+- **Recebe** (`EndorsementDateRequest`): `inclusionDate` (data, obrigatório).
+- **Envia** (200, `EndorsementState`): reavalia a elegibilidade e recalcula na nova data.
+- **Erros:** 400 (data inválida), 409 (já submetido).
+
+### `POST /quotes/{quote_id}/endorsement/response`
+
+**Novo** · `postQuoteEndorsementResponse` · Resposta do cliente registada pelo GTE
+
+- **Quem pode:** scope `q360.approve`, permissão `quote:approve`.
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+
+**Recebe** (`EndorsementClientResponse`):
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `decision` | texto (ACCEPT · REFUSE) | sim | |
+| `reason` | texto ou null | não | Obrigatório ao recusar (mínimo 10 caracteres) |
+
+**Envia** (200, `EndorsementState`). Com ACCEPT:
+- a cotação passa a `BOUND`;
+- as pessoas entram na apólice com a data de inclusão e as carências a contar dela;
+- são criadas as prestações do endosso;
+- fica registado o endosso `ADD_MEMBER`.
+
+Com REFUSE a cotação passa a `CANCELLED`.
+
+**Erros:**
+- 400: recusa sem motivo;
+- 409: não está APPROVED, o prazo passou (fica EXPIRED) ou a data de inclusão já passou.
+
+### `GET /quotes/{quote_id}/endorsement/document`
+
+**Novo** · `getQuoteEndorsementDocument` · Documento do endosso
+
+- **Quem pode:** scope `q360.read`.
+- **Parâmetros de pesquisa:** `fileType` — `pdf` (por omissão), `html` ou `docx`.
+- **Envia** (200, `application/pdf`, `text/html` ou DOCX): a proposta de endosso; depois de aplicado, a ata adicional n.º N.
+
+### `GET /customer-portal/endorsements`
+
+**Novo** · `getCustomerPortalEndorsementList` · Propostas de endosso do cliente
+
+- **Quem pode:** cliente autenticado no portal (token do portal).
+- **Envia** (200): lista de `EndorsementState` das propostas APPROVED à espera de resposta.
+
+### `POST /customer-portal/endorsements/{quote_id}/response`
+
+**Novo** · `postCustomerPortalEndorsementResponse` · O cliente aceita ou recusa
+
+- **Quem pode:** cliente autenticado no portal; só as propostas dos seus tomadores.
+- **Recebe** (`EndorsementClientResponse`): `decision` (ACCEPT · REFUSE) e `reason` (obrigatório ao recusar).
+- **Envia** (200, `EndorsementState`): como a resposta registada pelo GTE, com `channel = PORTAL`.
+- **Erros:** 400, 404 (proposta de outro cliente ou inexistente), 409.
+
+### `GET /customer-portal/endorsements/{quote_id}/document`
+
+**Novo** · `getCustomerPortalEndorsementDocument` · PDF da proposta ou da ata adicional
+
+- **Quem pode:** cliente autenticado no portal; só depois de aprovada pela subscrição.
+- **Envia** (200, `application/pdf`).
+
+**Tarefa agendada:** `manage.py expire_endorsement_offers` (cron diário) expira as propostas cujo prazo de aceitação terminou. O `expire_quotes` deixou de expirar propostas de endosso aprovadas, porque elas têm prazo próprio.
+
 ## 2. Endpoints alterados no contrato
 
 ### `POST /business-config/formulas/test`
@@ -1790,3 +1957,15 @@ O formato destes endpoints no contrato é o mesmo, ou a resposta não tem tipo n
 Os endpoints existentes `POST /member-imports`, `POST /benefits/import` e `POST /claims/imports` passam a aceitar apenas `.xlsx`. Cabeçalhos traduzidos do modelo são convertidos pelo backend para os campos internos. Os uploads de documentos (PDF, imagem ou anexos de configuração) não são importações de dados e mantêm os seus formatos próprios.
 
 O modelo e a pré-validação Excel das tabelas de referência da plataforma usam `GET /platform/reference-tables/import-template` e `POST /platform/reference-tables/import-preview`; a pré-validação lê no máximo 5.000 linhas e não grava nem propõe a tabela.
+
+### Endosso de inclusão — alterações em rotas existentes
+
+| Rota | O que mudou |
+|---|---|
+| `POST /quotes/{quote_id}/members` | Numa cotação de endosso recusa (400) pessoas que já estão na apólice. A elegibilidade é avaliada na data de inclusão |
+| `POST /quotes/{quote_id}/submit` | Num endosso valida a data de inclusão (não pode ter passado) e congela o cálculo pro-rata. Recém-nascidos dentro da janela configurada: a cotação passa logo a `APPROVED` (sem revisão manual) |
+| `POST /quotes/{quote_id}/decision` | Ao aprovar um endosso abre o prazo de aceitação do cliente (`acceptanceDeadline`) e emite o evento `ENDORSEMENT.OFFERED` |
+| `GET /quotes/{quote_id}/requirements` | Recém-nascidos de um endosso: item `NEWBORN_AUTO_INCLUSION` (informação) e sem `CLINICAL_QUESTIONNAIRE_REQUIRED` nem `MEDICAL_EXAM_REQUIRED`; `members[].clinicalQuestionnaireRequired = false` |
+| `POST /quotes/{quote_id}/policy` | Recusa uma cotação de endosso: o endosso aplica-se à apólice existente com a aceitação do cliente |
+| `GET /business-config/catalog` | Tipo de configuração novo `policy.endorsements` (área RULES), com `day_count_basis`, `minimum_premium`, `apply_fractionation_loading`, `newborn_auto_inclusion_days` e `acceptance_days` |
+

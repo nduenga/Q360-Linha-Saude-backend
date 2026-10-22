@@ -38,7 +38,11 @@ class Command(BaseCommand):
             )
             token = CurrentActorProvider.bind(actor)
             try:
-                due = Quote.objects.filter(status__in=CANCELLABLE_QUOTE_STATUSES, valid_until__isnull=False)
+                # Propostas de endosso aprovadas têm prazo próprio de aceitação
+                # (`expire_endorsement_offers`), não a validade da cotação.
+                due = Quote.objects.filter(status__in=CANCELLABLE_QUOTE_STATUSES, valid_until__isnull=False).exclude(
+                    quote_type="ENDORSEMENT", status="APPROVED"
+                )
                 for quote in list(due):
                     if expire_quote(quote=quote) is not None:
                         total_expired += 1

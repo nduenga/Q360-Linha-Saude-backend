@@ -295,6 +295,12 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
     else:
         questionnaire_required = None
 
+    # Endosso: recém-nascidos dentro da janela configurada entram sem
+    # questionário clínico nem exames (inclusão automática).
+    from apps.policy.application import endorsement_service
+
+    newborns = endorsement_service.newborn_members(quote)
+
     for qm in quote_members:
         member = qm.member
         member_id = str(member.id)
@@ -342,9 +348,12 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
             exam_reasons.append(f"idade {age} ≥ {exam_age}")
         if hospital_capital is not None and exam_capital is not None and hospital_capital >= Decimal(str(exam_capital)):
             exam_reasons.append(f"capital {hospital_capital} ≥ {exam_capital}")
+        if member_id in newborns:
+            exam_reasons = []
+            member_items.append(_item("INFO", "NEWBORN_AUTO_INCLUSION", "Recém-nascido: inclusão automática, sem questionário clínico nem exames.", member_id=member_id, member_name=member_name))
         if exam_reasons:
             member_items.append(_item("WARNING", "MEDICAL_EXAM_REQUIRED", "Exames médicos exigidos: " + "; ".join(exam_reasons) + ".", member_id=member_id, member_name=member_name))
-        if questionnaire_required:
+        if questionnaire_required and member_id not in newborns:
             member_items.append(_item("WARNING", "CLINICAL_QUESTIONNAIRE_REQUIRED", "Questionário clínico obrigatório.", member_id=member_id, member_name=member_name))
         if qm.pre_existing_json:
             member_items.append(
@@ -386,7 +395,7 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
         "memberName": member_name,
         "ageAtQuoteDate": age,  # idade na data de referência (criação) da cotação
         "relationshipCategory": category,
-        "clinicalQuestionnaireRequired": bool(questionnaire_required),
+        "clinicalQuestionnaireRequired": bool(questionnaire_required) and member_id not in newborns,
         "medicalExamRequired": bool(exam_reasons),
         "blocking": any(
             i["severity"] == "ERROR"

@@ -42,6 +42,27 @@ REGISTRY: dict[str, dict] = {
     "ProductTariffSimulationView.post": {"response": d.TariffSimulationResult},
     "FormulaTestView.post": {"response": d.FormulaTestResult},
     "PendingApprovalsView.get": {"response": d.PendingApprovals, "queries": {"area": ("string", False, "ORGANIZATION, PRODUCTS, TARIFF, RULES, PARAMETERS ou DOCUMENTS.")}},
+    "PolicyInclusionView.post": {
+        "request": d.EndorsementInclusionRequest, "response": d.EndorsementState, "status": 201,
+        "notes": "Cria a cotação de endosso (ENDORSEMENT) ligada à apólice ativa, com a data de inclusão como data de referência do cálculo, e calcula logo o prémio anual das pessoas indicadas.",
+    },
+    "PolicyEndorsementListView.get": {"response": d.PolicyEndorsements},
+    "QuoteEndorsementView.get": {"response": d.EndorsementState},
+    "QuoteEndorsementView.put": {
+        "request": d.EndorsementDateRequest, "response": d.EndorsementState,
+        "notes": "Só antes de submeter. Reavalia a elegibilidade e recalcula na nova data.",
+    },
+    "QuoteEndorsementResponseView.post": {
+        "request": d.EndorsementClientResponse, "response": d.EndorsementState,
+        "notes": "Resposta do cliente registada pelo GTE. ACCEPT aplica o endosso (pessoas, carências, prestações, endosso ADD_MEMBER); REFUSE cancela.",
+    },
+    "QuoteEndorsementDocumentView.get": {
+        "media": "application/pdf", "queries": {"fileType": ("string", False, "pdf (por omissão), html ou docx.")},
+        "notes": "Proposta de endosso; depois de aplicado, ata adicional.",
+    },
+    "CustomerPortalEndorsementListView.get": {"response": d.EndorsementState, "many": True},
+    "CustomerPortalEndorsementResponseView.post": {"request": d.EndorsementClientResponse, "response": d.EndorsementState},
+    "CustomerPortalEndorsementDocumentView.get": {"media": "application/pdf"},
     "FormulaVariablesView.get": {
         "response": d.FormulaVariablesCatalog,
         "queries": {"productId": ("string", False, "UUID do produto: junta os grupos, opções, campos e fórmulas dele."),

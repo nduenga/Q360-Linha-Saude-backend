@@ -487,6 +487,100 @@ class PendingApprovalsCount(s.Serializer):
     byArea = s.DictField(child=s.IntegerField())
 
 
+# ------------------------------------------------------------ endossos
+class EndorsementInclusionRequest(s.Serializer):
+    inclusionDate = s.DateField(help_text="Data de inclusão = data de referência do cálculo. Nunca no passado; dentro do período da apólice.")
+    memberIds = s.ListField(child=s.UUIDField(), required=False, help_text="Pessoas novas do tomador (podem juntar-se depois em /quotes/{id}/members).")
+
+
+class EndorsementDateRequest(s.Serializer):
+    inclusionDate = s.DateField()
+
+
+class EndorsementClientResponse(s.Serializer):
+    decision = s.ChoiceField(choices=["ACCEPT", "REFUSE"])
+    reason = s.CharField(required=False, allow_null=True, help_text="Obrigatório ao recusar (mínimo 10 caracteres).")
+
+
+class EndorsementMember(s.Serializer):
+    memberId = s.UUIDField()
+    name = s.CharField(allow_null=True)
+    relationshipCode = s.CharField(allow_null=True)
+    dateOfBirth = s.DateField(allow_null=True)
+    ageAtInclusion = s.IntegerField(allow_null=True)
+    eligibilityDecision = s.CharField(allow_null=True)
+    quoteMemberStatus = s.CharField()
+    newborn = s.BooleanField(help_text="Recém-nascido dentro da janela de inclusão automática.")
+
+
+class EndorsementInstallment(s.Serializer):
+    sequence = s.IntegerField()
+    dueDate = s.DateField()
+    periodFrom = s.DateField()
+    periodTo = s.DateField()
+    amount = s.CharField()
+
+
+class EndorsementCalculation(s.Serializer):
+    quoteId = s.UUIDField()
+    policy = s.DictField(help_text="id, number, startDate, endDate, paymentFrequency, activeMembers, currentAnnualPremium.")
+    inclusionDate = s.DateField()
+    currencyCode = s.CharField()
+    pricingRunId = s.UUIDField()
+    tariffDate = s.DateField(help_text="Data da tarifa usada (a de inclusão).")
+    annualPremium = s.CharField(help_text="Prémio anual das pessoas novas.")
+    days = s.DictField(help_text="remaining, basis, basisCode (ACTUAL_PERIOD, FIXED_366, FIXED_365, FIXED_360), factor.")
+    proRataPremium = s.CharField()
+    minimumPremium = s.CharField()
+    minimumApplied = s.BooleanField()
+    endorsementPremium = s.CharField(help_text="max(pro-rata, mínimo).")
+    fractionation = s.DictField(help_text="frequency, loading (fração), applied, installments.")
+    totalCharged = s.CharField()
+    installments = EndorsementInstallment(many=True)
+    newAnnualPremiumReference = s.CharField(allow_null=True, help_text="Prémio anual da apólice com as pessoas novas (referência para a renovação).")
+    members = EndorsementMember(many=True)
+    newbornAutoInclusion = s.BooleanField()
+
+
+class EndorsementState(s.Serializer):
+    quoteId = s.UUIDField()
+    status = s.CharField(help_text="DRAFT, READY, IN_REVIEW, APPROVED (à espera do cliente), BOUND (aplicado), CANCELLED (recusado), EXPIRED.")
+    inclusionDate = s.DateField(allow_null=True)
+    policyId = s.UUIDField(allow_null=True)
+    policyNumber = s.CharField(allow_null=True)
+    acceptanceDeadline = s.DateField(allow_null=True)
+    clientResponse = s.DictField(allow_null=True, help_text="decision, reason, channel (STAFF/PORTAL), at, by.")
+    autoApproved = s.BooleanField()
+    appliedEndorsementNo = s.IntegerField(allow_null=True)
+    calculation = EndorsementCalculation(allow_null=True, help_text="Congelado na submissão; antes disso, o cálculo atual.")
+
+
+class PolicyEndorsementItem(s.Serializer):
+    endorsementNo = s.IntegerField()
+    type = s.CharField()
+    effectiveDate = s.DateField()
+    createdBy = s.CharField()
+    createdAt = s.DateTimeField(allow_null=True)
+    payload = s.DictField()
+
+
+class PolicyEndorsementQuoteItem(s.Serializer):
+    quoteId = s.UUIDField()
+    quoteNumber = s.CharField(allow_null=True)
+    status = s.CharField()
+    inclusionDate = s.DateField(allow_null=True)
+    acceptanceDeadline = s.DateField(allow_null=True)
+    totalCharged = s.CharField(allow_null=True)
+    createdAt = s.DateTimeField(allow_null=True)
+
+
+class PolicyEndorsements(s.Serializer):
+    policyId = s.UUIDField()
+    policyNumber = s.CharField(allow_null=True)
+    endorsements = PolicyEndorsementItem(many=True)
+    quotes = PolicyEndorsementQuoteItem(many=True)
+
+
 # ------------------------------------------------------------ benefits/plans
 class BenefitImportRequest(s.Serializer):
     file = s.FileField(help_text="Excel .xlsx com cabeçalhos em português: Código, Nome, Descrição, Definição (JSON), Categoria.")
