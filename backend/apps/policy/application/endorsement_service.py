@@ -281,10 +281,22 @@ def _day_basis(code: str, policy: Policy) -> int:
 
 def _future_due_installments(policy: Policy, inclusion: datetime.date) -> list[PremiumInstallment]:
     """Uma linha por data de vencimento ainda por vir (a partir da inclusão):
-    é por essas datas que o endosso se reparte."""
+    é por essas datas que o endosso se reparte.
+
+    `due_date__lte=policy.end_date` é uma validação defensiva: uma
+    prestação vencer depois do fim da apólice não devia poder acontecer
+    (nunca se fatura cobertura que já não existe), mas se os dados da
+    apólice ficarem inconsistentes com o seu próprio calendário de
+    prestações — por exemplo, `end_date` alterado sem recalcular as
+    prestações — mostrar essa prestação "órfã" produzia um documento de
+    inclusão com datas de dois períodos diferentes ao mesmo tempo. Sem
+    nenhuma prestação válida dentro do período, cai-se no ramo `else` de
+    `calculate()`: uma prestação única, a vencer na própria data de
+    inclusão, com o período até ao fim real da apólice — o resultado
+    correto para esse caso."""
     seen: set[datetime.date] = set()
     result = []
-    for row in (policy.installments.filter(due_date__gte=inclusion)
+    for row in (policy.installments.filter(due_date__gte=inclusion, due_date__lte=policy.end_date)
                 .exclude(status__in=_SETTLED_INSTALLMENT_STATUSES).order_by("due_date", "installment_no")):
         if row.due_date in seen:
             continue

@@ -1,5 +1,7 @@
 """API de plataforma (super administradores): autenticação própria, tenants,
 super admins e auditoria. Só aceita tokens `token_type=platform`."""
+import uuid
+
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -7,7 +9,7 @@ from rest_framework.views import APIView
 
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.platform_admin.application import admin_service, auth_service, tenant_service
-from apps.platform_admin.infrastructure.models import PlatformAuditEvent
+from apps.platform_admin.infrastructure.models import PlatformAdmin, PlatformAuditEvent
 from apps.platform_admin.interfaces.permissions import IsPlatformAdmin
 from apps.platform_admin.interfaces.serializers import (
     ChangePasswordSerializer,
@@ -211,9 +213,25 @@ class PlatformAuditView(APIView):
             limit = max(1, min(int(request.query_params.get("limit", 100)), 500))
         except ValueError:
             limit = 100
+        events = list(qs[:limit])
+        actor_ids = []
+        for e in events:
+            try:
+                actor_ids.append(uuid.UUID(str(e.actor_id)))
+            except (TypeError, ValueError):
+                continue
+        # actor_id aqui é quase sempre o id de um PlatformAdmin — mostrar o
+        # UUID cru na auditoria do super admin não diz a quem o leia quem
+        # fez a ação; "ANONYMOUS" (login falhado antes de autenticar) não é
+        # um UUID e fica sem nome, o que é o esperado.
+        actor_names = {
+            str(row["id"]): row["name"]
+            for row in PlatformAdmin.objects.filter(id__in=actor_ids).values("id", "name")
+        }
         return Response([
-            {"id": e.id, "actorId": e.actor_id, "action": e.action, "entityType": e.entity_type,
+            {"id": e.id, "actorId": e.actor_id, "actorName": actor_names.get(str(e.actor_id)),
+             "action": e.action, "entityType": e.entity_type,
              "entityId": e.entity_id, "occurredAt": e.occurred_at, "correlationId": e.correlation_id,
              "metadata": e.metadata_json}
-            for e in qs[:limit]
+            for e in events
         ])

@@ -120,6 +120,7 @@ class ChangePasswordSerializer(serializers.Serializer):
 class PlatformAuditEventSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     actorId = serializers.CharField()
+    actorName = serializers.CharField(allow_null=True)
     action = serializers.CharField()
     entityType = serializers.CharField()
     entityId = serializers.CharField(allow_null=True)

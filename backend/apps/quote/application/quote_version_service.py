@@ -85,10 +85,17 @@ def capture_state(quote: Quote) -> dict[str, Any]:
     return {
         "quoteType": quote.quote_type,
         "sourcePolicyId": str(quote.source_policy_id) if quote.source_policy_id else None,
+        # Identidade do proponente, do produto e do plano à data desta
+        # versão — sem isto, o snapshot não era autónomo: se o proponente
+        # fosse renomeado, ou o plano mudasse de produto, as versões
+        # antigas passavam a mostrar o estado ATUAL em vez do que existia
+        # no momento em que foram gravadas.
+        "proposerId": str(quote.proposer_id),
+        "proposerName": quote.proposer.display_name,
+        "proposerTaxId": quote.proposer.nif or quote.proposer.registration_number,
+        "productId": str(quote.plan.product_id),
+        "productName": quote.plan.product.name,
         "planId": str(quote.plan_id),
-        # Nome a par do id: sem isto, o histórico de versões só mostrava o
-        # UUID do plano, sem forma de saber qual era sem ir consultar a API
-        # à parte.
         "planName": quote.plan.name,
         "selection": quote.selection_json or {},
         "adjustments": adjustments,
@@ -164,9 +171,12 @@ def diff_states(before: dict[str, Any], after: dict[str, Any]) -> list[dict[str,
     # Versões gravadas antes de 2026-10-15 ainda trazem `effectiveDate`; a
     # cotação deixou de o ter e não entra na comparação.
     add("planId", before["planId"], after["planId"])
-    # Versões gravadas antes desta alteração não têm `planName` — usa .get()
-    # para não rebentar a comparar com uma versão antiga.
+    # Versões gravadas antes destas alterações não têm estes campos — usa
+    # .get() para não rebentar a comparar com uma versão antiga.
     add("planName", before.get("planName"), after.get("planName"))
+    add("proposerName", before.get("proposerName"), after.get("proposerName"))
+    add("proposerTaxId", before.get("proposerTaxId"), after.get("proposerTaxId"))
+    add("productName", before.get("productName"), after.get("productName"))
     for key in sorted(set(before["selection"]) | set(after["selection"])):
         add(f"selection.{key}", before["selection"].get(key), after["selection"].get(key))
     before_adj = {_adjustment_key(a): a for a in before["adjustments"]}

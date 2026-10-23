@@ -234,13 +234,21 @@ class QuoteAdjustmentSerializer(serializers.Serializer):
     status = serializers.CharField()
     impact = serializers.JSONField(source="impact_json")
     appliedBy = serializers.CharField(source="applied_by")
+    appliedByName = serializers.SerializerMethodField()
     appliedAt = serializers.DateTimeField(source="applied_at")
     removedBy = serializers.CharField(source="removed_by", allow_null=True)
+    removedByName = serializers.SerializerMethodField()
     removedAt = serializers.DateTimeField(source="removed_at", allow_null=True)
     removedReason = serializers.CharField(source="removed_reason", allow_null=True)
 
     def get_value(self, obj) -> str:
         return format(obj.value.normalize(), "f")
+
+    def get_appliedByName(self, obj) -> str | None:
+        return self.context.get("responsible_names", {}).get(str(obj.applied_by))
+
+    def get_removedByName(self, obj) -> str | None:
+        return self.context.get("responsible_names", {}).get(str(obj.removed_by))
 
 
 class QuoteDiscountApprovalSerializer(serializers.Serializer):
@@ -490,10 +498,14 @@ class QuoteVersionSerializer(serializers.Serializer):
     totalAmount = serializers.SerializerMethodField()
     currencyCode = serializers.CharField(source="currency_code", allow_null=True)
     createdBy = serializers.CharField(source="created_by")
+    createdByName = serializers.SerializerMethodField()
     createdAt = serializers.DateTimeField(source="created_at")
 
     def get_totalAmount(self, obj) -> str | None:
         return None if obj.total_amount is None else str(round_amount(obj.total_amount))
+
+    def get_createdByName(self, obj) -> str | None:
+        return self.context.get("responsible_names", {}).get(str(obj.created_by))
 
 
 class QuoteVersionDetailSerializer(QuoteVersionSerializer):

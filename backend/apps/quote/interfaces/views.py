@@ -285,6 +285,29 @@ class QuoteDecisionView(APIView):
         return Response(QuoteSerializer(updated).data)
 
 
+def _responsible_names(tenant_id, actor_id_values) -> dict[str, str]:
+    """`created_by`/`changed_by` são só o actor_id em texto (pode ser um
+    UUID de StaffAccount, ou um actor técnico como "system-scheduler") —
+    resolve os que são UUIDs reais para o nome, para não mostrar um UUID
+    cru a quem está a ler o histórico/as versões da cotação."""
+    from apps.staff_accounts.infrastructure.models import StaffAccount
+
+    actor_ids = []
+    for value in actor_id_values:
+        try:
+            actor_ids.append(uuid.UUID(str(value)))
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return {
+        str(row["id"]): row["name"]
+        for row in (
+            StaffAccount.objects
+            .filter(id__in=actor_ids, tenant_id=tenant_id)
+            .values("id", "name")
+        )
+    }
+
+
 class QuoteHistoryView(APIView):
     permission_classes = [require_scope(Scope.READ)]
 
@@ -295,30 +318,7 @@ class QuoteHistoryView(APIView):
             quote_service.get_quote_history(quote=quote)
         )
 
-        from uuid import UUID
-        from apps.staff_accounts.infrastructure.models import StaffAccount
-
-        actor_ids = []
-
-        for item in history:
-            try:
-                actor_ids.append(UUID(str(item.changed_by)))
-            except (TypeError, ValueError, AttributeError):
-                # Pode ser um actor técnico:
-                # system:auto, system-scheduler, etc.
-                continue
-
-        responsible_names = {
-            str(row["id"]): row["name"]
-            for row in (
-                StaffAccount.objects
-                .filter(
-                    id__in=actor_ids,
-                    tenant_id=quote.tenant_id,
-                )
-                .values("id", "name")
-            )
-        }
+        responsible_names = _responsible_names(quote.tenant_id, (item.changed_by for item in history))
 
         return Response(
             StateHistoryItemSerializer(
@@ -474,7 +474,7 @@ class ReviewQueueView(APIView):
         queryset = ReviewTask.objects.select_related(
             "quote__proposer",
             "quote__plan__product",
-        ).order_by("created_at")
+        ).order_by("-created_at")
         status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
@@ -539,8 +539,13 @@ class QuoteAdjustmentListCreateView(APIView):
 
     def get(self, request, quote_id):
         quote = get_object_or_404(Quote, id=quote_id)
-        adjustments = simulator_service.list_adjustments(quote=quote, status=request.query_params.get("status"))
-        return Response(QuoteAdjustmentSerializer(adjustments, many=True).data)
+        adjustments = list(simulator_service.list_adjustments(quote=quote, status=request.query_params.get("status")))
+        responsible_names = _responsible_names(
+            quote.tenant_id, (v for adj in adjustments for v in (adj.applied_by, adj.removed_by))
+        )
+        return Response(QuoteAdjustmentSerializer(
+            adjustments, many=True, context={"responsible_names": responsible_names}
+        ).data)
 
     def post(self, request, quote_id):
         quote = get_object_or_404(Quote, id=quote_id)
@@ -559,9 +564,10 @@ class QuoteAdjustmentListCreateView(APIView):
                 "message": "Desconto enviado à fila de aprovação da Direcção Técnica; ainda não foi aplicado.",
             }, status=202)
         adjustment, updated = simulator_service.apply_adjustment(quote=quote, spec=spec, reason=data["reason"])
+        responsible_names = _responsible_names(quote.tenant_id, (adjustment.applied_by,))
         return Response(
             {
-                "adjustment": QuoteAdjustmentSerializer(adjustment).data,
+                "adjustment": QuoteAdjustmentSerializer(adjustment, context={"responsible_names": responsible_names}).data,
                 "quote": QuoteSerializer(updated).data,
                 "impact": adjustment.impact_json,
             },
@@ -610,7 +616,11 @@ class QuoteAdjustmentDetailView(APIView):
         adjustment, updated = simulator_service.remove_adjustment(
             quote=quote, adjustment_id=adjustment_id, reason=body.validated_data["reason"]
         )
-        return Response({"adjustment": QuoteAdjustmentSerializer(adjustment).data, "quote": QuoteSerializer(updated).data})
+        responsible_names = _responsible_names(quote.tenant_id, (adjustment.applied_by, adjustment.removed_by))
+        return Response({
+            "adjustment": QuoteAdjustmentSerializer(adjustment, context={"responsible_names": responsible_names}).data,
+            "quote": QuoteSerializer(updated).data,
+        })
 
 
 @requires_idempotency
@@ -873,14 +883,17 @@ class QuoteVersionListCreateView(APIView):
 
     def get(self, request, quote_id):
         quote = get_object_or_404(Quote, id=quote_id)
-        return Response(QuoteVersionSerializer(quote_version_service.list_versions(quote=quote), many=True).data)
+        versions = list(quote_version_service.list_versions(quote=quote))
+        responsible_names = _responsible_names(quote.tenant_id, (v.created_by for v in versions))
+        return Response(QuoteVersionSerializer(versions, many=True, context={"responsible_names": responsible_names}).data)
 
     def post(self, request, quote_id):
         quote = get_object_or_404(Quote, id=quote_id)
         body = QuoteVersionSaveRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         version = quote_version_service.save_version(quote=quote, reason=body.validated_data["reason"])
-        return Response(QuoteVersionSerializer(version).data, status=201)
+        responsible_names = _responsible_names(quote.tenant_id, [version.created_by])
+        return Response(QuoteVersionSerializer(version, context={"responsible_names": responsible_names}).data, status=201)
 
 
 class QuoteVersionDetailView(APIView):
@@ -888,7 +901,9 @@ class QuoteVersionDetailView(APIView):
 
     def get(self, request, quote_id, version_no):
         quote = get_object_or_404(Quote, id=quote_id)
-        return Response(QuoteVersionDetailSerializer(quote_version_service.get_version(quote=quote, version_no=version_no)).data)
+        version = quote_version_service.get_version(quote=quote, version_no=version_no)
+        responsible_names = _responsible_names(quote.tenant_id, [version.created_by])
+        return Response(QuoteVersionDetailSerializer(version, context={"responsible_names": responsible_names}).data)
 
 
 class QuoteVersionDiffView(APIView):
