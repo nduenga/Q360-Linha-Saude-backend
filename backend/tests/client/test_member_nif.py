@@ -10,7 +10,7 @@ from tests.client.test_members import _proposer
 def _titular(client, proposer_id, **extra):
     return client.post(
         "/api/v1/members",
-        {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1985-04-12", **extra},
+        {"firstName": "Pessoa", "proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1985-04-12", **extra},
         format="json",
     )
 
@@ -37,14 +37,14 @@ def test_update_without_nif_keeps_it_and_null_removes_it(admin_client):
     member = _titular(admin_client, _proposer(admin_client)["id"], nif="123456789LA042").data
     kept = admin_client.put(
         f"/api/v1/members/{member['id']}",
-        {"relationshipCode": "TITULAR", "dateOfBirth": "1985-04-12", "rowVersion": 0},
+        {"firstName": "Pessoa", "relationshipCode": "TITULAR", "dateOfBirth": "1985-04-12", "rowVersion": 0},
         format="json",
     )
     assert kept.status_code == 200, kept.data
     assert kept.data["nif"] == "123456789LA042"
     cleared = admin_client.put(
         f"/api/v1/members/{member['id']}",
-        {"relationshipCode": "TITULAR", "dateOfBirth": "1985-04-12", "nif": None, "rowVersion": 1},
+        {"firstName": "Pessoa", "relationshipCode": "TITULAR", "dateOfBirth": "1985-04-12", "nif": None, "rowVersion": 1},
         format="json",
     )
     assert cleared.status_code == 200, cleared.data

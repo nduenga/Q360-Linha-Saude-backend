@@ -1,6 +1,6 @@
 """Friendly, customer-facing message texts — MOTOR_ELEGIBILIDADE.md
 secção 2 ("Mensagens amigáveis"), "Regra de tom": nunca citar artigos de
-lei, nunca usar a palavra "rejeitado" quando existe hipótese de correcção
+lei, nunca usar a palavra "rejeitado" quando existe hipótese de correção
 (usar "falta", "ainda não", "precisamos de"), sempre dizer qual é o
 próximo passo. Internal codes stay in `EligibilityMessage.code`; this
 module only supplies the `severity`/`message` shown to the customer.
@@ -60,13 +60,13 @@ _TEMPLATES: dict[str, tuple[str, str]] = {
     ),
     "NIF_INATIVO": (
         "ERROR",
-        "O seu NIF parece estar inactivo. Contacte a Administração Geral "
+        "O seu NIF parece estar inativo. Contacte a Administração Geral "
         "Tributária para regularizar antes de continuar.",
     ),
     "VINCULO_LABORAL_INATIVO": (
         "ERROR",
-        "Não conseguimos confirmar o seu vínculo actual com a empresa. "
-        "Fale com o departamento de Recursos Humanos para actualizar o "
+        "Não conseguimos confirmar o seu vínculo atual com a empresa. "
+        "Fale com o departamento de Recursos Humanos para atualizar o "
         "seu registo.",
     ),
 }

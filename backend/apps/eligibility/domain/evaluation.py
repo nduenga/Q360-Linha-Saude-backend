@@ -397,7 +397,7 @@ def evaluate(
     # ELIG-001 — Completeness (PUBLISHED-CANDIDATE, no open parameter).
     if not (data.member_id and data.plan_id and data.effective_date):
         return EligibilityDecision.HARD_STOP, [
-            EligibilityMessage("VALIDATION-400", "ERROR", "Required input missing")
+            EligibilityMessage("VALIDATION-400", "ERROR", "Faltam dados obrigatórios para avaliar a elegibilidade.")
         ]
 
     # Referenced entity must actually exist — not itself an ART-008 rule
@@ -405,20 +405,20 @@ def evaluate(
     # ELIG-007 at all.
     if plan is None:
         return EligibilityDecision.HARD_STOP, [
-            EligibilityMessage("ELIG-REFERENCE-NOT-FOUND", "ERROR", "Referenced plan does not exist")
+            EligibilityMessage("ELIG-REFERENCE-NOT-FOUND", "ERROR", "O plano indicado não existe.")
         ]
 
     # ELIG-007 — Plan inactive.
     if not plan.is_active:
         return EligibilityDecision.HARD_STOP, [
-            EligibilityMessage("ELIG-PLAN-INACTIVE", "ERROR", "Selected plan is inactive")
+            EligibilityMessage("ELIG-PLAN-INACTIVE", "ERROR", "O plano escolhido não está ativo.")
         ]
 
     # ELIG-010 — No applicable rule version: fail closed (DOC-004 s9:
     # "CONFIG_ERROR nunca pode ser convertido silenciosamente em ELIGIBLE").
     if config is None:
         return EligibilityDecision.CONFIG_ERROR, [
-            EligibilityMessage("ELIG-RULE-MISSING", "ERROR", "Eligibility configuration unavailable")
+            EligibilityMessage("ELIG-RULE-MISSING", "ERROR", "Não há regras de elegibilidade publicadas para este plano.")
         ]
 
     age: int | None = None
@@ -438,12 +438,12 @@ def evaluate(
     # ELIG-003 — Age below configured minimum.
     if config.min_entry_age is not None and age is not None and age < config.min_entry_age:
         return EligibilityDecision.HARD_STOP, [
-            EligibilityMessage("ELIG-AGE-MIN", "ERROR", "Member below minimum entry age")
+            EligibilityMessage("ELIG-AGE-MIN", "ERROR", "A pessoa ainda não tem a idade mínima de adesão.")
         ]
     # ELIG-004 — Age above configured maximum.
     if config.max_entry_age is not None and age is not None and age > config.max_entry_age:
         return EligibilityDecision.HARD_STOP, [
-            EligibilityMessage("ELIG-AGE-MAX", "ERROR", "Member above maximum entry age")
+            EligibilityMessage("ELIG-AGE-MAX", "ERROR", "A pessoa ultrapassa a idade máxima de adesão.")
         ]
 
     # ELIG-005 — Relationship not allowed by plan.
@@ -478,7 +478,7 @@ def evaluate(
     # ELIG-008 — Configured referral condition matched.
     if any(c.matches(age=age, relationship_code=relationship_code) for c in config.referral_criteria):
         return EligibilityDecision.REFERRAL, [
-            EligibilityMessage("ELIG-REFERRAL", "WARNING", "Manual underwriting review required")
+            EligibilityMessage("ELIG-REFERRAL", "WARNING", "É necessária análise manual da subscrição.")
         ]
 
     # ELIG-009 — Configured warning matched.

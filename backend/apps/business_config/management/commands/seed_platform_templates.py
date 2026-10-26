@@ -3,7 +3,7 @@
 Carrega na camada do fornecedor os modelos de partida que hoje vivem no
 código: a configuração de referência de Angola (planos, coberturas, regras,
 documentos — `seed/reference_rules.py`, com os produtos de mercado do PDF) e
-o modelo actuarial SAU/SAG (Excel). Idempotente: só cria um modelo que ainda
+o modelo atuarial SAU/SAG (Excel). Idempotente: só cria um modelo que ainda
 não exista. A versão 1 entra publicada, registada como carga inicial do
 sistema (proposta e aprovação com identidades distintas de sistema); as
 versões seguintes seguem o ciclo normal de duas contas."""
@@ -36,8 +36,8 @@ def templates() -> list[dict]:
         {
             "code": "modelo-actuarial-sau-sag",
             "kind": "ACTUARIAL_MODEL",
-            "name": "Modelo actuarial SAU/SAG de referência",
-            "description": "Prémio puro por cobertura, idade e sexo, fatores e carregamentos do Excel actuarial "
+            "name": "Modelo atuarial SAU/SAG de referência",
+            "description": "Prémio puro por cobertura, idade e sexo, fatores e carregamentos do Excel atuarial "
                            "(rascunho por validar pelo actuário).",
             "segment": None,
             "content": {"configurations": {"pricing.actuarial_model": build_actuarial_model()}},

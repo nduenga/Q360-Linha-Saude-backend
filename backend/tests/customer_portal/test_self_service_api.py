@@ -32,7 +32,7 @@ def _setup_active_policy_with_member(admin_client, tenant, *, policy_number: str
     product = admin_client.post("/api/v1/products", {"code": f"PORTAL-{policy_number}", "name": "Portal Product"}).data
     plan = admin_client.post("/api/v1/plans", {"productId": product["id"], "code": "PLAN-A", "name": "Plan A"}).data
     member = admin_client.post(
-        "/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
+        "/api/v1/members", {"firstName": "Pessoa", "proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data
     quote = admin_client.post(
         "/api/v1/quotes",
@@ -198,7 +198,7 @@ def test_coverage_checks_own_member_and_is_covered_today(admin_client, tenant):
     assert response.status_code == 200, response.data
     assert len(response.data["results"]) == 1
     assert response.data["results"][0]["memberId"] == scope["memberId"]
-    assert response.data["results"][0]["memberName"] == "Beneficiário"
+    assert response.data["results"][0]["memberName"] == "Pessoa"
     assert response.data["results"][0]["inclusionDate"] == "2026-06-02"
     assert response.data["results"][0]["covered"] is True
 
@@ -225,7 +225,7 @@ def test_eligibility_endpoint_also_checks_coverage_for_own_members_only(admin_cl
     assert response.status_code == 200, response.data
     assert len(response.data["results"]) == 1
     assert response.data["results"][0]["memberId"] == scope["memberId"]
-    assert response.data["results"][0]["memberName"] == "Beneficiário"
+    assert response.data["results"][0]["memberName"] == "Pessoa"
     assert response.data["results"][0]["inclusionDate"] == "2026-06-02"
     assert response.data["results"][0]["covered"] is True
 

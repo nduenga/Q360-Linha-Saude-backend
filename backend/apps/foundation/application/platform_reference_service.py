@@ -52,7 +52,7 @@ def _cell_text(value: Any) -> str:
 def parse_workbook_preview(content: bytes) -> dict[str, Any]:
     """Lê a primeira folha de um .xlsx enviado pelo browser e devolve
     cabeçalhos + linhas em texto, prontos para a pré-visualização e para a
-    proposta em si (o frontend usa esta resposta directamente como
+    proposta em si (o frontend usa esta resposta diretamente como
     `columns`/`rows`, não só como mostra). Mesma leitura (`openpyxl`,
     `read_only`, `data_only`) já usada em `claims/application/import_service.py`
     para não introduzir uma segunda forma de ler Excel no projecto."""

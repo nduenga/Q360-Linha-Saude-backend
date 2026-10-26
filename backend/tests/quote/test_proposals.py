@@ -85,11 +85,11 @@ def test_docx_and_html_carry_the_same_content(admin_client):
 
     document = Document(io.BytesIO(raw))
     text = "\n".join(p.text for p in document.paragraphs) + "\n".join(c.text for t in document.tables for r in t.rows for c in r.cells)
-    for expected in ("Holder", "SIM", "Hospitalização", "Capital anual por pessoa: 15.000.000 Kz", "Evacuação e tratamento no estrangeiro"):
+    for expected in ("Holder", "SIM", "Hospitalização", "Capital anual por pessoa: Kz 15.000.000,00", "Evacuação e tratamento no estrangeiro"):
         assert expected in text
     html_doc = _generate(admin_client, scope, format="HTML").data
     html = admin_client.get(html_doc["downloadUrl"]).content.decode("utf-8")
-    assert "Capital anual por pessoa: 15.000.000 Kz" in html and html_doc["contentType"].startswith("text/html")
+    assert "Capital anual por pessoa: Kz 15.000.000,00" in html and html_doc["contentType"].startswith("text/html")
 
 
 @pytest.mark.django_db
@@ -114,15 +114,15 @@ def test_proposal_content_follows_the_pdf_rules(admin_client):
     html = _html(admin_client, scope)
 
     # coberturas: capitais, sublimite, participação rede/reembolso, carência, destinos, moeda
-    assert "Capital anual por pessoa: 15.000.000 Kz" in html and "Quarto por dia: 50.000 Kz" in html
-    assert "Rede convencionada: sem participação do segurado; franquia de 100.000 Kz por evento" in html
-    assert "Reembolso: a seguradora paga 85% e o segurado 15% (teto anual a cargo do segurado: 500.000 Kz)" in html
+    assert "Capital anual por pessoa: Kz 15.000.000,00" in html and "Quarto por dia: Kz 50.000,00" in html
+    assert "Rede convencionada: sem participação do segurado; franquia de Kz 100.000,00 por evento" in html
+    assert "Reembolso: a seguradora paga 85% e o segurado 15% (teto anual a cargo do segurado: Kz 500.000,00)" in html
     assert "Carência: 90 dias; cirurgias programadas: 180 dias; em acidente não há carência" in html
     assert "Dentária" not in html and "Estomatologia" in html  # opcional escolhida
     assert "Estomatologia e ortodontia (opcional escolhida)" in html
     assert "Coberturas opcionais disponíveis (não incluídas)" in html and "Evacuação e tratamento no estrangeiro" in html
     # opção de participação A–E
-    assert "C — Participação moderada" in html and "Franquia anual" in html and "25.000 Kz" in html
+    assert "C — Participação moderada" in html and "Franquia anual" in html and "Kz 25.000,00" in html
     # preço e ajustes
     assert "Desconto de 5%" in html and "Prémio total" in html
     # preexistências por pessoa
@@ -163,10 +163,10 @@ def test_selected_scenario_drives_the_proposal(admin_client):
         f"/api/v1/quotes/{scope['quoteId']}/scenarios",
         {"name": "Opção A", "parameters": {"selection": {"participationOption": "A"}}}, format="json",
     ).data
-    assert "200 Kz" in _html(admin_client, scope)  # sem selecionado: estado atual da cotação
+    assert "Kz 200,00" in _html(admin_client, scope)  # sem selecionado: estado atual da cotação
     admin_client.post(f"/api/v1/scenarios/{big['id']}/select", {}, format="json")
     html = _html(admin_client, scope)
-    assert "230 Kz" in html and "Opção A" in html and "A — Sem participação" in html
+    assert "Kz 230,00" in html and "Opção A" in html and "A — Sem participação" in html
     explicit = _generate(admin_client, scope, scenarioId=base["id"])
     assert explicit.data["scenarioId"] == base["id"]
     default = _generate(admin_client, scope, format="HTML")
@@ -206,7 +206,7 @@ def test_custom_template_controls_title_sections_and_texts(admin_client):
     admin_client.post(f"/api/v1/document-templates/{created['id']}/publish")
 
     html = _html(admin_client, scope)
-    assert "Proposta " in html and "para Holder" in html and "Prémio total: 200 Kz (2 pessoas)." in html
+    assert "Proposta " in html and "para Holder" in html and "Prémio total: Kz 200,00 (2 pessoas)." in html
     assert "Rodapé (a atribuir)" in html
     assert html.index("Prémio") < html.index("Resumo da proposta")  # secções pela ordem do GTE
     assert "Coberturas, capitais" not in html and "Exclusões" not in html

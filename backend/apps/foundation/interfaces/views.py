@@ -85,11 +85,18 @@ class AuditEventListView(APIView):
 
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
-        return paginator.get_paginated_response(AuditEventSerializer(page, many=True).data)
+        from apps.foundation.application.audit_labels import entity_labels
+
+        labels = entity_labels(page)
+        return paginator.get_paginated_response(
+            AuditEventSerializer(page, many=True, context={"entity_labels": labels}).data
+        )
 
 
 def _status_counts(queryset) -> dict[str, int]:
-    return {row["status"]: row["total"] for row in queryset.values("status").annotate(total=Count("id"))}
+    # order_by() limpa a ordenação: senão o Django junta-a ao GROUP BY e
+    # devolve uma linha por registo em vez de uma por estado.
+    return {row["status"]: row["total"] for row in queryset.order_by().values("status").annotate(total=Count("id"))}
 
 
 class DashboardView(APIView):
@@ -303,11 +310,11 @@ class DashboardView(APIView):
         trunc_period = TruncWeek if trend_period == "week" else TruncMonth
         created_buckets = {
             row["period"].date().isoformat(): row["total"]
-            for row in quotes.annotate(period=trunc_period("created_at")).values("period").annotate(total=Count("id"))
+            for row in quotes.order_by().annotate(period=trunc_period("created_at")).values("period").annotate(total=Count("id"))
         }
         approved_buckets = {
             row["period"].date().isoformat(): row["total"]
-            for row in quotes.filter(approved_at__isnull=False)
+            for row in quotes.filter(approved_at__isnull=False).order_by()
             .annotate(period=trunc_period("approved_at"))
             .values("period").annotate(total=Count("id"))
         }
@@ -316,7 +323,7 @@ class DashboardView(APIView):
             for day in sorted(created_buckets.keys() | approved_buckets.keys())
         ]
         product_conversion = []
-        for row in quotes.values("plan__product_id", "plan__product__code", "plan__product__name").annotate(
+        for row in quotes.order_by().values("plan__product_id", "plan__product__code", "plan__product__name").annotate(
             total=Count("id"),
             converted=Count("id", filter=Q(status__in=("APPROVED", "BOUND"))),
         ).order_by("plan__product__code"):
@@ -329,7 +336,7 @@ class DashboardView(APIView):
                 "conversionRatePercent": round(row["converted"] / row["total"] * 100, 2) if row["total"] else None,
             })
         channel_conversion = []
-        for row in quotes.values("source_channel").annotate(
+        for row in quotes.order_by().values("source_channel").annotate(
             total=Count("id"),
             converted=Count("id", filter=Q(status__in=("APPROVED", "BOUND"))),
         ).order_by("source_channel"):

@@ -114,7 +114,7 @@ def test_changing_titular_birth_date_cannot_break_existing_children(admin_client
     _member(admin_client, proposer["id"], "FILHO", "2010-01-01")
     response = admin_client.put(
         f"/api/v1/members/{titular['id']}",
-        {"relationshipCode": "TITULAR", "dateOfBirth": "2005-01-01", "rowVersion": titular["rowVersion"]},
+        {"firstName": "Pessoa", "relationshipCode": "TITULAR", "dateOfBirth": "2005-01-01", "rowVersion": titular["rowVersion"]},
     )
     assert response.status_code == 400
 

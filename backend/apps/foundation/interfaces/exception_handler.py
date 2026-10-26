@@ -76,6 +76,24 @@ _CODE_BY_EXCEPTION: dict[type[Exception], str] = {
 }
 
 
+# As mensagens por omissão do DRF chegam em português do Brasil («Você não tem
+# permissão para executar essa ação»); estas são as do produto (PT-PT).
+_DEFAULT_DETAILS: dict[type[Exception], str] = {
+    PermissionDenied: "Não tem permissão para fazer esta operação.",
+    NotAuthenticated: "A sessão não é válida ou terminou. Inicie sessão novamente.",
+    AuthenticationFailed: "A sessão não é válida ou terminou. Inicie sessão novamente.",
+    NotFound: "O registo pedido não existe ou não está disponível.",
+    Throttled: "Demasiados pedidos seguidos. Aguarde um pouco e tente novamente.",
+}
+
+
+def _default_detail(exc) -> str | None:
+    for kind, text in _DEFAULT_DETAILS.items():
+        if type(exc) is kind and str(exc.detail) == str(kind.default_detail):
+            return text
+    return None
+
+
 def q360_exception_handler(exc, context):
     if isinstance(exc, DomainProblem):
         return _problem_response(exc.problem_code, exc.http_status, str(exc))
@@ -89,7 +107,7 @@ def q360_exception_handler(exc, context):
         return response
 
     field_errors = _field_errors(exc.detail) if isinstance(exc, ValidationError) else None
-    detail = _readable(field_errors) if field_errors else str(exc)
+    detail = _readable(field_errors) if field_errors else (_default_detail(exc) or str(exc))
     return _problem_response(code, response.status_code, detail, field_errors=field_errors)
 
 

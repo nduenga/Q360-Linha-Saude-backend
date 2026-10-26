@@ -271,7 +271,7 @@ def _events(request: PortalRequest) -> list[dict]:
     return [
         {
             "status": e.to_status, "statusLabel": rules.STATUS_LABELS[e.to_status],
-            "note": e.note, "by": "Você" if e.actor_type == "CUSTOMER" else "Q360", "at": e.created_at,
+            "note": e.note, "by": "Você" if e.actor_type == "CUSTOMER" else "Seguradora", "at": e.created_at,
         }
         for e in PortalRequestEvent.objects.filter(request=request).order_by("created_at")
     ]

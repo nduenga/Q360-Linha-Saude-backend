@@ -14,7 +14,7 @@ Duas camadas independentes, ambas idempotentes (podem correr-se várias vezes):
   TESTE       (--profile demo|all)  só com DEBUG=True (ou --allow-demo). Corre
               `seed_demo_data` (+ portal) e acrescenta volume: equipa de
               colaboradores, dezenas de clientes (famílias e empresas) com
-              cotações em todos os estados, apólices activas / pendentes /
+              cotações em todos os estados, apólices ativas / pendentes /
               com prestações em atraso, sinistralidade e prémios históricos,
               contas, pedidos e mensagens do Portal Cliente e um segundo tenant
               vazio-mas-configurado para testar o isolamento entre tenants.
@@ -27,9 +27,7 @@ Exemplos:
 """
 from __future__ import annotations
 
-import csv
 import datetime
-import io
 import json
 import random
 import secrets
@@ -48,7 +46,8 @@ from apps.business_config.application.service import approve_configuration, crea
 from apps.business_config.domain.errors import InvalidConfiguration
 from apps.business_config.infrastructure.models import BusinessConfiguration
 from apps.business_config.seed.reference_rules import CUSTOM_RULES, STATIC_CONFIGS
-from apps.claims.application.import_service import import_file
+from apps.claims.application.import_service import import_file, xlsx_from_rows
+from apps.policy.application.demo_dates import make_installment_due_soon, make_installment_late
 from apps.claims.infrastructure.models import ClaimsImport
 from apps.client.application.relationship_service import ensure_relationship_catalog
 from apps.client.infrastructure.models import InsuredMember, Proposer
@@ -242,7 +241,7 @@ class _ReferencePricing(DefaultPricingCommand):
             call_command("publish_actuarial_model", tenant_code=self._tenant.code,
                          effective_from=EARLIEST_EFFECTIVE_FROM.isoformat(), stdout=self.stdout)
         except SystemExit as exc:
-            raise CommandError(f"Publicação do modelo actuarial falhou (código {exc.code}).") from exc
+            raise CommandError(f"Publicação do modelo atuarial falhou (código {exc.code}).") from exc
 
 
 class Command(BaseCommand):
@@ -261,7 +260,7 @@ class Command(BaseCommand):
         parser.add_argument("--allow-demo", action="store_true", help="Permite a camada de teste com DEBUG=False.")
         parser.add_argument("--no-isolation-tenant", action="store_true")
         parser.add_argument("--no-actuarial", action="store_true",
-                            help="Não publica o modelo actuarial (fica em rascunho para aprovação do actuário).")
+                            help="Não publica o modelo atuarial (fica em rascunho para aprovação do actuário).")
 
     # ------------------------------------------------------------------ main
     def handle(self, *args, **opts):
@@ -448,7 +447,7 @@ class Command(BaseCommand):
             stats["historico"] = self._claims_history()
             self.report.append(
                 f"Tenant de teste: {code} ({tenant.id}) — clientes em massa: {stats['customers']}, "
-                f"apólices activas: {stats['active']}, a aguardar 1.º pagamento: {stats['pending']}, "
+                f"apólices ativas: {stats['active']}, a aguardar 1.º pagamento: {stats['pending']}, "
                 f"cotações em curso/recusadas: {stats['quotes']}, contas de portal: {stats['accounts']}, "
                 f"pedidos: {stats['requests']}, importações de sinistralidade: {stats['historico']}, falhas: {stats['failed']}"
             )
@@ -651,19 +650,18 @@ class Command(BaseCommand):
         return out
 
     def _shape_installments(self, policy: Policy) -> None:
-        """Parte das apólices fraccionadas fica com prestações em atraso / a vencer."""
+        """Parte das apólices fracionadas fica com prestações em atraso / a vencer."""
         r = self.rng
-        today = timezone.localdate()
         rows = list(PremiumInstallment.all_tenants.filter(policy_id=policy.id).order_by("installment_no"))
         if len(rows) < 2 or r.random() > 0.35:
             return
+        # A apólice inteira recua no tempo, para que o período da prestação em
+        # atraso / a vencer já tenha (ou esteja quase a) começar.
         late = rows[1]
         if r.random() < 0.5:
-            PremiumInstallment.all_tenants.filter(id=late.id).update(
-                status="OVERDUE", due_date=today - datetime.timedelta(days=r.randint(3, 40)), paid_at=None)
+            make_installment_late(policy, late.installment_no, days_late=r.randint(3, 40))
         else:
-            PremiumInstallment.all_tenants.filter(id=late.id).update(
-                status="DUE", due_date=today + datetime.timedelta(days=r.randint(1, 14)), paid_at=None)
+            make_installment_due_soon(policy, late.installment_no, in_days=r.randint(1, 14))
 
     # -- portal -------------------------------------------------------------
     def _portal_account(self, proposer: Proposer, stats: dict[str, int]):
@@ -717,7 +715,7 @@ class Command(BaseCommand):
     # -- sinistralidade -----------------------------------------------------
     def _claims_history(self) -> int:
         """24 meses de prémios e sinistros (outra seguradora) por proponente com
-        apólice activa, para os ecrãs de sinistralidade e projecção."""
+        apólice ativa, para os ecrãs de sinistralidade e projeção."""
         created = 0
         today = timezone.localdate()
         proposers = list(Proposer.objects.filter(external_reference__startswith="BULK-",
@@ -728,27 +726,25 @@ class Command(BaseCommand):
                 continue
             corporate = proposer.proposer_type == "ORGANISATION"
             insured = max(1, InsuredMember.objects.filter(proposer=proposer).count())
-            prem, claims = io.StringIO(), io.StringIO()
-            pw, cw = csv.writer(prem), csv.writer(claims)
-            pw.writerow(["period_start", "period_end", "premium_amount", "insured_count", "currency"])
-            cw.writerow(["occurrence_date", "benefit_code", "paid_amount", "member_reference", "provision_amount",
-                         "currency", "status"])
+            prem = [["period_start", "period_end", "premium_amount", "insured_count", "currency"]]
+            claims = [["occurrence_date", "benefit_code", "paid_amount", "member_reference", "provision_amount",
+                       "currency", "status"]]
             base = Decimal(260000 if not corporate else 200000) * insured
             for k in range(24, 0, -1):
                 start = (today.replace(day=1) - datetime.timedelta(days=30 * k)).replace(day=1)
                 end = (start + datetime.timedelta(days=32)).replace(day=1) - datetime.timedelta(days=1)
-                pw.writerow([start, end, f"{(base / 12).quantize(Decimal('0.01'))}", insured, "AOA"])
+                prem.append([start, end, f"{(base / 12).quantize(Decimal('0.01'))}", insured, "AOA"])
                 for _ in range(self.rng.randint(0, 2 + insured // 2)):
                     day = start + datetime.timedelta(days=self.rng.randint(0, (end - start).days))
                     amount = Decimal(self.rng.randint(8, 400)) * 1000
-                    cw.writerow([day, self.rng.choice(CLAIM_BENEFITS), f"{amount:.2f}",
-                                 f"{proposer.external_reference}-M{self.rng.randint(1, insured)}",
-                                 "0" if day < today - datetime.timedelta(days=90) else f"{amount / 4:.2f}",
-                                 "AOA", self.rng.choice(["PAID"] * 8 + ["OPEN", "REJECTED"])])
-            for kind, buf, name in (("PREMIUMS", prem, "premios"), ("CLAIMS", claims, "sinistros")):
+                    claims.append([day, self.rng.choice(CLAIM_BENEFITS), f"{amount:.2f}",
+                                   f"{proposer.external_reference}-M{self.rng.randint(1, insured)}",
+                                   "0" if day < today - datetime.timedelta(days=90) else f"{amount / 4:.2f}",
+                                   "AOA", self.rng.choice(["PAID"] * 8 + ["OPEN", "REJECTED"])])
+            for kind, rows, name in (("PREMIUMS", prem, "premios"), ("CLAIMS", claims, "sinistros")):
                 import_file(kind=kind, proposer_id=proposer.id, policy_id=None, source="OTHER_INSURER",
-                            filename=f"{proposer.external_reference}-{name}.csv",
-                            content=buf.getvalue().encode("utf-8"), dry_run=False)
+                            filename=f"{proposer.external_reference}-{name}.xlsx",
+                            content=xlsx_from_rows(rows), dry_run=False)
                 created += 1
         return created
 

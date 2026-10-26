@@ -22,12 +22,12 @@ Forma do valor:
          "unit": "AOA", "showInForm": true, "order": 2, "description": ""}
       ],
       "values": [                       # «Taxas e Valores», um por grupo
-        {"group": "actividade", "type": "SIMPLE", "aggregate": "SUM",
+        {"group": "atividade", "type": "SIMPLE", "aggregate": "SUM",
          "unit": "PERCENT", "rows": [{"option": "comercio", "value": "0.02"}]}
       ],
       "formulas": [
         {"code": "premio_anual", "name": "Prémio anual",
-         "expression": "actividade * massa_salarial * multiplicador",
+         "expression": "atividade * massa_salarial * multiplicador",
          "flags": {"premium": true, "capital": false, "hidden": false,
                    "fractionation": false, "conversion": false},
          "frequency": null, "unit": "AOA", "minResult": null, "order": 1,

@@ -58,7 +58,7 @@ class CoverageResult:
 
 _MESSAGES: dict[str, str] = {
     "POLICY_AWAITING_FIRST_PREMIUM":
-        "A apólice ainda não está activa — falta confirmar o pagamento da 1.ª fracção.",
+        "A apólice ainda não está ativa — falta confirmar o pagamento da 1.ª fracção.",
 
     "POLICY_SUSPENDED_NO_PAYMENT":
         "A apólice está suspensa por falta de pagamento.",
@@ -67,10 +67,10 @@ _MESSAGES: dict[str, str] = {
         "A apólice não está em vigor nesta data.",
 
     "MEMBER_DEACTIVATED":
-        "Este beneficiário está desactivado.",
+        "Este beneficiário está desativado.",
 
     "MEMBER_PENDING":
-        "Este beneficiário ainda não está activo — existe uma validação pendente.",
+        "Este beneficiário ainda não está ativo — existe uma validação pendente.",
 
     "MEMBER_NOT_IN_FORCE":
         "Este beneficiário não está coberto nesta data.",
@@ -120,12 +120,12 @@ def _not_covered(
     if reason_code == "MEMBER_PENDING":
         if required_action:
             message = (
-                "Este beneficiário ainda não está activo. "
+                "Este beneficiário ainda não está ativo. "
                 f"{required_action}"
             )
         else:
             message = (
-                "Este beneficiário ainda não está activo — "
+                "Este beneficiário ainda não está ativo — "
                 "a validação do beneficiário está pendente."
             )
 

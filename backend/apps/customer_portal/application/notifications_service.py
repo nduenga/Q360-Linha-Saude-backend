@@ -1,17 +1,19 @@
 """Central de notificações (PDF s.14).
 
 Duas origens, ambas idempotentes por `dedupe_key`:
-  - eventos directos (pedido actualizado, mensagem do backoffice) criados por
+  - eventos diretos (pedido atualizado, mensagem do backoffice) criados por
     quem os provoca via `notify_account`;
   - eventos de estado (cotação aprovada/recusada, apólice emitida, prestação
     em atraso, apólice a vencer, renovação disponível) calculados a partir do
-    estado actual por `sync_account` sempre que o cliente abre a central —
+    estado atual por `sync_account` sempre que o cliente abre a central —
     assim não é preciso ligar cada serviço do backoffice ao portal.
 
 Canal: portal. Email/SMS/WhatsApp dependem de integrações que ainda não
 existem (PDF: "conforme integrações").
 """
 from __future__ import annotations
+
+from shared import formatting as fmt
 
 import datetime
 import uuid
@@ -121,13 +123,13 @@ def sync_account(account_id: uuid.UUID, *, today: datetime.date | None = None) -
         if installment.status == "OVERDUE":
             notify_account(
                 account_id=account_id, dedupe_key=f"installment:{installment.id}:OVERDUE", code="PAYMENT_OVERDUE",
-                title="Pagamento em atraso", body=f"Apólice {number}: prestação com vencimento em {installment.due_date}.",
+                title="Pagamento em atraso", body=f"Apólice {number}: prestação com vencimento em {fmt.date(installment.due_date)}.",
                 link="/portal/pagamentos",
             )
         elif installment.due_date <= soon:
             notify_account(
                 account_id=account_id, dedupe_key=f"installment:{installment.id}:DUE_SOON", code="PAYMENT_PENDING",
-                title="Pagamento pendente", body=f"Apólice {number}: prestação vence em {installment.due_date}.",
+                title="Pagamento pendente", body=f"Apólice {number}: prestação vence em {fmt.date(installment.due_date)}.",
                 link="/portal/pagamentos",
             )
 

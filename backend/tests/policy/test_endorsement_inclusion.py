@@ -26,7 +26,7 @@ def _active_policy(admin_client, tenant):
 def test_inclusion_prorata_approval_and_client_acceptance(admin_client, tenant):
     policy, quote = _active_policy(admin_client, tenant)
     assert policy["status"] == "ACTIVE"
-    child = admin_client.post("/api/v1/members", {"proposerId": quote["proposerId"], "relationshipCode": "FILHO",
+    child = admin_client.post("/api/v1/members", {"firstName": "Pessoa", "proposerId": quote["proposerId"], "relationshipCode": "FILHO",
                                                   "dateOfBirth": "2015-03-01"}).data["id"]
     today = datetime.date.today()
     url = f"/api/v1/policies/{policy['id']}/endorsements/inclusions"
@@ -77,7 +77,7 @@ def test_inclusion_prorata_approval_and_client_acceptance(admin_client, tenant):
 
 
 def _child(admin_client, proposer_id, birth: datetime.date) -> str:
-    created = admin_client.post("/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "FILHO",
+    created = admin_client.post("/api/v1/members", {"firstName": "Pessoa", "proposerId": proposer_id, "relationshipCode": "FILHO",
                                                     "dateOfBirth": birth.isoformat()})
     assert created.status_code == 201, created.data
     return created.data["id"]
@@ -236,3 +236,51 @@ def test_client_accepts_the_endorsement_in_the_portal(admin_client, tenant):
     assert accepted.status_code == 200, accepted.data
     assert accepted.data["status"] == "BOUND" and accepted.data["clientResponse"]["channel"] == "PORTAL"
     assert portal.get("/api/v1/customer-portal/endorsements").data == []
+
+
+def _policy_with_prepaid_installments(admin_client, tenant):
+    """Apólice trimestral com as duas primeiras prestações pagas."""
+    quote = _approved_quote(admin_client, tenant, suffix="PREPAID")
+    approver = _approver(tenant)
+    policy = approver.post(f"/api/v1/quotes/{quote['id']}/policy", {
+        "signatoryName": "Holder", "signatoryDocumentType": "BI", "signatoryDocumentNumber": "000000000BI000",
+        "signatoryCapacity": "TOMADOR", "termMonths": 12, "paymentFrequency": "TRIMESTRAL",
+        "signedAt": "2026-06-10T14:00:00Z", "rowVersion": quote["rowVersion"]}, format="json").data
+    approver.post(f"/api/v1/policies/{policy['id']}/installments/1/payment",
+                  {"paidAt": "2026-06-10T16:00:00Z", "rowVersion": policy["rowVersion"]}, format="json")
+    from apps.policy.infrastructure.models import PremiumInstallment
+
+    PremiumInstallment.all_tenants.filter(policy_id=policy["id"], installment_no=2).update(
+        status="PAID", paid_at=datetime.datetime(2026, 6, 10, tzinfo=datetime.timezone.utc))
+    return admin_client.get(f"/api/v1/policies/{policy['id']}").data, quote
+
+
+@pytest.mark.django_db
+def test_prepaid_period_is_charged_immediately_by_default(admin_client, tenant):
+    """Com as prestações seguintes já pagas, a parte até à próxima prestação por
+    pagar vence logo na data de inclusão (antes só se cobrava meses depois)."""
+    policy, quote = _policy_with_prepaid_installments(admin_client, tenant)
+    installments = admin_client.get(f"/api/v1/policies/{policy['id']}/installments").data
+    next_unpaid = min(i["periodFrom"] for i in installments if i["status"] == "DUE")
+    today = datetime.date.today()
+    inclusion = max(today, datetime.date.fromisoformat(policy["startDate"])) + datetime.timedelta(days=5)
+    if inclusion.isoformat() >= next_unpaid:
+        pytest.skip("a data de hoje já passou o período pré-pago desta apólice de teste")
+    child = _child(admin_client, quote["proposerId"], datetime.date(2015, 3, 1))
+    created = admin_client.post(f"/api/v1/policies/{policy['id']}/endorsements/inclusions",
+                                {"inclusionDate": inclusion.isoformat(), "memberIds": [child]}, format="json")
+    assert created.status_code == 201, created.data
+    calc = created.data["calculation"]
+    assert calc["prepaidPeriodCharge"] == "IMMEDIATE"
+    first = calc["installments"][0]
+    assert first["dueDate"] == inclusion.isoformat() and first["periodFrom"] == inclusion.isoformat()
+    assert first["periodTo"] < next_unpaid
+    assert sum(Decimal(i["amount"]) for i in calc["installments"]) == Decimal(calc["totalCharged"])
+
+    _publish_settings(admin_client, tenant, {"prepaid_period_charge": "SPREAD"})
+    spread = admin_client.put(f"/api/v1/quotes/{created.data['quoteId']}/endorsement",
+                              {"inclusionDate": inclusion.isoformat()}, format="json")
+    assert spread.status_code == 200, spread.data
+    calc = spread.data["calculation"]
+    assert calc["prepaidPeriodCharge"] == "SPREAD"
+    assert all(i["dueDate"] >= next_unpaid for i in calc["installments"])

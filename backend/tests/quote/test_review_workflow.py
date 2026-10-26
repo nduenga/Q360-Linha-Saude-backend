@@ -68,7 +68,7 @@ def _ready_quote(client, *, code_suffix: str) -> dict:
     proposer_id = proposer_response.data["id"]
 
     member_id = client.post(
-        "/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
+        "/api/v1/members", {"firstName": "Pessoa", "proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data["id"]
     quote = client.post(
         "/api/v1/quotes",

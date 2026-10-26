@@ -52,7 +52,7 @@ class ConfigurationListCreateView(_ConfigPermissions, APIView):
 class ConfigurationDetailView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="getBusinessConfiguration", summary="Consultar configuração de negócio", tags=["Configuration"], responses=BusinessConfigurationSerializer)
     def get(self,request,configuration_id):return Response(BusinessConfigurationSerializer(get_object_or_404(BusinessConfiguration,id=configuration_id)).data)
-    @extend_schema(operation_id="updateBusinessConfiguration", summary="Actualizar configuração de negócio em rascunho", tags=["Configuration"], request=BusinessConfigurationUpdateSerializer, responses=BusinessConfigurationSerializer)
+    @extend_schema(operation_id="updateBusinessConfiguration", summary="Atualizar configuração de negócio em rascunho", tags=["Configuration"], request=BusinessConfigurationUpdateSerializer, responses=BusinessConfigurationSerializer)
     def put(self,request,configuration_id):
         c=get_object_or_404(BusinessConfiguration,id=configuration_id);s=BusinessConfigurationUpdateSerializer(data=request.data);s.is_valid(raise_exception=True)
         c=update_configuration(request,c,s.validated_data["value"],s.validated_data.get("effectiveFrom"),s.validated_data.get("effectiveTo"),s.validated_data.get("metadata"),s.validated_data.get("rowVersion"))

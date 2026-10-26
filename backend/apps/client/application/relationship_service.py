@@ -35,7 +35,7 @@ MARKET_CATALOG: list[dict[str, str]] = [
     },
     {
         "code": "ASCENDENTE",
-        "label": "Pai / Mãe / Avô / Avó (Ascendente Directo)",
+        "label": "Pai / Mãe / Avô / Avó (Ascendente Direto)",
         "category": RelationshipCategory.ASCENDANT.value,
     },
     {

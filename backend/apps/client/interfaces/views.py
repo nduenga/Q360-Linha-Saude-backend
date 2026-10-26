@@ -78,6 +78,10 @@ class ProposerListCreateView(APIView):
         body = ProposerCreateRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         proposer = proposer_service.create_proposer(**body.validated_data)
+        # Convite por email para o Portal do Cliente (enviado depois do commit).
+        from apps.customer_portal.application.invitation_service import invite_proposer
+
+        invite_proposer(proposer)
         return Response(ProposerSerializer(proposer).data, status=201)
 
 

@@ -106,7 +106,7 @@ def test_update_member_with_unknown_relationship_code_is_rejected(
 
     response = admin_client.put(
         f"/api/v1/members/{member['id']}",
-        {
+        {"firstName": "Pessoa", 
             "relationshipCode": "SOBRINHO",
             "rowVersion": member.get("rowVersion", 0),
         },

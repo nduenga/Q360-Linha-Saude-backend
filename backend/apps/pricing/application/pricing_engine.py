@@ -273,7 +273,7 @@ def _execute(
         proposer_ids = {member.proposer_id for member in members}
         if len(proposer_ids) != 1:
             raise ReferencedEntityNotFoundError(
-                "Seleccione membros de um único proponente para calcular a tarifação."
+                "Selecione membros de um único proponente para calcular a tarifação."
             )
         proposer = members[0].proposer
         if proposer.proposer_type != expected_proposer_type:
@@ -513,7 +513,7 @@ def _run_calculation(
         proposer_attributes = (members[0].proposer.attributes_json or {})
         saved_profile = proposer_attributes.get("actuarialProfile") or {}
         if not isinstance(saved_profile, dict):
-            raise PricingConfigError("O perfil actuarial guardado no proponente tem de ser um objecto.")
+            raise PricingConfigError("O perfil atuarial guardado no proponente tem de ser um objecto.")
         profile = {**saved_profile, **supplied_profile}
         plan_mapping = actuarial_model.get("plan_code_mapping", {}).get(str(plan.code), {})
         segment = plan_mapping.get("segment")
@@ -1038,10 +1038,10 @@ def _run_calculation(
                 commission = Decimal(str(loadings["acquisition_commission"]))
                 margin = Decimal(str(loadings["insurer_margin"]))
             except (KeyError, TypeError, InvalidOperation) as exc:
-                raise PricingConfigError(f"Carregamentos actuariais incompletos para o segmento '{segment}'.") from exc
+                raise PricingConfigError(f"Carregamentos atuariais incompletos para o segmento '{segment}'.") from exc
             total_loading = administration + commission + margin
             if volatility < 0 or total_loading < 0 or total_loading >= 1:
-                raise PricingConfigError(f"Carregamentos actuariais inválidos para o segmento '{segment}'.")
+                raise PricingConfigError(f"Carregamentos atuariais inválidos para o segmento '{segment}'.")
 
             before_risk = running_amount
             running_amount = round_amount(running_amount * (Decimal("1") + volatility))

@@ -66,7 +66,19 @@ class AuditEventSerializer(serializers.Serializer):
         default=None,
     )
 
+    entityLabel = serializers.SerializerMethodField(
+        help_text="Nome legível do registo (p.ex. «COT-47», «APO-1», nome do proponente); null se não houver.",
+    )
+
     metadata = serializers.SerializerMethodField()
+
+    def get_entityLabel(self, obj) -> str | None:
+        labels = self.context.get("entity_labels")
+        if labels is None:
+            from apps.foundation.application.audit_labels import entity_labels
+
+            labels = entity_labels([obj])
+        return labels.get((obj.entity_type, str(obj.entity_id)))
 
     def get_authorName(self, obj) -> str | None:
         if not obj.actor_id:

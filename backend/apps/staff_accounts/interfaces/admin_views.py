@@ -69,3 +69,13 @@ class StaffAccountResetPasswordView(APIView):
     def post(self, request, account_id):
         new_password = account_service.reset_password(account_id=account_id)
         return Response(GeneratedPasswordSerializer({"temporaryPassword": new_password}).data)
+
+
+class StaffAccountUnlockView(APIView):
+    """POST /admin/staff-accounts/{id}/unlock — levanta o bloqueio por tentativas falhadas."""
+
+    permission_classes = [IsAdminRole]
+
+    def post(self, request, account_id):
+        account_service.unlock(account_id=account_id)
+        return Response(status=204)

@@ -91,7 +91,7 @@ def _scope(client, *, members=2, settings=SETTINGS):
 
         member_response = client.post(
             "/api/v1/members",
-            {
+            {"firstName": "Pessoa", 
                 "proposerId": proposer,
                 "relationshipCode": relationship_code,
                 "dateOfBirth": "1990-01-01",

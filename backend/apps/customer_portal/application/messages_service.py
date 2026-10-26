@@ -69,7 +69,7 @@ def _item(message: PortalMessage) -> dict:
     return {
         "id": str(message.id),
         "from": "CUSTOMER" if message.sender_type == "CUSTOMER" else "STAFF",
-        "fromLabel": "Você" if message.sender_type == "CUSTOMER" else "Q360",
+        "fromLabel": "Você" if message.sender_type == "CUSTOMER" else "Seguradora",
         "body": message.body,
         "createdAt": message.created_at,
     }
@@ -146,7 +146,7 @@ def staff_send(*, context_type: str, context_ref: str, body: str, actor_ref: str
         for account_id in notifications_service.account_ids_for_proposer(row.proposer_id):
             notifications_service.notify_account(
                 account_id=account_id, dedupe_key=f"message:{message.id}", code="NEW_MESSAGE",
-                title="Nova mensagem da Q360", body=body[:200],
+                title="Nova mensagem do seu mediador", body=body[:200],
                 link=f"/portal/mensagens/{context_type.lower()}/{context_ref}",
             )
     _audit.record(

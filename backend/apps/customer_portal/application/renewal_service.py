@@ -27,10 +27,10 @@ from apps.quote.infrastructure.models import Quote
 
 STEPS = (
     ("ALERT", "Alerta de aproximação do vencimento"),
-    ("CONDITIONS", "Consulta das condições actuais"),
-    ("UPDATE", "Actualização de informações"),
+    ("CONDITIONS", "Consulta das condições atuais"),
+    ("UPDATE", "Atualização de informações"),
     ("REQUEST", "Pedido de renovação"),
-    ("PROPOSAL", "Recepção da proposta de renovação"),
+    ("PROPOSAL", "Receção da proposta de renovação"),
     ("ACCEPTANCE", "Aceitação pelo cliente"),
     ("ISSUANCE", "Emissão da renovação"),
 )

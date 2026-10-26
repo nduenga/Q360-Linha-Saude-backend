@@ -54,9 +54,9 @@ STATIC_CONFIGS: dict[str, dict[str, Any]] = {
     ]},
     # Regras_Ajustes §3 e Dashboard_Premissas: encargos do modelo (informativos, já incluídos no prémio actuarial).
     "pricing.taxes_fees": {"charges": [
-        {"code": "ARSEG-LEVY", "description": "Taxa de supervisão ARSEG (1%) — já incluída no prémio actuarial",
+        {"code": "ARSEG-LEVY", "description": "Taxa de supervisão ARSEG (1%) — já incluída no prémio atuarial",
          "category": "TAX", "type": "PERCENTAGE", "value": "1", "included_in_premium": False},
-        {"code": "STAMP-DUTY", "description": "Imposto do selo (0% no modelo actuarial)",
+        {"code": "STAMP-DUTY", "description": "Imposto do selo (0% no modelo atuarial)",
          "category": "TAX", "type": "PERCENTAGE", "value": "0", "included_in_premium": False},
     ]},
     # Regras_Ajustes §2 (B58:D62): gravidade da pré-existência -> tratamento.
@@ -108,7 +108,7 @@ STATIC_CONFIGS: dict[str, dict[str, Any]] = {
     "foreign_coverage.rules": {
         "enabled": True, "countries": ["Portugal", "África do Sul", "Brasil", "Namíbia"], "currency": "USD",
         "prior_approval": True,
-        "fx_rule": "Reembolso em Kz à taxa de referência do modelo actuarial (1 USD = 931,27 Kz) na data de pagamento.",
+        "fx_rule": "Reembolso em Kz à taxa de referência do modelo atuarial (1 USD = 931,27 Kz) na data de pagamento.",
     },
     "proposal.documents": {"documents": [
         {"document_type": "PROPOSAL", "required": True, "description": "Proposta de Seguro"},
@@ -123,7 +123,7 @@ STATIC_CONFIGS: dict[str, dict[str, Any]] = {
     "proposal.texts": {"texts": [
         {"code": "VALIDADE-PROPOSTA", "title": "Validade da proposta",
          "text": "Esta proposta é válida pelo prazo indicado e sujeita à aceitação do risco pela seguradora.", "active": False},
-        {"code": "PROTECCAO-DADOS", "title": "Protecção de dados de saúde",
+        {"code": "PROTECCAO-DADOS", "title": "Proteção de dados de saúde",
          "text": "Os dados de saúde são tratados com confidencialidade para efeitos de subscrição e gestão do contrato.",
          "active": False},
     ]},

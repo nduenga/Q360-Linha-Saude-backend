@@ -60,11 +60,10 @@ PRE_EXISTING_TEXT = {
 
 
 def money(amount: Any, currency: str = "AOA") -> str:
-    value = Decimal(str(amount))
-    text = f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    if text.endswith(",00"):
-        text = text[:-3]
-    return f"{text} Kz" if currency == "AOA" else f"{text} {currency}"
+    """Mesma regra de todo o produto (`shared.formatting.money`)."""
+    from shared.formatting import money as format_money
+
+    return format_money(amount, currency)
 
 
 def _limit_text(limit: dict[str, Any], currency: str) -> str:

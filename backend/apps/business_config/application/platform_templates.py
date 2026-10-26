@@ -35,7 +35,7 @@ from apps.foundation.infrastructure.models import PlatformTemplateVersion as Ver
 KINDS = ("PRODUCT", "ACTUARIAL_MODEL", "FORMULA_SET", "COVERAGE_LIBRARY")
 KIND_LABELS = {
     "PRODUCT": "Produto de mercado",
-    "ACTUARIAL_MODEL": "Modelo actuarial de referência",
+    "ACTUARIAL_MODEL": "Modelo atuarial de referência",
     "FORMULA_SET": "Conjunto de fórmulas",
     "COVERAGE_LIBRARY": "Biblioteca de coberturas",
 }

@@ -61,7 +61,7 @@ def _member(client) -> str:
         },
     ).data
     member = client.post(
-        "/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1985-04-12"}
+        "/api/v1/members", {"firstName": "Pessoa", "proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1985-04-12"}
     ).data
     return member["id"]
 

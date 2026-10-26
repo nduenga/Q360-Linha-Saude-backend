@@ -79,7 +79,7 @@ def fractionation_loading(quote: Quote, payment_frequency: str) -> Decimal:
     Decisão A8 (2026-10-14): aplica-se a todas as apólices.
       1. `pricing.fractionation` publicada e vigente na data de efeito da
          cotação (editável pela interface);
-      2. senão, a tabela do modelo actuarial registado no cálculo do prémio
+      2. senão, a tabela do modelo atuarial registado no cálculo do prémio
          (a versão usada nesse cálculo, não a publicada hoje);
       3. senão, sem encargo (partes iguais)."""
     config = BusinessConfigurationResolver.get("pricing.fractionation", effective_date=quote.reference_date)
@@ -371,7 +371,8 @@ def _plan_benefit_codes(policy: Policy) -> list[str]:
 
 def _coverage_waiting_days(policy: Policy) -> dict[str, int]:
     """Waiting days configured on each contracted coverage of the plan (PDF:
-    carência por cobertura, individual vs grupo). Frozen in the snapshot."""
+    carência por cobertura, individual vs grupo). Frozen in the snapshot.
+    A value of 0 means "no waiting period" and overrides the rule default."""
     plan_json = (policy.contracted_terms_snapshot.snapshot_json or {}).get("plan") or {}
     key = "group" if (plan_json.get("settings") or {}).get("segment") == "GROUP" else "individual"
     out: dict[str, int] = {}
@@ -379,7 +380,9 @@ def _coverage_waiting_days(policy: Policy) -> dict[str, int]:
         if not benefit.get("contracted", True):
             continue
         days = ((benefit.get("configurationJson") or {}).get("waitingDays") or {}).get(key)
-        if isinstance(days, int) and days > 0:
+        # 0 é uma escolha explícita («sem carência», p. ex. urgências) e tem de
+        # prevalecer sobre a carência genérica da regra de elegibilidade.
+        if isinstance(days, int) and not isinstance(days, bool) and days >= 0:
             out[benefit["code"]] = days
     return out
 
@@ -423,6 +426,21 @@ def _waiting_period_ends(*, policy: Policy, policy_member: PolicyMember, inclusi
     return ends
 
 
+_POLICY_STATUS_TEXT = {
+    "ACTIVE": "ativa", "CANCELLED": "cancelada", "EXPIRED": "expirada", "RENEWED": "renovada",
+    "SUSPENDED": "suspensa", "PENDING_FIRST_PREMIUM": "a aguardar o 1.º prémio",
+}
+
+
+def _not_pending_message(policy: Policy) -> str:
+    """Mensagem para quem tenta registar o 1.º prémio de uma apólice que já não o espera."""
+    number = policy.policy_number or "esta apólice"
+    if PremiumInstallment.objects.filter(policy=policy, installment_no=1, status="PAID").exists():
+        return f"A 1.ª prestação da apólice {number} já está paga."
+    state = _POLICY_STATUS_TEXT.get(policy.status, policy.status)
+    return f"A apólice {number} está {state}; só se regista o 1.º prémio de uma apólice a aguardar esse pagamento."
+
+
 def register_first_premium_payment(
     *,
     policy: Policy,
@@ -433,7 +451,7 @@ def register_first_premium_payment(
     correlation_id: str | None,
 ) -> Policy:
     if policy.status != PolicyStatus.PENDING_FIRST_PREMIUM.value:
-        raise PolicyStateError(f"A apólice {policy.id} está em {policy.status}; só uma apólice PENDING_FIRST_PREMIUM (a aguardar a 1.ª prestação) pode ser ativada")
+        raise PolicyStateError(_not_pending_message(policy))
 
     installment = PremiumInstallment.objects.filter(policy=policy, installment_no=1, status="DUE").first()
     if installment is None:
@@ -463,7 +481,7 @@ def register_first_premium_payment(
         if updated == 0:
             policy.refresh_from_db()
             if policy.status != PolicyStatus.PENDING_FIRST_PREMIUM.value:
-                raise PolicyStateError(f"A apólice {policy.id} está em {policy.status}; só uma apólice PENDING_FIRST_PREMIUM (a aguardar a 1.ª prestação) pode ser ativada")
+                raise PolicyStateError(_not_pending_message(policy))
             raise RowVersionMismatchError(
                 f"A versão da apólice {policy.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
             )

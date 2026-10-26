@@ -244,12 +244,14 @@ def test_full_lifecycle_from_market_templates_to_portal_and_renewal(admin_client
     assert indexed.data["coverages"]["HOSPITALIZATION"][0]["amount"] == "16500000"
 
     # ------------------------------------- 10. sinistralidade e projeção ligada a cenário
-    claims_csv = "occurrence_date,benefit_code,paid_amount\n" + "\n".join(f"2025-{m:02d}-10,DENTAL,10000" for m in range(1, 13))
-    premiums_csv = "period_start,period_end,premium_amount,insured_count\n2025-01-01,2025-12-31,200000,2\n"
-    for kind, content in (("CLAIMS", claims_csv), ("PREMIUMS", premiums_csv)):
+    from apps.claims.application.import_service import xlsx_from_rows
+
+    claims_rows = [["occurrence_date", "benefit_code", "paid_amount"]] + [[f"2025-{m:02d}-10", "DENTAL", "10000"] for m in range(1, 13)]
+    premiums_rows = [["period_start", "period_end", "premium_amount", "insured_count"], ["2025-01-01", "2025-12-31", "200000", 2]]
+    for kind, rows in (("CLAIMS", claims_rows), ("PREMIUMS", premiums_rows)):
         resp = admin_client.post(
             "/api/v1/claims/imports",
-            {"file": SimpleUploadedFile("d.csv", content.encode()), "kind": kind, "proposerId": proposer["id"]}, format="multipart",
+            {"file": SimpleUploadedFile("d.xlsx", xlsx_from_rows(rows)), "kind": kind, "proposerId": proposer["id"]}, format="multipart",
         )
         assert resp.status_code == 201, resp.data
     summary = admin_client.get(f"/api/v1/claims/summary?proposerId={proposer['id']}").data

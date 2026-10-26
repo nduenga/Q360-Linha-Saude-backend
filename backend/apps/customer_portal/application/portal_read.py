@@ -10,6 +10,8 @@ module — no pricing rules, underwriting notes, loadings or internal reasons
 """
 from __future__ import annotations
 
+from shared import formatting as fmt
+
 import datetime
 import uuid
 from collections import defaultdict
@@ -431,7 +433,7 @@ def get_my_dashboard(*, today: datetime.date | None = None) -> dict:
     for installment in open_installments:
         if installment["status"] == "OVERDUE":
             alerts.append({"code": "PAYMENT_OVERDUE", "severity": "danger", "policyNumber": installment["policyNumber"],
-                           "message": f"Prestação de {installment['amount']} {installment['currencyCode']} em atraso."})
+                           "message": f"Prestação de {fmt.money(installment['amount'], installment['currencyCode'])} em atraso."})
     for policy in policies:
         phase = policy_phase(policy, today)
         if phase == "EXPIRING":

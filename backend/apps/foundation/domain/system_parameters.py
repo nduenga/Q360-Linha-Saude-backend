@@ -97,7 +97,7 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
             maximum=365,
             unit="dias",
             description="Validade por omissão de uma cotação, em dias a partir da data de início.",
-            used_by="Cotações: `valid_until` ao criar/alterar a data de início.",
+            used_by="Cotações: data «Válida até» de cada cotação nova ou reaberta.",
         ),
         ParameterDefinition(
             code="client.individual_max_beneficiaries",
@@ -111,7 +111,7 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
                 "Número máximo de beneficiários (dependentes, sem contar o titular) que um proponente "
                 "individual pode ter."
             ),
-            used_by="Clientes: POST/PUT /members e importação de pessoas seguras (proponente INDIVIDUAL).",
+            used_by="Clientes: ao registar ou importar pessoas seguras de um cliente individual.",
         ),
         ParameterDefinition(
             code="documents.signed_url_ttl_seconds",
@@ -122,7 +122,7 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
             maximum=86400,
             unit="segundos",
             description="Validade das ligações assinadas para descarregar propostas e outros documentos.",
-            used_by="Documentos: POST /documents/{id}/signed-url.",
+            used_by="Documentos: ligações para descarregar propostas e outros documentos.",
         ),
         ParameterDefinition(
             code="renewal.default_medical_inflation_pct",
@@ -136,7 +136,7 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
                 "Inflação dos custos médicos usada na indexação de capitais de uma renovação quando o plano não "
                 "define a sua própria percentagem."
             ),
-            used_by="Renovações: POST /quotes/{id}/renewal/indexation.",
+            used_by="Renovações: atualização dos capitais pela inflação médica.",
         ),
         ParameterDefinition(
             code="pricing.rounding_policy",
@@ -145,16 +145,16 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
             default="OD-006-OFFICIAL-HALF-UP-2DP",
             description="Política oficial de arredondamento dos valores monetários (meio para cima, 2 casas).",
             allowed_values=("OD-006-OFFICIAL-HALF-UP-2DP",),
-            used_by="Motor de preço: cada componente é arredondado a 2 casas, meio para cima (OD-006).",
+            used_by="Cálculo do prémio: cada parcela é arredondada a 2 casas decimais, meio para cima.",
         ),
         ParameterDefinition(
             code="pricing.formula",
             value_type="TEXT",
             category=STRUCTURAL,
             default="BASE × Π(fatores) + ajustes aditivos, arredondado a cada passo",
-            description="Estrutura do cálculo do prémio. Os valores (fatores, tarifas, ajustes) são parâmetros do GTE; a estrutura é do motor.",
+            description="Estrutura do cálculo do prémio. Os valores (fatores, tarifas, ajustes) são configurados por cada seguradora; a estrutura é igual para todas.",
             allowed_values=("BASE × Π(fatores) + ajustes aditivos, arredondado a cada passo",),
-            used_by="Motor de preço: ordem das etapas (descrição; mudar o texto não muda o cálculo).",
+            used_by="Cálculo do prémio: ordem das etapas (texto informativo; alterá-lo não muda o cálculo).",
         ),
         ParameterDefinition(
             code="capital.pro_rata_rule",
@@ -174,9 +174,9 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
             unit="%",
             description=(
                 "Imposto do selo sobre o prémio comercial líquido. Valor legal, igual para todas as seguradoras; "
-                "prevalece sobre o valor do modelo actuarial e sobre o encargo STAMP_DUTY do tenant."
+                "prevalece sobre o valor do modelo atuarial e sobre o encargo de imposto do selo configurado pela seguradora."
             ),
-            used_by="Motor de preço: componente TAX `STAMP_DUTY` (Calculador!C85).",
+            used_by="Cálculo do prémio: linha «Imposto do selo». Nas fórmulas: taxa_selo_pct.",
             formula_name="taxa_selo_pct",
         ),
         ParameterDefinition(
@@ -189,9 +189,9 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
             unit="%",
             description=(
                 "Taxa de supervisão da ARSEG sobre o prémio comercial líquido. Valor legal, igual para todas as "
-                "seguradoras; prevalece sobre o valor do modelo actuarial e sobre o encargo ARSEG_LEVY do tenant."
+                "seguradoras; prevalece sobre o valor do modelo atuarial e sobre o encargo da taxa ARSEG configurado pela seguradora."
             ),
-            used_by="Motor de preço: componente TAX `ARSEG_LEVY` (Calculador!C85).",
+            used_by="Cálculo do prémio: linha «Taxa de supervisão ARSEG». Nas fórmulas: taxa_arseg_pct.",
             formula_name="taxa_arseg_pct",
         ),
         ParameterDefinition(
@@ -206,7 +206,7 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
                 "Maioridade (art. 130.º do Código Civil). Um filho até esta idade é dependente sem prova; acima dela "
                 "só com prova de estudos e até ao teto de idade com prova."
             ),
-            used_by="Elegibilidade: limite «sem prova» dos filhos (categoria CHILD); nenhum tenant o pode exceder.",
+            used_by="Elegibilidade: idade máxima dos filhos sem prova de estudos; nenhuma seguradora a pode exceder.",
             formula_name="maioridade",
         ),
         ParameterDefinition(
@@ -218,10 +218,10 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
             maximum="1000000",
             unit="Kz por USD",
             description=(
-                "Câmbio de referência do dólar (BNA). Valor inicial do modelo actuarial (30/06/2026); o fornecedor "
+                "Câmbio de referência do dólar (BNA). Valor inicial do modelo atuarial (30/06/2026); o fornecedor "
                 "atualiza-o."
             ),
-            used_by="Fórmulas dos tenants: constante `cambio_usd_aoa` (custos em dólares, evacuação, medicamentos).",
+            used_by="Fórmulas das seguradoras: cambio_usd_aoa (custos em dólares, evacuação, medicamentos).",
             formula_name="cambio_usd_aoa",
         ),
         ParameterDefinition(
@@ -233,10 +233,10 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
             maximum="1000",
             unit="%",
             description=(
-                "Inflação geral anual de referência (INE). Valor inicial do modelo actuarial (30/06/2026); o "
+                "Inflação geral anual de referência (INE). Valor inicial do modelo atuarial (30/06/2026); o "
                 "fornecedor atualiza-o."
             ),
-            used_by="Fórmulas dos tenants: constante `inflacao_geral_pct` (indexação, renovações).",
+            used_by="Fórmulas das seguradoras: inflacao_geral_pct (indexação, renovações).",
             formula_name="inflacao_geral_pct",
         ),
         ParameterDefinition(
@@ -251,7 +251,7 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
                 "Idade máxima de um filho dependente com prova de estudos que qualquer seguradora pode aceitar "
                 "(inclui exceções corporativas)."
             ),
-            used_by="Elegibilidade: teto de maxAgeWithProof das regras e das exceções corporativas.",
+            used_by="Elegibilidade: teto da idade dos filhos com prova de estudos, também nas exceções de empresas.",
         ),
         ParameterDefinition(
             code="limits.max_acquisition_commission_pct",
@@ -262,10 +262,10 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
             maximum="100",
             unit="%",
             description=(
-                "Comissão de mediação máxima que um tenant pode carregar no prémio. 100 % = sem teto (até haver "
-                "norma que o fixe)."
+                "Comissão de mediação máxima que uma seguradora pode carregar no prémio. 100 % significa que ainda "
+                "não há teto (até haver norma que o fixe)."
             ),
-            used_by="Modelo actuarial: carregamento acquisition_commission de cada segmento (ao submeter e aprovar).",
+            used_by="Modelo atuarial: comissão de mediação de cada segmento (verificada ao submeter e ao aprovar).",
         ),
     )
 }

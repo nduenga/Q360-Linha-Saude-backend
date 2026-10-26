@@ -11,6 +11,7 @@ from apps.customer_portal.management.commands.prepare_portal_test_accounts impor
 from apps.customer_portal.management.commands.seed_portal_demo import PORTAL_PASSWORD
 from apps.customer_portal.infrastructure.models import CustomerAccount, CustomerAccountProposer
 from apps.foundation.infrastructure.models import Tenant
+from apps.foundation.management.commands.seed_demo_data import demo_email
 
 BASE = "/api/v1/customer-portal"
 
@@ -42,12 +43,20 @@ def test_demo_seeders_create_every_portal_scenario():
     tenant = Tenant.objects.get(code="demo-saude")
 
     # --- Ana: conta com palavra-passe, apólice, atraso, cotação aprovada, pedidos, mensagens
-    ana_client = _login(tenant, "fabiongila@gmail.com")
+    ana_client = _login(tenant, demo_email("ANA"))
     policies = ana_client.get(f"{BASE}/policies").data["policies"]
     assert [p["status"] for p in policies] == ["ACTIVE"]
 
     alerts = [a["code"] for a in ana_client.get(f"{BASE}/dashboard").data["alerts"]]
     assert "PAYMENT_OVERDUE" in alerts
+    # a prestação em atraso é de um período que já começou, dentro da vigência
+    import datetime
+
+    payments = ana_client.get(f"{BASE}/payments").data["installments"]
+    overdue = [i for i in payments if i["status"] == "OVERDUE"]
+    today, start = datetime.date.today().isoformat(), str(policies[0]["startDate"])
+    assert overdue and all(str(i["periodFrom"]) <= today for i in overdue)
+    assert all(str(i["dueDate"]) >= start for i in payments)
 
     statuses = {q["status"] for q in ana_client.get(f"{BASE}/me/quotes").data["quotes"]}
     assert "AWAITING_SIGNATURE" in statuses and "CONTRACTED" in statuses
@@ -72,21 +81,22 @@ def test_demo_seeders_create_every_portal_scenario():
     sent = _first_access(tenant, carlos_policy.policy_number, carlos.registration_number)
     assert sent.status_code == 202, sent.data
     assert mail.outbox[-1].to == [carlos.email]
-    assert carlos.email == "sethlussueki@gmail.com"
+    assert carlos.email == demo_email("CARLOS")
     assert APIClient().post(f"{BASE}/{tenant.id}/auth/login", {"email": carlos.email, "password": PORTAL_PASSWORD}, format="json").status_code == 401
 
     ana_proposer = Proposer.all_tenants.get(external_reference="DEMO-ANA-SILVA")
     ana_policy = Policy.all_tenants.get(proposer=ana_proposer, status="ACTIVE")
     ana_first_access = _first_access(tenant, ana_policy.policy_number, ana_proposer.registration_number)
     assert ana_first_access.status_code == 202, ana_first_access.data
-    assert mail.outbox[-1].to == ["fabiongila@gmail.com"]
+    assert mail.outbox[-1].to == [demo_email("ANA")]
 
     empresa = Proposer.all_tenants.get(external_reference="DEMO-EMPRESA-KILAMBA")
     empresa_policy = Policy.all_tenants.get(proposer=empresa, status="ACTIVE")
     company_first_access = _first_access(tenant, empresa_policy.policy_number, empresa.registration_number)
     assert company_first_access.status_code == 202, company_first_access.data
     assert mail.outbox[-1].to == ["empresa.kilamba@demo.q360.local"]
-    assert {carlos.email, ana_proposer.email} == set(TEST_EMAILS)
+    # por omissão o seed nunca usa caixas de correio reais
+    assert {carlos.email, ana_proposer.email} == {"carlos.mendes@demo.q360.local", "ana.silva@demo.q360.local"}
 
     # --- Mariana: sem email no registo
     mariana = Proposer.all_tenants.get(external_reference="DEMO-MARIANA-SEM-EMAIL")
@@ -112,13 +122,16 @@ def test_demo_seeders_create_every_portal_scenario():
     # --- idempotência: voltar a correr repõe o estado sem duplicar nada
     call_command("seed_portal_demo")
     assert len(ana_client.get(f"{BASE}/requests").data["requests"]) == 2
-    assert _login(tenant, "fabiongila@gmail.com")  # a palavra-passe continua válida
+    assert _login(tenant, demo_email("ANA"))  # a palavra-passe continua válida
     # o seeder repõe a Empresa sem conta, para repetir o primeiro acesso
     assert _first_access(tenant, empresa_policy.policy_number, empresa.registration_number).status_code == 202
 
 
 @pytest.mark.django_db(transaction=True)
-def test_production_preparation_is_explicit_idempotent_and_preserves_passwords(settings):
+def test_production_preparation_is_explicit_idempotent_and_preserves_passwords(settings, monkeypatch):
+    # Quem testa com caixas reais escolhe-as explicitamente.
+    monkeypatch.setenv("Q360_DEMO_EMAIL_ANA", TEST_EMAILS[0])
+    monkeypatch.setenv("Q360_DEMO_EMAIL_CARLOS", TEST_EMAILS[1])
     settings.DEBUG = False
     with pytest.raises(CommandError, match="ambientes DEBUG"):
         call_command("seed_demo_data")

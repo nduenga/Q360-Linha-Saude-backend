@@ -1969,3 +1969,22 @@ O modelo e a pré-validação Excel das tabelas de referência da plataforma usa
 | `POST /quotes/{quote_id}/policy` | Recusa uma cotação de endosso: o endosso aplica-se à apólice existente com a aceitação do cliente |
 | `GET /business-config/catalog` | Tipo de configuração novo `policy.endorsements` (área RULES), com `day_count_basis`, `minimum_premium`, `apply_fractionation_loading`, `newborn_auto_inclusion_days` e `acceptance_days` |
 
+
+### Alterações de 24/10/2026 (auditoria funcional, segunda ronda)
+
+| Endpoint | Tipo | O que muda |
+|---|---|---|
+| `POST /proposers` | Comportamento | Se o proponente tiver email, cria a conta do Portal do Cliente (sem palavra-passe) ligada a ele e envia, depois do commit, um email com o link `CUSTOMER_PORTAL_URL/recuperar?email=…&convite=1` para criar a palavra-passe. Se já existir uma conta com esse email, não a liga automaticamente: o email explica como usar o «Primeiro acesso». A resposta não muda. Nova configuração `CUSTOMER_PORTAL_URL` (por omissão `http://localhost:5173/portal-cliente`). O mesmo convite sai quando o proponente é criado dentro de `POST /quotes` (`proposerInput`). |
+| `GET /audit-events` | Contrato (resposta) | Novo campo `entityLabel: string \| null` em cada evento: nome legível do registo (`COT-47`, `APO-1`, nome do proponente ou da pessoa segura, «Cálculo da cotação COT-47», «Elegibilidade de Inês Silva»…). |
+| `GET /platform/audit` | Contrato (resposta) | Novo campo `entityLabel: string \| null` (nome da seguradora, do super administrador ou do utilizador da seguradora). |
+| `POST /eligibility/evaluate` | Comportamento | As mensagens `ELIG-*` passam a vir em português. |
+
+### Alterações de 26/10/2026 (pendentes da auditoria)
+
+| Endpoint | Tipo | O que muda |
+|---|---|---|
+| `POST /members` · `PUT /members/{id}` | Contrato (pedido) | `firstName` passa a obrigatório (não vazio). Campos desconhecidos dão 400 `VALIDATION-400` com `fieldErrors` por campo (p.ex. `fullName`: «Campo desconhecido. Use firstName e lastName.»). |
+| `GET /admin/staff-accounts` (e respostas de criar/alterar) | Contrato (resposta) | Novo `lockedUntil: date-time \| null`: conta bloqueada por tentativas falhadas até essa data. |
+| `POST /admin/staff-accounts/{id}/unlock` | **Novo** | Sem corpo; 204. Só ADMIN. Levanta o bloqueio sem mudar a palavra-passe; regista `staff_account.unlocked`. |
+| `POST /policies/{id}/endorsements/inclusions` · `GET/PUT /quotes/{id}/endorsement` | Contrato (resposta) + comportamento | `calculation.prepaidPeriodCharge` (`IMMEDIATE` \| `SPREAD`). Com `IMMEDIATE` (omissão), a 1.ª linha de `installments` vence na data de inclusão e cobre o período até à próxima prestação por pagar. Configuração nova `policy.endorsements.prepaid_period_charge`. |
+| Todos os recursos | Comportamento | `updatedAt` passa a mudar em todas as alterações, também nas transições de estado. |

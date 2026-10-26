@@ -5,7 +5,7 @@ Idempotente e só de desenvolvimento/demonstração: repõe as palavras-passe e 
 estado dos clientes demo sempre que corre, tal como `seed_demo_data` faz com o
 staff. Cada cliente existe para provar uma parte do portal:
 
-  Ana Silva        entra com email + palavra-passe; apólice activa, prestação em
+  Ana Silva        entra com email + palavra-passe; apólice ativa, prestação em
                    atraso e outra a vencer, cotação aprovada à espera de aceitação,
                    pedidos (um a aguardar o cliente) e mensagens.
   Diana Lopes      entra com email + palavra-passe; só tem cotações (em análise e
@@ -137,18 +137,16 @@ class Command(BaseCommand):
     # ----------------------------------------------------- cenários da Ana
     @staticmethod
     def _ana_payments(policy: Policy) -> None:
-        """One instalment overdue and one due soon, for the payments page, the
-        dashboard alerts and the notifications."""
-        today = datetime.date.today()
+        """One instalment overdue, for the payments page, the dashboard alerts
+        and the notifications. The whole policy is moved back in time so the
+        overdue instalment's period has really started (the next one stays
+        due on its own date)."""
+        from apps.policy.application.demo_dates import make_installment_late
+
         installments = list(PremiumInstallment.all_tenants.filter(policy_id=policy.id).order_by("installment_no"))
-        if len(installments) < 3:
+        if len(installments) < 3 or installments[1].status == "OVERDUE":
             return
-        PremiumInstallment.all_tenants.filter(id=installments[1].id).update(
-            status="OVERDUE", due_date=today - datetime.timedelta(days=10), paid_at=None
-        )
-        PremiumInstallment.all_tenants.filter(id=installments[2].id).update(
-            status="DUE", due_date=today + datetime.timedelta(days=5), paid_at=None
-        )
+        make_installment_late(policy, installments[1].installment_no, days_late=10)
 
     @staticmethod
     def _ana_approved_quote(demo, tenant, staff, proposer: Proposer, policy: Policy) -> None:
@@ -172,7 +170,15 @@ class Command(BaseCommand):
 
     @staticmethod
     def _empresa_renewal_window(policy: Policy) -> None:
-        Policy.all_tenants.filter(id=policy.id).update(end_date=datetime.date.today() + datetime.timedelta(days=45))
+        """A apólice termina daqui a 45 dias: recua-se a vigência inteira (e as
+        prestações), em vez de encurtar o fim, para o período continuar de 12 meses."""
+        from apps.policy.application.demo_dates import backdate_policy
+
+        policy.refresh_from_db()
+        if policy.end_date is None:
+            return
+        target = datetime.date.today() + datetime.timedelta(days=45)
+        backdate_policy(policy, (policy.end_date - target).days)
 
     @staticmethod
     def _mariana(demo, tenant, staff, ana_policy: Policy) -> dict:
@@ -206,7 +212,7 @@ class Command(BaseCommand):
         CurrentActorProvider.bind(customer)
         waiting = requests_service.create_request(
             account_id=account.id, request_type="DATA_CHANGE", subject="Actualizar a morada",
-            description="Mudei de casa e quero actualizar a morada da apólice.", policy_number=policy.policy_number,
+            description="Mudei de casa e quero atualizar a morada da apólice.", policy_number=policy.policy_number,
             quote_number=None, payload={},
         )
         requests_service.create_request(
@@ -238,7 +244,7 @@ class Command(BaseCommand):
         diana_quote = Quote.objects.filter(proposer=proposers["diana"], status="IN_REVIEW").first()
         w = self.stdout.write
         w(self.style.SUCCESS("Portal do Cliente: dados de demonstração prontos."))
-        w(f"Tenant: {tenant.code} ({tenant.id})  <- NEXT_PUBLIC_CUSTOMER_PORTAL_TENANT_ID do portal")
+        w(f"Tenant: {tenant.code} ({tenant.id})  <- VITE_CUSTOMER_PORTAL_TENANT_ID do frontend")
         w(f"\nCLIENTES COM CONTA (entrar com email + palavra-passe: {password})")
         w(f"  Ana Silva   {proposers['ana'].email}  — apólice {ana_policy.policy_number}")
         w(f"  Diana Lopes {proposers['diana'].email}  — só cotações")

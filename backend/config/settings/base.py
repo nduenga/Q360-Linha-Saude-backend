@@ -333,6 +333,9 @@ CUSTOMER_PORTAL_TOKEN_TTL_SECONDS = int(os.environ.get("CUSTOMER_PORTAL_TOKEN_TT
 # OD-PORTAL-001 (Product Owner decision 2026-09-22): email OTP only.
 CUSTOMER_PORTAL_OTP_TTL_SECONDS = int(os.environ.get("CUSTOMER_PORTAL_OTP_TTL_SECONDS", "600"))
 CUSTOMER_PORTAL_EMAIL_FROM = os.environ.get("CUSTOMER_PORTAL_EMAIL_FROM", "no-reply@q360.example")
+# Endereço público do Portal do Cliente, usado no email de convite enviado
+# quando a seguradora regista um proponente com email.
+CUSTOMER_PORTAL_URL = os.environ.get("CUSTOMER_PORTAL_URL", "http://localhost:5173/portal-cliente").rstrip("/")
 # OD-PORTAL-003 (Product Owner decision 2026-09-22): 5 tentativas / 30 min.
 # Login antigo (apólice + documento + email, OTP por email). Desligar assim
 # que o login por email + palavra-passe estiver em produção: aceita qualquer

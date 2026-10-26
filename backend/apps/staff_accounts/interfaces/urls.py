@@ -5,6 +5,7 @@ from django.urls import path
 from apps.staff_accounts.interfaces.admin_views import (
     StaffAccountListCreateView,
     StaffAccountResetPasswordView,
+    StaffAccountUnlockView,
     StaffAccountRolesView,
     StaffAccountStatusView,
 )
@@ -29,5 +30,10 @@ urlpatterns = [
         "admin/staff-accounts/<uuid:account_id>/reset-password",
         StaffAccountResetPasswordView.as_view(),
         name="staff-accounts-reset-password",
+    ),
+    path(
+        "admin/staff-accounts/<uuid:account_id>/unlock",
+        StaffAccountUnlockView.as_view(),
+        name="staff-accounts-unlock",
     ),
 ]

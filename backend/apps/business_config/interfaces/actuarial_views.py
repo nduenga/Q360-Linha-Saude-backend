@@ -1,4 +1,4 @@
-"""API do modelo actuarial (`pricing.actuarial_model`).
+"""API do modelo atuarial (`pricing.actuarial_model`).
 
 O modelo é uma configuração como as outras: edita-se pela rota genérica
 `business-config/configurations` (DRAFT -> aprovação -> PUBLISHED). Estas
@@ -47,13 +47,13 @@ SECTIONS = [
     {"key": "age_gender_relativities", "label": "Relatividades idade × sexo", "help": "Factor por cobertura e escalão"},
     {"key": "group_size_factors", "label": "SAG: dimensão do grupo", "help": "Ajuste e volatilidade por número de colaboradores"},
     {"key": "group_participation_factors", "label": "SAG: adesão", "help": "Obrigatória/facultativa e taxa de participação"},
-    {"key": "industry_factors", "label": "SAG: sector de actividade", "help": "Factor por sector"},
+    {"key": "industry_factors", "label": "SAG: sector de atividade", "help": "Factor por sector"},
     {"key": "adjustment_assumptions", "label": "Ajustes",
      "help": "Participação nos custos, pré-existências, idade de adesão, descontos (agregado, venda cruzada, renovação, máximo) e factor regional"},
-    {"key": "plan_code_mapping", "label": "Planos do produto → plano actuarial", "help": "Segmento SAU/SAG e plano do Excel"},
-    {"key": "coverage_code_mapping", "label": "Coberturas do produto → códigos actuariais", "help": "Cada código só pode estar numa cobertura"},
+    {"key": "plan_code_mapping", "label": "Planos do produto → plano atuarial", "help": "Segmento SAU/SAG e plano do Excel"},
+    {"key": "coverage_code_mapping", "label": "Coberturas do produto → códigos atuariais", "help": "Cada código só pode estar numa cobertura"},
     {"key": "calculation_settings", "label": "Opções de cálculo",
-     "help": "Valores por omissão do perfil actuarial e regra da idade de adesão em renovações"},
+     "help": "Valores por omissão do perfil atuarial e regra da idade de adesão em renovações"},
 ]
 
 
@@ -95,7 +95,7 @@ class ActuarialModelImportView(_ConfigPermissions, APIView):
     parser_classes = [MultiPartParser]
 
     @extend_schema(operation_id="importActuarialModelWorkbook", tags=["Configuration"],
-                   summary="Importar o modelo actuarial de um Excel (cria uma versão DRAFT para aprovação)",
+                   summary="Importar o modelo atuarial de um Excel (cria uma versão DRAFT para aprovação)",
                    request={"multipart/form-data": ActuarialImportSerializer},
                    responses={200: _IMPORT_PREVIEW, 201: BusinessConfigurationSerializer})
     def post(self, request):
@@ -120,7 +120,7 @@ class ActuarialModelImportView(_ConfigPermissions, APIView):
 
 class ActuarialModelTemplateView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="downloadActuarialModelTemplate", tags=["Configuration"],
-                   summary="Descarregar o Excel de referência do modelo actuarial (modelo para importação)",
+                   summary="Descarregar o Excel de referência do modelo atuarial (modelo para importação)",
                    responses={(200, XLSX): OpenApiTypes.BINARY})
     def get(self, request):
         return FileResponse(WORKBOOK_PATH.open("rb"), as_attachment=True, filename=WORKBOOK_PATH.name, content_type=XLSX)
@@ -128,7 +128,7 @@ class ActuarialModelTemplateView(_ConfigPermissions, APIView):
 
 class ActuarialModelCatalogView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="getActuarialModelCatalog", tags=["Configuration"],
-                   summary="Secções editáveis e opções de cálculo do modelo actuarial",
+                   summary="Secções editáveis e opções de cálculo do modelo atuarial",
                    responses=ActuarialModelCatalogSerializer)
     def get(self, request):
         published = BusinessConfigurationResolver.get(CONFIG_KEY, effective_date=date.today())

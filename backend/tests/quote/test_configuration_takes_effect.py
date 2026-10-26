@@ -74,7 +74,7 @@ def test_the_last_price_is_reused_only_while_nothing_it_used_changed(admin_clien
     member = admin_client.get(f"/api/v1/members/{scope['memberId']}").data
     edited = admin_client.put(
         f"/api/v1/members/{scope['memberId']}",
-        {"relationshipCode": "TITULAR", "dateOfBirth": "1980-01-01", "rowVersion": member["rowVersion"]},
+        {"firstName": "Pessoa", "relationshipCode": "TITULAR", "dateOfBirth": "1980-01-01", "rowVersion": member["rowVersion"]},
         format="json",
     )
     assert edited.status_code == 200, edited.data

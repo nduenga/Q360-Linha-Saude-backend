@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
 import uuid
 from decimal import Decimal
 
@@ -70,6 +71,16 @@ _STAFF = (
     ("subscriber", "subscritor.demo@q360.local", "Subscritor Demo", (Role.SUBSCRIBER,)),
 )
 
+
+
+# Emails dos clientes de demonstração. Por omissão são fictícios, para que os
+# códigos de acesso e as notificações da demo nunca cheguem a pessoas reais.
+# Quem quiser receber os códigos na sua caixa de correio define
+# Q360_DEMO_EMAIL_ANA / Q360_DEMO_EMAIL_CARLOS antes de correr o seed.
+def demo_email(person: str) -> str:
+    """`person` = "ANA" ou "CARLOS"; lido em cada execução do seed."""
+    default = {"ANA": "ana.silva@demo.q360.local", "CARLOS": "carlos.mendes@demo.q360.local"}[person]
+    return os.environ.get(f"Q360_DEMO_EMAIL_{person}", "").strip().lower() or default
 
 class Command(BaseCommand):
     help = "Seed an idempotent demo tenant with staff, policies, coverages and portal-client scenarios."
@@ -327,7 +338,7 @@ class Command(BaseCommand):
             proposer_type="INDIVIDUAL",
             display_name="Ana Paula Silva",
             registration_number="000000001LA001",
-            email="fabiongila@gmail.com",
+            email=demo_email("ANA"),
             phone="+244 900 000 001",
         )
         members = {
@@ -458,7 +469,7 @@ class Command(BaseCommand):
             proposer_type="INDIVIDUAL",
             display_name="Carlos Mendes",
             registration_number="000000002LA002",
-            email="sethlussueki@gmail.com",
+            email=demo_email("CARLOS"),
             phone="+244 900 000 002",
         )
         holder = self._ensure_member(proposer, "DEMO-CARLOS-TITULAR", "TITULAR", "Carlos", "Mendes", "1985-10-18")

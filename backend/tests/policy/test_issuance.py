@@ -77,7 +77,7 @@ def _approved_quote(admin_client, tenant, *, suffix: str, min_entry_age: int | N
         },
     ).data["id"]
     member_id = admin_client.post(
-        "/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
+        "/api/v1/members", {"firstName": "Pessoa", "proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data["id"]
     quote = admin_client.post(
         "/api/v1/quotes",

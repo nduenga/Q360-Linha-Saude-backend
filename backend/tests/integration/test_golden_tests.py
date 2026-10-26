@@ -179,7 +179,7 @@ def test_GT_PRICE_005_base_plus_adjustment_reconciles_exactly(admin_client):
     proposer_id = proposer_response.data["id"]
 
     member_id = admin_client.post(
-        "/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
+        "/api/v1/members", {"firstName": "Pessoa", "proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data["id"]
     quote = admin_client.post(
         "/api/v1/quotes",

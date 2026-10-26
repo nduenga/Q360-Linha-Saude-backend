@@ -160,7 +160,7 @@ class CustomerPortalPasswordAuthService:
         proposer = _resolve_proposer(reference=reference, registration_number=registration_number)
         email = _normalise(proposer.email or "")
         if "@" not in email:
-            raise PortalNoEmailOnFileError("Não há nenhum email registado para este cliente; contacte o seu mediador Q360")
+            raise PortalNoEmailOnFileError("Não há nenhum email registado para este cliente; contacte o seu mediador")
         with transaction.atomic():
             account = _account_for(email) or CustomerAccount.objects.create(tenant_id=_tenant_id(), email=email)
             _assert_not_locked(account)

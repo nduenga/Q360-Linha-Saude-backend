@@ -103,7 +103,7 @@ REGISTRY: dict[str, dict] = {
     "QuoteAdjustmentListCreateView.post": {
         "queries": DRY_RUN,
         "response": {201: d.AdjustmentApplied, 200: d.AdjustmentDryRun, 202: d.DiscountApprovalRequested},
-        "notes": "dryRun=true devolve AdjustmentDryRun (200); aplicação imediata devolve 201; desconto acima do limite cria pedido de aprovação da Direcção Técnica (202).",
+        "notes": "dryRun=true devolve AdjustmentDryRun (200); aplicação imediata devolve 201; desconto acima do limite cria pedido de aprovação da Direção Técnica (202).",
     },
     "QuoteDiscountApprovalQueueView.get": {
         "response": d.QuoteDiscountApprovalQueue,
@@ -112,7 +112,7 @@ REGISTRY: dict[str, dict] = {
     "QuoteDiscountApprovalDecisionView.post": {
         "request": d.QuoteDiscountApprovalDecision,
         "response": d.QuoteDiscountApproval,
-        "notes": "Só Direcção Técnica; exige nota de decisão e impede autoaprovação.",
+        "notes": "Só Direção Técnica; exige nota de decisão e impede autoaprovação.",
     },
     "QuoteAdjustmentDetailView.delete": {"response": d.AdjustmentRemoved},
     "QuoteSelectionView.put": {"response": d.QuoteWithWarnings},
@@ -341,6 +341,7 @@ REGISTRY.update(
         "StaffAccountRolesView.patch": {"response": _staff.StaffAccountSerializer},
         "StaffAccountStatusView.patch": {"response": _staff.StaffAccountSerializer},
         "StaffAccountResetPasswordView.post": {"request": d.EmptyRequest, "response": _staff.GeneratedPasswordSerializer},
+        "StaffAccountUnlockView.post": {"request": d.EmptyRequest, "empty": True, "status": 204},
     }
 )
 

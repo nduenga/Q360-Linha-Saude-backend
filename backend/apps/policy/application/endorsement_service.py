@@ -25,6 +25,8 @@ Fluxo (decisões de negócio de 2026-10-22):
 Configuração do tenant: `policy.endorsements` (interface)."""
 from __future__ import annotations
 
+from shared import formatting as fmt
+
 import datetime
 import uuid
 from decimal import Decimal
@@ -60,6 +62,10 @@ DEFAULTS: dict[str, Any] = {
     "apply_fractionation_loading": True,
     "newborn_auto_inclusion_days": 0,
     "acceptance_days": 30,
+    # A parte do período entre a inclusão e o início da próxima prestação por
+    # pagar já está coberta pelas prestações pagas: IMMEDIATE cobra-a logo
+    # (vence na data de inclusão), SPREAD reparte-a pelas prestações futuras.
+    "prepaid_period_charge": "IMMEDIATE",
 }
 NEWBORN_APPROVER = "system:newborn-auto-inclusion"
 _OPEN_STATUSES = ("DRAFT", "READY", "IN_REVIEW", "APPROVED")
@@ -90,6 +96,8 @@ def settings(on: datetime.date | None = None) -> dict[str, Any]:
             result[key] = raw[key]
     if result["day_count_basis"] not in DAY_BASES:
         result["day_count_basis"] = DEFAULTS["day_count_basis"]
+    if result["prepaid_period_charge"] not in ("IMMEDIATE", "SPREAD"):
+        result["prepaid_period_charge"] = DEFAULTS["prepaid_period_charge"]
     return result
 
 
@@ -118,12 +126,12 @@ def _check_inclusion_date(policy: Policy, inclusion: datetime.date) -> None:
     today = _today()
     if inclusion < today:
         raise EndorsementError(
-            f"A data de inclusão ({inclusion.isoformat()}) não pode ser anterior a hoje ({today.isoformat()})"
+            f"A data de inclusão ({fmt.date(inclusion)}) não pode ser anterior a hoje ({fmt.date(today)})"
         )
     if inclusion < policy.start_date or inclusion > policy.end_date:
         raise EndorsementError(
             f"A data de inclusão tem de estar dentro do período da apólice "
-            f"({policy.start_date.isoformat()} a {policy.end_date.isoformat()})"
+            f"({fmt.date(policy.start_date)} a {fmt.date(policy.end_date)})"
         )
 
 
@@ -334,10 +342,24 @@ def calculate(quote: Quote) -> dict[str, Any]:
     total_charged = round_amount(premium * (Decimal("1") + loading))
     installments = []
     if split:
-        each = round_amount(total_charged / len(due))
+        to_spread = total_charged
+        first_future = min(row.period_from for row in due)
+        if config["prepaid_period_charge"] == "IMMEDIATE" and first_future > inclusion:
+            # Sem isto o cliente ficava coberto desde a inclusão e só pagava a
+            # partir da próxima prestação (p.ex. 6 meses depois, se as
+            # prestações seguintes já estavam pagas).
+            gap_days = (first_future - inclusion).days
+            upfront = round_amount(total_charged * Decimal(gap_days) / Decimal(remaining))
+            if upfront > 0:
+                installments.append({"sequence": 1, "dueDate": inclusion.isoformat(), "periodFrom": inclusion.isoformat(),
+                                     "periodTo": (first_future - datetime.timedelta(days=1)).isoformat(),
+                                     "amount": str(upfront)})
+                to_spread = round_amount(total_charged - upfront)
+        offset = len(installments)
+        each = round_amount(to_spread / len(due))
         for index, row in enumerate(due, start=1):
-            amount = each if index < len(due) else round_amount(total_charged - each * (len(due) - 1))
-            installments.append({"sequence": index, "dueDate": row.due_date.isoformat(),
+            amount = each if index < len(due) else round_amount(to_spread - each * (len(due) - 1))
+            installments.append({"sequence": offset + index, "dueDate": row.due_date.isoformat(),
                                  "periodFrom": max(row.period_from, inclusion).isoformat(),
                                  "periodTo": row.period_to.isoformat(), "amount": str(amount)})
     else:
@@ -389,6 +411,7 @@ def calculate(quote: Quote) -> dict[str, Any]:
         "minimumPremium": str(minimum),
         "minimumApplied": premium > pro_rata,
         "endorsementPremium": str(premium),
+        "prepaidPeriodCharge": config["prepaid_period_charge"],
         "fractionation": {"frequency": frequency, "loading": str(loading), "applied": loading > 0,
                           "installments": len(installments)},
         "totalCharged": str(total_charged),

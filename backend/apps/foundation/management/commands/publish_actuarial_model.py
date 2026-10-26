@@ -28,7 +28,7 @@ APPROVER_EMAIL = "actuarial.approver@q360-saude.local"
 
 class Command(BaseCommand):
     help = (
-        "Valida o modelo actuarial SAU/SAG (94 células) e publica-o como "
+        "Valida o modelo atuarial SAU/SAG (94 células) e publica-o como "
         "BusinessConfiguration PUBLISHED do tenant atual (4-eyes bypass via "
         "actor especial approver, auditado como ACTUARIAL_MODEL_CLI_PUBLISHED). "
         "NÃO usar diretamente em produção sem validação do actuário responsável."
@@ -102,7 +102,7 @@ class Command(BaseCommand):
         try:
             workbook_path = Path(build_actuarial_model.__code__.co_filename).parent / "Modelo_Actuarial_Saude_SAU_SAG_Angola.xlsx"
             if not workbook_path.exists():
-                self.stdout.write(f"1. Importar modelo actuarial do ficheiro Excel...")
+                self.stdout.write(f"1. Importar modelo atuarial do ficheiro Excel...")
             else:
                 self.stdout.write(self.style.WARNING(
                     f"Ficheiro workbook não encontrado em {workbook_path}. "
@@ -164,7 +164,7 @@ class Command(BaseCommand):
                 if len(deviations) > 15:
                     self.stderr.write(f"  ... +{len(deviations)-15} mais.")
             if passed != total:
-                self.stderr.write("\nValidação actuarial falhou. NÃO será publicada.")
+                self.stderr.write("\nValidação atuarial falhou. NÃO será publicada.")
                 raise SystemExit(3)
 
             if validate_only:
@@ -247,7 +247,7 @@ class Command(BaseCommand):
                 pass  # auditoria falhou não deve bloquear publicação
 
             self.stdout.write(self.style.SUCCESS(
-                f"\nModelo actuarial publicado com sucesso — PricingConfiguration v{final.version_no}.\n"
+                f"\nModelo atuarial publicado com sucesso — PricingConfiguration v{final.version_no}.\n"
                 f"  Tenant: {tenant.code} ({tenant.id})\n"
                 f"  ID: {final.id}\n"
                 f"  effective_from: {final.effective_from.isoformat()}\n"

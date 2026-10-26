@@ -498,5 +498,5 @@ def formula_catalog() -> dict[str, Any]:
         "functions": [{"name": name, "description": text} for name, text in ALLOWED_FUNCTIONS.items()],
         "operators": list(ALLOWED_OPERATORS),
         "limits": {"maxFormulas": MAX_FORMULAS, "maxParameters": MAX_PARAMETERS, "maxExpressionLength": 500},
-        "rounding": "Cada passo TOTAL é arredondado a 2 casas, meio-para-cima (OD-006).",
+        "rounding": "O resultado de cada passo é arredondado a 2 casas decimais, meio para cima.",
     }

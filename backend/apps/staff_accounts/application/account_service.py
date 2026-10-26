@@ -33,12 +33,15 @@ class StaffAccountView:
     status: str
     roles: list[str]
     last_login_at: object
+    locked_until: object = None
 
 
 def _view(account: StaffAccount, roles: list[str]) -> StaffAccountView:
+    # Só conta como bloqueada enquanto o bloqueio está em vigor.
+    locked = account.locked_until if account.locked_until and account.locked_until > timezone.now() else None
     return StaffAccountView(
         id=account.id, email=account.email, name=account.name, status=account.status,
-        roles=roles, last_login_at=account.last_login_at,
+        roles=roles, last_login_at=account.last_login_at, locked_until=locked,
     )
 
 
@@ -130,6 +133,15 @@ def set_status(*, account_id: uuid.UUID, status: str) -> StaffAccountView:
     roles = list(StaffAccountRole.objects.filter(staff_account_id=account.id).values_list("role", flat=True))
     account.status = status
     return _view(account, roles)
+
+
+def unlock(*, account_id: uuid.UUID) -> None:
+    """Admin: levanta o bloqueio por tentativas falhadas sem mudar a palavra-passe."""
+    account = StaffAccount.objects.filter(id=account_id).first()
+    if account is None:
+        raise NotFound(f"Não existe a conta de utilizador {account_id} neste tenant")
+    StaffAccount.objects.filter(id=account.id).update(failed_login_attempts=0, locked_until=None)
+    _audit.record(action="staff_account.unlocked", entity_type="StaffAccount", entity_id=str(account.id))
 
 
 def reset_password(*, account_id: uuid.UUID) -> str:

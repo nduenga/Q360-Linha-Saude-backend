@@ -289,6 +289,56 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/admin/staff-accounts/{account_id}/unlock:
+    post:
+      operationId: postStaffAccountUnlock
+      description: POST /admin/staff-accounts/{id}/unlock — levanta o bloqueio por tentativas falhadas.
+      summary: Criar staff account unlock
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Administration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '204':
+          description: Sem conteúdo.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/audit-events:
     get:
       operationId: getAuditEventList
@@ -1139,7 +1189,7 @@ paths:
     get:
       operationId: getActuarialModelCatalog
       description: 'Requer: scope q360.read.'
-      summary: Secções editáveis e opções de cálculo do modelo actuarial
+      summary: Secções editáveis e opções de cálculo do modelo atuarial
       tags:
       - Configuration
       security:
@@ -1156,7 +1206,7 @@ paths:
     post:
       operationId: importActuarialModelWorkbook
       description: 'Requer: scope q360.write, permissão pricing-config:manage.'
-      summary: Importar o modelo actuarial de um Excel (cria uma versão DRAFT para aprovação)
+      summary: Importar o modelo atuarial de um Excel (cria uma versão DRAFT para aprovação)
       tags:
       - Configuration
       requestBody:
@@ -1185,7 +1235,7 @@ paths:
     get:
       operationId: downloadActuarialModelTemplate
       description: 'Requer: scope q360.read.'
-      summary: Descarregar o Excel de referência do modelo actuarial (modelo para importação)
+      summary: Descarregar o Excel de referência do modelo atuarial (modelo para importação)
       tags:
       - Configuration
       security:
@@ -1368,7 +1418,7 @@ paths:
     put:
       operationId: updateBusinessConfiguration
       description: 'Requer: scope q360.write, permissão pricing-config:manage.'
-      summary: Actualizar configuração de negócio em rascunho
+      summary: Atualizar configuração de negócio em rascunho
       parameters:
       - in: path
         name: configuration_id
@@ -12808,7 +12858,7 @@ paths:
       description: 'Requer: scope q360.approve, permissão quote:discount:approve.
 
 
-        Só Direcção Técnica; exige nota de decisão e impede autoaprovação.'
+        Só Direção Técnica; exige nota de decisão e impede autoaprovação.'
       summary: Criar quote discount approval decision
       parameters:
       - in: header
@@ -13262,7 +13312,7 @@ paths:
 
 
         dryRun=true devolve AdjustmentDryRun (200); aplicação imediata devolve 201; desconto acima do limite cria
-        pedido de aprovação da Direcção Técnica (202).'
+        pedido de aprovação da Direção Técnica (202).'
       summary: Criar quote adjustment list create
       parameters:
       - in: header
@@ -18198,6 +18248,9 @@ components:
       - status
     MemberCreateRequest:
       type: object
+      description: 'Um campo desconhecido era ignorado em silêncio (p.ex. `fullName`): a
+
+        pessoa ficava gravada sem nome sem ninguém dar por isso. Agora é um erro 400.'
       properties:
         proposerId:
           type: string
@@ -18211,9 +18264,8 @@ components:
           maxLength: 40
           minLength: 1
         firstName:
-          type:
-          - string
-          - 'null'
+          type: string
+          maxLength: 120
         lastName:
           type:
           - string
@@ -18233,18 +18285,21 @@ components:
         attributes: {}
       required:
       - dateOfBirth
+      - firstName
       - proposerId
       - relationshipCode
     MemberUpdateRequest:
       type: object
+      description: 'Um campo desconhecido era ignorado em silêncio (p.ex. `fullName`): a
+
+        pessoa ficava gravada sem nome sem ninguém dar por isso. Agora é um erro 400.'
       properties:
         relationshipCode:
           type: string
           minLength: 1
         firstName:
-          type:
-          - string
-          - 'null'
+          type: string
+          maxLength: 120
         lastName:
           type:
           - string
@@ -18267,6 +18322,7 @@ components:
           minimum: 0
       required:
       - dateOfBirth
+      - firstName
       - relationshipCode
       - rowVersion
     ImportJob:
@@ -19074,6 +19130,12 @@ components:
           type:
           - string
           - 'null'
+        entityLabel:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+          description: Nome legível do registo (p.ex. «COT-47», «APO-1», nome do proponente); null se não houver.
         metadata:
           type: object
           additionalProperties: {}
@@ -19081,6 +19143,7 @@ components:
       required:
       - action
       - authorName
+      - entityLabel
       - entityType
       - id
       - metadata
@@ -24427,10 +24490,17 @@ components:
           - string
           - 'null'
           format: date-time
+        lockedUntil:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: Bloqueada por tentativas falhadas até esta data; null se não está bloqueada.
       required:
       - email
       - id
       - lastLoginAt
+      - lockedUntil
       - name
       - roles
       - status
@@ -25856,6 +25926,11 @@ components:
           type:
           - string
           - 'null'
+        entityLabel:
+          type:
+          - string
+          - 'null'
+          description: Nome legível do registo (seguradora, conta); null se não houver.
         occurredAt:
           type: string
           format: date-time
@@ -25870,6 +25945,7 @@ components:
       - actorName
       - correlationId
       - entityId
+      - entityLabel
       - entityType
       - id
       - metadata
@@ -26472,7 +26548,7 @@ components:
           items:
             type: object
             additionalProperties: {}
-          description: Planos activos do mesmo produto, com as coberturas e limites; sem preços.
+          description: Planos ativos do mesmo produto, com as coberturas e limites; sem preços.
         benefits:
           type: array
           items:
@@ -30271,6 +30347,16 @@ components:
         endorsementPremium:
           type: string
           description: max(pro-rata, mínimo).
+        prepaidPeriodCharge:
+          allOf:
+          - $ref: '#/components/schemas/PrepaidPeriodChargeEnum'
+          description: 'IMMEDIATE: a parte até à próxima prestação por pagar vence na data de inclusão; SPREAD:
+            tudo repartido pelas prestações futuras.
+
+
+            * `IMMEDIATE` - IMMEDIATE
+
+            * `SPREAD` - SPREAD'
         fractionation:
           type: object
           additionalProperties: {}
@@ -30306,6 +30392,7 @@ components:
       - newAnnualPremiumReference
       - newbornAutoInclusion
       - policy
+      - prepaidPeriodCharge
       - pricingRunId
       - proRataPremium
       - quoteId
@@ -30603,6 +30690,14 @@ components:
           description: Excel .xlsx com os cabeçalhos na primeira linha (máx. 10 MB)
       required:
       - file
+    PrepaidPeriodChargeEnum:
+      enum:
+      - IMMEDIATE
+      - SPREAD
+      type: string
+      description: '* `IMMEDIATE` - IMMEDIATE
+
+        * `SPREAD` - SPREAD'
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

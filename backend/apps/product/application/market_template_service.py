@@ -1,5 +1,5 @@
 """Carrega os modelos de produto/plano do PDF "Coberturas e Capitais"
-(`apps.product.domain.market_templates`) para o tenant actual.
+(`apps.product.domain.market_templates`) para o tenant atual.
 
 Idempotente: um produto/plano que já existe (mesmo código) nunca é tocado —
 o GTE pode ter editado capitais e participação, e isso não se sobrepõe. Cada

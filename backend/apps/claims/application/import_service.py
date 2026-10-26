@@ -1,6 +1,6 @@
 """Importação de sinistros e de prémios (R2), apenas Excel (.xlsx).
 
-O formato exacto dos dados históricos do cliente ainda é uma decisão em
+O formato exato dos dados históricos do cliente ainda é uma decisão em
 aberto (OPEN_DECISIONS); este é o formato **documentado** que o simulador
 aceita hoje — colunas por nome, qualquer ordem:
 
@@ -51,6 +51,20 @@ class ClaimsImportError(DomainProblem):
 class ClaimsImportNotFoundError(DomainProblem):
     http_status = 404
     problem_code = "NOT-FOUND"
+
+
+def xlsx_from_rows(rows: list[list]) -> bytes:
+    """Livro Excel (.xlsx) com a 1.ª linha como cabeçalho — o único formato que a
+    importação aceita. Usado pelos seeds e testes que geram dados de exemplo."""
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    for row in rows:
+        sheet.append([v.isoformat() if isinstance(v, datetime.date) else v for v in row])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 def _rows(filename: str, content: bytes) -> list[dict[str, str]]:

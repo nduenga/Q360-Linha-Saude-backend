@@ -104,7 +104,7 @@ def test_backend_reproduces_the_excel_calculador(admin_client, approver, excel, 
     for relationship, sex, birth, cell in PEOPLE:
         member = admin_client.post(
             "/api/v1/members",
-            {"proposerId": proposer.data["id"], "relationshipCode": relationship, "sexCode": sex, "dateOfBirth": birth},
+            {"firstName": "Pessoa", "proposerId": proposer.data["id"], "relationshipCode": relationship, "sexCode": sex, "dateOfBirth": birth},
             format="json",
         )
         assert member.status_code == 201, member.data

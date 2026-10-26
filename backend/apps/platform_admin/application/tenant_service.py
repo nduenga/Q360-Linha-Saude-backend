@@ -76,12 +76,9 @@ def list_tenants(*, actor_id, correlation_id, status: str | None = None, search:
         qs = qs.filter(status=status)
     if search:
         qs = qs.filter(name__icontains=search) | qs.filter(code__icontains=search)
-    tenants = list(qs)
-    record_platform_audit(
-        actor_id=actor_id, action="platform.tenants_listed", entity_type="Tenant", correlation_id=correlation_id,
-        metadata={"count": len(tenants)},
-    )
-    return tenants
+    # Consultar a lista não altera nada: não se regista na auditoria (enchia o
+    # trilho de eventos sem valor e escondia as alterações que importam).
+    return list(qs)
 
 
 def tenant_detail(*, tenant_id) -> tuple[Tenant, list[StaffAccount], dict[str, int]]:

@@ -67,7 +67,7 @@ def resolve_published_business_pricing(*, effective_date: date) -> PublishedBusi
     actuarial_config = BusinessConfigurationResolver.get("pricing.actuarial_model", effective_date=effective_date)
     if actuarial_config is not None:
         if not actuarial_config.approved_by or not actuarial_config.published_at:
-            raise PricingConfigError("O modelo actuarial precisa de aprovação explícita antes de ser usado no pricing.")
+            raise PricingConfigError("O modelo atuarial precisa de aprovação explícita antes de ser usado no pricing.")
         if not isinstance(actuarial_config.value_json, dict):
             raise PricingConfigError("A configuração 'pricing.actuarial_model' deve ser um objecto JSON.")
         actuarial_model = actuarial_config.value_json
@@ -277,22 +277,22 @@ def resolve_actuarial_coverage_premiums(
     """
     plan_mapping = model.get("plan_code_mapping", {}).get(plan_code)
     if not isinstance(plan_mapping, dict):
-        raise PricingConfigError(f"O plano '{plan_code}' não tem mapeamento no modelo actuarial publicado.")
+        raise PricingConfigError(f"O plano '{plan_code}' não tem mapeamento no modelo atuarial publicado.")
     segment = str(plan_mapping.get("segment", ""))
     actuarial_plan = str(plan_mapping.get("actuarial_plan", ""))
     sex = str(sex_code or "").strip().upper()
     if sex not in {"M", "F"}:
-        raise PricingConfigError("O modelo actuarial SAU/SAG exige sexo M/F para cada pessoa segura.")
+        raise PricingConfigError("O modelo atuarial SAU/SAG exige sexo M/F para cada pessoa segura.")
     age_band = "0-17" if age <= 17 else "18-35" if age <= 35 else "36-50" if age <= 50 else "51-65" if age <= 65 else ">65"
 
     actuarial_to_benefit: dict[str, str] = {}
     for benefit_code, actuarial_codes in model.get("coverage_code_mapping", {}).items():
         if not isinstance(actuarial_codes, list):
-            raise PricingConfigError(f"Mapeamento actuarial inválido para a cobertura '{benefit_code}'.")
+            raise PricingConfigError(f"Mapeamento atuarial inválido para a cobertura '{benefit_code}'.")
         for actuarial_code in actuarial_codes:
             code = str(actuarial_code)
             if code in actuarial_to_benefit:
-                raise PricingConfigError(f"O código actuarial '{code}' está associado a mais de uma cobertura.")
+                raise PricingConfigError(f"O código atuarial '{code}' está associado a mais de uma cobertura.")
             actuarial_to_benefit[code] = str(benefit_code)
 
     contracted = {
@@ -339,7 +339,7 @@ def resolve_actuarial_coverage_premiums(
         except (KeyError, TypeError, InvalidOperation) as exc:
             raise PricingConfigError(f"Dados actuariais incompletos em {rate.get('source_cell', actuarial_code)}.") from exc
         if factor < 0 or frequency < 0 or adjusted_mean_cost < 0 or trend < 0 or mean_claim <= 0 or sigma <= 0:
-            raise PricingConfigError(f"Parâmetro actuarial inválido em {rate.get('source_cell', actuarial_code)}.")
+            raise PricingConfigError(f"Parâmetro atuarial inválido em {rate.get('source_cell', actuarial_code)}.")
 
         if capital <= 0:
             lev = Decimal("1")
@@ -381,12 +381,12 @@ def resolve_actuarial_group_adjustment(
     """
     plan_mapping = model.get("plan_code_mapping", {}).get(plan_code)
     if not isinstance(plan_mapping, dict):
-        raise PricingConfigError(f"O plano '{plan_code}' não tem mapeamento no modelo actuarial publicado.")
+        raise PricingConfigError(f"O plano '{plan_code}' não tem mapeamento no modelo atuarial publicado.")
     segment = str(plan_mapping.get("segment", ""))
     loadings_by_segment = model.get("assumptions", {}).get("loadings", {})
     loadings = loadings_by_segment.get(segment)
     if not isinstance(loadings, dict):
-        raise PricingConfigError(f"O modelo actuarial não define carregamentos para o segmento '{segment}'.")
+        raise PricingConfigError(f"O modelo atuarial não define carregamentos para o segmento '{segment}'.")
     cost_sharing = _cost_sharing_adjustment(model, profile)
     if segment != "SAG":
         # Calculador!C64 para SAU: (1 + participação nos custos) × factor regional.
@@ -411,8 +411,8 @@ def resolve_actuarial_group_adjustment(
     if not industry or not region or adhesion not in {"MANDATORY", "VOLUNTARY"}:
         raise PricingConfigError(
             "Não foi possível calcular o preço deste plano de grupo porque faltam dados de tarifação "
-            "do proponente: sector de actividade, região e tipo de adesão. Peça ao administrador "
-            "para completar o perfil actuarial ou as predefinições do produto."
+            "do proponente: sector de atividade, região e tipo de adesão. Peça ao administrador "
+            "para completar o perfil atuarial ou as predefinições do produto."
         )
 
     size_row = next((
@@ -421,12 +421,12 @@ def resolve_actuarial_group_adjustment(
     ), None)
     industry_row = next((row for row in model.get("industry_factors", []) if row.get("industry") == industry), None)
     if size_row is None or industry_row is None:
-        raise PricingConfigError("Headcount ou sector não correspondem às tabelas do modelo actuarial.")
+        raise PricingConfigError("Headcount ou sector não correspondem às tabelas do modelo atuarial.")
 
     if adhesion == "MANDATORY":
         adhesion_rows = [row for row in model.get("group_participation_factors", []) if "Obrigatória" in str(row.get("rule", ""))]
         if len(adhesion_rows) != 2:
-            raise PricingConfigError("A tabela actuarial deve conter os dois factores de adesão obrigatória.")
+            raise PricingConfigError("A tabela atuarial deve conter os dois fatores de adesão obrigatória.")
         adhesion_factor = Decimal("1")
         for row in adhesion_rows:
             adhesion_factor *= Decimal("1") + Decimal(str(row["premium_adjustment"]))
@@ -444,7 +444,7 @@ def resolve_actuarial_group_adjustment(
         )
         eligible_rows = [row for row in participation_rows if Decimal(str(row["minimum_participation"])) <= participation_rate]
         if not eligible_rows:
-            raise PricingConfigError("Não há sobretaxa actuarial para o nível de participação enviado.")
+            raise PricingConfigError("Não há sobretaxa atuarial para o nível de participação enviado.")
         selected_row = eligible_rows[-1]
         adhesion_factor = Decimal("1") + Decimal(str(selected_row["premium_adjustment"]))
         adhesion_details = selected_row["premium_adjustment"]
@@ -480,7 +480,7 @@ def _regional_factor(model: dict[str, Any], region: str) -> Decimal:
     row = next((r for r in rows if r.get("region") == region), None)
     if row is None:
         allowed = [r.get("region") for r in rows]
-        raise PricingConfigError(f"A região '{region}' não existe no modelo actuarial (permitidas: {allowed}).")
+        raise PricingConfigError(f"A região '{region}' não existe no modelo atuarial (permitidas: {allowed}).")
     return Decimal(str(row["factor"]))
 
 
@@ -496,7 +496,7 @@ def _cost_sharing_adjustment(model: dict[str, Any], profile: dict[str, Any]) -> 
     """Calculador!C59 = (1+co-pag.)×(1+comparticipação)×(1+franquia amb.)×(1+franquia int.) − 1.
 
     Só quando `actuarialProfile.costSharing` é enviado; cada valor tem de
-    existir na tabela do modelo (o Excel usa MATCH exacto)."""
+    existir na tabela do modelo (o Excel usa MATCH exato)."""
     raw = profile.get("costSharing")
     if raw is None:
         return None
@@ -505,8 +505,8 @@ def _cost_sharing_adjustment(model: dict[str, Any], profile: dict[str, Any]) -> 
     tables = model.get("adjustment_assumptions", {}).get("cost_sharing")
     if not isinstance(tables, dict):
         raise PricingConfigError(
-            "O modelo actuarial publicado não contém as tabelas de participação nos custos; "
-            "publique uma versão gerada pelo seed actual (publish_actuarial_model)."
+            "O modelo atuarial publicado não contém as tabelas de participação nos custos; "
+            "publique uma versão gerada pelo seed atual (publish_actuarial_model)."
         )
     combined = Decimal("1")
     details: dict[str, Any] = {}

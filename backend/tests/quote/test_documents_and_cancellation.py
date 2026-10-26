@@ -54,7 +54,7 @@ def _approved_quote(client, *, code_suffix: str, tenant) -> dict:
             "phone": "+244900000000",
         },
     ).data["id"]
-    member_id = client.post("/api/v1/members", {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}).data["id"]
+    member_id = client.post("/api/v1/members", {"firstName": "Pessoa", "proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}).data["id"]
     quote = client.post("/api/v1/quotes", {**plan_ref, "proposerId": proposer_id}, format="json").data
     client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member_id}, format="json")
     client.post(f"/api/v1/quotes/{quote['id']}/price")

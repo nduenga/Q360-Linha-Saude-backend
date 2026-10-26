@@ -9,6 +9,34 @@ from apps.client.domain.nif import NifFormatError, validate_agt_nif
 from apps.client.domain.rules import require_date_of_birth
 from apps.foundation.domain.problem import DomainProblem
 
+# Nomes errados mais comuns, para a mensagem de erro dizer o nome certo.
+_FIELD_HINTS = {
+    "fullName": "firstName e lastName", "name": "firstName e lastName", "gender": "sexCode",
+    "sex": "sexCode", "birthDate": "dateOfBirth", "relationship": "relationshipCode",
+}
+
+
+class _RejectUnknownFields:
+    """Um campo desconhecido era ignorado em silêncio (p.ex. `fullName`): a
+    pessoa ficava gravada sem nome sem ninguém dar por isso. Agora é um erro 400."""
+
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            unknown = sorted(set(data) - set(self.fields))
+            if unknown:
+                raise serializers.ValidationError({
+                    key: f"Campo desconhecido. Use {_FIELD_HINTS[key]}." if key in _FIELD_HINTS else "Campo desconhecido."
+                    for key in unknown
+                })
+        return super().to_internal_value(data)
+
+
+def _required_name(value):
+    value = (value or "").strip()
+    if not value:
+        raise serializers.ValidationError("Indique o nome próprio da pessoa segura.")
+    return value
+
 
 class ProposerSerializer(serializers.Serializer):
     id = serializers.UUIDField()
@@ -189,11 +217,12 @@ class MemberSerializer(serializers.Serializer):
     rowVersion = serializers.IntegerField(source="row_version")
 
 
-class MemberCreateRequestSerializer(serializers.Serializer):
+class MemberCreateRequestSerializer(_RejectUnknownFields, serializers.Serializer):
     proposerId = serializers.UUIDField()
     externalReference = serializers.CharField(allow_null=True, required=False, default=None)
     relationshipCode = serializers.CharField(min_length=1, max_length=40)
-    firstName = serializers.CharField(allow_null=True, required=False, default=None)
+    # Obrigatório: uma pessoa segura sem nome não se identifica na apólice, no cartão nem nos documentos.
+    firstName = serializers.CharField(max_length=120)
     lastName = serializers.CharField(allow_null=True, required=False, default=None)
     # Obrigatória para todo o beneficiário/membro. Email e telefone NÃO existem
     # aqui: herdam os do titular (campos do proponente).
@@ -203,13 +232,16 @@ class MemberCreateRequestSerializer(serializers.Serializer):
     nif = serializers.CharField(allow_null=True, allow_blank=True, required=False, default=None, max_length=30)
     attributes = serializers.JSONField(required=False, default=dict)
 
+    def validate_firstName(self, value):
+        return _required_name(value)
+
     def validate_nif(self, value):
         return _optional_member_nif(value)
 
 
-class MemberUpdateRequestSerializer(serializers.Serializer):
+class MemberUpdateRequestSerializer(_RejectUnknownFields, serializers.Serializer):
     relationshipCode = serializers.CharField(min_length=1)
-    firstName = serializers.CharField(allow_null=True, required=False, default=None)
+    firstName = serializers.CharField(max_length=120)
     lastName = serializers.CharField(allow_null=True, required=False, default=None)
     dateOfBirth = serializers.DateField(required=True, allow_null=False)
     sexCode = serializers.CharField(allow_null=True, required=False, default=None)
@@ -217,6 +249,9 @@ class MemberUpdateRequestSerializer(serializers.Serializer):
     nif = serializers.CharField(allow_null=True, allow_blank=True, required=False, max_length=30)
     attributes = serializers.JSONField(required=False, default=dict)
     rowVersion = serializers.IntegerField(min_value=0)
+
+    def validate_firstName(self, value):
+        return _required_name(value)
 
     def validate_nif(self, value):
         return _optional_member_nif(value)

@@ -42,3 +42,28 @@ def send_set_password_email(*, to_email: str, otp: str) -> None:
         recipient_list=[to_email],
         fail_silently=False,
     )
+
+
+def send_portal_invitation_email(*, to_email: str, client_name: str, insurer_name: str, link: str,
+                                 existing_account: bool) -> None:
+    """Convite enviado quando a seguradora regista um proponente com email."""
+    if existing_account:
+        steps = ("Já existe uma conta no Portal do Cliente com este email. Para ver também este registo, "
+                 f"use «Primeiro acesso» em {link} com o número da cotação ou apólice que vai receber "
+                 "e o documento do cliente.")
+    else:
+        steps = (f"Para criar a sua palavra-passe, abra {link} e peça o código: enviamo-lo para "
+                 "este email. Depois entra com o email e a palavra-passe que escolher.")
+    send_mail(
+        subject=f"{insurer_name}: acesso ao Portal do Cliente",
+        message=(
+            f"Olá {client_name},\n\n"
+            f"A {insurer_name} registou-o(a) como cliente. No Portal do Cliente pode acompanhar "
+            "as suas cotações, apólices, pagamentos e pedidos.\n\n"
+            f"{steps}\n\n"
+            "Se não reconhece este registo, ignore este email."
+        ),
+        from_email=settings.CUSTOMER_PORTAL_EMAIL_FROM,
+        recipient_list=[to_email],
+        fail_silently=False,
+    )

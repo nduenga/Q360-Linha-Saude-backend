@@ -534,6 +534,7 @@ class EndorsementCalculation(s.Serializer):
     minimumPremium = s.CharField()
     minimumApplied = s.BooleanField()
     endorsementPremium = s.CharField(help_text="max(pro-rata, mínimo).")
+    prepaidPeriodCharge = s.ChoiceField(choices=["IMMEDIATE", "SPREAD"], help_text="IMMEDIATE: a parte até à próxima prestação por pagar vence na data de inclusão; SPREAD: tudo repartido pelas prestações futuras.")
     fractionation = s.DictField(help_text="frequency, loading (fração), applied, installments.")
     totalCharged = s.CharField()
     installments = EndorsementInstallment(many=True)
@@ -1323,7 +1324,7 @@ class PortalRenewal(s.Serializer):
 class PortalPlanCompare(s.Serializer):
     policyNumber = s.CharField(allow_null=True)
     product = PortalQuoteNamed(allow_null=True)
-    plans = s.ListField(child=s.DictField(), help_text="Planos activos do mesmo produto, com as coberturas e limites; sem preços.")
+    plans = s.ListField(child=s.DictField(), help_text="Planos ativos do mesmo produto, com as coberturas e limites; sem preços.")
     benefits = s.ListField(child=s.DictField(), help_text="Coberturas existentes em pelo menos um plano (linhas da tabela).")
 
 

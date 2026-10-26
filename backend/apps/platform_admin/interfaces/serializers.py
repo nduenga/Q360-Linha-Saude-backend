@@ -124,6 +124,7 @@ class PlatformAuditEventSerializer(serializers.Serializer):
     action = serializers.CharField()
     entityType = serializers.CharField()
     entityId = serializers.CharField(allow_null=True)
+    entityLabel = serializers.CharField(allow_null=True, help_text="Nome legível do registo (seguradora, conta); null se não houver.")
     occurredAt = serializers.DateTimeField()
     correlationId = serializers.CharField(allow_null=True)
     metadata = serializers.JSONField()

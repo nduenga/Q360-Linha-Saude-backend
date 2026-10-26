@@ -228,10 +228,37 @@ class PlatformAuditView(APIView):
             str(row["id"]): row["name"]
             for row in PlatformAdmin.objects.filter(id__in=actor_ids).values("id", "name")
         }
+        entity_labels = _platform_entity_labels(events)
         return Response([
             {"id": e.id, "actorId": e.actor_id, "actorName": actor_names.get(str(e.actor_id)),
              "action": e.action, "entityType": e.entity_type,
-             "entityId": e.entity_id, "occurredAt": e.occurred_at, "correlationId": e.correlation_id,
+             "entityId": e.entity_id, "entityLabel": entity_labels.get((e.entity_type, str(e.entity_id))),
+             "occurredAt": e.occurred_at, "correlationId": e.correlation_id,
              "metadata": e.metadata_json}
             for e in events
         ])
+
+
+def _platform_entity_labels(events) -> dict[tuple[str, str], str]:
+    """Nome legível do registo (seguradora, super administrador, utilizador da
+    seguradora) para a auditoria da plataforma não mostrar UUIDs."""
+    from apps.foundation.infrastructure.models import Tenant
+    from apps.staff_accounts.infrastructure.models import StaffAccount
+
+    ids: dict[str, list[uuid.UUID]] = {}
+    for e in events:
+        try:
+            ids.setdefault(e.entity_type, []).append(uuid.UUID(str(e.entity_id)))
+        except (TypeError, ValueError):
+            continue
+    sources = {
+        "Tenant": lambda keys: Tenant.objects.filter(id__in=keys).values_list("id", "name"),
+        "PlatformAdmin": lambda keys: PlatformAdmin.objects.filter(id__in=keys).values_list("id", "name"),
+        "StaffAccount": lambda keys: StaffAccount.all_tenants.filter(id__in=keys).values_list("id", "name"),
+    }
+    out: dict[tuple[str, str], str] = {}
+    for entity_type, keys in ids.items():
+        if entity_type in sources:
+            for key, name in sources[entity_type](keys):
+                out[(entity_type, str(key))] = name
+    return out

@@ -43,7 +43,7 @@ def _setup(admin_client, suffix: str) -> dict:
          "email": "holder@example.com", "phone": "+244900000000"},
     ).data["id"]
     holder = admin_client.post(
-        "/api/v1/members", {"proposerId": proposer, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
+        "/api/v1/members", {"firstName": "Pessoa", "proposerId": proposer, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data["id"]
     parent = admin_client.post(
         "/api/v1/members",
@@ -221,7 +221,7 @@ def test_customer_uploads_from_the_portal_and_is_notified_of_the_decision(admin_
          "email": "outro@example.com", "phone": "+244900000001"},
     ).data["id"]
     other_member = admin_client.post(
-        "/api/v1/members", {"proposerId": other_proposer, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
+        "/api/v1/members", {"firstName": "Pessoa", "proposerId": other_proposer, "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data["id"]
     assert portal.get(f"/api/v1/customer-portal/members/{other_member}/documents").status_code == 404
 

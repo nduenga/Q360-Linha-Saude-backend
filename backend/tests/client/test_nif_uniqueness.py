@@ -21,7 +21,7 @@ def test_member_nif_is_unique_per_proposer_on_create_and_update(admin_client):
 
     duplicate = admin_client.post(
         "/api/v1/members",
-        {"proposerId": proposer, "relationshipCode": "CONJUGE", "dateOfBirth": "1986-05-20",
+        {"firstName": "Pessoa", "proposerId": proposer, "relationshipCode": "CONJUGE", "dateOfBirth": "1986-05-20",
          "nif": "123456789la042"},
         format="json",
     )
@@ -29,20 +29,20 @@ def test_member_nif_is_unique_per_proposer_on_create_and_update(admin_client):
 
     spouse = admin_client.post(
         "/api/v1/members",
-        {"proposerId": proposer, "relationshipCode": "CONJUGE", "dateOfBirth": "1986-05-20",
+        {"firstName": "Pessoa", "proposerId": proposer, "relationshipCode": "CONJUGE", "dateOfBirth": "1986-05-20",
          "nif": "123456789LA043"},
         format="json",
     ).data
     taken = admin_client.put(
         f"/api/v1/members/{spouse['id']}",
-        {"relationshipCode": "CONJUGE", "dateOfBirth": "1986-05-20", "nif": "123456789LA042", "rowVersion": 0},
+        {"firstName": "Pessoa", "relationshipCode": "CONJUGE", "dateOfBirth": "1986-05-20", "nif": "123456789LA042", "rowVersion": 0},
         format="json",
     )
     assert taken.status_code == 409, taken.data
     # o próprio NIF pode ser reenviado sem conflito
     same = admin_client.put(
         f"/api/v1/members/{spouse['id']}",
-        {"relationshipCode": "CONJUGE", "dateOfBirth": "1986-05-20", "nif": "123456789LA043", "rowVersion": 0},
+        {"firstName": "Pessoa", "relationshipCode": "CONJUGE", "dateOfBirth": "1986-05-20", "nif": "123456789LA043", "rowVersion": 0},
         format="json",
     )
     assert same.status_code == 200, same.data

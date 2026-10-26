@@ -77,7 +77,7 @@ def test_outbox_event_catalog_end_to_end():
         },
     ).data
     member = owner.post(
-        "/api/v1/members", {"proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
+        "/api/v1/members", {"firstName": "Pessoa", "proposerId": proposer["id"], "relationshipCode": "TITULAR", "dateOfBirth": "1990-01-01"}
     ).data
 
     quote = owner.post(

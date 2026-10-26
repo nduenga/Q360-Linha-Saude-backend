@@ -330,7 +330,7 @@ def _stored_path(policy: Policy) -> Path:
 
 
 def store_policy_document(policy: Policy) -> Path:
-    """Grava o PDF da apólice (chamado ao emitir e ao activar)."""
+    """Grava o PDF da apólice (chamado ao emitir e ao ativar)."""
     blocks, title = policy_blocks(policy)
     data, _, _ = _render(blocks, title, "PDF", _policy_template(policy))
     path = _stored_path(policy)

@@ -1,4 +1,4 @@
-"""Importação do modelo actuarial a partir de um Excel enviado pela interface.
+"""Importação do modelo atuarial a partir de um Excel enviado pela interface.
 
 O ficheiro é convertido no valor de `pricing.actuarial_model`, validado e
 gravado como uma nova versão DRAFT, que segue o ciclo normal (submeter ->
@@ -52,13 +52,13 @@ def build_from_upload(*, content: bytes, filename: str, effective_from: date, ke
     if len(content) > MAX_WORKBOOK_BYTES:
         raise InvalidConfiguration(f"O ficheiro excede {MAX_WORKBOOK_BYTES // (1024 * 1024)} MB.")
     if not filename.lower().endswith(".xlsx"):
-        raise InvalidConfiguration("Envie um ficheiro Excel .xlsx com a estrutura do modelo actuarial.")
+        raise InvalidConfiguration("Envie um ficheiro Excel .xlsx com a estrutura do modelo atuarial.")
     try:
         model = build_actuarial_model(content, source_name=Path(filename).name[:255])
     except ActuarialWorkbookError as exc:
         raise InvalidConfiguration(str(exc)) from exc
     except (TypeError, ValueError, KeyError, IndexError, AttributeError) as exc:
-        raise InvalidConfiguration("O ficheiro não segue a estrutura do modelo actuarial (células/tabelas em falta).") from exc
+        raise InvalidConfiguration("O ficheiro não segue a estrutura do modelo atuarial (células/tabelas em falta).") from exc
     kept: list[str] = []
     if keep_published_settings:
         published = BusinessConfigurationResolver.get(CONFIG_KEY, effective_date=effective_from)

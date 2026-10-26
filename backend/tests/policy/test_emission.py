@@ -158,7 +158,8 @@ def test_emitting_closes_the_customers_acceptance_request(admin_client, tenant):
     from apps.client.infrastructure.models import Proposer
     from apps.customer_portal.infrastructure.models import CustomerAccount
 
-    account = CustomerAccount.all_tenants.create(tenant_id=tenant.id, email="holder@example.com")
+    # o registo do proponente já criou a conta (convite do portal)
+    account, _ = CustomerAccount.all_tenants.get_or_create(tenant_id=tenant.id, email="holder@example.com")
     request = PortalRequest.all_tenants.create(
         tenant_id=tenant.id, request_number="PED-TEST-1", customer_account_id=account.id,
         proposer_id=quote["proposerId"], quote_id=quote["id"], request_type="ACCEPT_QUOTE", subject="Aceitar", status="OPEN",

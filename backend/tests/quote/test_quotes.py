@@ -73,7 +73,7 @@ def _proposer(
 def _member(client, *, proposer_id: str, date_of_birth: str = "1990-01-01") -> str:
     return client.post(
         "/api/v1/members",
-        {"proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": date_of_birth},
+        {"firstName": "Pessoa", "proposerId": proposer_id, "relationshipCode": "TITULAR", "dateOfBirth": date_of_birth},
     ).data["id"]
 
 
@@ -362,3 +362,40 @@ def test_dashboard_reports_average_approval_duration_from_lifecycle_timestamps(a
     assert metrics["measuredQuotes"] == 1
     assert metrics["averageDurationHours"] == 3.0
     assert metrics["averageDurationSeconds"] == 10800.0
+
+
+@pytest.mark.django_db
+def test_dashboard_counts_group_by_status_not_by_quote(admin_client, tenant):
+    """Regressão: com o queryset ordenado, o GROUP BY incluía created_at e cada
+    cotação contava 1 — o dashboard mostrava 1 rejeitada quando havia várias."""
+    from apps.quote.infrastructure.models import Quote
+
+    scope = _quote_scope(admin_client, code_suffix="status-counts")
+    ids = []
+    for _ in range(3):
+        created = admin_client.post(
+            "/api/v1/quotes", {"proposerId": scope["proposerId"], "planId": scope["planId"]}, format="json"
+        )
+        assert created.status_code == 201
+        ids.append(created.data["id"])
+    Quote.all_tenants.filter(id__in=ids[:2], tenant_id=tenant.id).update(status="REJECTED")
+
+    data = admin_client.get("/api/v1/dashboard").data["quotations"]
+    assert data["byStatus"] == {"REJECTED": 2, "DRAFT": 1}
+    assert data["trend"]["items"][0]["created"] == 3
+    assert data["approvalMetrics"]["conversionRatePercent"] == 0.0
+
+
+@pytest.mark.django_db
+def test_updated_at_moves_on_queryset_updates(admin_client, tenant):
+    """Regressão F3: transições feitas com QuerySet.update() também mexem no updatedAt."""
+    import time
+
+    from apps.quote.infrastructure.models import Quote
+
+    scope = _quote_scope(admin_client, code_suffix="updated-at")
+    created = admin_client.post("/api/v1/quotes", {"proposerId": scope["proposerId"], "planId": scope["planId"]}, format="json")
+    before = Quote.all_tenants.get(id=created.data["id"]).updated_at
+    time.sleep(0.01)
+    Quote.all_tenants.filter(id=created.data["id"]).update(status="CANCELLED")
+    assert Quote.all_tenants.get(id=created.data["id"]).updated_at > before

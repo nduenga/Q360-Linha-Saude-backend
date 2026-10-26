@@ -1,8 +1,8 @@
-"""Importação do modelo actuarial a partir do Excel.
+"""Importação do modelo atuarial a partir do Excel.
 
 Lê o ficheiro de referência (`WORKBOOK_PATH`) ou um ficheiro enviado pela
 interface com a mesma estrutura. Os valores calculados (prémios puros,
-ajustes adoptados) vêm da cache de valores do próprio Excel: o ficheiro tem
+ajustes adotados) vêm da cache de valores do próprio Excel: o ficheiro tem
 de ter sido guardado pelo Excel depois de recalculado.
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ REQUIRED_SHEETS = ("Dashboard_Premissas", "Matriz_SAU", "Matriz_SAG", "Regras_Aj
 
 
 class ActuarialWorkbookError(ValueError):
-    """O ficheiro não é um Excel com a estrutura do modelo actuarial."""
+    """O ficheiro não é um Excel com a estrutura do modelo atuarial."""
 AGE_GENDER_KEYS = ("M|0-17", "F|0-17", "M|18-35", "F|18-35", "M|36-50", "F|36-50", "M|51-65", "F|51-65", "M|>65", "F|>65")
 PLAN_CODES = {
     "IND-BASE": ("SAU", "Base"),
@@ -71,7 +71,7 @@ def _table(sheet, rows: range, columns: dict[str, int]) -> list[dict[str, Any]]:
 
 
 def _adopted(sheet, rows: range, *, value_column: int, adopted_column: int) -> list[dict[str, Any]]:
-    """Linhas `valor -> ajuste adoptado` lidas dos valores calculados pelo Excel."""
+    """Linhas `valor -> ajuste adotado` lidas dos valores calculados pelo Excel."""
     letter = "ABCDEFGHIJ"[adopted_column - 1]
     return [
         {
@@ -94,7 +94,7 @@ def _open(source: Path | bytes | BinaryIO):
         raise ActuarialWorkbookError("O ficheiro não é um livro Excel (.xlsx) válido.") from exc
     missing = [name for name in REQUIRED_SHEETS if name not in workbook.sheetnames]
     if missing:
-        raise ActuarialWorkbookError(f"Faltam as folhas do modelo actuarial: {', '.join(missing)}.")
+        raise ActuarialWorkbookError(f"Faltam as folhas do modelo atuarial: {', '.join(missing)}.")
     if cached_workbook["Matriz_SAU"].cell(6, 19).value is None:
         raise ActuarialWorkbookError(
             "O ficheiro não tem os valores calculados (Matriz_SAU!S6 está vazio). Abra-o no Excel, "

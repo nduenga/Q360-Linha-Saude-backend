@@ -561,7 +561,7 @@ class QuoteAdjustmentListCreateView(APIView):
             return Response({
                 "approval": QuoteDiscountApprovalSerializer(approval).data,
                 "impact": simulated,
-                "message": "Desconto enviado à fila de aprovação da Direcção Técnica; ainda não foi aplicado.",
+                "message": "Desconto enviado à fila de aprovação da Direção Técnica; ainda não foi aplicado.",
             }, status=202)
         adjustment, updated = simulator_service.apply_adjustment(quote=quote, spec=spec, reason=data["reason"])
         responsible_names = _responsible_names(quote.tenant_id, (adjustment.applied_by,))

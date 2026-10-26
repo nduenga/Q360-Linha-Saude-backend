@@ -251,6 +251,9 @@ def create_quote(
                     require_birth_date=True,
                 )
                 proposer_id = created_proposer.id
+                from apps.customer_portal.application.invitation_service import invite_proposer
+
+                invite_proposer(created_proposer)  # convite para o Portal do Cliente (após o commit)
                 if titular_member_input is not None:
                     # O titular criado no mesmo passo é sempre relação TITULAR
                     # com o próprio Proposer (a menos que o formulário indique
@@ -642,8 +645,8 @@ def build_pricing_context(
 def _pricing_inputs_fingerprint(quote: Quote, context: dict, member_ids: list) -> str:
     """Impressão digital de tudo o que entra no cálculo da cotação, para saber
     se o último cálculo ainda vale. Inclui todas as configurações de negócio
-    publicadas em vigor no dia de referência (tarifas, fórmulas, factores,
-    regras, modelo actuarial, subscrição…), as tabelas/parâmetros/regras
+    publicadas em vigor no dia de referência (tarifas, fórmulas, fatores,
+    regras, modelo atuarial, subscrição…), as tabelas/parâmetros/regras
     legados resolvidos, o conteúdo do plano (definições e coberturas) e os
     dados das pessoas."""
     from django.db.models import Q as _Q
@@ -1076,7 +1079,7 @@ def decide_quote(
     # here first for a clean SEC-403 instead of a raw IntegrityError.
     if quote.submitted_by and quote.submitted_by == actor_id:
         raise SegregationOfDutiesError(
-            f"O utilizador {actor_id} submeteu esta cotação e não pode decidir sobre ela (regra dos quatro olhos)"
+            "Foi você que submeteu esta cotação; pela regra dos quatro olhos, a decisão tem de ser de outra pessoa"
         )
 
     authority_policy = None

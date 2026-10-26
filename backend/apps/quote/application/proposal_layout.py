@@ -1,7 +1,7 @@
 """Da estrutura da proposta ao documento: um modelo intermédio (blocos) que
 os três renderizadores — HTML, PDF (reportlab) e DOCX (python-docx) —
 percorrem. A lógica de cada secção vive só aqui, por isso os três formatos
-dizem sempre exactamente o mesmo."""
+dizem sempre exatamente o mesmo."""
 from __future__ import annotations
 
 import base64

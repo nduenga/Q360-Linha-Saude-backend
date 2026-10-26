@@ -21,10 +21,13 @@ aplicado e o que continua em aberto.
 | R2 | Estado REJECTED | Migrar a CHECK | Migração `business_config/0003`; a rejeição deixa a versão `REJECTED`; editar volta a DRAFT; pode ser reenviada |
 | C1 | Datas da cotação (2026-10-15) | A cotação tem data de criação e validade (configurável na interface); não tem data de efeito, porque ainda não se sabe se será apólice | Migração `quote/0013` remove a coluna. Validade = dia de criação + `quote.validity_days` (parâmetro editável em `/system-parameters`); ao reabrir uma cotação caducada conta a partir do dia da reabertura. A data de referência do cálculo (idades, configurações, tarifas, fórmulas e regras em vigor) é o **dia do cálculo** enquanto a cotação está aberta (DRAFT/READY): o que se publica na interface vale no próximo cálculo, também em cotações criadas antes. Depois de submetida, o prémio fica congelado e vale o dia do último cálculo (`Quote.reference_date`). O último cálculo só é reaproveitado se nada do que entrou nele mudou (todas as configurações publicadas em vigor, tabelas/parâmetros legados, plano e coberturas, pessoas, escolhas e ajustes). O início da vigência escolhe-se na emissão; nas renovações o formulário propõe o dia a seguir ao fim do período actual (`renewal.proposedStartDate`). `PUT /quotes/{id}` removido (só alterava a data de efeito); clonar e renovar deixam de aceitar a data |
 
-Seed de demonstração: a cliente «Ana» passa a `fabiongila@gmail.com`; a
-Empresa Kilamba (que usava esse endereço) passa a
-`empresa.kilamba@demo.q360.local`, porque o seeder do portal repõe a conta da
-Empresa e apagaria a da Ana se partilhassem o endereço.
+Seed de demonstração (revisto em 2026-10-24): por omissão os clientes da demo
+usam emails fictícios (`ana.silva@demo.q360.local`,
+`carlos.mendes@demo.q360.local`, `empresa.kilamba@demo.q360.local`), para que
+códigos e notificações nunca cheguem a pessoas reais. Para testar com uma caixa
+real, defina `Q360_DEMO_EMAIL_ANA` / `Q360_DEMO_EMAIL_CARLOS` antes de correr o
+seed. A Empresa Kilamba tem endereço próprio porque o seeder do portal repõe a
+conta da Empresa e apagaria a da Ana se partilhassem o endereço.
 
 - **Taxas legais (2026-10-15):** o imposto do selo e a taxa ARSEG são configurados pelo fornecedor em `/platform/system-parameters` (versão proposta por uma conta da plataforma e aprovada por outra, com vigência); os tenants só as consultam. Valores iniciais: selo 0 %, ARSEG 1 % (do modelo actuarial).
 
@@ -60,3 +63,7 @@ Empresa e apagaria a da Ana se partilhassem o endereço.
 - Imports não usados reportados pelo `pyflakes` (sem impacto funcional).
 - `tools/recalc_calculador.py` precisa do `pycel` e de `openpyxl<3.1` num
   ambiente à parte (não são dependências do backend).
+
+- **Endosso com prestações já pagas (2026-10-26):** por omissão (`prepaid_period_charge = IMMEDIATE`) cobra-se logo, na data de inclusão, a parte do período até à próxima prestação por pagar; `SPREAD` reparte tudo pelas prestações futuras (comportamento anterior). Configurável em `policy.endorsements`.
+- **Base legal dos parâmetros legais (2026-10-26):** por preencher pela área jurídica (imposto do selo, taxa ARSEG, maioridade). A plataforma assinala-as como «Por indicar»; nenhum diploma foi inventado.
+- **Teto da comissão de mediação:** 100 % = sem teto, até haver norma; o ecrã mostra «Sem teto».

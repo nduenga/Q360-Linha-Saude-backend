@@ -333,7 +333,7 @@ class PlatformReferenceTableVersion(models.Model):
 
 class PlatformTemplateVersion(models.Model):
     """Versão de um modelo de partida do fornecedor (sem tenant): um conjunto
-    de configurações de negócio (produto de mercado, modelo actuarial,
+    de configurações de negócio (produto de mercado, modelo atuarial,
     fórmulas…) que cada tenant copia para rascunhos e ajusta. Proposta e
     aprovada por contas diferentes da plataforma."""
 

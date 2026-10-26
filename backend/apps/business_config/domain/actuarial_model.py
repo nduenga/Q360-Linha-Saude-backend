@@ -1,4 +1,4 @@
-"""Modelo actuarial configurável (chave `pricing.actuarial_model`).
+"""Modelo atuarial configurável (chave `pricing.actuarial_model`).
 
 O modelo é editável pela interface (como qualquer configuração: DRAFT ->
 aprovação -> PUBLISHED) e importável de um Excel com a estrutura do
@@ -7,7 +7,7 @@ valores numéricos que o motor usa, para que uma edição inválida seja recusad
 ao gravar e nunca chegue ao cálculo, e define as opções de cálculo
 (`calculation_settings`) decididas em 2026-10-14:
 
-- `profile_defaults` (A4): valores do perfil actuarial usados quando o
+- `profile_defaults` (A4): valores do perfil atuarial usados quando o
   tomador não os indica. Os recomendados são os de referência do Excel
   (factor 1 / sem participação nos custos / sem desconto), por isso não
   alteram o prémio; servem para que um tomador sem perfil seja cotado.
@@ -112,7 +112,7 @@ def validate_actuarial_model(value: Any) -> None:
     seen_codes: set[str] = set()
     for benefit, codes in _dict(model.get("coverage_code_mapping"), "coverage_code_mapping").items():
         if not isinstance(codes, list) or not all(isinstance(c, str) and c for c in codes):
-            raise InvalidConfiguration(f"coverage_code_mapping.{benefit}: deve ser uma lista de códigos actuariais")
+            raise InvalidConfiguration(f"coverage_code_mapping.{benefit}: deve ser uma lista de códigos atuariais")
         repeated = seen_codes & set(codes)
         if repeated:
             raise InvalidConfiguration(f"coverage_code_mapping.{benefit}: {sorted(repeated)} já associados a outra cobertura")

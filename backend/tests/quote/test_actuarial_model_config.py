@@ -126,7 +126,7 @@ def _market_quote(client, approver, plan_code, proposer, model):
     assert created.status_code == 201, created.data
     quote = client.post("/api/v1/quotes", {"proposerId": created.data["id"], "planId": plan["id"]},
                         format="json").data
-    member = client.post("/api/v1/members", {"proposerId": created.data["id"], "relationshipCode": "TITULAR",
+    member = client.post("/api/v1/members", {"firstName": "Pessoa", "proposerId": created.data["id"], "relationshipCode": "TITULAR",
                                              "sexCode": "M", "dateOfBirth": "1960-01-15"}, format="json")
     assert member.status_code == 201, member.data
     client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member.data["id"]}, format="json")

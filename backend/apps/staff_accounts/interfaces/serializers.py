@@ -48,6 +48,9 @@ class StaffAccountSerializer(serializers.Serializer):
     status = serializers.CharField()
     roles = serializers.ListField(child=serializers.CharField())
     lastLoginAt = serializers.DateTimeField(allow_null=True)
+    lockedUntil = serializers.DateTimeField(
+        allow_null=True, help_text="Bloqueada por tentativas falhadas até esta data; null se não está bloqueada."
+    )
 
 
 def account_view_to_dict(view) -> dict:
@@ -58,6 +61,7 @@ def account_view_to_dict(view) -> dict:
         "status": view.status,
         "roles": view.roles,
         "lastLoginAt": view.last_login_at,
+        "lockedUntil": view.locked_until,
     }
 
 

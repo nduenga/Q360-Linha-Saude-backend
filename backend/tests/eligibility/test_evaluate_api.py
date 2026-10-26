@@ -41,7 +41,7 @@ def _setup_member(
     if relationship_code != "TITULAR":
         titular_response = client.post(
             "/api/v1/members",
-            {
+            {"firstName": "Pessoa", 
                 "proposerId": proposer["id"],
                 "relationshipCode": "TITULAR",
                 "dateOfBirth": "1990-05-14",
@@ -51,7 +51,7 @@ def _setup_member(
 
     member_response = client.post(
         "/api/v1/members",
-        {
+        {"firstName": "Pessoa", 
         "proposerId": proposer["id"],
         "relationshipCode": relationship_code,
         "dateOfBirth": date_of_birth,

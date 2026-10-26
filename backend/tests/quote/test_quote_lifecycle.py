@@ -211,7 +211,7 @@ def _member(client, scope, *, date_of_birth, relationship="OUTRO"):
     # O _scope já cria o titular; um proponente individual só pode ter um titular ativo.
     member_id = client.post(
         "/api/v1/members",
-        {"proposerId": scope["proposerId"], "relationshipCode": relationship, "dateOfBirth": date_of_birth},
+        {"firstName": "Pessoa", "proposerId": scope["proposerId"], "relationshipCode": relationship, "dateOfBirth": date_of_birth},
     ).data["id"]
     client.post(f"/api/v1/quotes/{scope['quoteId']}/members", {"memberId": member_id}, format="json")
     client.post(f"/api/v1/quotes/{scope['quoteId']}/price", {"recalculate": True}, format="json")
