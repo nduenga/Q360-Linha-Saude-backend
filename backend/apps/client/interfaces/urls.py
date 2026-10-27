@@ -9,10 +9,10 @@ from apps.client.interfaces.views import (
     ProposerDetailView,
     ProposerListCreateView,
     RelationshipCodeListView,
-    PopulationGroupListCreateView,
-    PopulationGroupDetailView,
-    PopulationGroupMemberListAssignView,
-    PopulationGroupMemberRemoveView,
+    HouseholdDetailView,
+    HouseholdListCreateView,
+    HouseholdMemberListAddView,
+    HouseholdMemberRemoveView,
 )
 
 urlpatterns = [
@@ -21,10 +21,10 @@ urlpatterns = [
     path("proposers/<uuid:proposer_id>", ProposerDetailView.as_view(), name="proposer-detail"),
     path("members", MemberListCreateView.as_view(), name="member-list-create"),
     path("members/<uuid:member_id>", MemberDetailView.as_view(), name="member-detail"),
-    path("population-groups", PopulationGroupListCreateView.as_view(), name="population-group-list-create"),
-    path("population-groups/<uuid:group_id>", PopulationGroupDetailView.as_view(), name="population-group-detail"),
-    path("population-groups/<uuid:group_id>/members", PopulationGroupMemberListAssignView.as_view(), name="population-group-members"),
-    path("population-groups/<uuid:group_id>/members/<uuid:assignment_id>/remove", PopulationGroupMemberRemoveView.as_view(), name="population-group-member-remove"),
+    path("households", HouseholdListCreateView.as_view(), name="household-list-create"),
+    path("households/<uuid:household_id>", HouseholdDetailView.as_view(), name="household-detail"),
+    path("households/<uuid:household_id>/members", HouseholdMemberListAddView.as_view(), name="household-members"),
+    path("households/<uuid:household_id>/members/<uuid:membership_id>/remove", HouseholdMemberRemoveView.as_view(), name="household-member-remove"),
     path("member-imports", MemberImportUploadView.as_view(), name="member-import-upload"),
     path("member-imports/<uuid:import_id>", MemberImportDetailView.as_view(), name="member-import-detail"),
     path(

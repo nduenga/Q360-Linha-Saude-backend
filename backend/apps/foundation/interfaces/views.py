@@ -22,7 +22,7 @@ from apps.foundation.interfaces.audit_serializers import AuditEventSerializer
 from apps.foundation.interfaces.permissions import require_scope
 from apps.policy.infrastructure.models import Policy
 from apps.policy.infrastructure.models import PremiumInstallment
-from apps.client.infrastructure.models import Proposer, InsuredMember, PopulationGroup
+from apps.client.infrastructure.models import FamilyHousehold, Proposer, InsuredMember
 from apps.pricing.infrastructure.models import PricingRun
 from apps.quote.infrastructure.models import Quote, ReviewTask
 from shared.pagination import Q360PageNumberPagination
@@ -672,14 +672,13 @@ class OperationalReportView(APIView):
         quote_by_status = _status_counts(Quote.objects.all())
         overdue = installments.filter(status__in=("DUE", "OVERDUE"), due_date__lt=today)
         paid = installments.filter(status="PAID")
-        groups = PopulationGroup.objects.filter(status="ACTIVE")
+        households = FamilyHousehold.objects.filter(status="ACTIVE")
         return Response({
             "asOf": today,
             "population": {
                 "proposers": Proposer.objects.filter(status="ACTIVE").count(),
                 "insuredMembers": InsuredMember.objects.filter(status="ACTIVE").count(),
-                "corporateGroups": groups.count(),
-                "subgroups": groups.filter(parent_group_id__isnull=False).count(),
+                "familyHouseholds": households.count(),
             },
             "portfolio": {
                 "policiesByStatus": policy_by_status,

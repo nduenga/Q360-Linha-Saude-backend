@@ -289,51 +289,34 @@ class ProposerDeleteRequestSerializer(serializers.Serializer):
     )
 
 
-class PopulationGroupSerializer(serializers.Serializer):
+class HouseholdSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     proposerId = serializers.UUIDField(source="proposer_id")
-    parentGroupId = serializers.UUIDField(source="parent_group_id", allow_null=True)
-    code = serializers.CharField()
-    name = serializers.CharField()
-    categoryCode = serializers.CharField(source="category_code", allow_null=True)
-    eligibilityRules = serializers.JSONField(source="eligibility_rules_json")
+    primaryMemberId = serializers.UUIDField(source="primary_member_id")
     status = serializers.CharField()
     rowVersion = serializers.IntegerField(source="row_version")
 
 
-class PopulationGroupCreateSerializer(serializers.Serializer):
+class HouseholdCreateSerializer(serializers.Serializer):
     proposerId = serializers.UUIDField()
-    parentGroupId = serializers.UUIDField(required=False, allow_null=True, default=None)
-    code = serializers.CharField(min_length=1, max_length=60)
-    name = serializers.CharField(min_length=1, max_length=200)
-    categoryCode = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=60, default=None)
-    eligibilityRules = serializers.JSONField(required=False, default=dict)
+    primaryMemberId = serializers.UUIDField()
+    joinedAt = serializers.DateField()
 
 
-class PopulationGroupUpdateSerializer(serializers.Serializer):
-    name = serializers.CharField(min_length=1, max_length=200)
-    categoryCode = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=60, default=None)
-    eligibilityRules = serializers.JSONField(required=False, default=dict)
-    status = serializers.ChoiceField(choices=("ACTIVE", "INACTIVE"))
-    rowVersion = serializers.IntegerField(min_value=0)
-
-
-class PopulationGroupMemberSerializer(serializers.Serializer):
+class HouseholdMemberSerializer(serializers.Serializer):
     id = serializers.UUIDField()
-    groupId = serializers.UUIDField(source="group_id")
+    householdId = serializers.UUIDField(source="household_id")
     memberId = serializers.UUIDField(source="member_id")
-    categoryCode = serializers.CharField(source="category_code", allow_null=True)
     joinedAt = serializers.DateField(source="joined_at")
     leftAt = serializers.DateField(source="left_at", allow_null=True)
     rowVersion = serializers.IntegerField(source="row_version")
 
 
-class PopulationGroupAssignSerializer(serializers.Serializer):
+class HouseholdAddDependentSerializer(serializers.Serializer):
     memberId = serializers.UUIDField()
-    categoryCode = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=60, default=None)
     joinedAt = serializers.DateField()
 
 
-class PopulationGroupRemoveSerializer(serializers.Serializer):
+class HouseholdRemoveDependentSerializer(serializers.Serializer):
     leftAt = serializers.DateField()
     rowVersion = serializers.IntegerField(min_value=0)

@@ -42,15 +42,15 @@ class RowVersionMismatchError(DomainProblem):
     problem_code = "VERSION-CONFLICT"
 
 
-class PopulationGroupValidationError(DomainProblem):
-    """A group, subgroup or its eligibility rules are not consistent."""
+class HouseholdValidationError(DomainProblem):
+    """A household or its members are not consistent."""
 
     http_status = 400
     problem_code = "VALIDATION-400"
 
 
-class PopulationGroupConflictError(DomainProblem):
-    """An incompatible group membership or state already exists."""
+class HouseholdConflictError(DomainProblem):
+    """An incompatible household membership or state already exists."""
 
     http_status = 409
     problem_code = "CONFLICT"
