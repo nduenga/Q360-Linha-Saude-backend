@@ -16,7 +16,7 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 - Os erros vêm em `application/problem+json` (`code`, `detail`, `correlationId`).
 - As rotas `/platform/…` usam o token da conta da plataforma; as restantes, o token do tenant.
 
-**Resumo:** 44 endpoints novos, 5 alterados no contrato e 36 alterados no comportamento (dos quais 8 obsoletos).
+**Resumo:** a contagem seguinte pertence ao levantamento original. A atualização de 27/10/2026 acrescenta 13 operações de grupos empresariais, relatório operacional e transições adicionais do ciclo de vida da apólice; também passa a documentar 9 operações já disponíveis de autenticação própria e administração de contas.
 
 | # | Método | Endpoint | operationId | Estado |
 |---|---|---|---|---|
@@ -109,6 +109,75 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 | 84 | POST | `/quotes/{quote_id}/decision` | postQuoteDecision | Alterado (comportamento: endosso) |
 | 85 | GET | `/quotes/{quote_id}/requirements` | getQuoteRequirements | Alterado (comportamento: recém-nascidos) |
 | 86 | POST | `/quotes/{quote_id}/policy` | postIssuePolicy | Alterado (comportamento: endosso) |
+
+## Atualização de 27/10/2026 — ciclo de vida, grupos e controlo operacional
+
+As operações abaixo foram implementadas depois do inventário inicial. Todas usam o prefixo `/api/v1` (omitido na tabela) e devolvem erros no formato `application/problem+json`. As operações de escrita dos grupos e do ciclo de vida exigem `Idempotency-Key`; as operações de autenticação têm proteção própria contra repetição e limitação de tentativas.
+
+| Método | Endpoint | Quem pode | Funcionalidade |
+|---|---|---|---|
+| GET | `/population-groups` | `q360.read` | Lista grupos e subgrupos empresariais; aceita o filtro `proposerId`. |
+| POST | `/population-groups` | `q360.write` | Cria um grupo ou subgrupo para um proponente do tipo empresa, com categoria e regras de elegibilidade. |
+| GET | `/population-groups/{group_id}` | `q360.read` | Obtém um grupo, a sua categoria, estado e regras vigentes. |
+| PUT | `/population-groups/{group_id}` | `q360.write` | Altera nome, categoria, regras e estado (`ACTIVE`/`INACTIVE`) com controlo otimista por `rowVersion`. |
+| GET | `/population-groups/{group_id}/members` | `q360.read` | Lista as associações de pessoas seguras ao grupo, incluindo entradas e saídas. |
+| POST | `/population-groups/{group_id}/members` | `q360.write` | Associa uma pessoa segura elegível ao grupo/categoria. |
+| POST | `/population-groups/{group_id}/members/{assignment_id}/remove` | `q360.write` | Regista a saída lógica de uma pessoa do grupo, preservando o histórico. |
+| GET | `/reports/operational` | `q360.audit` | Entrega indicadores operacionais de população, carteira, cotações, cobranças e auditoria recente. |
+| POST | `/policies/{policy_id}/installments/{installment_no}/default-notice` | `q360.approve` + permissão de aprovação | Regista a notificação formal de falta de pagamento e o novo prazo. |
+| POST | `/policies/{policy_id}/installments/{installment_no}/suspend` | `q360.approve` + permissão de aprovação | Suspende a apólice por incumprimento, quando as pré-condições do ciclo de vida são cumpridas. |
+| POST | `/policies/{policy_id}/installments/{installment_no}/terminate` | `q360.approve` + permissão de aprovação | Termina a apólice por incumprimento, guardando a transição para auditoria. |
+| POST | `/policies/{policy_id}/cancel` | `q360.approve` + permissão de aprovação | Cancela uma apólice com motivo, observação opcional e data de efeito. |
+| POST | `/policies/{policy_id}/members/{member_id}/exclude` | `q360.write` + permissão de edição | Exclui uma pessoa da apólice a partir de uma data, sem apagar o histórico. |
+
+### Autenticação própria e administração de contas
+
+| Método | Endpoint | Quem pode | Funcionalidade |
+|---|---|---|
+| POST | `/auth/login` | Público | Autentica uma conta de staff ou administrador da plataforma por email e palavra-passe; aplica limitação de tentativas. |
+| POST | `/auth/refresh` | Público, com refresh token válido | Renova a sessão de uma conta de staff. |
+| POST | `/auth/logout` | Público, com refresh token válido | Invalida a sessão associada ao refresh token. |
+| GET | `/admin/staff-accounts` | Administrador do tenant | Lista contas de staff do tenant. |
+| POST | `/admin/staff-accounts` | Administrador do tenant | Cria uma conta de staff, com perfis e palavra-passe definida ou temporária. |
+| PATCH | `/admin/staff-accounts/{account_id}/roles` | Administrador do tenant | Substitui os perfis atribuídos a uma conta. |
+| PATCH | `/admin/staff-accounts/{account_id}/status` | Administrador do tenant | Ativa ou desativa uma conta de staff. |
+| POST | `/admin/staff-accounts/{account_id}/reset-password` | Administrador do tenant | Gera e devolve uma palavra-passe temporária. |
+| POST | `/admin/staff-accounts/{account_id}/unlock` | Administrador do tenant | Remove o bloqueio causado por tentativas falhadas, sem alterar a palavra-passe. |
+
+`POST /auth/login` recebe `{email, password}`. Para contas de staff, a resposta tem `{accessToken, refreshToken, expiresIn, accountId, name, email, roles, accountType: "STAFF"}`. Para o administrador da plataforma, `accountType` é `"PLATFORM"` e não é emitido refresh token. `POST /auth/refresh` e `POST /auth/logout` recebem `{refreshToken}`; o logout devolve `204 No Content`.
+
+As respostas de contas de staff incluem `id`, `email`, `name`, `status`, `roles`, `lastLoginAt` e `lockedUntil`. A criação recebe `{email, name, roles, password?}`; quando `password` é omitida, a resposta inclui `temporaryPassword` uma única vez. A alteração de perfis recebe `{roles}` e a alteração de estado recebe `{status: "ACTIVE" | "DISABLED"}`.
+
+### Contratos de grupos empresariais
+
+`POST /population-groups` recebe `proposerId`, `code`, `name`, e opcionalmente `parentGroupId`, `categoryCode` e `eligibilityRules`. Um `parentGroupId` cria um subgrupo da mesma empresa. As regras suportadas são:
+
+| Campo em `eligibilityRules` | Tipo | Efeito |
+|---|---|---|
+| `relationshipCodes` | lista de texto | Limita as relações familiares que podem integrar o grupo. |
+| `minAge` / `maxAge` | inteiro | Define os limites etários na data de entrada. |
+| `requireActiveMember` | booleano | Exige que a pessoa segura esteja ativa; o padrão é `true`. |
+
+As respostas de grupo têm `id`, `proposerId`, `parentGroupId`, `code`, `name`, `categoryCode`, `eligibilityRules`, `status` e `rowVersion`. A atualização exige `name`, `status` e `rowVersion`; aceita também `categoryCode` e `eligibilityRules`.
+
+Para associar uma pessoa, `POST .../members` recebe `memberId`, `joinedAt` e `categoryCode` opcional. O backend confirma que a pessoa pertence ao mesmo proponente, que está ativa quando exigido e que respeita a relação/idade configuradas. Para remover, o corpo é `{leftAt, rowVersion}`.
+
+### Contratos do ciclo de vida da apólice
+
+- `POST .../default-notice` recebe `{registeredMailReference, newDeadline, sentAt?}` e devolve o identificador da notificação, a prestação e o novo prazo.
+- `POST .../suspend` e `POST .../terminate` não recebem corpo; devolvem a apólice depois da transição.
+- `POST .../cancel` recebe `{reasonCode, reasonText?, effectiveDate}` e devolve a apólice cancelada.
+- `POST .../exclude` recebe `{effectiveDate, reason}`; `reason` tem pelo menos 10 caracteres e a resposta é o membro da apólice com a data de exclusão.
+
+### Contrato do relatório operacional
+
+`GET /reports/operational` não recebe corpo. A resposta contém `asOf` e estes blocos:
+
+- `population`: totais de proponentes ativos, pessoas seguras ativas, grupos empresariais e subgrupos ativos;
+- `portfolio`: apólices por estado, apólices ativas e pessoas cobertas;
+- `commercial`: cotações por estado;
+- `collections`: quantidade e montante de prestações pagas e vencidas;
+- `audit`: número de eventos nos últimos 30 dias e os 10 eventos mais recentes.
 
 ## 1. Endpoints novos
 
