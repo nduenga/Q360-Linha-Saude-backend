@@ -42,6 +42,23 @@ class RegisterFirstPremiumPaymentRequestSerializer(serializers.Serializer):
     )
 
 
+class DefaultNoticeRequestSerializer(serializers.Serializer):
+    registeredMailReference = serializers.CharField(min_length=1, max_length=200)
+    newDeadline = serializers.DateField()
+    sentAt = serializers.DateTimeField(required=False, default=None, allow_null=True)
+
+
+class CancelPolicyRequestSerializer(serializers.Serializer):
+    reasonCode = serializers.CharField(min_length=1, max_length=100)
+    reasonText = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=2000)
+    effectiveDate = serializers.DateField()
+
+
+class ExcludePolicyMemberRequestSerializer(serializers.Serializer):
+    effectiveDate = serializers.DateField()
+    reason = serializers.CharField(min_length=10, max_length=2000)
+
+
 class EmitPaymentSerializer(serializers.Serializer):
     paidAt = serializers.DateTimeField()
     paymentMethod = serializers.ChoiceField(choices=["NUMERARIO", "TRANSFERENCIA", "MULTICAIXA", "TPA"])

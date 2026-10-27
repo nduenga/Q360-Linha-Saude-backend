@@ -42,6 +42,20 @@ class RowVersionMismatchError(DomainProblem):
     problem_code = "VERSION-CONFLICT"
 
 
+class PopulationGroupValidationError(DomainProblem):
+    """A group, subgroup or its eligibility rules are not consistent."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+class PopulationGroupConflictError(DomainProblem):
+    """An incompatible group membership or state already exists."""
+
+    http_status = 409
+    problem_code = "CONFLICT"
+
+
 class IncoherentDateError(DomainProblem):
     """DOC-003 Q360-S3-02 acceptance criterion "Datas coerentes" — e.g. a
     `dateOfBirth` in the future."""

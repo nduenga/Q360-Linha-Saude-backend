@@ -10,6 +10,7 @@ from __future__ import annotations
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from rest_framework.parsers import MultiPartParser
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -17,9 +18,9 @@ from apps.foundation.application.context import CurrentActorProvider
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_scope
-from apps.client.application import import_service, member_service, proposer_service
+from apps.client.application import import_service, member_service, proposer_service, population_group_service
 from apps.client.application.relationship_service import list_relationship_codes
-from apps.client.infrastructure.models import ImportJob, InsuredMember, Proposer
+from apps.client.infrastructure.models import ImportJob, InsuredMember, Proposer, PopulationGroup, PopulationGroupMember
 from apps.client.interfaces.serializers import (
     ImportCommitRequestSerializer,
     ImportJobSerializer,
@@ -32,8 +33,18 @@ from apps.client.interfaces.serializers import (
     ProposerSerializer,
     ProposerUpdateRequestSerializer,
     RelationshipCodeSerializer,
+    PopulationGroupSerializer, PopulationGroupCreateSerializer, PopulationGroupMemberSerializer,
+    PopulationGroupAssignSerializer, PopulationGroupRemoveSerializer, PopulationGroupUpdateSerializer,
 )
 from shared.pagination import Q360PageNumberPagination
+
+
+def _group_operation(operation, **kwargs):
+    """Translate validation failures from the domain boundary into ART-006 errors."""
+    try:
+        return operation(**kwargs)
+    except ValueError as exc:
+        raise ValidationError({"detail": str(exc)}) from exc
 
 
 class RelationshipCodeListView(APIView):
@@ -281,3 +292,77 @@ class MemberImportCommitView(APIView):
             import_job=import_job, actor_id=actor.actor_id if actor else "unknown"
         )
         return Response(ImportJobSerializer(committed).data, status=202)
+
+
+class PopulationGroupListCreateView(APIView):
+    def get_permissions(self):
+        return [require_scope(Scope.WRITE if self.request.method == "POST" else Scope.READ)()]
+
+    def get(self, request):
+        groups = PopulationGroup.objects.all().order_by("proposer_id", "parent_group_id", "name")
+        if proposer_id := request.query_params.get("proposerId"):
+            groups = groups.filter(proposer_id=proposer_id)
+        return Response(PopulationGroupSerializer(groups, many=True).data)
+
+    @requires_idempotency
+    def post(self, request):
+        body = PopulationGroupCreateSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        group = _group_operation(population_group_service.create_group,
+            proposer=get_object_or_404(Proposer, id=data["proposerId"]), code=data["code"], name=data["name"],
+            category_code=data["categoryCode"], parent_group_id=data["parentGroupId"], eligibility_rules=data["eligibilityRules"],
+        )
+        return Response(PopulationGroupSerializer(group).data, status=201)
+
+
+class PopulationGroupDetailView(APIView):
+    def get_permissions(self):
+        return [require_scope(Scope.WRITE if self.request.method == "PUT" else Scope.READ)()]
+
+    def get(self, request, group_id):
+        return Response(PopulationGroupSerializer(get_object_or_404(PopulationGroup, id=group_id)).data)
+
+    @requires_idempotency
+    def put(self, request, group_id):
+        body = PopulationGroupUpdateSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        group = _group_operation(
+            population_group_service.update_group,
+            group=get_object_or_404(PopulationGroup, id=group_id),
+            name=data["name"], category_code=data["categoryCode"],
+            eligibility_rules=data["eligibilityRules"], status=data["status"], row_version=data["rowVersion"],
+        )
+        return Response(PopulationGroupSerializer(group).data)
+
+
+class PopulationGroupMemberListAssignView(APIView):
+    def get_permissions(self):
+        return [require_scope(Scope.WRITE if self.request.method == "POST" else Scope.READ)()]
+
+    def get(self, request, group_id):
+        group = get_object_or_404(PopulationGroup, id=group_id)
+        return Response(PopulationGroupMemberSerializer(group.assignments.order_by("joined_at"), many=True).data)
+
+    @requires_idempotency
+    def post(self, request, group_id):
+        body = PopulationGroupAssignSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        assignment = _group_operation(population_group_service.assign_member, group=get_object_or_404(PopulationGroup, id=group_id),
+            member=get_object_or_404(InsuredMember, id=data["memberId"]), category_code=data["categoryCode"], joined_at=data["joinedAt"])
+        return Response(PopulationGroupMemberSerializer(assignment).data, status=201)
+
+
+class PopulationGroupMemberRemoveView(APIView):
+    permission_classes = [require_scope(Scope.WRITE)]
+
+    @requires_idempotency
+    def post(self, request, group_id, assignment_id):
+        body = PopulationGroupRemoveSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        assignment = get_object_or_404(PopulationGroupMember, id=assignment_id, group_id=group_id)
+        result = _group_operation(population_group_service.remove_member, assignment=assignment, left_at=body.validated_data["leftAt"],
+            row_version=body.validated_data["rowVersion"])
+        return Response(PopulationGroupMemberSerializer(result).data)

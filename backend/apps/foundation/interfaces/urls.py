@@ -9,7 +9,7 @@ from apps.foundation.interfaces.system_parameter_views import (
     SystemParameterRevisionsView,
     SystemParameterRollbackView,
 )
-from apps.foundation.interfaces.views import AuditEventListView, DashboardView, LiveHealthView, MeView, ReadyHealthView
+from apps.foundation.interfaces.views import AuditEventListView, DashboardView, OperationalReportView, LiveHealthView, MeView, ReadyHealthView
 from apps.foundation.interfaces.import_template_views import ImportTemplateView
 
 urlpatterns = [
@@ -27,6 +27,7 @@ urlpatterns = [
     path("reference-tables", ReferenceTableListView.as_view(), name="reference-table-list"),
     path("reference-tables/<str:code>", ReferenceTableDetailView.as_view(), name="reference-table-detail"),
     path("dashboard", DashboardView.as_view(), name="dashboard"),
+    path("reports/operational", OperationalReportView.as_view(), name="operational-report"),
     path("health/live", LiveHealthView.as_view(), name="health-live"),
     path("health/ready", ReadyHealthView.as_view(), name="health-ready"),
 ]

@@ -40,20 +40,19 @@ quando podia não estar.
 
 ## S01-AUTH-001 — Quem confirma a identidade de quem usa o sistema (login)
 
-**Estado:** Decisão de teste (não é valor de negócio real).
+**Estado:** Resolvido.
 
-Nenhum documento diz ainda **qual** vai ser o sistema real de login da
-empresa (ex.: um serviço como o Keycloak, o Auth0, ou o login da Microsoft/
-Azure). O código já está pronto para ligar a qualquer um destes — só falta
-escolher qual.
+O sistema usa autenticação própria para contas de staff, com palavra-passe,
+limitação de tentativas, bloqueio temporário, refresh-token rotativo e JWT
+assinado por chave própria. Não será usado IdP externo.
 
 **O que fizemos para testar sem esperar:** um mecanismo interno de "login
 de desenvolvimento" (o que já usaste para entrar na plataforma). Só
 funciona em ambiente de teste — o sistema **recusa-se a arrancar** em
 produção se este atalho estiver ligado, por segurança.
 
-**O que falta:** escolher o fornecedor real de login antes de ir para
-clientes reais a sério.
+**Para produção:** configurar `Q360_JWT_SIGNING_KEY` forte e os segredos do
+portal; a configuração de OIDC externo é recusada.
 
 ---
 
@@ -136,7 +135,7 @@ antes de estes resultados serem usados a sério com clientes.
 
 ## S04-ROUNDING-001 — Moeda e arredondamento de valores monetários
 
-**Estado:** Decisão de teste (não é a política oficial).
+**Estado:** Resolvido/configurável.
 
 Não há uma política aprovada de que moeda usar oficialmente nem como
 arredondar valores (ex.: para cima, para baixo, a que casa decimal).
@@ -145,9 +144,10 @@ arredondar valores (ex.: para cima, para baixo, a que casa decimal).
 decimais, sempre para cima a partir do 5) aplicado de forma consistente
 em todo o cálculo, e Kwanza (AOA) como moeda de demonstração.
 
-**O que falta:** a política oficial de arredondamento e moeda deve ser
-aprovada pelo actuário/Product Owner antes de qualquer valor calculado
-ser usado a sério.
+**Como funciona agora:** moeda, tarifas e regras comerciais são publicadas
+pela interface de configuração. A política de arredondamento também é
+selecionável pela interface entre os modos que o motor suporta; cada cálculo
+guarda a política aplicada, preservando o histórico.
 
 ---
 
