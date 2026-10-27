@@ -172,6 +172,41 @@ def _default_valid_until(start: datetime.date) -> datetime.date:
     return start + datetime.timedelta(days=days)
 
 
+def _eligibility_rejection_reason(quote: Quote) -> str:
+    """Build a readable rejection reason from the evaluations on excluded members."""
+    excluded = (
+        quote.members.filter(status=QuoteMemberStatus.EXCLUDED.value)
+        .select_related("member", "eligibility_evaluation")
+        .order_by("created_at")
+    )
+    explanations = []
+    for quote_member in excluded:
+        member = quote_member.member
+        name = " ".join(part for part in (member.first_name, member.last_name) if part).strip()
+        name = name or "Um dos membros"
+        evaluation = quote_member.eligibility_evaluation
+        if evaluation is None:
+            detail = "não foi possível confirmar os critérios de adesão"
+        elif evaluation.decision == EligibilityDecision.CONFIG_ERROR.value:
+            detail = "não foi possível verificar a elegibilidade devido a uma configuração em falta"
+        else:
+            messages = [
+                item.get("message", "").strip()
+                for item in (evaluation.evidence_json or [])
+                if item.get("severity") == "ERROR" and item.get("message", "").strip()
+            ]
+            detail = "; ".join(messages) or "não reúne os critérios de adesão"
+        explanations.append(f"{name}: {detail}")
+
+    if not explanations:
+        return "A cotação não pode avançar porque não foi possível confirmar a elegibilidade de um ou mais membros. Reveja os dados e tente novamente ou contacte a equipa de atendimento."
+    return (
+        "A cotação não pode avançar porque a elegibilidade não foi confirmada para "
+        + ". ".join(explanations)
+        + ". Reveja os dados indicados ou contacte a equipa de atendimento."
+    )
+
+
 def _record_transition(
     quote: Quote, *, from_status: str | None, to_status: str, reason_code: str | None = None,
     reason_text: str | None = None, correlation_id: str | None = None,
@@ -778,7 +813,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
         if has_excluded_member:
             new_status = QuoteStatus.REJECTED.value
             reason_code = "ELIGIBILITY_HARD_STOP"
-            reason_text = "Cotação rejeitada automaticamente: pelo menos um membro foi considerado inelegível (HARD_STOP) após verificação de elegibilidade."
+            reason_text = _eligibility_rejection_reason(quote)
             Quote.objects.filter(id=quote.id).update(
                 status=QuoteStatus.REJECTED.value,
                 rejected_by=actor.actor_id if actor else "system:auto",
