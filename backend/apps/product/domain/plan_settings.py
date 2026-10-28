@@ -25,6 +25,7 @@ SEGMENTS = ("INDIVIDUAL_FAMILY", "GROUP")
 TIERS = ("BASE", "MEDIUM", "SUPERIOR", "CUSTOM")
 ACCESS_SYSTEMS = ("NETWORK", "REIMBURSEMENT", "MIXED")
 PARTICIPATION_CODES = ("A", "B", "C", "D", "E")
+COST_SHARING_MODELS = ("INTEGRAL", "COPAYMENT")
 PRE_EXISTING_MODES = (
     "TOTAL_EXCLUSION",  # Exclusão total — Individual, padrão
     "SPECIFIC_EXCLUSION",  # Exclusão específica — Individual, após análise médica
@@ -39,7 +40,7 @@ PREMIUM_PAYERS = ("COMPANY", "EMPLOYEE_COPAYS_FAMILY")
 NETWORK_REGIONS = ("LUANDA", "PROVINCES")
 
 _ALLOWED_KEYS = {
-    "segment", "tier", "category", "accessSystem", "participationOption", "participationOptions",
+    "segment", "tier", "category", "accessSystem", "costSharingModel", "participationOption", "participationOptions",
     "entryAge", "permanenceAge", "household", "clinicalQuestionnaire", "group", "preExistingTreatment",
     "waitingRules", "network", "priorAuthorization", "capitalIndexation", "currency", "noProRata", "notes",
     "indicative", "source",
@@ -115,6 +116,8 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
         _choice(settings["tier"], "settings.tier", TIERS)
     if "accessSystem" in settings:
         _choice(settings["accessSystem"], "settings.accessSystem", ACCESS_SYSTEMS)
+    if "costSharingModel" in settings:
+        _choice(settings["costSharingModel"], "settings.costSharingModel", COST_SHARING_MODELS)
     if "currency" in settings:
         _choice(settings["currency"], "settings.currency", ("AOA", "USD"))
     if settings.get("noProRata") is False:
@@ -251,6 +254,23 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
             raise InvalidPlanSettingsError(
                 f"settings.participationOption '{selected}' tem de estar definida em settings.participationOptions"
             )
+    if settings.get("costSharingModel") == "INTEGRAL":
+        if settings.get("participationOption") is not None or options:
+            raise InvalidPlanSettingsError(
+                "Um plano INTEGRAL não pode definir participationOption nem participationOptions; "
+                "configure as coberturas sem participação."
+            )
+    elif settings.get("costSharingModel") == "COPAYMENT" and options:
+        if not any(
+            entry.get("copayPerConsultation", Decimal("0")) > 0
+            or entry.get("annualDeductible", Decimal("0")) > 0
+            or entry.get("perEventDeductible", Decimal("0")) > 0
+            for entry in parsed.values()
+        ):
+            warnings.append(_warning(
+                "COPAYMENT_OPTIONS_ZERO",
+                "Plano COPAYMENT sem copagamento ou franquia nas opções; configure-o nas coberturas ou opções de participação.",
+            ))
 
     # ---- doenças preexistentes (6 tratamentos do PDF)
     if "preExistingTreatment" in settings and settings["preExistingTreatment"] is not None:

@@ -13,6 +13,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 
 from apps.foundation.application.context import CurrentActorProvider
 from apps.foundation.domain.scopes import Scope
@@ -33,7 +34,7 @@ from apps.client.interfaces.serializers import (
     ProposerSerializer,
     ProposerUpdateRequestSerializer,
     RelationshipCodeSerializer,
-    HouseholdAddDependentSerializer, HouseholdCreateSerializer, HouseholdMemberSerializer,
+    HouseholdAddDependentSerializer, HouseholdCreateDependentSerializer, HouseholdCreateSerializer, HouseholdMemberSerializer,
     HouseholdRemoveDependentSerializer, HouseholdSerializer,
 )
 from shared.pagination import Q360PageNumberPagination
@@ -57,8 +58,16 @@ class RelationshipCodeListView(APIView):
 
     permission_classes = [require_scope(Scope.READ)]
 
+    @extend_schema(parameters=[OpenApiParameter(
+        name="householdRole", type=OpenApiTypes.STR, location=OpenApiParameter.QUERY,
+        enum=["HOLDER", "DEPENDENT"], required=False,
+        description="HOLDER devolve apenas TITULAR; DEPENDENT devolve relações elegíveis como dependente.",
+    )])
     def get(self, request):
-        queryset = list_relationship_codes()
+        household_role = request.query_params.get("householdRole", "DEPENDENT").upper()
+        if household_role not in {"HOLDER", "DEPENDENT"}:
+            raise ValidationError({"householdRole": "Use HOLDER ou DEPENDENT."})
+        queryset = list_relationship_codes(household_role=household_role)
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(RelationshipCodeSerializer(page, many=True).data)
@@ -362,3 +371,29 @@ class HouseholdMemberRemoveView(APIView):
             membership=membership, left_at=body.validated_data["leftAt"], row_version=body.validated_data["rowVersion"],
         )
         return Response(HouseholdMemberSerializer(result).data)
+
+
+class HouseholdDependentCreateView(APIView):
+    """Create an unregistered family dependant and add it to this household."""
+
+    permission_classes = [require_scope(Scope.WRITE)]
+
+    @requires_idempotency
+    def post(self, request, household_id):
+        body = HouseholdCreateDependentSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        membership = _domain_operation(
+            household_service.create_dependent,
+            household=get_object_or_404(FamilyHousehold, id=household_id),
+            relationship_code=data["relationshipCode"],
+            first_name=data["firstName"],
+            last_name=data["lastName"],
+            date_of_birth=data["dateOfBirth"],
+            sex_code=data["sexCode"],
+            external_reference=data["externalReference"],
+            attributes=data["attributes"],
+            nif=data["nif"],
+            joined_at=data["joinedAt"],
+        )
+        return Response(HouseholdMemberSerializer(membership).data, status=201)

@@ -310,11 +310,38 @@ class HouseholdMemberSerializer(serializers.Serializer):
     joinedAt = serializers.DateField(source="joined_at")
     leftAt = serializers.DateField(source="left_at", allow_null=True)
     rowVersion = serializers.IntegerField(source="row_version")
+    # Evita que o consumidor tenha de cruzar manualmente cada membership com
+    # GET /members apenas para apresentar o nome e o parentesco.
+    member = MemberSerializer(read_only=True)
 
 
 class HouseholdAddDependentSerializer(serializers.Serializer):
     memberId = serializers.UUIDField()
     joinedAt = serializers.DateField()
+
+
+class HouseholdCreateDependentSerializer(_RejectUnknownFields, serializers.Serializer):
+    """Cria uma pessoa segura dependente e associa-a ao agregado na mesma operação.
+
+    O `proposerId` é deliberadamente omitido: é sempre o da empresa do
+    agregado indicado na URL, impedindo a criação acidental noutra empresa.
+    """
+
+    externalReference = serializers.CharField(allow_null=True, required=False, default=None)
+    relationshipCode = serializers.CharField(min_length=1, max_length=40)
+    firstName = serializers.CharField(max_length=120)
+    lastName = serializers.CharField(allow_null=True, required=False, default=None)
+    dateOfBirth = serializers.DateField(required=True, allow_null=False)
+    sexCode = serializers.CharField(allow_null=True, required=False, default=None)
+    nif = serializers.CharField(allow_null=True, allow_blank=True, required=False, default=None, max_length=30)
+    attributes = serializers.JSONField(required=False, default=dict)
+    joinedAt = serializers.DateField()
+
+    def validate_firstName(self, value):
+        return _required_name(value)
+
+    def validate_nif(self, value):
+        return _optional_member_nif(value)
 
 
 class HouseholdRemoveDependentSerializer(serializers.Serializer):

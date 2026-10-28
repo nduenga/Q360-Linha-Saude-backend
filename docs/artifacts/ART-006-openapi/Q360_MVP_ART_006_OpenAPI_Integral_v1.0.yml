@@ -6945,6 +6945,69 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/households/{household_id}/dependents:
+    post:
+      operationId: postHouseholdDependentCreate
+      description: 'Create an unregistered family dependant and add it to this household.
+
+
+        Requer: scope q360.write.'
+      summary: Criar household dependent create
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdCreateDependent'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMember'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/households/{household_id}/members:
     get:
       operationId: getHouseholdMemberListAdd
@@ -16970,6 +17033,14 @@ paths:
       summary: Listar relationship code list
       parameters:
       - in: query
+        name: householdRole
+        schema:
+          type: string
+          enum:
+          - DEPENDENT
+          - HOLDER
+        description: HOLDER devolve apenas TITULAR; DEPENDENT devolve relações elegíveis como dependente.
+      - in: query
         name: page
         schema:
           type: integer
@@ -16991,6 +17062,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/RelationshipCodePage'
           description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
         '401':
           content:
             application/problem+json:
@@ -31645,11 +31722,16 @@ components:
           format: date
         rowVersion:
           type: integer
+        member:
+          allOf:
+          - $ref: '#/components/schemas/Member'
+          readOnly: true
       required:
       - householdId
       - id
       - joinedAt
       - leftAt
+      - member
       - memberId
       - rowVersion
     HouseholdRemoveDependent:
@@ -31664,6 +31746,51 @@ components:
       required:
       - leftAt
       - rowVersion
+    HouseholdCreateDependent:
+      type: object
+      description: 'Cria uma pessoa segura dependente e associa-a ao agregado na mesma operação.
+
+
+        O `proposerId` é deliberadamente omitido: é sempre o da empresa do
+
+        agregado indicado na URL, impedindo a criação acidental noutra empresa.'
+      properties:
+        externalReference:
+          type:
+          - string
+          - 'null'
+        relationshipCode:
+          type: string
+          maxLength: 40
+          minLength: 1
+        firstName:
+          type: string
+          maxLength: 120
+        lastName:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          type: string
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 30
+        attributes: {}
+        joinedAt:
+          type: string
+          format: date
+      required:
+      - dateOfBirth
+      - firstName
+      - joinedAt
+      - relationshipCode
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

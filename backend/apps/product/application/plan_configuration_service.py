@@ -18,7 +18,7 @@ from apps.foundation.domain.problem import DomainProblem
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.product.domain.coverage_config import plan_completeness_issues, validate_coverage_config
 from apps.product.domain.enums import BenefitStatus
-from apps.product.domain.errors import InvalidBenefitSelectionError, RowVersionMismatchError
+from apps.product.domain.errors import InvalidBenefitSelectionError, InvalidPlanCostSharingError, RowVersionMismatchError
 from apps.product.domain.plan_settings import validate_plan_settings
 from apps.product.infrastructure.models import Benefit, Plan, PlanBenefit
 
@@ -61,6 +61,18 @@ def configure_plan_benefit(
         benefit_definition=benefit.definition_json,
         plan_settings=plan.settings_json,
     )
+    if (plan.settings_json or {}).get("costSharingModel") == "INTEGRAL":
+        participations = normalised.get("participation") or {}
+        has_charge = any(
+            spec.get("type", "NONE") != "NONE"
+            or spec.get("annualDeductible") not in (None, "0", 0)
+            or spec.get("perEventDeductible") not in (None, "0", 0)
+            for spec in participations.values()
+        )
+        if has_charge:
+            raise InvalidPlanCostSharingError(
+                "Um plano INTEGRAL não pode ter copagamento, cosseguro ou franquia nas coberturas."
+            )
     before = existing.configuration_json if existing else None
     with transaction.atomic():
         if existing is None:
@@ -120,8 +132,24 @@ def validate_plan(*, plan: Plan) -> dict[str, Any]:
             warnings.extend({**w, "scope": f"coverage.{benefit.code}"} for w in cov_warnings)
         except DomainProblem as exc:
             errors.append({"code": "COVERAGE_CONFIG", "message": str(exc), "scope": f"coverage.{benefit.code}"})
+        if settings.get("costSharingModel") == "INTEGRAL":
+            has_charge = any(
+                spec.get("type", "NONE") != "NONE"
+                or spec.get("annualDeductible") not in (None, "0", 0)
+                or spec.get("perEventDeductible") not in (None, "0", 0)
+                for spec in (plan_benefit.configuration_json or {}).get("participation", {}).values()
+            )
+            if has_charge:
+                errors.append({
+                    "code": "INTEGRAL_PARTICIPATION",
+                    "message": "Plano INTEGRAL não pode ter copagamento, cosseguro ou franquia.",
+                    "scope": f"coverage.{benefit.code}",
+                })
 
-    for issue in plan_completeness_issues(segment=settings.get("segment"), coverages=coverages):
+    for issue in plan_completeness_issues(
+        segment=settings.get("segment"), coverages=coverages,
+        cost_sharing_model=settings.get("costSharingModel"),
+    ):
         target = errors if issue["severity"] == "ERROR" else warnings
         target.append({"code": issue["code"], "message": issue["message"], "scope": "plan"})
 

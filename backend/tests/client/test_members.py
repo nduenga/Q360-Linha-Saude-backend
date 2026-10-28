@@ -45,6 +45,53 @@ def test_create_and_get_member(admin_client):
 
 
 @pytest.mark.django_db
+def test_create_unregistered_dependant_and_add_it_to_corporate_household(admin_client):
+    registration_number = f"{next(_COUNTER):010d}"
+    proposer_response = admin_client.post(
+        "/api/v1/proposers",
+        {
+            "proposerType": "ORGANISATION",
+            "displayName": "Empresa Familiar SA",
+            "registrationNumber": registration_number,
+            "email": "rh@empresa.test",
+            "phone": "+244900000001",
+        },
+    )
+    assert proposer_response.status_code == 201, proposer_response.data
+    proposer = proposer_response.data
+    holder_response = admin_client.post(
+        "/api/v1/members",
+        {
+            "proposerId": proposer["id"],
+            "relationshipCode": "TITULAR",
+            "firstName": "Funcionário",
+            "dateOfBirth": "1988-05-20",
+        },
+    )
+    assert holder_response.status_code == 201, holder_response.data
+    household_response = admin_client.post(
+        "/api/v1/households",
+        {"proposerId": proposer["id"], "primaryMemberId": holder_response.data["id"], "joinedAt": "2026-01-01"},
+    )
+    assert household_response.status_code == 201, household_response.data
+
+    response = admin_client.post(
+        f"/api/v1/households/{household_response.data['id']}/dependents",
+        {
+            "relationshipCode": "FILHO",
+            "firstName": "Filho",
+            "dateOfBirth": "2015-06-15",
+            "joinedAt": "2026-01-01",
+        },
+    )
+
+    assert response.status_code == 201, response.data
+    assert response.data["member"]["proposerId"] == proposer["id"]
+    assert response.data["member"]["relationshipCode"] == "FILHO"
+    assert response.data["member"]["status"] == "ACTIVE"
+
+
+@pytest.mark.django_db
 def test_future_date_of_birth_is_rejected(admin_client):
     proposer = _proposer(admin_client)
     future = (datetime.date.today() + datetime.timedelta(days=365)).isoformat()
