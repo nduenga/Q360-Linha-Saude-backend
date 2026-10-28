@@ -35,6 +35,7 @@ from apps.quote.interfaces.views import (
     QuoteDetailView,
     QuoteHistoryView,
     QuoteListCreateView,
+    CorporateQuotationOnboardingView,
     QuoteMemberDetailView,
     QuoteMemberListCreateView,
     QuoteMemberPreExistingView,
@@ -56,6 +57,7 @@ from apps.quote.interfaces.views import (
 )
 
 urlpatterns = [
+    path("corporate-quotations", CorporateQuotationOnboardingView.as_view(), name="corporate-quotation-onboarding"),
     path("quotes", QuoteListCreateView.as_view(), name="quote-list-create"),
     path("quotes/<uuid:quote_id>/proposals", QuoteProposalListCreateView.as_view(), name="quote-proposals"),
     path("quotes/<uuid:quote_id>/proposals/preview", QuoteProposalPreviewView.as_view(), name="quote-proposal-preview"),
