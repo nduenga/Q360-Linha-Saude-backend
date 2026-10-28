@@ -5,10 +5,12 @@ Serializer" rationale).
 """
 from __future__ import annotations
 
+import datetime
 from decimal import Decimal
 
 from rest_framework import serializers
 
+from apps.client.domain.nif import NifFormatError, validate_agt_nif
 from apps.pricing.domain.money import round_amount
 
 from apps.quote.domain.enums import (
@@ -195,6 +197,74 @@ class QuoteCreateRequestSerializer(serializers.Serializer):
 
 class QuoteMemberRequestSerializer(serializers.Serializer):
     memberId = serializers.UUIDField()
+
+
+class CorporatePopulationMemberInputSerializer(serializers.Serializer):
+    relationshipCode = serializers.CharField(min_length=1, max_length=40)
+    firstName = serializers.CharField(min_length=1, max_length=120)
+    lastName = serializers.CharField(required=False, allow_null=True, max_length=120)
+    dateOfBirth = serializers.DateField()
+    sexCode = serializers.CharField(required=False, allow_null=True, max_length=10)
+    nif = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=30)
+    externalReference = serializers.CharField(required=False, allow_null=True, max_length=120)
+    attributes = serializers.JSONField(required=False, default=dict)
+
+    def validate_firstName(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Indique o nome próprio da pessoa segura.")
+        return value
+
+    def validate_nif(self, value):
+        if value is None or not value.strip():
+            return None
+        try:
+            return validate_agt_nif(value, "INDIVIDUAL")
+        except NifFormatError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+
+class CorporateHouseholdInputSerializer(serializers.Serializer):
+    holder = CorporatePopulationMemberInputSerializer()
+    dependents = CorporatePopulationMemberInputSerializer(many=True, required=False, default=list)
+    createHousehold = serializers.BooleanField(required=False, default=True)
+    joinedAt = serializers.DateField(required=False, default=datetime.date.today)
+
+    def validate(self, attrs):
+        if attrs["dependents"] and not attrs["createHousehold"]:
+            raise serializers.ValidationError({"dependents": "Dependentes requerem createHousehold=true."})
+        return attrs
+
+
+class _CorporateProposerInputSerializer(_ProposerInputSerializer):
+    proposerType = serializers.CharField(max_length=30, required=False, default="ORGANISATION")
+
+
+class CorporateQuotationOnboardingRequestSerializer(serializers.Serializer):
+    """Empresa e população a cotar numa única transação."""
+
+    proposerId = serializers.UUIDField(required=False, allow_null=True, default=None)
+    proposerInput = _CorporateProposerInputSerializer(required=False, allow_null=True, default=None)
+    planId = serializers.UUIDField()
+    sourceChannel = serializers.CharField(max_length=60, required=False, allow_null=True, allow_blank=True, default=None)
+    households = CorporateHouseholdInputSerializer(many=True, min_length=1)
+
+    def validate(self, attrs):
+        if bool(attrs.get("proposerId")) == bool(attrs.get("proposerInput")):
+            raise serializers.ValidationError("Forneça exatamente um: proposerId ou proposerInput.")
+        proposer_input = attrs.get("proposerInput")
+        if proposer_input is not None and (proposer_input.get("proposerType") or "ORGANISATION") != "ORGANISATION":
+            raise serializers.ValidationError({"proposerInput": {"proposerType": "Use ORGANISATION no onboarding corporativo."}})
+        if attrs.get("sourceChannel") is not None:
+            attrs["sourceChannel"] = " ".join(attrs["sourceChannel"].split()).upper() or None
+        return attrs
+
+
+class CorporateQuotationOnboardingResponseSerializer(serializers.Serializer):
+    quote = QuoteSerializer()
+    pricing = serializers.JSONField()
+    requirements = serializers.JSONField()
+    households = serializers.ListField(child=serializers.JSONField())
 
 
 class QuoteSelectionRequestSerializer(serializers.Serializer):

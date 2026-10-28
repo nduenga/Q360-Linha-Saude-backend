@@ -122,6 +122,8 @@ As operações abaixo foram implementadas depois do inventário inicial. Todas u
 | GET | `/households/{household_id}/members` | `q360.read` | Lista o titular e os dependentes, incluindo entradas e saídas. |
 | POST | `/households/{household_id}/members` | `q360.write` | Associa ao agregado um dependente ativo já existente na mesma empresa. |
 | POST | `/households/{household_id}/dependents` | `q360.write` | Cria uma nova pessoa segura dependente no cadastro da empresa e associa-a ao agregado numa única operação atómica. |
+| POST | `/corporate-quotations` | `q360.write`, `quote:create`, `quote:calculate` | Onboarding corporativo transacional: cria a empresa (ou usa `proposerId`), titulares, dependentes/agregados, cotação, elegibilidade e prémio da população inteira. |
+| POST | `/policies/{policy_id}/dependents` | `q360.write`, `quote:create` | Regista um familiar de um titular ativo e abre o endosso de inclusão, já com cálculo anual e pró-rata. |
 | POST | `/households/{household_id}/members/{membership_id}/remove` | `q360.write` | Regista a saída lógica de um dependente, preservando o histórico. |
 | GET | `/reports/operational` | `q360.audit` | Entrega indicadores operacionais de população, carteira, cotações, cobranças e auditoria recente. |
 | POST | `/policies/{policy_id}/installments/{installment_no}/default-notice` | `q360.approve` + permissão de aprovação | Regista a notificação formal de falta de pagamento e o novo prazo. |
@@ -157,6 +159,10 @@ As respostas do agregado têm `id`, `proposerId`, `primaryMemberId`, `status` e 
 O cadastro conserva a relação de cada pessoa segura. Para o painel separar escolhas, `GET /relationship-codes?householdRole=HOLDER` devolve apenas `TITULAR`; `GET /relationship-codes?householdRole=DEPENDENT` devolve cônjuge, filho, ascendente e outro. Sem filtro, mantém-se o comportamento anterior: só relações de dependente.
 
 Para registar um familiar que ainda não exista no cadastro, a interface deve usar `POST /households/{household_id}/dependents` com `relationshipCode`, identificação da pessoa (`firstName`, `lastName`, `dateOfBirth`, `sexCode`, `nif` opcional), `attributes` opcional e `joinedAt`. O `proposerId` não é aceite: o backend usa sempre a empresa do agregado. A operação cria a pessoa segura ativa e a respetiva associação; se uma validação falhar, nenhuma das duas é persistida. O retorno de listagem/criação de membros inclui também `member`, com nome e `relationshipCode`, para apresentação direta do painel.
+
+`POST /corporate-quotations` cobre a entrada inicial de uma empresa. Recebe `planId`, `proposerId` **ou** `proposerInput` (obrigatoriamente `ORGANISATION`) e uma lista `households`. Cada item possui `holder`, `dependents`, `joinedAt` e `createHousehold` (permite colaboradores sem agregado, mas dependentes exigem `true`). Todos os titulares e dependentes recebidos passam a membros da cotação; o backend avalia a elegibilidade, executa a tarifação e devolve a cotação, o prémio, requisitos e os identificadores criados. O pedido é atómico: um erro de cadastro, agregado ou cotação não deixa população parcial persistida.
+
+Depois de uma apólice estar ativa, `POST /policies/{policy_id}/dependents` recebe `holderMemberId`, `inclusionDate` e `dependent`. O titular tem de estar ativo na apólice; o backend cria (ou reutiliza) o seu agregado, regista o familiar, cria a cotação de endosso e devolve o cálculo anual/pró-rata. A inclusão contratual só ocorre depois do workflow normal de submissão, aprovação e aceitação do endosso.
 
 ### Contratos do ciclo de vida da apólice
 

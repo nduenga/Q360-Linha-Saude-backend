@@ -3615,6 +3615,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/corporate-quotations:
+    post:
+      operationId: postCorporateQuotationOnboarding
+      description: Cria a empresa ou usa uma existente, regista titulares/dependentes/agregados, cria a cotação
+        e calcula o prémio numa única transação.
+      summary: Criar corporate quotation onboarding
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorporateQuotationOnboardingRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorporateQuotationOnboardingResponse'
+          description: ''
   /api/v1/coverage:
     get:
       operationId: getCoverageLookup
@@ -10773,6 +10804,71 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/policies/{policy_id}/dependents:
+    post:
+      operationId: postPolicyDependentInclusion
+      description: 'Regista um familiar e abre o respetivo endosso de inclusão.
+
+
+        Requer: scope q360.write, permissão quote:create.'
+      summary: Criar policy dependent inclusion
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyDependentInclusionRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/policies/{policy_id}/document:
     get:
       operationId: getPolicyDocument
@@ -19664,6 +19760,105 @@ components:
       description: '* `POLICY` - POLICY
 
         * `QUOTE` - QUOTE'
+    CorporateHouseholdInput:
+      type: object
+      properties:
+        holder:
+          $ref: '#/components/schemas/CorporatePopulationMemberInput'
+        dependents:
+          type: array
+          items:
+            $ref: '#/components/schemas/CorporatePopulationMemberInput'
+        createHousehold:
+          type: boolean
+          default: true
+        joinedAt:
+          type: string
+          format: date
+      required:
+      - holder
+    CorporatePopulationMemberInput:
+      type: object
+      properties:
+        relationshipCode:
+          type: string
+          maxLength: 40
+          minLength: 1
+        firstName:
+          type: string
+          maxLength: 120
+          minLength: 1
+        lastName:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        dateOfBirth:
+          type: string
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 10
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 30
+        externalReference:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        attributes: {}
+      required:
+      - dateOfBirth
+      - firstName
+      - relationshipCode
+    CorporateQuotationOnboardingRequest:
+      type: object
+      description: Empresa e população a cotar numa única transação.
+      properties:
+        proposerId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        proposerInput:
+          oneOf:
+          - $ref: '#/components/schemas/_CorporateProposerInput'
+          - type: 'null'
+        planId:
+          type: string
+          format: uuid
+        sourceChannel:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+        households:
+          type: array
+          items:
+            $ref: '#/components/schemas/CorporateHouseholdInput'
+      required:
+      - households
+      - planId
+    CorporateQuotationOnboardingResponse:
+      type: object
+      properties:
+        quote:
+          $ref: '#/components/schemas/Quote'
+        pricing: {}
+        requirements: {}
+        households:
+          type: array
+          items: {}
+      required:
+      - households
+      - pricing
+      - quote
+      - requirements
     CoverageMemberResult:
       type: object
       properties:
@@ -19993,6 +20188,45 @@ components:
       required:
       - newDeadline
       - registeredMailReference
+    DependentInput:
+      type: object
+      properties:
+        relationshipCode:
+          type: string
+          maxLength: 40
+          minLength: 1
+        firstName:
+          type: string
+          maxLength: 120
+          minLength: 1
+        lastName:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        dateOfBirth:
+          type: string
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 20
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 30
+        externalReference:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        attributes: {}
+      required:
+      - dateOfBirth
+      - firstName
+      - relationshipCode
     DevLoginRequest:
       type: object
       properties:
@@ -23173,6 +23407,21 @@ components:
       - policyId
       - reasonCode
       - waitingPeriodEnds
+    PolicyDependentInclusionRequest:
+      type: object
+      properties:
+        holderMemberId:
+          type: string
+          format: uuid
+        inclusionDate:
+          type: string
+          format: date
+        dependent:
+          $ref: '#/components/schemas/DependentInput'
+      required:
+      - dependent
+      - holderMemberId
+      - inclusionDate
     PolicyDraft:
       type: object
       description: 'Rascunho de emissão: a apólice pré-preenchida a partir da cotação.'
@@ -28788,6 +29037,73 @@ components:
       required:
       - code
       - message
+    _CorporateProposerInput:
+      type: object
+      description: 'Campos necessários para criar um Proposer no mesmo request que a
+
+        criação da cotação. Rejeita caso exista outro proposer com o mesmo NIF.'
+      properties:
+        proposerType:
+          type: string
+          default: ORGANISATION
+          maxLength: 30
+        displayName:
+          type: string
+          maxLength: 200
+          minLength: 1
+        externalReference:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        nif:
+          type: string
+          maxLength: 60
+          minLength: 1
+        registrationNumber:
+          type: string
+          maxLength: 60
+          minLength: 1
+        dateOfBirth:
+          type:
+          - string
+          - 'null'
+          format: date
+        email:
+          type:
+          - string
+          - 'null'
+          default: ''
+          maxLength: 200
+        phone:
+          type:
+          - string
+          - 'null'
+          default: ''
+          maxLength: 60
+        address:
+          type:
+          - string
+          - 'null'
+          maxLength: 500
+        province:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        municipality:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        attributes:
+          oneOf:
+          - {}
+          - type: 'null'
+      required:
+      - displayName
+      - nif
+      - registrationNumber
     _ProposerInput:
       type: object
       description: 'Campos necessários para criar um Proposer no mesmo request que a

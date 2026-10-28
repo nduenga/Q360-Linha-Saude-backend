@@ -16,6 +16,7 @@ from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.client.domain.nif import NifFormatError, validate_agt_nif
 from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
@@ -32,6 +33,31 @@ class InclusionRequestSerializer(serializers.Serializer):
 
 class InclusionDateSerializer(serializers.Serializer):
     inclusionDate = serializers.DateField()
+
+
+class DependentInputSerializer(serializers.Serializer):
+    relationshipCode = serializers.CharField(min_length=1, max_length=40)
+    firstName = serializers.CharField(min_length=1, max_length=120)
+    lastName = serializers.CharField(required=False, allow_null=True, max_length=120)
+    dateOfBirth = serializers.DateField()
+    sexCode = serializers.CharField(required=False, allow_null=True, max_length=20)
+    nif = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=30)
+    externalReference = serializers.CharField(required=False, allow_null=True, max_length=100)
+    attributes = serializers.JSONField(required=False, default=dict)
+
+    def validate_nif(self, value):
+        if value is None or not value.strip():
+            return None
+        try:
+            return validate_agt_nif(value, "INDIVIDUAL")
+        except NifFormatError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+
+class PolicyDependentInclusionRequestSerializer(serializers.Serializer):
+    holderMemberId = serializers.UUIDField()
+    inclusionDate = serializers.DateField()
+    dependent = DependentInputSerializer()
 
 
 class ClientResponseSerializer(serializers.Serializer):
@@ -58,6 +84,29 @@ class PolicyInclusionView(APIView):
             member_ids=body.validated_data["memberIds"], correlation_id=get_correlation_id(),
         )
         return Response(endorsement_service.describe(quote), status=status.HTTP_201_CREATED)
+
+
+@requires_idempotency
+class PolicyDependentInclusionView(APIView):
+    """Regista um familiar e abre o respetivo endosso de inclusão."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_CREATE)]
+
+    def post(self, request, policy_id):
+        body = PolicyDependentInclusionRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        quote, household_id, member_id = endorsement_service.create_dependent_inclusion(
+            policy_id=policy_id,
+            holder_member_id=body.validated_data["holderMemberId"],
+            inclusion_date=body.validated_data["inclusionDate"],
+            dependent=body.validated_data["dependent"],
+            correlation_id=get_correlation_id(),
+        )
+        return Response({
+            **endorsement_service.describe(quote),
+            "householdId": household_id,
+            "memberId": member_id,
+        }, status=status.HTTP_201_CREATED)
 
 
 class PolicyEndorsementListView(APIView):
