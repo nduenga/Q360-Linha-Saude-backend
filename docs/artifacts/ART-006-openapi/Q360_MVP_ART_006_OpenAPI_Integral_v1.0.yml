@@ -6808,6 +6808,312 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatusOk'
           description: Resposta.
+  /api/v1/households:
+    get:
+      operationId: getHouseholdListCreate
+      description: 'Optional family households for a corporate policyholder.
+
+
+        Requer: scope q360.read.'
+      summary: Listar household list create
+      parameters:
+      - in: query
+        name: proposerId
+        schema:
+          type: string
+        description: Filtro.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Household'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    post:
+      operationId: postHouseholdListCreate
+      description: 'Optional family households for a corporate policyholder.
+
+
+        Requer: scope q360.write.'
+      summary: Criar household list create
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdCreate'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Household'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/households/{household_id}:
+    get:
+      operationId: getHouseholdDetail
+      description: 'Requer: scope q360.read.'
+      summary: Obter household detail
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Household'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/households/{household_id}/members:
+    get:
+      operationId: getHouseholdMemberListAdd
+      description: 'Requer: scope q360.read.'
+      summary: Listar household member list add
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HouseholdMember'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    post:
+      operationId: postHouseholdMemberListAdd
+      description: 'Requer: scope q360.write.'
+      summary: Criar household member list add
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdAddDependent'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMember'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/households/{household_id}/members/{membership_id}/remove:
+    post:
+      operationId: postHouseholdMemberRemove
+      description: 'Requer: scope q360.write.'
+      summary: Criar household member remove
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: membership_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdRemoveDependent'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMember'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/import-templates/{kind}:
     get:
       operationId: getImportTemplate
@@ -11107,365 +11413,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
-  /api/v1/population-groups:
-    get:
-      operationId: getPopulationGroupListCreate
-      description: 'Requer: scope q360.read.'
-      summary: Listar population group list create
-      parameters:
-      - in: query
-        name: proposerId
-        schema:
-          type: string
-        description: Filtro.
-      tags:
-      - Other
-      security:
-      - oauth2:
-        - q360.read
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PopulationGroup'
-          description: Sucesso.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-    post:
-      operationId: postPopulationGroupListCreate
-      description: 'Requer: scope q360.write.'
-      summary: Criar population group list create
-      tags:
-      - Other
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PopulationGroupCreate'
-        required: true
-      security:
-      - oauth2:
-        - q360.write
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PopulationGroup'
-          description: Criado.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '409':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
-  /api/v1/population-groups/{group_id}:
-    get:
-      operationId: getPopulationGroupDetail
-      description: 'Requer: scope q360.read.'
-      summary: Obter population group detail
-      parameters:
-      - in: path
-        name: group_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Other
-      security:
-      - oauth2:
-        - q360.read
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PopulationGroup'
-          description: Sucesso.
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
-    put:
-      operationId: putPopulationGroupDetail
-      description: 'Requer: scope q360.write.'
-      summary: Substituir population group detail
-      parameters:
-      - in: path
-        name: group_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Other
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PopulationGroupUpdate'
-        required: true
-      security:
-      - oauth2:
-        - q360.write
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PopulationGroup'
-          description: Sucesso.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
-        '409':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
-  /api/v1/population-groups/{group_id}/members:
-    get:
-      operationId: getPopulationGroupMemberListAssign
-      description: 'Requer: scope q360.read.'
-      summary: Listar population group member list assign
-      parameters:
-      - in: path
-        name: group_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Other
-      security:
-      - oauth2:
-        - q360.read
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PopulationGroupMember'
-          description: Sucesso.
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
-    post:
-      operationId: postPopulationGroupMemberListAssign
-      description: 'Requer: scope q360.write.'
-      summary: Criar population group member list assign
-      parameters:
-      - in: path
-        name: group_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Other
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PopulationGroupAssign'
-        required: true
-      security:
-      - oauth2:
-        - q360.write
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PopulationGroupMember'
-          description: Criado.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
-        '409':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
-  /api/v1/population-groups/{group_id}/members/{assignment_id}/remove:
-    post:
-      operationId: postPopulationGroupMemberRemove
-      description: 'Requer: scope q360.write.'
-      summary: Criar population group member remove
-      parameters:
-      - in: path
-        name: assignment_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      - in: path
-        name: group_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Other
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PopulationGroupRemove'
-        required: true
-      security:
-      - oauth2:
-        - q360.write
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PopulationGroupMember'
-          description: Sucesso.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
-        '409':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/portal-conversations:
     get:
       operationId: getPortalConversationList
@@ -31626,6 +31573,97 @@ components:
       - name
       - rowVersion
       - status
+    Household:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        proposerId:
+          type: string
+          format: uuid
+        primaryMemberId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        rowVersion:
+          type: integer
+      required:
+      - id
+      - primaryMemberId
+      - proposerId
+      - rowVersion
+      - status
+    HouseholdAddDependent:
+      type: object
+      properties:
+        memberId:
+          type: string
+          format: uuid
+        joinedAt:
+          type: string
+          format: date
+      required:
+      - joinedAt
+      - memberId
+    HouseholdCreate:
+      type: object
+      properties:
+        proposerId:
+          type: string
+          format: uuid
+        primaryMemberId:
+          type: string
+          format: uuid
+        joinedAt:
+          type: string
+          format: date
+      required:
+      - joinedAt
+      - primaryMemberId
+      - proposerId
+    HouseholdMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        householdId:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+        joinedAt:
+          type: string
+          format: date
+        leftAt:
+          type:
+          - string
+          - 'null'
+          format: date
+        rowVersion:
+          type: integer
+      required:
+      - householdId
+      - id
+      - joinedAt
+      - leftAt
+      - memberId
+      - rowVersion
+    HouseholdRemoveDependent:
+      type: object
+      properties:
+        leftAt:
+          type: string
+          format: date
+        rowVersion:
+          type: integer
+          minimum: 0
+      required:
+      - leftAt
+      - rowVersion
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

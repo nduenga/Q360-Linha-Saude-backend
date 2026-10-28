@@ -181,15 +181,13 @@ class MemberDocument(TenantScopedModel):
         db_table = "member_document"
 
 
-class PopulationGroup(TenantScopedModel):
+class FamilyHousehold(TenantScopedModel):
+    """Optional household of a corporate holder and their dependants."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
-    proposer = models.ForeignKey(Proposer, on_delete=models.DO_NOTHING, db_column="proposer_id", related_name="population_groups")
-    parent_group = models.ForeignKey("self", on_delete=models.DO_NOTHING, db_column="parent_group_id", null=True, blank=True, related_name="subgroups")
-    code = models.CharField(max_length=60)
-    name = models.CharField(max_length=200)
-    category_code = models.CharField(max_length=60, null=True, blank=True)
-    eligibility_rules_json = models.JSONField(default=dict)
+    proposer = models.ForeignKey(Proposer, on_delete=models.DO_NOTHING, db_column="proposer_id", related_name="households")
+    primary_member = models.ForeignKey(InsuredMember, on_delete=models.DO_NOTHING, db_column="primary_member_id", related_name="primary_household")
     status = models.CharField(max_length=20, default="ACTIVE")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -197,15 +195,14 @@ class PopulationGroup(TenantScopedModel):
 
     class Meta:
         managed = False
-        db_table = "population_group"
+        db_table = "family_household"
 
 
-class PopulationGroupMember(TenantScopedModel):
+class FamilyHouseholdMember(TenantScopedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
-    group = models.ForeignKey(PopulationGroup, on_delete=models.DO_NOTHING, db_column="group_id", related_name="assignments")
-    member = models.ForeignKey(InsuredMember, on_delete=models.DO_NOTHING, db_column="member_id", related_name="group_assignments")
-    category_code = models.CharField(max_length=60, null=True, blank=True)
+    household = models.ForeignKey(FamilyHousehold, on_delete=models.DO_NOTHING, db_column="household_id", related_name="memberships")
+    member = models.ForeignKey(InsuredMember, on_delete=models.DO_NOTHING, db_column="member_id", related_name="household_membership")
     joined_at = models.DateField()
     left_at = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -214,4 +211,5 @@ class PopulationGroupMember(TenantScopedModel):
 
     class Meta:
         managed = False
-        db_table = "population_group_member"
+        db_table = "family_household_member"
+

@@ -16,7 +16,7 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 - Os erros vêm em `application/problem+json` (`code`, `detail`, `correlationId`).
 - As rotas `/platform/…` usam o token da conta da plataforma; as restantes, o token do tenant.
 
-**Resumo:** a contagem seguinte pertence ao levantamento original. A atualização de 27/10/2026 acrescenta 13 operações de grupos empresariais, relatório operacional e transições adicionais do ciclo de vida da apólice; também passa a documentar 9 operações já disponíveis de autenticação própria e administração de contas.
+**Resumo:** a contagem seguinte pertence ao levantamento original. A atualização de 27/10/2026 acrescenta agregados familiares opcionais, relatório operacional e transições adicionais do ciclo de vida da apólice; também passa a documentar operações já disponíveis de autenticação própria e administração de contas.
 
 | # | Método | Endpoint | operationId | Estado |
 |---|---|---|---|---|
@@ -110,19 +110,18 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 | 85 | GET | `/quotes/{quote_id}/requirements` | getQuoteRequirements | Alterado (comportamento: recém-nascidos) |
 | 86 | POST | `/quotes/{quote_id}/policy` | postIssuePolicy | Alterado (comportamento: endosso) |
 
-## Atualização de 27/10/2026 — ciclo de vida, grupos e controlo operacional
+## Atualização de 27/10/2026 — ciclo de vida, agregados familiares e controlo operacional
 
 As operações abaixo foram implementadas depois do inventário inicial. Todas usam o prefixo `/api/v1` (omitido na tabela) e devolvem erros no formato `application/problem+json`. As operações de escrita dos grupos e do ciclo de vida exigem `Idempotency-Key`; as operações de autenticação têm proteção própria contra repetição e limitação de tentativas.
 
 | Método | Endpoint | Quem pode | Funcionalidade |
 |---|---|---|---|
-| GET | `/population-groups` | `q360.read` | Lista grupos e subgrupos empresariais; aceita o filtro `proposerId`. |
-| POST | `/population-groups` | `q360.write` | Cria um grupo ou subgrupo para um proponente do tipo empresa, com categoria e regras de elegibilidade. |
-| GET | `/population-groups/{group_id}` | `q360.read` | Obtém um grupo, a sua categoria, estado e regras vigentes. |
-| PUT | `/population-groups/{group_id}` | `q360.write` | Altera nome, categoria, regras e estado (`ACTIVE`/`INACTIVE`) com controlo otimista por `rowVersion`. |
-| GET | `/population-groups/{group_id}/members` | `q360.read` | Lista as associações de pessoas seguras ao grupo, incluindo entradas e saídas. |
-| POST | `/population-groups/{group_id}/members` | `q360.write` | Associa uma pessoa segura elegível ao grupo/categoria. |
-| POST | `/population-groups/{group_id}/members/{assignment_id}/remove` | `q360.write` | Regista a saída lógica de uma pessoa do grupo, preservando o histórico. |
+| GET | `/households` | `q360.read` | Lista agregados familiares opcionais; aceita o filtro `proposerId`. |
+| POST | `/households` | `q360.write` | Cria o agregado de um titular ativo de uma empresa. |
+| GET | `/households/{household_id}` | `q360.read` | Obtém o agregado e o seu titular. |
+| GET | `/households/{household_id}/members` | `q360.read` | Lista o titular e os dependentes, incluindo entradas e saídas. |
+| POST | `/households/{household_id}/members` | `q360.write` | Associa um dependente ativo da mesma empresa ao agregado. |
+| POST | `/households/{household_id}/members/{membership_id}/remove` | `q360.write` | Regista a saída lógica de um dependente, preservando o histórico. |
 | GET | `/reports/operational` | `q360.audit` | Entrega indicadores operacionais de população, carteira, cotações, cobranças e auditoria recente. |
 | POST | `/policies/{policy_id}/installments/{installment_no}/default-notice` | `q360.approve` + permissão de aprovação | Regista a notificação formal de falta de pagamento e o novo prazo. |
 | POST | `/policies/{policy_id}/installments/{installment_no}/suspend` | `q360.approve` + permissão de aprovação | Suspende a apólice por incumprimento, quando as pré-condições do ciclo de vida são cumpridas. |
@@ -148,19 +147,11 @@ As operações abaixo foram implementadas depois do inventário inicial. Todas u
 
 As respostas de contas de staff incluem `id`, `email`, `name`, `status`, `roles`, `lastLoginAt` e `lockedUntil`. A criação recebe `{email, name, roles, password?}`; quando `password` é omitida, a resposta inclui `temporaryPassword` uma única vez. A alteração de perfis recebe `{roles}` e a alteração de estado recebe `{status: "ACTIVE" | "DISABLED"}`.
 
-### Contratos de grupos empresariais
+### Contratos de agregados familiares
 
-`POST /population-groups` recebe `proposerId`, `code`, `name`, e opcionalmente `parentGroupId`, `categoryCode` e `eligibilityRules`. Um `parentGroupId` cria um subgrupo da mesma empresa. As regras suportadas são:
+`POST /households` recebe `{proposerId, primaryMemberId, joinedAt}`. É opcional criar agregado: membros de uma empresa podem existir sem um. Quando é criado, o titular tem obrigatoriamente de ser uma pessoa segura ativa, com relação `TITULAR`, da mesma empresa. Um titular só pode ter um agregado.
 
-| Campo em `eligibilityRules` | Tipo | Efeito |
-|---|---|---|
-| `relationshipCodes` | lista de texto | Limita as relações familiares que podem integrar o grupo. |
-| `minAge` / `maxAge` | inteiro | Define os limites etários na data de entrada. |
-| `requireActiveMember` | booleano | Exige que a pessoa segura esteja ativa; o padrão é `true`. |
-
-As respostas de grupo têm `id`, `proposerId`, `parentGroupId`, `code`, `name`, `categoryCode`, `eligibilityRules`, `status` e `rowVersion`. A atualização exige `name`, `status` e `rowVersion`; aceita também `categoryCode` e `eligibilityRules`.
-
-Para associar uma pessoa, `POST .../members` recebe `memberId`, `joinedAt` e `categoryCode` opcional. O backend confirma que a pessoa pertence ao mesmo proponente, que está ativa quando exigido e que respeita a relação/idade configuradas. Para remover, o corpo é `{leftAt, rowVersion}`.
+As respostas do agregado têm `id`, `proposerId`, `primaryMemberId`, `status` e `rowVersion`. Para associar alguém, `POST .../members` recebe `{memberId, joinedAt}`. O backend exige que seja pessoa ativa da mesma empresa, que a sua relação não seja `TITULAR` e que ainda não pertença a outro agregado. Assim, cada membro adicional é um dependente do titular. Para remover, o corpo é `{leftAt, rowVersion}`; o titular não pode ser removido do próprio agregado.
 
 ### Contratos do ciclo de vida da apólice
 
@@ -173,7 +164,7 @@ Para associar uma pessoa, `POST .../members` recebe `memberId`, `joinedAt` e `ca
 
 `GET /reports/operational` não recebe corpo. A resposta contém `asOf` e estes blocos:
 
-- `population`: totais de proponentes ativos, pessoas seguras ativas, grupos empresariais e subgrupos ativos;
+- `population`: totais de proponentes ativos, pessoas seguras ativas e agregados familiares ativos;
 - `portfolio`: apólices por estado, apólices ativas e pessoas cobertas;
 - `commercial`: cotações por estado;
 - `collections`: quantidade e montante de prestações pagas e vencidas;

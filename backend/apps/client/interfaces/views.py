@@ -18,9 +18,9 @@ from apps.foundation.application.context import CurrentActorProvider
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_scope
-from apps.client.application import import_service, member_service, proposer_service, population_group_service
+from apps.client.application import household_service, import_service, member_service, proposer_service
 from apps.client.application.relationship_service import list_relationship_codes
-from apps.client.infrastructure.models import ImportJob, InsuredMember, Proposer, PopulationGroup, PopulationGroupMember
+from apps.client.infrastructure.models import FamilyHousehold, FamilyHouseholdMember, ImportJob, InsuredMember, Proposer
 from apps.client.interfaces.serializers import (
     ImportCommitRequestSerializer,
     ImportJobSerializer,
@@ -33,13 +33,13 @@ from apps.client.interfaces.serializers import (
     ProposerSerializer,
     ProposerUpdateRequestSerializer,
     RelationshipCodeSerializer,
-    PopulationGroupSerializer, PopulationGroupCreateSerializer, PopulationGroupMemberSerializer,
-    PopulationGroupAssignSerializer, PopulationGroupRemoveSerializer, PopulationGroupUpdateSerializer,
+    HouseholdAddDependentSerializer, HouseholdCreateSerializer, HouseholdMemberSerializer,
+    HouseholdRemoveDependentSerializer, HouseholdSerializer,
 )
 from shared.pagination import Q360PageNumberPagination
 
 
-def _group_operation(operation, **kwargs):
+def _domain_operation(operation, **kwargs):
     """Translate validation failures from the domain boundary into ART-006 errors."""
     try:
         return operation(**kwargs)
@@ -294,75 +294,71 @@ class MemberImportCommitView(APIView):
         return Response(ImportJobSerializer(committed).data, status=202)
 
 
-class PopulationGroupListCreateView(APIView):
+class HouseholdListCreateView(APIView):
+    """Optional family households for a corporate policyholder."""
+
     def get_permissions(self):
         return [require_scope(Scope.WRITE if self.request.method == "POST" else Scope.READ)()]
 
     def get(self, request):
-        groups = PopulationGroup.objects.all().order_by("proposer_id", "parent_group_id", "name")
+        households = FamilyHousehold.objects.all().order_by("proposer_id", "created_at")
         if proposer_id := request.query_params.get("proposerId"):
-            groups = groups.filter(proposer_id=proposer_id)
-        return Response(PopulationGroupSerializer(groups, many=True).data)
+            households = households.filter(proposer_id=proposer_id)
+        return Response(HouseholdSerializer(households, many=True).data)
 
     @requires_idempotency
     def post(self, request):
-        body = PopulationGroupCreateSerializer(data=request.data)
+        body = HouseholdCreateSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         data = body.validated_data
-        group = _group_operation(population_group_service.create_group,
-            proposer=get_object_or_404(Proposer, id=data["proposerId"]), code=data["code"], name=data["name"],
-            category_code=data["categoryCode"], parent_group_id=data["parentGroupId"], eligibility_rules=data["eligibilityRules"],
+        household = _domain_operation(
+            household_service.create_household,
+            proposer=get_object_or_404(Proposer, id=data["proposerId"]),
+            primary_member=get_object_or_404(InsuredMember, id=data["primaryMemberId"]),
+            joined_at=data["joinedAt"],
         )
-        return Response(PopulationGroupSerializer(group).data, status=201)
+        return Response(HouseholdSerializer(household).data, status=201)
 
 
-class PopulationGroupDetailView(APIView):
-    def get_permissions(self):
-        return [require_scope(Scope.WRITE if self.request.method == "PUT" else Scope.READ)()]
+class HouseholdDetailView(APIView):
+    permission_classes = [require_scope(Scope.READ)]
 
-    def get(self, request, group_id):
-        return Response(PopulationGroupSerializer(get_object_or_404(PopulationGroup, id=group_id)).data)
-
-    @requires_idempotency
-    def put(self, request, group_id):
-        body = PopulationGroupUpdateSerializer(data=request.data)
-        body.is_valid(raise_exception=True)
-        data = body.validated_data
-        group = _group_operation(
-            population_group_service.update_group,
-            group=get_object_or_404(PopulationGroup, id=group_id),
-            name=data["name"], category_code=data["categoryCode"],
-            eligibility_rules=data["eligibilityRules"], status=data["status"], row_version=data["rowVersion"],
-        )
-        return Response(PopulationGroupSerializer(group).data)
+    def get(self, request, household_id):
+        return Response(HouseholdSerializer(get_object_or_404(FamilyHousehold, id=household_id)).data)
 
 
-class PopulationGroupMemberListAssignView(APIView):
+class HouseholdMemberListAddView(APIView):
     def get_permissions(self):
         return [require_scope(Scope.WRITE if self.request.method == "POST" else Scope.READ)()]
 
-    def get(self, request, group_id):
-        group = get_object_or_404(PopulationGroup, id=group_id)
-        return Response(PopulationGroupMemberSerializer(group.assignments.order_by("joined_at"), many=True).data)
+    def get(self, request, household_id):
+        household = get_object_or_404(FamilyHousehold, id=household_id)
+        return Response(HouseholdMemberSerializer(household.memberships.order_by("joined_at"), many=True).data)
 
     @requires_idempotency
-    def post(self, request, group_id):
-        body = PopulationGroupAssignSerializer(data=request.data)
+    def post(self, request, household_id):
+        body = HouseholdAddDependentSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         data = body.validated_data
-        assignment = _group_operation(population_group_service.assign_member, group=get_object_or_404(PopulationGroup, id=group_id),
-            member=get_object_or_404(InsuredMember, id=data["memberId"]), category_code=data["categoryCode"], joined_at=data["joinedAt"])
-        return Response(PopulationGroupMemberSerializer(assignment).data, status=201)
+        membership = _domain_operation(
+            household_service.add_dependent,
+            household=get_object_or_404(FamilyHousehold, id=household_id),
+            member=get_object_or_404(InsuredMember, id=data["memberId"]),
+            joined_at=data["joinedAt"],
+        )
+        return Response(HouseholdMemberSerializer(membership).data, status=201)
 
 
-class PopulationGroupMemberRemoveView(APIView):
+class HouseholdMemberRemoveView(APIView):
     permission_classes = [require_scope(Scope.WRITE)]
 
     @requires_idempotency
-    def post(self, request, group_id, assignment_id):
-        body = PopulationGroupRemoveSerializer(data=request.data)
+    def post(self, request, household_id, membership_id):
+        body = HouseholdRemoveDependentSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        assignment = get_object_or_404(PopulationGroupMember, id=assignment_id, group_id=group_id)
-        result = _group_operation(population_group_service.remove_member, assignment=assignment, left_at=body.validated_data["leftAt"],
-            row_version=body.validated_data["rowVersion"])
-        return Response(PopulationGroupMemberSerializer(result).data)
+        membership = get_object_or_404(FamilyHouseholdMember, id=membership_id, household_id=household_id)
+        result = _domain_operation(
+            household_service.remove_dependent,
+            membership=membership, left_at=body.validated_data["leftAt"], row_version=body.validated_data["rowVersion"],
+        )
+        return Response(HouseholdMemberSerializer(result).data)
