@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import datetime
+from typing import Any
 
 from django.db import transaction
 
 from apps.client.application.relationship_service import validate_relationship_code
+from apps.client.application import member_service
 from apps.client.domain.enums import MemberStatus, ProposerType, RelationshipCategory
 from apps.client.domain.errors import HouseholdConflictError, HouseholdValidationError, RowVersionMismatchError
 from apps.client.infrastructure.models import FamilyHousehold, FamilyHouseholdMember, InsuredMember, Proposer
@@ -66,6 +68,53 @@ def add_dependent(*, household: FamilyHousehold, member: InsuredMember, joined_a
         )
     _audit.record(action="household.dependent_added", entity_type="FamilyHousehold", entity_id=str(household.id),
                   metadata={"memberId": str(member.id)})
+    return membership
+
+
+def create_dependent(
+    *,
+    household: FamilyHousehold,
+    relationship_code: str,
+    first_name: str,
+    last_name: str | None,
+    date_of_birth: datetime.date,
+    sex_code: str | None,
+    external_reference: str | None,
+    attributes: dict[str, Any] | None,
+    nif: str | None,
+    joined_at: datetime.date,
+) -> FamilyHouseholdMember:
+    """Create a dependent in the company's insured population and link it.
+
+    A household never owns an anonymous person: quotes, underwriting and a
+    future policy need a stable insured-member identity.  This convenience
+    command removes the UI's former two-step requirement while retaining that
+    invariant.  All writes are atomic, so an invalid relationship or failed
+    household link does not leave a newly-created member behind.
+    """
+    if household.status != "ACTIVE":
+        raise HouseholdValidationError("Não é possível incluir dependentes num agregado inativo.")
+    if household.proposer.proposer_type != ProposerType.ORGANISATION.value:
+        raise HouseholdValidationError("Os agregados familiares são exclusivos de empresas.")
+
+    tenant = CurrentTenantProvider.require()
+    relationship = validate_relationship_code(tenant_id=tenant.value, code=relationship_code)
+    if relationship.category == RelationshipCategory.TITULAR.value:
+        raise HouseholdValidationError("Use a relação de dependente; TITULAR não pode ser criado como familiar.")
+
+    with transaction.atomic():
+        member = member_service.create_member(
+            proposer=household.proposer,
+            relationship_code=relationship_code,
+            first_name=first_name,
+            last_name=last_name,
+            date_of_birth=date_of_birth,
+            sex_code=sex_code,
+            external_reference=external_reference,
+            attributes=attributes,
+            nif=nif,
+        )
+        membership = add_dependent(household=household, member=member, joined_at=joined_at)
     return membership
 
 

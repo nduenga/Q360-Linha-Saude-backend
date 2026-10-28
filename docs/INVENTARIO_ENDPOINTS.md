@@ -120,7 +120,8 @@ As operações abaixo foram implementadas depois do inventário inicial. Todas u
 | POST | `/households` | `q360.write` | Cria o agregado de um titular ativo de uma empresa. |
 | GET | `/households/{household_id}` | `q360.read` | Obtém o agregado e o seu titular. |
 | GET | `/households/{household_id}/members` | `q360.read` | Lista o titular e os dependentes, incluindo entradas e saídas. |
-| POST | `/households/{household_id}/members` | `q360.write` | Associa um dependente ativo da mesma empresa ao agregado. |
+| POST | `/households/{household_id}/members` | `q360.write` | Associa ao agregado um dependente ativo já existente na mesma empresa. |
+| POST | `/households/{household_id}/dependents` | `q360.write` | Cria uma nova pessoa segura dependente no cadastro da empresa e associa-a ao agregado numa única operação atómica. |
 | POST | `/households/{household_id}/members/{membership_id}/remove` | `q360.write` | Regista a saída lógica de um dependente, preservando o histórico. |
 | GET | `/reports/operational` | `q360.audit` | Entrega indicadores operacionais de população, carteira, cotações, cobranças e auditoria recente. |
 | POST | `/policies/{policy_id}/installments/{installment_no}/default-notice` | `q360.approve` + permissão de aprovação | Regista a notificação formal de falta de pagamento e o novo prazo. |
@@ -154,6 +155,8 @@ As respostas de contas de staff incluem `id`, `email`, `name`, `status`, `roles`
 As respostas do agregado têm `id`, `proposerId`, `primaryMemberId`, `status` e `rowVersion`. Para associar alguém, `POST .../members` recebe `{memberId, joinedAt}`. O backend exige que seja pessoa ativa da mesma empresa, que a sua relação não seja `TITULAR` e que ainda não pertença a outro agregado. Assim, cada membro adicional é um dependente do titular. Para remover, o corpo é `{leftAt, rowVersion}`; o titular não pode ser removido do próprio agregado.
 
 O cadastro conserva a relação de cada pessoa segura. Para o painel separar escolhas, `GET /relationship-codes?householdRole=HOLDER` devolve apenas `TITULAR`; `GET /relationship-codes?householdRole=DEPENDENT` devolve cônjuge, filho, ascendente e outro. Sem filtro, mantém-se o comportamento anterior: só relações de dependente.
+
+Para registar um familiar que ainda não exista no cadastro, a interface deve usar `POST /households/{household_id}/dependents` com `relationshipCode`, identificação da pessoa (`firstName`, `lastName`, `dateOfBirth`, `sexCode`, `nif` opcional), `attributes` opcional e `joinedAt`. O `proposerId` não é aceite: o backend usa sempre a empresa do agregado. A operação cria a pessoa segura ativa e a respetiva associação; se uma validação falhar, nenhuma das duas é persistida. O retorno de listagem/criação de membros inclui também `member`, com nome e `relationshipCode`, para apresentação direta do painel.
 
 ### Contratos do ciclo de vida da apólice
 

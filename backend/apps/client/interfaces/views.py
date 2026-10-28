@@ -34,7 +34,7 @@ from apps.client.interfaces.serializers import (
     ProposerSerializer,
     ProposerUpdateRequestSerializer,
     RelationshipCodeSerializer,
-    HouseholdAddDependentSerializer, HouseholdCreateSerializer, HouseholdMemberSerializer,
+    HouseholdAddDependentSerializer, HouseholdCreateDependentSerializer, HouseholdCreateSerializer, HouseholdMemberSerializer,
     HouseholdRemoveDependentSerializer, HouseholdSerializer,
 )
 from shared.pagination import Q360PageNumberPagination
@@ -371,3 +371,29 @@ class HouseholdMemberRemoveView(APIView):
             membership=membership, left_at=body.validated_data["leftAt"], row_version=body.validated_data["rowVersion"],
         )
         return Response(HouseholdMemberSerializer(result).data)
+
+
+class HouseholdDependentCreateView(APIView):
+    """Create an unregistered family dependant and add it to this household."""
+
+    permission_classes = [require_scope(Scope.WRITE)]
+
+    @requires_idempotency
+    def post(self, request, household_id):
+        body = HouseholdCreateDependentSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        membership = _domain_operation(
+            household_service.create_dependent,
+            household=get_object_or_404(FamilyHousehold, id=household_id),
+            relationship_code=data["relationshipCode"],
+            first_name=data["firstName"],
+            last_name=data["lastName"],
+            date_of_birth=data["dateOfBirth"],
+            sex_code=data["sexCode"],
+            external_reference=data["externalReference"],
+            attributes=data["attributes"],
+            nif=data["nif"],
+            joined_at=data["joinedAt"],
+        )
+        return Response(HouseholdMemberSerializer(membership).data, status=201)
