@@ -16970,6 +16970,14 @@ paths:
       summary: Listar relationship code list
       parameters:
       - in: query
+        name: householdRole
+        schema:
+          type: string
+          enum:
+          - DEPENDENT
+          - HOLDER
+        description: HOLDER devolve apenas TITULAR; DEPENDENT devolve relações elegíveis como dependente.
+      - in: query
         name: page
         schema:
           type: integer
@@ -16991,6 +16999,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/RelationshipCodePage'
           description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
         '401':
           content:
             application/problem+json:

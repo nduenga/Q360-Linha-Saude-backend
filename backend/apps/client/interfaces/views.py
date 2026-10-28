@@ -13,6 +13,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 
 from apps.foundation.application.context import CurrentActorProvider
 from apps.foundation.domain.scopes import Scope
@@ -57,8 +58,16 @@ class RelationshipCodeListView(APIView):
 
     permission_classes = [require_scope(Scope.READ)]
 
+    @extend_schema(parameters=[OpenApiParameter(
+        name="householdRole", type=OpenApiTypes.STR, location=OpenApiParameter.QUERY,
+        enum=["HOLDER", "DEPENDENT"], required=False,
+        description="HOLDER devolve apenas TITULAR; DEPENDENT devolve relações elegíveis como dependente.",
+    )])
     def get(self, request):
-        queryset = list_relationship_codes()
+        household_role = request.query_params.get("householdRole", "DEPENDENT").upper()
+        if household_role not in {"HOLDER", "DEPENDENT"}:
+            raise ValidationError({"householdRole": "Use HOLDER ou DEPENDENT."})
+        queryset = list_relationship_codes(household_role=household_role)
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(RelationshipCodeSerializer(page, many=True).data)

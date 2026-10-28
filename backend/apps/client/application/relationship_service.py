@@ -63,17 +63,19 @@ def ensure_relationship_catalog(tenant_id: uuid.UUID) -> None:
         )
 
 
-def list_relationship_codes():
-    """Devolve apenas as relações que podem ser escolhidas na interface."""
+def list_relationship_codes(*, household_role: str = "DEPENDENT"):
+    """Return choices for a holder or dependant selection control.
+
+    ``HOLDER`` returns only ``TITULAR``. ``DEPENDENT`` remains the default
+    and deliberately excludes it.
+    """
     tenant_id = CurrentTenantProvider.require().value
     ensure_relationship_catalog(tenant_id)
 
-    return (
-        RelationshipCode.objects
-        .filter(tenant_id=tenant_id)
-        .exclude(code="TITULAR")
-        .order_by("category", "code")
-    )
+    queryset = RelationshipCode.objects.filter(tenant_id=tenant_id)
+    if household_role == "HOLDER":
+        return queryset.filter(category=RelationshipCategory.TITULAR.value).order_by("code")
+    return queryset.exclude(category=RelationshipCategory.TITULAR.value).order_by("category", "code")
 
 
 def validate_relationship_code(

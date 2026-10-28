@@ -339,6 +339,7 @@ def plan_completeness_issues(
     *,
     segment: str | None,
     coverages: list[dict[str, Any]],
+    cost_sharing_model: str | None = None,
 ) -> list[dict[str, str]]:
     """Plan-level checks over all attached coverages (`coverages` items:
     `{code, category, config}`) — used by `GET /plans/{id}/validation`.
@@ -362,4 +363,17 @@ def plan_completeness_issues(
         limits = outpatient["config"].get("limits", [])
         if not any(lim.get("kind") in ("ANNUAL_PER_PERSON", "HOUSEHOLD_SHARED") for lim in limits):
             issue("WARNING", "OUTPATIENT_CAPITAL", "Ambulatório: definir o capital anual (por pessoa ou por agregado) e os sublimites por consulta.")
+    if cost_sharing_model == "COPAYMENT":
+        has_charge = any(
+            spec.get("type", "NONE") != "NONE"
+            or spec.get("annualDeductible") not in (None, "0", 0)
+            or spec.get("perEventDeductible") not in (None, "0", 0)
+            for coverage in coverages
+            for spec in (coverage["config"].get("participation") or {}).values()
+        )
+        if not has_charge:
+            issue(
+                "ERROR", "COPAYMENT_CONFIGURATION_MISSING",
+                "Plano COPAYMENT sem copagamento, cosseguro ou franquia configurado em qualquer cobertura.",
+            )
     return issues
