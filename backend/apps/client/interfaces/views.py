@@ -21,7 +21,7 @@ from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_scope
 from apps.client.application import household_service, import_service, member_service, proposer_service
 from apps.client.application.relationship_service import list_relationship_codes
-from apps.client.infrastructure.models import FamilyHousehold, FamilyHouseholdMember, ImportJob, InsuredMember, Proposer
+from apps.client.infrastructure.models import FamilyHousehold, FamilyHouseholdMember, ImportJob, InsuredMember, Person, Proposer
 from apps.client.interfaces.serializers import (
     ImportCommitRequestSerializer,
     ImportJobSerializer,
@@ -29,12 +29,13 @@ from apps.client.interfaces.serializers import (
     MemberDeleteRequestSerializer,
     MemberSerializer,
     MemberUpdateRequestSerializer,
+    PersonSerializer,
     ProposerCreateRequestSerializer,
     ProposerDeleteRequestSerializer,
     ProposerSerializer,
     ProposerUpdateRequestSerializer,
     RelationshipCodeSerializer,
-    HouseholdAddDependentSerializer, HouseholdCreateDependentSerializer, HouseholdCreateSerializer, HouseholdMemberSerializer,
+    HouseholdAddDependentSerializer, HouseholdCreateDependentSerializer, HouseholdCreateSerializer, HouseholdLinkPersonSerializer, HouseholdMemberSerializer,
     HouseholdRemoveDependentSerializer, HouseholdSerializer,
 )
 from shared.pagination import Q360PageNumberPagination
@@ -71,6 +72,21 @@ class RelationshipCodeListView(APIView):
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(RelationshipCodeSerializer(page, many=True).data)
+
+
+class PersonListView(APIView):
+    """Tenant-scoped search for reusing civil identities across households."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request):
+        search = (request.query_params.get("search") or "").strip()
+        if len(search) < 2:
+            return Response([])
+        people = Person.objects.filter(
+            Q(first_name__icontains=search) | Q(last_name__icontains=search) | Q(nif__icontains=search)
+        ).order_by("first_name", "last_name", "id")[:30]
+        return Response(PersonSerializer(people, many=True).data)
 
 
 @requires_idempotency
@@ -342,7 +358,7 @@ class HouseholdMemberListAddView(APIView):
 
     def get(self, request, household_id):
         household = get_object_or_404(FamilyHousehold, id=household_id)
-        return Response(HouseholdMemberSerializer(household.memberships.order_by("joined_at"), many=True).data)
+        return Response(HouseholdMemberSerializer(household.memberships.select_related("member", "person").order_by("joined_at"), many=True).data)
 
     @requires_idempotency
     def post(self, request, household_id):
@@ -394,6 +410,31 @@ class HouseholdDependentCreateView(APIView):
             external_reference=data["externalReference"],
             attributes=data["attributes"],
             nif=data["nif"],
+            joined_at=data["joinedAt"],
+        )
+        return Response(HouseholdMemberSerializer(membership).data, status=201)
+
+
+class HouseholdPersonDependentCreateView(APIView):
+    """Create a civil person linked to a household, without an insurance enrollment."""
+
+    permission_classes = [require_scope(Scope.WRITE)]
+
+    @requires_idempotency
+    def post(self, request, household_id):
+        body = HouseholdLinkPersonSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        membership = _domain_operation(
+            household_service.create_household_person,
+            household=get_object_or_404(FamilyHousehold, id=household_id),
+            relationship_code=data["relationshipCode"],
+            person_id=data.get("personId"),
+            first_name=data.get("firstName"),
+            last_name=data.get("lastName"),
+            date_of_birth=data.get("dateOfBirth"),
+            sex_code=data.get("sexCode"),
+            nif=data.get("nif"),
             joined_at=data["joinedAt"],
         )
         return Response(HouseholdMemberSerializer(membership).data, status=201)

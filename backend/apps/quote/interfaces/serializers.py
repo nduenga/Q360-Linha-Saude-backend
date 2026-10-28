@@ -194,7 +194,13 @@ class QuoteCreateRequestSerializer(serializers.Serializer):
 
 
 class QuoteMemberRequestSerializer(serializers.Serializer):
-    memberId = serializers.UUIDField()
+    memberId = serializers.UUIDField(required=False)
+    personId = serializers.UUIDField(required=False)
+
+    def validate(self, attrs):
+        if bool(attrs.get("memberId")) == bool(attrs.get("personId")):
+            raise serializers.ValidationError("Envie memberId para um registo existente ou personId para um familiar do agregado.")
+        return attrs
 
 
 class QuoteSelectionRequestSerializer(serializers.Serializer):
@@ -290,6 +296,7 @@ class QuoteMemberSerializer(serializers.Serializer):
 
     id = serializers.UUIDField()
     memberId = serializers.UUIDField(source="member_id")
+    personId = serializers.UUIDField(source="member.person_id", allow_null=True)
     status = serializers.CharField()
     eligibilityEvaluationId = serializers.UUIDField(source="eligibility_evaluation_id", allow_null=True)
     preExisting = serializers.JSONField(source="pre_existing_json")

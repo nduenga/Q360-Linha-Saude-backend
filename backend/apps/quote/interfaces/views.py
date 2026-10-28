@@ -191,7 +191,8 @@ class QuoteMemberListCreateView(APIView):
         body = QuoteMemberRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         updated = quote_service.add_quote_member(
-            quote=quote, member_id=body.validated_data["memberId"], correlation_id=get_correlation_id()
+            quote=quote, member_id=body.validated_data.get("memberId"),
+            person_id=body.validated_data.get("personId"), correlation_id=get_correlation_id()
         )
         return Response(QuoteSerializer(updated).data)
 

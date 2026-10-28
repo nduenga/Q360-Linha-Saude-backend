@@ -1,43 +1,45 @@
-"""Optional family households for corporate policyholders.
-
-The previous population-group proposal was deliberately not exposed: a
-company's population is represented by households (one holder plus zero or
-more dependants), not organisational groups/subgroups.
-"""
+"""Groups, subgroups and membership categories for corporate populations."""
 from django.db import migrations
 
 
 SQL = """
-CREATE TABLE q360.family_household (
+CREATE TABLE q360.population_group (
     id uuid PRIMARY KEY,
     tenant_id uuid NOT NULL REFERENCES q360.tenant(id),
     proposer_id uuid NOT NULL REFERENCES q360.proposer(id),
-    primary_member_id uuid NOT NULL UNIQUE REFERENCES q360.insured_member(id),
+    parent_group_id uuid NULL REFERENCES q360.population_group(id),
+    code varchar(60) NOT NULL,
+    name varchar(200) NOT NULL,
+    category_code varchar(60) NULL,
+    eligibility_rules_json jsonb NOT NULL DEFAULT '{}'::jsonb,
     status varchar(20) NOT NULL DEFAULT 'ACTIVE',
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     row_version bigint NOT NULL DEFAULT 0,
-    CONSTRAINT ck_family_household_status CHECK (status IN ('ACTIVE','INACTIVE'))
+    CONSTRAINT uq_population_group_code UNIQUE (tenant_id, proposer_id, code),
+    CONSTRAINT ck_population_group_status CHECK (status IN ('ACTIVE','INACTIVE'))
 );
-CREATE INDEX ix_family_household_proposer ON q360.family_household(tenant_id, proposer_id);
-CREATE TABLE q360.family_household_member (
+CREATE INDEX ix_population_group_proposer ON q360.population_group(tenant_id, proposer_id, parent_group_id);
+CREATE TABLE q360.population_group_member (
     id uuid PRIMARY KEY,
     tenant_id uuid NOT NULL REFERENCES q360.tenant(id),
-    household_id uuid NOT NULL REFERENCES q360.family_household(id),
-    member_id uuid NOT NULL UNIQUE REFERENCES q360.insured_member(id),
+    group_id uuid NOT NULL REFERENCES q360.population_group(id),
+    member_id uuid NOT NULL REFERENCES q360.insured_member(id),
+    category_code varchar(60) NULL,
     joined_at date NOT NULL,
     left_at date NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     row_version bigint NOT NULL DEFAULT 0,
-    CONSTRAINT ck_family_household_member_dates CHECK (left_at IS NULL OR left_at >= joined_at)
+    CONSTRAINT uq_population_group_member UNIQUE (group_id, member_id),
+    CONSTRAINT ck_population_group_member_dates CHECK (left_at IS NULL OR left_at >= joined_at)
 );
-CREATE INDEX ix_family_household_member_active ON q360.family_household_member(tenant_id, household_id, left_at);
+CREATE INDEX ix_population_group_member_active ON q360.population_group_member(tenant_id, group_id, left_at);
 """
 
 REVERSE_SQL = """
-DROP TABLE IF EXISTS q360.family_household_member;
-DROP TABLE IF EXISTS q360.family_household;
+DROP TABLE IF EXISTS q360.population_group_member;
+DROP TABLE IF EXISTS q360.population_group;
 """
 
 

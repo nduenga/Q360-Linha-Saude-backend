@@ -65,6 +65,7 @@ class InsuredMember(TenantScopedModel):
     proposer = models.ForeignKey(
         Proposer, on_delete=models.DO_NOTHING, db_column="proposer_id", related_name="members"
     )
+    person = models.ForeignKey("Person", on_delete=models.DO_NOTHING, db_column="person_id", related_name="insurance_enrollments", null=True, blank=True)
     external_reference = models.CharField(max_length=100, null=True, blank=True)
     relationship_code = models.CharField(max_length=40)
     first_name = models.CharField(max_length=120, null=True, blank=True)
@@ -86,6 +87,28 @@ class InsuredMember(TenantScopedModel):
 
     def __str__(self) -> str:  # pragma: no cover - debug helper
         return f"{self.first_name or ''} {self.last_name or ''} ({self.id})".strip()
+
+
+class Person(TenantScopedModel):
+    """Civil identity, independent of any proposer or insurance enrollment."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    first_name = models.CharField(max_length=120)
+    last_name = models.CharField(max_length=120, null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    sex_code = models.CharField(max_length=20, null=True, blank=True)
+    nif = models.CharField(max_length=14, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    row_version = models.BigIntegerField(default=0)
+
+    class Meta:
+        managed = False
+        db_table = "person"
+
+    def __str__(self) -> str:
+        return f"{self.first_name} {self.last_name or ''}".strip()
 
 
 class RelationshipCode(TenantScopedModel):
@@ -188,6 +211,7 @@ class FamilyHousehold(TenantScopedModel):
     tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
     proposer = models.ForeignKey(Proposer, on_delete=models.DO_NOTHING, db_column="proposer_id", related_name="households")
     primary_member = models.ForeignKey(InsuredMember, on_delete=models.DO_NOTHING, db_column="primary_member_id", related_name="primary_household")
+    primary_person = models.ForeignKey(Person, on_delete=models.DO_NOTHING, db_column="primary_person_id", related_name="primary_households", null=True, blank=True)
     status = models.CharField(max_length=20, default="ACTIVE")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -202,7 +226,9 @@ class FamilyHouseholdMember(TenantScopedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
     household = models.ForeignKey(FamilyHousehold, on_delete=models.DO_NOTHING, db_column="household_id", related_name="memberships")
-    member = models.ForeignKey(InsuredMember, on_delete=models.DO_NOTHING, db_column="member_id", related_name="household_membership")
+    member = models.ForeignKey(InsuredMember, on_delete=models.DO_NOTHING, db_column="member_id", related_name="household_membership", null=True, blank=True)
+    person = models.ForeignKey(Person, on_delete=models.DO_NOTHING, db_column="person_id", related_name="household_memberships", null=True, blank=True)
+    relationship_code = models.CharField(max_length=40, null=True, blank=True)
     joined_at = models.DateField()
     left_at = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

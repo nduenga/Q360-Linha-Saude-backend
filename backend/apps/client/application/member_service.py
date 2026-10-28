@@ -23,7 +23,7 @@ from __future__ import annotations
 import datetime
 from typing import Any
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from apps.foundation.application.audit_service import AuditService
@@ -38,7 +38,7 @@ from apps.client.domain.errors import (
 )
 from apps.client.domain.enums import MemberStatus, ProposerType, RelationshipCategory
 from apps.client.domain.rules import Person, require_date_of_birth, validate_household
-from apps.client.infrastructure.models import InsuredMember, Proposer, RelationshipCode
+from apps.client.infrastructure.models import InsuredMember, Person as PersonRecord, Proposer, RelationshipCode
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
@@ -132,9 +132,18 @@ def create_member(
                 proposer=proposer,
                 candidate=Person(rel.category, date_of_birth, _person_label(first_name, last_name)),
             )
+            person_record = PersonRecord.objects.create(
+                tenant_id=tenant_id.value,
+                first_name=first_name,
+                last_name=last_name,
+                date_of_birth=date_of_birth,
+                sex_code=sex_code,
+                nif=nif,
+            )
             member = InsuredMember.objects.create(
                 tenant_id=tenant_id.value,
                 proposer=proposer,
+                person=person_record,
                 relationship_code=relationship_code,
                 first_name=first_name,
                 last_name=last_name,
@@ -204,6 +213,15 @@ def update_member(
                 attributes_json=attributes or {},
                 row_version=row_version + 1,
             )
+            if updated and member.person_id:
+                PersonRecord.objects.filter(id=member.person_id).update(
+                    first_name=first_name,
+                    last_name=last_name,
+                    date_of_birth=date_of_birth,
+                    sex_code=sex_code,
+                    nif=member.nif if keep_nif else nif,
+                    row_version=models.F("row_version") + 1,
+                )
     except IntegrityError as exc:  # corrida perdida com outra pessoa segura com o mesmo NIF
         raise DuplicateMemberNifError(f"Já existe uma pessoa segura com o NIF '{nif}' neste cliente.") from exc
     if updated == 0:
