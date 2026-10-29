@@ -65,6 +65,13 @@ class InvalidBenefitSelectionError(DomainProblem):
     problem_code = "VALIDATION-400"
 
 
+class InvalidPlanCostSharingError(DomainProblem):
+    """The plan's declared financial model conflicts with its coverages."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
 class MissingCoreBenefitsError(DomainProblem):
     """ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 1: a ProductVersion cannot
     publish while any of its Plans is missing a BASE (mandatory market)

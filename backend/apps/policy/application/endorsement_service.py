@@ -196,6 +196,58 @@ def create_inclusion(*, policy_id, inclusion_date: datetime.date, member_ids: li
     return _try_price(quote)
 
 
+def create_dependent_inclusion(
+    *,
+    policy_id,
+    holder_member_id,
+    inclusion_date: datetime.date,
+    dependent: dict[str, Any],
+    correlation_id: str | None,
+) -> tuple[Quote, str, str]:
+    """Register a family dependant and start their policy inclusion endorsement.
+
+    The dependent remains a proper insured-person record, but this command
+    links the three business actions atomically: family registration,
+    household membership and the priced endorsement request.
+    """
+    from apps.client.application import household_service
+    from apps.client.infrastructure.models import FamilyHousehold, InsuredMember
+
+    policy = _active_policy(policy_id)
+    _check_inclusion_date(policy, inclusion_date)
+    holder = InsuredMember.objects.filter(id=holder_member_id, proposer_id=policy.proposer_id).first()
+    if holder is None:
+        raise EndorsementError("O titular indicado não pertence ao tomador desta apólice.")
+    if not PolicyMember.objects.filter(
+        policy=policy, member=holder, status=PolicyMemberStatus.ACTIVE.value, exclusion_date__isnull=True
+    ).exists():
+        raise EndorsementError("O titular indicado não está ativo nesta apólice.")
+
+    with transaction.atomic():
+        household = FamilyHousehold.objects.filter(primary_member=holder, status="ACTIVE").first()
+        if household is None:
+            household = household_service.create_household(
+                proposer=policy.proposer, primary_member=holder, joined_at=inclusion_date
+            )
+        membership = household_service.create_dependent(
+            household=household,
+            relationship_code=dependent["relationshipCode"],
+            first_name=dependent["firstName"],
+            last_name=dependent.get("lastName"),
+            date_of_birth=dependent["dateOfBirth"],
+            sex_code=dependent.get("sexCode"),
+            external_reference=dependent.get("externalReference"),
+            attributes=dependent.get("attributes"),
+            nif=dependent.get("nif"),
+            joined_at=inclusion_date,
+        )
+        quote = create_inclusion(
+            policy_id=policy.id, inclusion_date=inclusion_date,
+            member_ids=[membership.member_id], correlation_id=correlation_id,
+        )
+    return quote, str(household.id), str(membership.member_id)
+
+
 def _try_price(quote: Quote) -> Quote:
     from apps.quote.application import quote_service
 

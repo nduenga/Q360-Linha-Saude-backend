@@ -16,6 +16,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema
 
 from apps.foundation.application.permission_evaluator import PermissionEvaluator
 from apps.foundation.domain.permissions import Permission
@@ -25,6 +26,7 @@ from apps.foundation.interfaces.permissions import require_permission, require_s
 from apps.pricing.interfaces.serializers import PricingResponseSerializer, render_preview
 from apps.quote.application import document_links
 from apps.quote.application import (
+    corporate_onboarding_service,
     config_impact_service,
     document_service,
     proposal_service,
@@ -59,6 +61,8 @@ from apps.quote.interfaces.serializers import (
     QuoteCloneRequestSerializer,
     QuoteReopenRequestSerializer,
     QuoteCreateRequestSerializer,
+    CorporateQuotationOnboardingRequestSerializer,
+    CorporateQuotationOnboardingResponseSerializer,
     QuoteIndexationRequestSerializer,
     QuoteRenewalRequestSerializer,
     QuoteVersionDetailSerializer,
@@ -144,6 +148,40 @@ class QuoteListCreateView(APIView):
 
 
 @requires_idempotency
+@extend_schema(
+    request=CorporateQuotationOnboardingRequestSerializer,
+    responses={201: CorporateQuotationOnboardingResponseSerializer},
+    description="Cria a empresa ou usa uma existente, regista titulares/dependentes/agregados, cria a cotação e calcula o prémio numa única transação.",
+)
+class CorporateQuotationOnboardingView(APIView):
+    """Cria a população corporativa e a primeira cotação já tarifada."""
+
+    permission_classes = [
+        require_scope(Scope.WRITE),
+        require_permission(Permission.QUOTE_CREATE),
+        require_permission(Permission.QUOTE_CALCULATE),
+    ]
+
+    def post(self, request):
+        body = CorporateQuotationOnboardingRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        result = corporate_onboarding_service.create_corporate_quotation(
+            plan_id=body.validated_data["planId"],
+            proposer_id=body.validated_data.get("proposerId"),
+            proposer_input=body.validated_data.get("proposerInput"),
+            source_channel=body.validated_data.get("sourceChannel"),
+            households=body.validated_data["households"],
+        )
+        response = {
+            "quote": QuoteSerializer(result["quote"]).data,
+            "pricing": PricingResponseSerializer(result["pricing"]).data,
+            "requirements": result["requirements"],
+            "households": result["households"],
+        }
+        return Response(CorporateQuotationOnboardingResponseSerializer(response).data, status=201)
+
+
+@requires_idempotency
 class QuoteDetailView(APIView):
     """ART-006 `/api/v1/quotes/{quoteId}`: `getQuote` (GET). O `updateQuote`
     (PUT) só alterava a data de efeito, que a cotação deixou de ter
@@ -191,7 +229,8 @@ class QuoteMemberListCreateView(APIView):
         body = QuoteMemberRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         updated = quote_service.add_quote_member(
-            quote=quote, member_id=body.validated_data["memberId"], correlation_id=get_correlation_id()
+            quote=quote, member_id=body.validated_data.get("memberId"),
+            person_id=body.validated_data.get("personId"), correlation_id=get_correlation_id()
         )
         return Response(QuoteSerializer(updated).data)
 

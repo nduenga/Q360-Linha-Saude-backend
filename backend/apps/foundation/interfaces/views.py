@@ -8,9 +8,10 @@ reference.
 from __future__ import annotations
 
 from django.db import connections
-from django.db.models import Count, Q, F
+from django.db.models import Count, Q, F, Sum
 from django.db.models.functions import TruncMonth, TruncWeek
 from django.http import JsonResponse
+from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -20,11 +21,14 @@ from apps.foundation.infrastructure.models import AuditEvent
 from apps.foundation.interfaces.audit_serializers import AuditEventSerializer
 from apps.foundation.interfaces.permissions import require_scope
 from apps.policy.infrastructure.models import Policy
+from apps.policy.infrastructure.models import PremiumInstallment
+from apps.client.infrastructure.models import FamilyHousehold, Proposer, InsuredMember
 from apps.pricing.infrastructure.models import PricingRun
 from apps.quote.infrastructure.models import Quote, ReviewTask
 from shared.pagination import Q360PageNumberPagination
 from apps.policy.interfaces.serializers import PolicySerializer
 from apps.quote.interfaces.serializers import QuoteSerializer
+import datetime
 
 
 class MeView(APIView):
@@ -655,6 +659,46 @@ class DashboardView(APIView):
                 "subscriptions": subscriptions,
             }
         )
+
+class OperationalReportView(APIView):
+    """Tenant-scoped portfolio, collections and audit aggregates."""
+
+    permission_classes = [IsAuthenticated, require_scope(Scope.AUDIT)]
+
+    def get(self, request):
+        today = timezone.localdate()
+        policies = Policy.objects.all()
+        installments = PremiumInstallment.objects.exclude(status="VOID")
+        policy_by_status = _status_counts(policies)
+        quote_by_status = _status_counts(Quote.objects.all())
+        overdue = installments.filter(status__in=("DUE", "OVERDUE"), due_date__lt=today)
+        paid = installments.filter(status="PAID")
+        households = FamilyHousehold.objects.filter(status="ACTIVE")
+        return Response({
+            "asOf": today,
+            "population": {
+                "proposers": Proposer.objects.filter(status="ACTIVE").count(),
+                "insuredMembers": InsuredMember.objects.filter(status="ACTIVE").count(),
+                "familyHouseholds": households.count(),
+            },
+            "portfolio": {
+                "policiesByStatus": policy_by_status,
+                "activePolicies": policy_by_status.get("ACTIVE", 0),
+                "coveredMembers": sum(p.members.filter(status="ACTIVE", exclusion_date__isnull=True).count() for p in policies.filter(status="ACTIVE")),
+            },
+            "commercial": {"quotesByStatus": quote_by_status},
+            "collections": {
+                "paidInstallments": paid.count(),
+                "paidAmount": str(paid.aggregate(total=Sum("amount"))["total"] or 0),
+                "overdueInstallments": overdue.count(),
+                "overdueAmount": str(overdue.aggregate(total=Sum("amount"))["total"] or 0),
+            },
+            "audit": {
+                "eventsLast30Days": AuditEvent.objects.filter(occurred_at__gte=timezone.now() - datetime.timedelta(days=30)).count(),
+                "recentEvents": AuditEventSerializer(AuditEvent.objects.order_by("-occurred_at")[:10], many=True).data,
+            },
+        })
+
 
 class LiveHealthView(APIView):
     """Unauthenticated liveness probe: process is able to answer HTTP."""

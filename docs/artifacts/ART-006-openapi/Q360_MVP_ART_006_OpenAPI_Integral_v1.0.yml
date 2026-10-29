@@ -3656,6 +3656,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/corporate-quotations:
+    post:
+      operationId: postCorporateQuotationOnboarding
+      description: Cria a empresa ou usa uma existente, regista titulares/dependentes/agregados, cria a cotação
+        e calcula o prémio numa única transação.
+      summary: Criar corporate quotation onboarding
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CorporateQuotationOnboardingRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorporateQuotationOnboardingResponse'
+          description: ''
   /api/v1/coverage:
     get:
       operationId: getCoverageLookup
@@ -6808,6 +6839,438 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatusOk'
           description: Resposta.
+  /api/v1/households:
+    get:
+      operationId: getHouseholdListCreate
+      description: 'Optional family households for a corporate policyholder.
+
+
+        Requer: scope q360.read.'
+      summary: Listar household list create
+      parameters:
+      - in: query
+        name: proposerId
+        schema:
+          type: string
+        description: Filtro.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Household'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    post:
+      operationId: postHouseholdListCreate
+      description: 'Optional family households for a corporate policyholder.
+
+
+        Requer: scope q360.write.'
+      summary: Criar household list create
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdCreate'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Household'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/households/{household_id}:
+    get:
+      operationId: getHouseholdDetail
+      description: 'Requer: scope q360.read.'
+      summary: Obter household detail
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Household'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/households/{household_id}/dependents:
+    post:
+      operationId: postHouseholdDependentCreate
+      description: 'Create an unregistered family dependant and add it to this household.
+
+
+        Requer: scope q360.write.'
+      summary: Criar household dependent create
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdCreateDependent'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMember'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/households/{household_id}/members:
+    get:
+      operationId: getHouseholdMemberListAdd
+      description: 'Requer: scope q360.read.'
+      summary: Listar household member list add
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HouseholdMember'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    post:
+      operationId: postHouseholdMemberListAdd
+      description: 'Requer: scope q360.write.'
+      summary: Criar household member list add
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdAddDependent'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMember'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/households/{household_id}/members/{membership_id}/remove:
+    post:
+      operationId: postHouseholdMemberRemove
+      description: 'Requer: scope q360.write.'
+      summary: Criar household member remove
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: membership_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdRemoveDependent'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMember'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/households/{household_id}/people/dependents:
+    post:
+      operationId: postHouseholdPersonDependentCreate
+      description: 'Create a civil person linked to a household, without an insurance enrollment.
+
+
+        Requer: scope q360.write.'
+      summary: Criar household person dependent create
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdLinkPerson'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMember'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/import-templates/{kind}:
     get:
       operationId: getImportTemplate
@@ -7685,6 +8148,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/people:
+    get:
+      operationId: getPersonList
+      description: 'Tenant-scoped search for reusing civil identities across households.
+
+
+        Requer: scope q360.read.'
+      summary: Listar person list
+      parameters:
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Filtro.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Person'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/plans:
     get:
       operationId: getPlanListCreate
@@ -10310,6 +10819,72 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/policies/{policy_id}/cancel:
+    post:
+      operationId: postPolicyCancel
+      description: 'Requer: scope q360.approve, permissão quote:approve.'
+      summary: Criar policy cancel
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelPolicyRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/policies/{policy_id}/coverage:
     get:
       operationId: getPolicyCoverage
@@ -10385,6 +10960,71 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/policies/{policy_id}/dependents:
+    post:
+      operationId: postPolicyDependentInclusion
+      description: 'Regista um familiar e abre o respetivo endosso de inclusão.
+
+
+        Requer: scope q360.write, permissão quote:create.'
+      summary: Criar policy dependent inclusion
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PolicyDependentInclusionRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/policies/{policy_id}/document:
     get:
       operationId: getPolicyDocument
@@ -10606,6 +11246,73 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/policies/{policy_id}/installments/{installment_no}/default-notice:
+    post:
+      operationId: postPolicyDefaultNotice
+      description: 'Requer: scope q360.approve, permissão quote:approve.'
+      summary: Criar policy default notice
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: installment_no
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DefaultNoticeRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '201':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/policies/{policy_id}/installments/{installment_no}/payment:
     post:
       operationId: postRegisterFirstPremiumPayment
@@ -10649,6 +11356,136 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaymentRegistered'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/policies/{policy_id}/installments/{installment_no}/suspend:
+    post:
+      operationId: postPolicySuspend
+      description: 'Requer: scope q360.approve, permissão quote:approve.'
+      summary: Criar policy suspend
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: installment_no
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/policies/{policy_id}/installments/{installment_no}/terminate:
+    post:
+      operationId: postPolicyTerminate
+      description: 'Requer: scope q360.approve, permissão quote:approve.'
+      summary: Criar policy terminate
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: installment_no
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
           description: Sucesso.
         '400':
           content:
@@ -10727,6 +11564,78 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/policies/{policy_id}/members/{member_id}/exclude:
+    post:
+      operationId: postPolicyMemberExclude
+      description: 'Requer: scope q360.write, permissão quote:edit.'
+      summary: Criar policy member exclude
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExcludePolicyMemberRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyMember'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/policies/{policy_id}/signature:
     get:
       operationId: getPolicySignature
@@ -14210,7 +15119,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/QuoteMemberRequest'
-        required: true
       security:
       - oauth2:
         - q360.write
@@ -16434,6 +17342,14 @@ paths:
       summary: Listar relationship code list
       parameters:
       - in: query
+        name: householdRole
+        schema:
+          type: string
+          enum:
+          - DEPENDENT
+          - HOLDER
+        description: HOLDER devolve apenas TITULAR; DEPENDENT devolve relações elegíveis como dependente.
+      - in: query
         name: page
         schema:
           type: integer
@@ -16454,6 +17370,46 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RelationshipCodePage'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/reports/operational:
+    get:
+      operationId: getOperationalReport
+      description: 'Tenant-scoped portfolio, collections and audit aggregates.
+
+
+        Requer: scope q360.audit.'
+      summary: Obter operational report
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.audit
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEvent'
           description: Sucesso.
         '401':
           content:
@@ -18303,6 +19259,11 @@ components:
         id:
           type: string
           format: uuid
+        personId:
+          type:
+          - string
+          - 'null'
+          format: uuid
         proposerId:
           type: string
           format: uuid
@@ -18346,6 +19307,7 @@ components:
       - id
       - lastName
       - nif
+      - personId
       - proposerId
       - relationshipCode
       - rowVersion
@@ -19044,8 +20006,9 @@ components:
         memberId:
           type: string
           format: uuid
-      required:
-      - memberId
+        personId:
+          type: string
+          format: uuid
     QuotePriceRequest:
       type: object
       properties:
@@ -23968,6 +24931,11 @@ components:
         memberId:
           type: string
           format: uuid
+        personId:
+          type:
+          - string
+          - 'null'
+          format: uuid
         status:
           type: string
         eligibilityEvaluationId:
@@ -23980,6 +24948,7 @@ components:
       - eligibilityEvaluationId
       - id
       - memberId
+      - personId
       - preExisting
       - status
     QuoteMemberPage:
@@ -30832,6 +31801,622 @@ components:
       description: '* `IMMEDIATE` - IMMEDIATE
 
         * `SPREAD` - SPREAD'
+    CancelPolicyRequest:
+      type: object
+      properties:
+        reasonCode:
+          type: string
+          maxLength: 100
+          minLength: 1
+        reasonText:
+          type:
+          - string
+          - 'null'
+          maxLength: 2000
+        effectiveDate:
+          type: string
+          format: date
+      required:
+      - effectiveDate
+      - reasonCode
+    DefaultNoticeRequest:
+      type: object
+      properties:
+        registeredMailReference:
+          type: string
+          maxLength: 200
+          minLength: 1
+        newDeadline:
+          type: string
+          format: date
+        sentAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - newDeadline
+      - registeredMailReference
+    ExcludePolicyMemberRequest:
+      type: object
+      properties:
+        effectiveDate:
+          type: string
+          format: date
+        reason:
+          type: string
+          maxLength: 2000
+          minLength: 10
+      required:
+      - effectiveDate
+      - reason
+    PopulationGroup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        proposerId:
+          type: string
+          format: uuid
+        parentGroupId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        categoryCode:
+          type:
+          - string
+          - 'null'
+        eligibilityRules: {}
+        status:
+          type: string
+        rowVersion:
+          type: integer
+      required:
+      - categoryCode
+      - code
+      - eligibilityRules
+      - id
+      - name
+      - parentGroupId
+      - proposerId
+      - rowVersion
+      - status
+    PopulationGroupAssign:
+      type: object
+      properties:
+        memberId:
+          type: string
+          format: uuid
+        categoryCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+        joinedAt:
+          type: string
+          format: date
+      required:
+      - joinedAt
+      - memberId
+    PopulationGroupCreate:
+      type: object
+      properties:
+        proposerId:
+          type: string
+          format: uuid
+        parentGroupId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        code:
+          type: string
+          maxLength: 60
+          minLength: 1
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+        categoryCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+        eligibilityRules: {}
+      required:
+      - code
+      - name
+      - proposerId
+    PopulationGroupMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        groupId:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+        categoryCode:
+          type:
+          - string
+          - 'null'
+        joinedAt:
+          type: string
+          format: date
+        leftAt:
+          type:
+          - string
+          - 'null'
+          format: date
+        rowVersion:
+          type: integer
+      required:
+      - categoryCode
+      - groupId
+      - id
+      - joinedAt
+      - leftAt
+      - memberId
+      - rowVersion
+    PopulationGroupRemove:
+      type: object
+      properties:
+        leftAt:
+          type: string
+          format: date
+        rowVersion:
+          type: integer
+          minimum: 0
+      required:
+      - leftAt
+      - rowVersion
+    PopulationGroupUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 1
+        categoryCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+        eligibilityRules: {}
+        status:
+          $ref: '#/components/schemas/PlanStatusEnum'
+        rowVersion:
+          type: integer
+          minimum: 0
+      required:
+      - name
+      - rowVersion
+      - status
+    Household:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        proposerId:
+          type: string
+          format: uuid
+        primaryMemberId:
+          type: string
+          format: uuid
+        primaryPersonId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        status:
+          type: string
+        rowVersion:
+          type: integer
+      required:
+      - id
+      - primaryMemberId
+      - primaryPersonId
+      - proposerId
+      - rowVersion
+      - status
+    HouseholdAddDependent:
+      type: object
+      properties:
+        memberId:
+          type: string
+          format: uuid
+        joinedAt:
+          type: string
+          format: date
+      required:
+      - joinedAt
+      - memberId
+    HouseholdCreate:
+      type: object
+      properties:
+        proposerId:
+          type: string
+          format: uuid
+        primaryMemberId:
+          type: string
+          format: uuid
+        joinedAt:
+          type: string
+          format: date
+      required:
+      - joinedAt
+      - primaryMemberId
+      - proposerId
+    HouseholdMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        householdId:
+          type: string
+          format: uuid
+        memberId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        personId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        relationshipCode:
+          type:
+          - string
+          - 'null'
+        joinedAt:
+          type: string
+          format: date
+        leftAt:
+          type:
+          - string
+          - 'null'
+          format: date
+        rowVersion:
+          type: integer
+        member:
+          oneOf:
+          - $ref: '#/components/schemas/Member'
+          - type: 'null'
+          readOnly: true
+        person:
+          oneOf:
+          - $ref: '#/components/schemas/Person'
+          - type: 'null'
+          readOnly: true
+      required:
+      - householdId
+      - id
+      - joinedAt
+      - leftAt
+      - member
+      - memberId
+      - person
+      - personId
+      - relationshipCode
+      - rowVersion
+    HouseholdRemoveDependent:
+      type: object
+      properties:
+        leftAt:
+          type: string
+          format: date
+        rowVersion:
+          type: integer
+          minimum: 0
+      required:
+      - leftAt
+      - rowVersion
+    HouseholdCreateDependent:
+      type: object
+      description: 'Cria uma pessoa segura dependente e associa-a ao agregado na mesma operação.
+
+
+        O `proposerId` é deliberadamente omitido: é sempre o da empresa do
+
+        agregado indicado na URL, impedindo a criação acidental noutra empresa.'
+      properties:
+        externalReference:
+          type:
+          - string
+          - 'null'
+        relationshipCode:
+          type: string
+          maxLength: 40
+          minLength: 1
+        firstName:
+          type: string
+          maxLength: 120
+        lastName:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          type: string
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 30
+        attributes: {}
+        joinedAt:
+          type: string
+          format: date
+      required:
+      - dateOfBirth
+      - firstName
+      - joinedAt
+      - relationshipCode
+    CorporateHouseholdInput:
+      type: object
+      properties:
+        holder:
+          $ref: '#/components/schemas/CorporatePopulationMemberInput'
+        dependents:
+          type: array
+          items:
+            $ref: '#/components/schemas/CorporatePopulationMemberInput'
+        createHousehold:
+          type: boolean
+          default: true
+        joinedAt:
+          type: string
+          format: date
+      required:
+      - holder
+    CorporatePopulationMemberInput:
+      type: object
+      properties:
+        relationshipCode:
+          type: string
+          maxLength: 40
+          minLength: 1
+        firstName:
+          type: string
+          maxLength: 120
+          minLength: 1
+        lastName:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        dateOfBirth:
+          type: string
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 10
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 30
+        externalReference:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        attributes: {}
+      required:
+      - dateOfBirth
+      - firstName
+      - relationshipCode
+    CorporateQuotationOnboardingRequest:
+      type: object
+      description: Empresa e população a cotar numa única transação.
+      properties:
+        proposerId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        proposerInput:
+          oneOf:
+          - $ref: '#/components/schemas/_CorporateProposerInput'
+          - type: 'null'
+        planId:
+          type: string
+          format: uuid
+        sourceChannel:
+          type:
+          - string
+          - 'null'
+          maxLength: 60
+        households:
+          type: array
+          items:
+            $ref: '#/components/schemas/CorporateHouseholdInput'
+      required:
+      - households
+      - planId
+    _CorporateProposerInput:
+      type: object
+      description: 'Campos necessários para criar um Proposer no mesmo request que a
+
+        criação da cotação. Rejeita caso exista outro proposer com o mesmo NIF.'
+      properties:
+        proposerType:
+          type: string
+          default: ORGANISATION
+          maxLength: 30
+        displayName:
+          type: string
+          maxLength: 200
+          minLength: 1
+        externalReference:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        nif:
+          type: string
+          maxLength: 60
+          minLength: 1
+        registrationNumber:
+          type: string
+          maxLength: 60
+          minLength: 1
+        dateOfBirth:
+          type:
+          - string
+          - 'null'
+          format: date
+        email:
+          type:
+          - string
+          - 'null'
+          default: ''
+          maxLength: 200
+        phone:
+          type:
+          - string
+          - 'null'
+          default: ''
+          maxLength: 60
+        address:
+          type:
+          - string
+          - 'null'
+          maxLength: 500
+        province:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        municipality:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        attributes:
+          oneOf:
+          - {}
+          - type: 'null'
+      required:
+      - displayName
+      - nif
+      - registrationNumber
+    CorporateQuotationOnboardingResponse:
+      type: object
+      properties:
+        quote:
+          $ref: '#/components/schemas/Quote'
+        pricing: {}
+        requirements: {}
+        households:
+          type: array
+          items: {}
+      required:
+      - households
+      - pricing
+      - quote
+      - requirements
+    DependentInput:
+      type: object
+      properties:
+        relationshipCode:
+          type: string
+          maxLength: 40
+          minLength: 1
+        firstName:
+          type: string
+          maxLength: 120
+          minLength: 1
+        lastName:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        dateOfBirth:
+          type: string
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 20
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 30
+        externalReference:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        attributes: {}
+      required:
+      - dateOfBirth
+      - firstName
+      - relationshipCode
+    PolicyDependentInclusionRequest:
+      type: object
+      properties:
+        holderMemberId:
+          type: string
+          format: uuid
+        inclusionDate:
+          type: string
+          format: date
+        dependent:
+          $ref: '#/components/schemas/DependentInput'
+      required:
+      - dependent
+      - holderMemberId
+      - inclusionDate
+    ConfigKeyState:
+      type: object
+      properties:
+        configKey:
+          type: string
+        published:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+          description: Em vigor hoje.
+        draft:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+        pending:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+        scheduled:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+          description: Publicada com vigência futura.
+      required:
+      - configKey
+      - draft
+      - pending
+      - published
+      - scheduled
     ConfigKeysEnum:
       enum:
       - product.plans
@@ -30897,62 +32482,6 @@ components:
         * `group.rules` - group.rules
 
         * `rules.custom` - rules.custom'
-    ProductConfigurationCopy:
-      type: object
-      properties:
-        source:
-          allOf:
-          - $ref: '#/components/schemas/Source662Enum'
-          default: GENERAL
-        sourceProductId:
-          type:
-          - string
-          - 'null'
-          format: uuid
-        configKeys:
-          type: array
-          items:
-            $ref: '#/components/schemas/ConfigKeysEnum'
-        includePricingSetup:
-          type: boolean
-          default: true
-    ProductConfigurationCopySourceEnum:
-      enum:
-      - GENERAL
-      - PRODUCT
-      type: string
-      description: '* `GENERAL` - GENERAL
-
-        * `PRODUCT` - PRODUCT'
-    ConfigKeyState:
-      type: object
-      properties:
-        configKey:
-          type: string
-        published:
-          oneOf:
-          - $ref: '#/components/schemas/TariffConfigVersion'
-          - type: 'null'
-          description: Em vigor hoje.
-        draft:
-          oneOf:
-          - $ref: '#/components/schemas/TariffConfigVersion'
-          - type: 'null'
-        pending:
-          oneOf:
-          - $ref: '#/components/schemas/TariffConfigVersion'
-          - type: 'null'
-        scheduled:
-          oneOf:
-          - $ref: '#/components/schemas/TariffConfigVersion'
-          - type: 'null'
-          description: Publicada com vigência futura.
-      required:
-      - configKey
-      - draft
-      - pending
-      - published
-      - scheduled
     GeneralOnlyConfiguration:
       type: object
       properties:
@@ -30966,6 +32495,76 @@ components:
       - area
       - configKey
       - label
+    HouseholdLinkPerson:
+      type: object
+      description: 'Um campo desconhecido era ignorado em silêncio (p.ex. `fullName`): a
+
+        pessoa ficava gravada sem nome sem ninguém dar por isso. Agora é um erro 400.'
+      properties:
+        personId:
+          type: string
+          format: uuid
+        relationshipCode:
+          type: string
+          maxLength: 40
+          minLength: 1
+        firstName:
+          type: string
+          maxLength: 120
+        lastName:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          type: string
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 30
+        joinedAt:
+          type: string
+          format: date
+      required:
+      - joinedAt
+      - relationshipCode
+    Person:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          type:
+          - string
+          - 'null'
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+        nif:
+          type:
+          - string
+          - 'null'
+      required:
+      - dateOfBirth
+      - firstName
+      - id
+      - lastName
+      - nif
+      - sexCode
     ProductConfiguration:
       type: object
       properties:
@@ -31030,6 +32629,25 @@ components:
       - copiedFrom
       - productConfigKey
       - versionNo
+    ProductConfigurationCopy:
+      type: object
+      properties:
+        source:
+          allOf:
+          - $ref: '#/components/schemas/Source662Enum'
+          default: GENERAL
+        sourceProductId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        configKeys:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigKeysEnum'
+        includePricingSetup:
+          type: boolean
+          default: true
     ProductConfigurationCopyResult:
       type: object
       properties:

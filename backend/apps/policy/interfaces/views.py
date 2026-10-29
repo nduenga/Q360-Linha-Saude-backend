@@ -20,7 +20,7 @@ from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
 from apps.foundation.interfaces.permissions import require_permission, require_scope
-from apps.policy.application import emission_service, policy_document
+from apps.policy.application import emission_service, lifecycle_service, policy_document
 from apps.policy.application.issuance_service import (
     issue_policy,
     register_first_premium_payment,
@@ -35,6 +35,9 @@ from apps.policy.interfaces.serializers import (
     PolicySignatureSerializer,
     PremiumInstallmentSerializer,
     RegisterFirstPremiumPaymentRequestSerializer,
+    DefaultNoticeRequestSerializer,
+    CancelPolicyRequestSerializer,
+    ExcludePolicyMemberRequestSerializer,
 )
 from apps.quote.infrastructure.models import Quote
 from shared.pagination import Q360PageNumberPagination
@@ -163,6 +166,7 @@ class RegisterFirstPremiumPaymentView(APIView):
                 payment_method=data["paymentMethod"],
                 correlation_id=get_correlation_id(),
             )
+            policy.refresh_from_db()
             payload = dict(PolicySerializer(policy).data)
             payload["installment"] = PremiumInstallmentSerializer(installment).data
             return Response(payload)
@@ -181,6 +185,75 @@ class RegisterFirstPremiumPaymentView(APIView):
             PremiumInstallment.objects.get(policy=updated, installment_no=1)
         ).data
         return Response(payload)
+
+
+@requires_idempotency
+class PolicyDefaultNoticeView(APIView):
+    permission_classes = [require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_APPROVE)]
+
+    def post(self, request, policy_id, installment_no):
+        policy = get_object_or_404(Policy, id=policy_id)
+        body = DefaultNoticeRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        notice = lifecycle_service.register_default_notice(
+            policy=policy, installment_no=installment_no,
+            registered_mail_reference=data["registeredMailReference"], new_deadline=data["newDeadline"],
+            sent_at=data["sentAt"],
+        )
+        return Response({"id": str(notice.id), "installmentNo": installment_no,
+                         "newDeadline": notice.new_deadline, "status": "NOTICE_REGISTERED"}, status=201)
+
+
+@requires_idempotency
+class PolicySuspendView(APIView):
+    permission_classes = [require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_APPROVE)]
+
+    def post(self, request, policy_id, installment_no):
+        policy = lifecycle_service.suspend_for_default(
+            policy=get_object_or_404(Policy, id=policy_id), installment_no=installment_no,
+            correlation_id=get_correlation_id(),
+        )
+        return Response(PolicySerializer(policy).data)
+
+
+@requires_idempotency
+class PolicyTerminateView(APIView):
+    permission_classes = [require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_APPROVE)]
+
+    def post(self, request, policy_id, installment_no):
+        policy = lifecycle_service.terminate_for_default(
+            policy=get_object_or_404(Policy, id=policy_id), installment_no=installment_no,
+            correlation_id=get_correlation_id(),
+        )
+        return Response(PolicySerializer(policy).data)
+
+
+@requires_idempotency
+class PolicyCancelView(APIView):
+    permission_classes = [require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_APPROVE)]
+
+    def post(self, request, policy_id):
+        body = CancelPolicyRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        policy = lifecycle_service.cancel_policy(policy=get_object_or_404(Policy, id=policy_id),
+            reason_code=data["reasonCode"], reason_text=data["reasonText"], effective_date=data["effectiveDate"],
+            correlation_id=get_correlation_id())
+        return Response(PolicySerializer(policy).data)
+
+
+@requires_idempotency
+class PolicyMemberExcludeView(APIView):
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_EDIT)]
+
+    def post(self, request, policy_id, member_id):
+        body = ExcludePolicyMemberRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        member = lifecycle_service.exclude_member(policy=get_object_or_404(Policy, id=policy_id), member_id=member_id,
+            effective_date=data["effectiveDate"], reason=data["reason"], correlation_id=get_correlation_id())
+        return Response(PolicyMemberSerializer(member).data)
 
 
 class InstallmentListView(APIView):

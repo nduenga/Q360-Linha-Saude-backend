@@ -121,7 +121,7 @@ def resolve_plan_pricing_context(
     chosen_codes = tuple(sorted(set(chosen)))
 
     dims: dict[str, str] = {}
-    for key in ("segment", "tier", "category", "accessSystem"):
+    for key in ("segment", "tier", "category", "accessSystem", "costSharingModel"):
         if settings.get(key):
             dims[key] = str(settings[key])
 

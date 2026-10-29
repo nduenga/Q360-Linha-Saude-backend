@@ -59,6 +59,7 @@ from apps.pricing.domain.errors import (
 from apps.pricing.domain.money import (
     ROUNDING_POLICY_CODE,
     ROUNDING_POLICY_VERSION,
+    configure_rounding_policy,
     round_amount,
 )
 from apps.foundation.infrastructure.models import RuleVersion
@@ -235,6 +236,7 @@ def _execute(
     *, request_snapshot: dict[str, Any], correlation_id: str | None, allow_config_overrides: bool = False
 ) -> PricingRun:
     tenant_id = CurrentTenantProvider.require()
+    rounding_policy_code = configure_rounding_policy(system_parameter_service.get_value("pricing.rounding_policy"))
 
     plan_id = uuid.UUID(str(request_snapshot["planId"]))
     effective_date = datetime.date.fromisoformat(str(request_snapshot["effectiveDate"]))
@@ -372,7 +374,7 @@ def _execute(
         status=PricingRunStatus.REQUESTED.value,
         effective_date=effective_date,
         currency_code=(business_pricing.currency_code if business_pricing else rating_table.currency_code),
-        rounding_policy_code=ROUNDING_POLICY_CODE,
+        rounding_policy_code=rounding_policy_code,
         rounding_policy_version=ROUNDING_POLICY_VERSION,
         input_snapshot_json=request_snapshot,
         business_configuration_snapshot_json=config_snapshot,

@@ -592,9 +592,9 @@ def register_installment_payment(
     vigor. As prestações pagam-se por ordem: a anterior tem de estar paga."""
     if installment_no < 2:
         raise ReferencedEntityNotFoundError("A 1.ª prestação regista-se com o fluxo de ativação da apólice")
-    if policy.status != PolicyStatus.ACTIVE.value:
+    if policy.status not in (PolicyStatus.ACTIVE.value, PolicyStatus.SUSPENDED.value):
         raise PolicyStateError(
-            f"A apólice {policy.policy_number} está em {policy.status}; só se registam pagamentos em apólices ativas (ACTIVE)"
+            f"A apólice {policy.policy_number} está em {policy.status}; só se registam pagamentos em apólices ativas ou suspensas"
         )
     if paid_at.date() > timezone_now().date():
         raise InvalidStartDateError("A data de pagamento não pode estar no futuro")
@@ -626,6 +626,11 @@ def register_installment_payment(
         if updated == 0:
             raise PolicyStateError(f"A prestação {installment_no} da apólice {policy.policy_number} já está paga")
     installment.refresh_from_db()
+    # Se a prestação regulariza todos os atrasos, a cobertura volta a valer
+    # apenas daqui em diante; o período de suspensão nunca é retroativo.
+    if policy.status == PolicyStatus.SUSPENDED.value:
+        from apps.policy.application.lifecycle_service import reactivate_after_regularization
+        policy = reactivate_after_regularization(policy=policy, correlation_id=correlation_id)
     _audit.record(
         action="policy.installment_paid",
         entity_type="Policy",

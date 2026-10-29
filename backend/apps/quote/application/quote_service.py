@@ -27,7 +27,7 @@ from django.utils.timezone import now as timezone_now
 
 from apps.client.application.member_service import create_member
 from apps.client.application.proposer_service import create_proposer
-from apps.client.infrastructure.models import InsuredMember, Proposer
+from apps.client.infrastructure.models import FamilyHouseholdMember, InsuredMember, Person, Proposer
 from apps.eligibility.application.use_cases import EvaluateEligibilityUseCase
 from apps.eligibility.domain.enums import EligibilityDecision
 from apps.foundation.application.audit_service import AuditService
@@ -430,7 +430,7 @@ def _demote_to_draft_if_ready(quote: Quote) -> None:
         _record_transition(quote, from_status=QuoteStatus.READY.value, to_status=QuoteStatus.DRAFT.value, reason_code="MATERIAL_EDIT")
 
 
-def add_quote_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str | None) -> Quote:
+def _add_quote_member_by_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str | None) -> Quote:
     if quote.status not in (QuoteStatus.DRAFT.value, QuoteStatus.READY.value):
         raise QuoteStateError(
             f"Esta cotação está em {quote_status_label(quote.status)}; as pessoas seguras só podem ser alteradas em rascunho (DRAFT) ou pronta (READY). O estado atual indica que a cotação já foi submetida ou aprovada."
@@ -507,6 +507,48 @@ def add_quote_member(*, quote: Quote, member_id: uuid.UUID, correlation_id: str 
     )
     quote.refresh_from_db()
     return quote
+
+
+def add_quote_member(
+    *, quote: Quote, member_id: uuid.UUID | None = None, person_id: uuid.UUID | None = None,
+    correlation_id: str | None,
+) -> Quote:
+    """Add an existing insured member or enroll a household person into a quote.
+
+    A household person becomes an InsuredMember only at this boundary, when
+    they are explicitly selected for a quote. The person record remains the
+    civil identity and is linked to the newly created enrollment record.
+    """
+    if person_id is None:
+        if member_id is None:
+            raise ReferencedEntityNotFoundError("Indique uma pessoa familiar ou pessoa segura para a cotação.")
+        return _add_quote_member_by_member(quote=quote, member_id=member_id, correlation_id=correlation_id)
+
+    with transaction.atomic():
+        person = Person.objects.filter(id=person_id, tenant_id=quote.tenant_id).first()
+        if person is None:
+            raise ReferencedEntityNotFoundError(f"A pessoa {person_id} não existe neste tenant.")
+        household_link = FamilyHouseholdMember.objects.select_for_update().select_related("household").filter(
+            person_id=person.id, household__proposer_id=quote.proposer_id, left_at__isnull=True,
+        ).first()
+        if household_link is None:
+            raise ReferencedEntityNotFoundError("A pessoa tem de pertencer a um núcleo familiar deste tomador antes de ser incluída na cotação.")
+        member = InsuredMember.objects.filter(person_id=person.id, proposer_id=quote.proposer_id).first()
+        if member is None:
+            member = InsuredMember.objects.create(
+                tenant_id=quote.tenant_id,
+                proposer_id=quote.proposer_id,
+                person=person,
+                relationship_code=household_link.relationship_code or "DEPENDENT",
+                first_name=person.first_name,
+                last_name=person.last_name,
+                date_of_birth=person.date_of_birth,
+                sex_code=person.sex_code,
+                nif=person.nif,
+                attributes_json={},
+                status=MemberStatus.ACTIVE.value,
+            )
+        return _add_quote_member_by_member(quote=quote, member_id=member.id, correlation_id=correlation_id)
 
 
 def remove_quote_member(*, quote: Quote, member_id: uuid.UUID) -> None:

@@ -204,6 +204,7 @@ def _optional_member_nif(value):
 
 class MemberSerializer(serializers.Serializer):
     id = serializers.UUIDField()
+    personId = serializers.UUIDField(source="person_id", allow_null=True)
     proposerId = serializers.UUIDField(source="proposer_id")
     externalReference = serializers.CharField(source="external_reference", allow_null=True)
     relationshipCode = serializers.CharField(source="relationship_code")
@@ -217,13 +218,22 @@ class MemberSerializer(serializers.Serializer):
     rowVersion = serializers.IntegerField(source="row_version")
 
 
+class PersonSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    firstName = serializers.CharField(source="first_name")
+    lastName = serializers.CharField(source="last_name", allow_null=True)
+    dateOfBirth = serializers.DateField(source="date_of_birth", allow_null=True)
+    sexCode = serializers.CharField(source="sex_code", allow_null=True)
+    nif = serializers.CharField(allow_null=True)
+
+
 class MemberCreateRequestSerializer(_RejectUnknownFields, serializers.Serializer):
     proposerId = serializers.UUIDField()
     externalReference = serializers.CharField(allow_null=True, required=False, default=None)
     relationshipCode = serializers.CharField(min_length=1, max_length=40)
     # Obrigatório: uma pessoa segura sem nome não se identifica na apólice, no cartão nem nos documentos.
     firstName = serializers.CharField(max_length=120)
-    lastName = serializers.CharField(allow_null=True, required=False, default=None)
+    lastName = serializers.CharField(allow_null=True, required=False)
     # Obrigatória para todo o beneficiário/membro. Email e telefone NÃO existem
     # aqui: herdam os do titular (campos do proponente).
     dateOfBirth = serializers.DateField(required=True, allow_null=False)
@@ -287,3 +297,92 @@ class ProposerDeleteRequestSerializer(serializers.Serializer):
     rowVersion = serializers.IntegerField(
         min_value=0
     )
+
+
+class HouseholdSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    proposerId = serializers.UUIDField(source="proposer_id")
+    primaryMemberId = serializers.UUIDField(source="primary_member_id")
+    primaryPersonId = serializers.UUIDField(source="primary_person_id", allow_null=True)
+    status = serializers.CharField()
+    rowVersion = serializers.IntegerField(source="row_version")
+
+
+class HouseholdCreateSerializer(serializers.Serializer):
+    proposerId = serializers.UUIDField()
+    primaryMemberId = serializers.UUIDField()
+    joinedAt = serializers.DateField()
+
+
+class HouseholdMemberSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    householdId = serializers.UUIDField(source="household_id")
+    memberId = serializers.UUIDField(source="member_id", allow_null=True)
+    personId = serializers.UUIDField(source="person_id", allow_null=True)
+    relationshipCode = serializers.CharField(source="relationship_code", allow_null=True)
+    joinedAt = serializers.DateField(source="joined_at")
+    leftAt = serializers.DateField(source="left_at", allow_null=True)
+    rowVersion = serializers.IntegerField(source="row_version")
+    # Evita que o consumidor tenha de cruzar manualmente cada membership com
+    # GET /members apenas para apresentar o nome e o parentesco.
+    member = MemberSerializer(read_only=True, allow_null=True)
+    person = PersonSerializer(read_only=True, allow_null=True)
+
+
+class HouseholdAddDependentSerializer(serializers.Serializer):
+    memberId = serializers.UUIDField()
+    joinedAt = serializers.DateField()
+
+
+class HouseholdCreateDependentSerializer(_RejectUnknownFields, serializers.Serializer):
+    """Cria uma pessoa segura dependente e associa-a ao agregado na mesma operação.
+
+    O `proposerId` é deliberadamente omitido: é sempre o da empresa do
+    agregado indicado na URL, impedindo a criação acidental noutra empresa.
+    """
+
+    externalReference = serializers.CharField(allow_null=True, required=False, default=None)
+    relationshipCode = serializers.CharField(min_length=1, max_length=40)
+    firstName = serializers.CharField(max_length=120)
+    lastName = serializers.CharField(allow_null=True, required=False, default=None)
+    dateOfBirth = serializers.DateField(required=True, allow_null=False)
+    sexCode = serializers.CharField(allow_null=True, required=False)
+    nif = serializers.CharField(allow_null=True, allow_blank=True, required=False, max_length=30)
+    attributes = serializers.JSONField(required=False, default=dict)
+    joinedAt = serializers.DateField()
+
+    def validate_firstName(self, value):
+        return _required_name(value)
+
+    def validate_nif(self, value):
+        return _optional_member_nif(value)
+
+
+class HouseholdLinkPersonSerializer(_RejectUnknownFields, serializers.Serializer):
+    personId = serializers.UUIDField(required=False)
+    relationshipCode = serializers.CharField(min_length=1, max_length=40)
+    firstName = serializers.CharField(max_length=120, required=False)
+    lastName = serializers.CharField(allow_null=True, required=False, default=None)
+    dateOfBirth = serializers.DateField(required=False, allow_null=False)
+    sexCode = serializers.CharField(allow_null=True, required=False, default=None)
+    nif = serializers.CharField(allow_null=True, allow_blank=True, required=False, default=None, max_length=30)
+    joinedAt = serializers.DateField()
+
+    def validate(self, attrs):
+        if not attrs.get("personId"):
+            if not attrs.get("firstName") or not attrs.get("dateOfBirth"):
+                raise serializers.ValidationError("Informe nome e data de nascimento ou selecione uma pessoa existente.")
+        elif any(key in attrs for key in ("firstName", "lastName", "dateOfBirth", "sexCode", "nif")):
+            raise serializers.ValidationError("Envie personId ou dados civis, não os dois.")
+        return attrs
+
+    def validate_firstName(self, value):
+        return _required_name(value)
+
+    def validate_nif(self, value):
+        return _optional_member_nif(value)
+
+
+class HouseholdRemoveDependentSerializer(serializers.Serializer):
+    leftAt = serializers.DateField()
+    rowVersion = serializers.IntegerField(min_value=0)

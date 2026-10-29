@@ -290,7 +290,7 @@ def simulate_tariff(
     selection: dict | None = None, actuarial_profile: dict | None = None, payment_frequency: str | None = None,
     configuration_ids: list[str] | None = None, include_open_drafts: bool = False,
 ) -> dict[str, Any]:
-    from apps.client.infrastructure.models import InsuredMember, Proposer
+    from apps.client.infrastructure.models import InsuredMember, Person, Proposer
     from apps.foundation.application.context import CurrentTenantProvider
     from apps.pricing.interfaces.serializers import PricingResponseSerializer
     from apps.quote.application import quote_service
@@ -322,11 +322,19 @@ def simulate_tariff(
                 age = person.get("age")
                 if not isinstance(age, int) or not 0 <= age <= 120:
                     raise TariffSimulationError(f"members[{index}].age: idade entre 0 e 120")
+                birth_date = _birth_date(age, quote.reference_date)
+                first_name = f"Pessoa {index + 1}"
+                sex_code = person.get("sex") or "M"
+                person_record = Person.objects.create(
+                    tenant_id=tenant_id, first_name=first_name, date_of_birth=birth_date,
+                    sex_code=sex_code,
+                )
                 member = InsuredMember.objects.create(
                     tenant_id=tenant_id, proposer=proposer,
+                    person=person_record,
                     relationship_code=str(person.get("relationship") or ("TITULAR" if index == 0 else "FILHO")),
-                    date_of_birth=_birth_date(age, quote.reference_date), sex_code=person.get("sex") or "M",
-                    first_name=f"Pessoa {index + 1}",
+                    date_of_birth=birth_date, sex_code=sex_code,
+                    first_name=first_name,
                 )
                 quote = quote_service.add_quote_member(quote=quote, member_id=member.id, correlation_id=None)
             if selection:

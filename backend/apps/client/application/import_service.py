@@ -47,7 +47,7 @@ from apps.client.domain.errors import (
 )
 from apps.client.domain.rules import Person, validate_household
 from apps.foundation.domain.problem import DomainProblem
-from apps.client.infrastructure.models import ImportJob, ImportRowError, InsuredMember, Proposer
+from apps.client.infrastructure.models import ImportJob, ImportRowError, InsuredMember, Person as PersonRecord, Proposer
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
@@ -323,14 +323,25 @@ def commit_member_import(*, import_job: ImportJob, actor_id: str) -> ImportJob:
             if not row.is_valid:
                 continue
             date_of_birth, _ = _parse_date((row.values.get("dateOfBirth") or "").strip())
+            first_name = (row.values.get("firstName") or "").strip() or None
+            last_name = (row.values.get("lastName") or "").strip() or None
+            sex_code = (row.values.get("sexCode") or "").strip() or None
+            person_record = PersonRecord.objects.create(
+                tenant_id=tenant_id.value,
+                first_name=first_name or "Pessoa",
+                last_name=last_name,
+                date_of_birth=date_of_birth,
+                sex_code=sex_code,
+            )
             InsuredMember.objects.create(
                 tenant_id=tenant_id.value,
                 proposer=import_job.proposer,
+                person=person_record,
                 relationship_code=row.values["relationshipCode"].strip(),
-                first_name=(row.values.get("firstName") or "").strip() or None,
-                last_name=(row.values.get("lastName") or "").strip() or None,
+                first_name=first_name,
+                last_name=last_name,
                 date_of_birth=date_of_birth,
-                sex_code=(row.values.get("sexCode") or "").strip() or None,
+                sex_code=sex_code,
                 external_reference=(row.values.get("externalReference") or "").strip() or None,
             )
             created += 1

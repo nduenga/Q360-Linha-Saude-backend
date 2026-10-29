@@ -16,7 +16,7 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 - Os erros vêm em `application/problem+json` (`code`, `detail`, `correlationId`).
 - As rotas `/platform/…` usam o token da conta da plataforma; as restantes, o token do tenant.
 
-**Resumo:** 44 endpoints novos, 5 alterados no contrato e 36 alterados no comportamento (dos quais 8 obsoletos).
+**Resumo:** a contagem seguinte pertence ao levantamento original. A atualização de 27/10/2026 acrescenta agregados familiares opcionais, relatório operacional e transições adicionais do ciclo de vida da apólice; também passa a documentar operações já disponíveis de autenticação própria e administração de contas.
 
 | # | Método | Endpoint | operationId | Estado |
 |---|---|---|---|---|
@@ -110,7 +110,89 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 | 85 | GET | `/quotes/{quote_id}/requirements` | getQuoteRequirements | Alterado (comportamento: recém-nascidos) |
 | 86 | POST | `/quotes/{quote_id}/policy` | postIssuePolicy | Alterado (comportamento: endosso) |
 
+## Atualização de 27/10/2026 — ciclo de vida, agregados familiares e controlo operacional
+
+As operações abaixo foram implementadas depois do inventário inicial. Todas usam o prefixo `/api/v1` (omitido na tabela) e devolvem erros no formato `application/problem+json`. As operações de escrita dos grupos e do ciclo de vida exigem `Idempotency-Key`; as operações de autenticação têm proteção própria contra repetição e limitação de tentativas.
+
+| Método | Endpoint | Quem pode | Funcionalidade |
+|---|---|---|---|
+| GET | `/households` | `q360.read` | Lista agregados familiares opcionais; aceita o filtro `proposerId`. |
+| POST | `/households` | `q360.write` | Cria o agregado de um titular ativo de uma empresa. |
+| GET | `/households/{household_id}` | `q360.read` | Obtém o agregado e o seu titular. |
+| GET | `/households/{household_id}/members` | `q360.read` | Lista o titular e os dependentes, incluindo entradas e saídas. |
+| POST | `/households/{household_id}/members` | `q360.write` | Associa ao agregado um dependente ativo já existente na mesma empresa. |
+| POST | `/households/{household_id}/dependents` | `q360.write` | Cria uma nova pessoa segura dependente no cadastro da empresa e associa-a ao agregado numa única operação atómica. |
+| POST | `/corporate-quotations` | `q360.write`, `quote:create`, `quote:calculate` | Onboarding corporativo transacional: cria a empresa (ou usa `proposerId`), titulares, dependentes/agregados, cotação, elegibilidade e prémio da população inteira. |
+| POST | `/policies/{policy_id}/dependents` | `q360.write`, `quote:create` | Regista um familiar de um titular ativo e abre o endosso de inclusão, já com cálculo anual e pró-rata. |
+| POST | `/households/{household_id}/members/{membership_id}/remove` | `q360.write` | Regista a saída lógica de um dependente, preservando o histórico. |
+| GET | `/reports/operational` | `q360.audit` | Entrega indicadores operacionais de população, carteira, cotações, cobranças e auditoria recente. |
+| POST | `/policies/{policy_id}/installments/{installment_no}/default-notice` | `q360.approve` + permissão de aprovação | Regista a notificação formal de falta de pagamento e o novo prazo. |
+| POST | `/policies/{policy_id}/installments/{installment_no}/suspend` | `q360.approve` + permissão de aprovação | Suspende a apólice por incumprimento, quando as pré-condições do ciclo de vida são cumpridas. |
+| POST | `/policies/{policy_id}/installments/{installment_no}/terminate` | `q360.approve` + permissão de aprovação | Termina a apólice por incumprimento, guardando a transição para auditoria. |
+| POST | `/policies/{policy_id}/cancel` | `q360.approve` + permissão de aprovação | Cancela uma apólice com motivo, observação opcional e data de efeito. |
+| POST | `/policies/{policy_id}/members/{member_id}/exclude` | `q360.write` + permissão de edição | Exclui uma pessoa da apólice a partir de uma data, sem apagar o histórico. |
+
+### Autenticação própria e administração de contas
+
+| Método | Endpoint | Quem pode | Funcionalidade |
+|---|---|---|
+| POST | `/auth/login` | Público | Autentica uma conta de staff ou administrador da plataforma por email e palavra-passe; aplica limitação de tentativas. |
+| POST | `/auth/refresh` | Público, com refresh token válido | Renova a sessão de uma conta de staff. |
+| POST | `/auth/logout` | Público, com refresh token válido | Invalida a sessão associada ao refresh token. |
+| GET | `/admin/staff-accounts` | Administrador do tenant | Lista contas de staff do tenant. |
+| POST | `/admin/staff-accounts` | Administrador do tenant | Cria uma conta de staff, com perfis e palavra-passe definida ou temporária. |
+| PATCH | `/admin/staff-accounts/{account_id}/roles` | Administrador do tenant | Substitui os perfis atribuídos a uma conta. |
+| PATCH | `/admin/staff-accounts/{account_id}/status` | Administrador do tenant | Ativa ou desativa uma conta de staff. |
+| POST | `/admin/staff-accounts/{account_id}/reset-password` | Administrador do tenant | Gera e devolve uma palavra-passe temporária. |
+| POST | `/admin/staff-accounts/{account_id}/unlock` | Administrador do tenant | Remove o bloqueio causado por tentativas falhadas, sem alterar a palavra-passe. |
+
+`POST /auth/login` recebe `{email, password}`. Para contas de staff, a resposta tem `{accessToken, refreshToken, expiresIn, accountId, name, email, roles, accountType: "STAFF"}`. Para o administrador da plataforma, `accountType` é `"PLATFORM"` e não é emitido refresh token. `POST /auth/refresh` e `POST /auth/logout` recebem `{refreshToken}`; o logout devolve `204 No Content`.
+
+As respostas de contas de staff incluem `id`, `email`, `name`, `status`, `roles`, `lastLoginAt` e `lockedUntil`. A criação recebe `{email, name, roles, password?}`; quando `password` é omitida, a resposta inclui `temporaryPassword` uma única vez. A alteração de perfis recebe `{roles}` e a alteração de estado recebe `{status: "ACTIVE" | "DISABLED"}`.
+
+### Contratos de agregados familiares
+
+`POST /households` recebe `{proposerId, primaryMemberId, joinedAt}`. É opcional criar agregado: membros de uma empresa podem existir sem um. Quando é criado, o titular tem obrigatoriamente de ser uma pessoa segura ativa, com relação `TITULAR`, da mesma empresa. Um titular só pode ter um agregado.
+
+As respostas do agregado têm `id`, `proposerId`, `primaryMemberId`, `status` e `rowVersion`. Para associar alguém, `POST .../members` recebe `{memberId, joinedAt}`. O backend exige que seja pessoa ativa da mesma empresa, que a sua relação não seja `TITULAR` e que ainda não pertença a outro agregado. Assim, cada membro adicional é um dependente do titular. Para remover, o corpo é `{leftAt, rowVersion}`; o titular não pode ser removido do próprio agregado.
+
+O cadastro conserva a relação de cada pessoa segura. Para o painel separar escolhas, `GET /relationship-codes?householdRole=HOLDER` devolve apenas `TITULAR`; `GET /relationship-codes?householdRole=DEPENDENT` devolve cônjuge, filho, ascendente e outro. Sem filtro, mantém-se o comportamento anterior: só relações de dependente.
+
+Para registar um familiar que ainda não exista no cadastro, a interface deve usar `POST /households/{household_id}/dependents` com `relationshipCode`, identificação da pessoa (`firstName`, `lastName`, `dateOfBirth`, `sexCode`, `nif` opcional), `attributes` opcional e `joinedAt`. O `proposerId` não é aceite: o backend usa sempre a empresa do agregado. A operação cria a pessoa segura ativa e a respetiva associação; se uma validação falhar, nenhuma das duas é persistida. O retorno de listagem/criação de membros inclui também `member`, com nome e `relationshipCode`, para apresentação direta do painel.
+
+`POST /corporate-quotations` cobre a entrada inicial de uma empresa. Recebe `planId`, `proposerId` **ou** `proposerInput` (obrigatoriamente `ORGANISATION`) e uma lista `households`. Cada item possui `holder`, `dependents`, `joinedAt` e `createHousehold` (permite colaboradores sem agregado, mas dependentes exigem `true`). Todos os titulares e dependentes recebidos passam a membros da cotação; o backend avalia a elegibilidade, executa a tarifação e devolve a cotação, o prémio, requisitos e os identificadores criados. O pedido é atómico: um erro de cadastro, agregado ou cotação não deixa população parcial persistida.
+
+Depois de uma apólice estar ativa, `POST /policies/{policy_id}/dependents` recebe `holderMemberId`, `inclusionDate` e `dependent`. O titular tem de estar ativo na apólice; o backend cria (ou reutiliza) o seu agregado, regista o familiar, cria a cotação de endosso e devolve o cálculo anual/pró-rata. A inclusão contratual só ocorre depois do workflow normal de submissão, aprovação e aceitação do endosso.
+
+### Contratos do ciclo de vida da apólice
+
+- `POST .../default-notice` recebe `{registeredMailReference, newDeadline, sentAt?}` e devolve o identificador da notificação, a prestação e o novo prazo.
+- `POST .../suspend` e `POST .../terminate` não recebem corpo; devolvem a apólice depois da transição.
+- `POST .../cancel` recebe `{reasonCode, reasonText?, effectiveDate}` e devolve a apólice cancelada.
+- `POST .../exclude` recebe `{effectiveDate, reason}`; `reason` tem pelo menos 10 caracteres e a resposta é o membro da apólice com a data de exclusão.
+
+### Contrato do relatório operacional
+
+`GET /reports/operational` não recebe corpo. A resposta contém `asOf` e estes blocos:
+
+- `population`: totais de proponentes ativos, pessoas seguras ativas e agregados familiares ativos;
+- `portfolio`: apólices por estado, apólices ativas e pessoas cobertas;
+- `commercial`: cotações por estado;
+- `collections`: quantidade e montante de prestações pagas e vencidas;
+- `audit`: número de eventos nos últimos 30 dias e os 10 eventos mais recentes.
+
 ## 1. Endpoints novos
+
+### Modalidade financeira dos planos de saúde
+
+As definições de plano (`settings` em `POST /plans` e `PATCH /plans/{plan_id}`) aceitam `costSharingModel`:
+
+| Valor | Significado | Regra do backend |
+|---|---|---|
+| `INTEGRAL` | Plano tradicional, sem coparticipação. | Não aceita opções de participação no plano nem copagamento, cosseguro ou franquia nas coberturas. A mensalidade é o único valor recorrente contratado. |
+| `COPAYMENT` | Plano com coparticipação. | Aceita copagamento fixo, cosseguro, franquia anual ou por evento nas coberturas. A validação do plano exige pelo menos uma dessas cobranças. |
+
+O motor de tarifação recebe `costSharingModel` como dimensão de pricing. Assim, a interface pode configurar uma tarifa/fator inferior para `COPAYMENT` (por exemplo, -20% a -40%) sem valores fixos no código. A modalidade `COPAYMENT` permite configurar os limites de proteção por cobertura, incluindo `insuredAnnualCap` no cosseguro, franquia anual e franquia por evento. A cobrança de utilização em fatura posterior depende do módulo de utilização/sinistros; a integração bancária/gateway mantém-se fora de âmbito.
 
 ## 1.1 Fornecedor — parâmetros gerais
 

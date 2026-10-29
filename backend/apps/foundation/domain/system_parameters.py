@@ -141,10 +141,10 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
         ParameterDefinition(
             code="pricing.rounding_policy",
             value_type="TEXT",
-            category=STRUCTURAL,
-            default="OD-006-OFFICIAL-HALF-UP-2DP",
-            description="Política oficial de arredondamento dos valores monetários (meio para cima, 2 casas).",
-            allowed_values=("OD-006-OFFICIAL-HALF-UP-2DP",),
+            category=OPERATIONAL,
+            default="HALF_UP_2DP",
+            description="Política de arredondamento dos valores monetários: meio para cima, meio para par ou por defeito, sempre a 2 casas.",
+            allowed_values=("HALF_UP_2DP", "HALF_EVEN_2DP", "DOWN_2DP"),
             used_by="Cálculo do prémio: cada parcela é arredondada a 2 casas decimais, meio para cima.",
         ),
         ParameterDefinition(
@@ -343,4 +343,9 @@ def validate_value(definition: ParameterDefinition, raw: Any) -> Any:
         return raw
     if not isinstance(raw, str) or not raw.strip():
         raise InvalidSystemParameterError(f"{definition.code} tem de ser um texto não vazio")
-    return raw.strip()
+    clean = raw.strip()
+    if definition.allowed_values is not None and clean not in definition.allowed_values:
+        raise InvalidSystemParameterError(
+            f"{definition.code} só aceita: " + ", ".join(str(value) for value in definition.allowed_values)
+        )
+    return clean
