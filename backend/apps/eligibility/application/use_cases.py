@@ -6,6 +6,7 @@ versão do rule set.").
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import uuid
 from typing import Any
@@ -71,7 +72,7 @@ def _apply_custom_rules(
     from apps.business_config.application.overlays import effective_plan_settings
     from apps.business_config.domain.custom_rules import describe as describe_rule
 
-    published = load_published_rules(effective_date)
+    published = load_published_rules(effective_date, plan.product_id)
     rules = published.for_stage("ELIGIBILITY", "PERSON")
     if not rules or decision not in _CUSTOM_RULE_OVERRIDABLE:
         return decision, messages, published.version
@@ -90,6 +91,25 @@ def _apply_custom_rules(
     severity = "ERROR" if blocking else "WARNING"
     extra = [EligibilityMessage("ELIG-CUSTOM-RULE", severity, r.message or describe_rule(r)) for r in chosen]
     return new_decision, [*messages, *extra], published.version
+
+
+def _with_product_age_limits(config, plan: Plan, effective_date: datetime.date):
+    """Idades de entrada em cascata: as de `product.age_limits` (versão do
+    produto ou geral; a linha do plano prevalece sobre a linha sem plano)
+    sobrepõem-se às da regra de elegibilidade geral. Sem linhas, nada muda."""
+    if config is None:
+        return None
+    from apps.business_config.application.overlays import age_limits
+    from apps.business_config.application.readers import BusinessSnapshot
+
+    limits = age_limits(plan, plan.settings_json or {}, BusinessSnapshot.load(effective_date).for_product(plan.product_id))
+    if "entryMin" not in limits and "entryMax" not in limits:
+        return config
+    return dataclasses.replace(
+        config,
+        min_entry_age=limits.get("entryMin", config.min_entry_age),
+        max_entry_age=limits.get("entryMax", config.max_entry_age),
+    )
 
 
 class EvaluateEligibilityUseCase:
@@ -125,7 +145,7 @@ class EvaluateEligibilityUseCase:
         context = _with_member_evidence(context, member)
 
         rule_version = resolve_eligibility_rule_version(effective_date)
-        config = parse_config(rule_version) if rule_version else None
+        config = _with_product_age_limits(parse_config(rule_version) if rule_version else None, plan, effective_date)
 
         # MOTOR_ELEGIBILIDADE.md Fase A: resolve the RelationshipCode
         # category (OD-ANGOLA-010 catalog, already tenant-scoped) and, for

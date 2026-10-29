@@ -152,7 +152,7 @@ def build_content(
     """`calculation` is a rendered pricing response (`render_preview` /
     `scenario.result_json`): `totalAmount`, `currencyCode`, `components`."""
     plan = quote.plan
-    snapshot = BusinessSnapshot.load(quote.reference_date)
+    snapshot = BusinessSnapshot.load(quote.reference_date).for_product(plan.product_id)
     settings = effective_plan_settings(plan, quote.reference_date, snapshot)
     segment = settings.get("segment")
     currency = calculation.get("currencyCode") or quote.currency_code or "AOA"

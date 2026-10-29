@@ -625,7 +625,9 @@ def build_pricing_context(
             context["members"][str(member_id)]["entryAge"] = entry_age
     # A configuração de negócio publicada (pricing.*) tem prioridade; sem ela,
     # mantém-se a resolução legada RatingTable/PricingParameterSet.
-    if BusinessConfigurationResolver.get("pricing.reference_premiums", effective_date=quote.reference_date) is None:
+    if BusinessConfigurationResolver.get(
+        "pricing.reference_premiums", effective_date=quote.reference_date, product_id=quote.plan.product_id
+    ) is None:
         context["ratingTableCode"] = resolve_default_rating_table_code(effective_date=quote.reference_date)
         context["parameterSetCode"] = resolve_default_parameter_set_code(effective_date=quote.reference_date)
     rule_version = resolve_pricing_rule_version_optional(effective_date=quote.reference_date)
@@ -639,7 +641,8 @@ def build_pricing_context(
 
     experience_currency = quote.currency_code
     if not experience_currency:
-        reference_config = BusinessConfigurationResolver.get("pricing.reference_premiums", effective_date=quote.reference_date)
+        reference_config = BusinessConfigurationResolver.get(
+            "pricing.reference_premiums", effective_date=quote.reference_date, product_id=quote.plan.product_id)
         if reference_config is not None:
             from apps.business_config.domain.shape import flatten
 

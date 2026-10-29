@@ -14,6 +14,7 @@ from apps.business_config.application.platform_limits import check_platform_limi
 from apps.business_config.application.readers import BusinessSnapshot
 from apps.business_config.domain.catalog import CATALOG_BY_KEY
 from apps.business_config.domain.product_setup import is_product_setup_key, validate_product_setup
+from apps.business_config.domain.scope import is_scopable, split_key, valid_product_id
 from apps.business_config.domain.errors import (
     ConfigurationStateError,
     ConfigurationVersionConflict,
@@ -54,8 +55,25 @@ def audit(action, c, extra=None):
     )
 
 
+def rule_key(key):
+    """Chave cujas regras de validação se aplicam: a geral, para uma versão
+    de produto (`pricing.factors@<id>` valida como `pricing.factors`)."""
+    base, product_id = split_key(key)
+    if product_id is None:
+        return key
+    if not is_scopable(base):
+        raise InvalidConfiguration("Esta configuração só existe ao nível da seguradora (não tem versão por produto).")
+    from apps.product.infrastructure.models import Product
+
+    if not valid_product_id(product_id) or not Product.objects.filter(id=product_id).exists():
+        raise InvalidConfiguration("O produto indicado na configuração não existe nesta seguradora.")
+    return base
+
+
 def validate(key, value, effective_from=None, effective_to=None):
     product_setup = is_product_setup_key(key)
+    if not product_setup:
+        key = rule_key(key)
     if key not in CATALOG_BY_KEY and not product_setup:
         raise InvalidConfiguration("Configuração não suportada.")
     if not isinstance(value, dict):
@@ -129,9 +147,9 @@ def submit_configuration(request, c, change_reason=None):
     if is_product_setup_key(c.config_key):
         validate_product_setup(c.value_json)
     else:
-        validate_structure(c.config_key, c.value_json)
-    validate_for_publication(c.config_key, c.value_json)
-    check_platform_limits(c.config_key, c.value_json)
+        validate_structure(rule_key(c.config_key), c.value_json)
+    validate_for_publication(rule_key(c.config_key), c.value_json)
+    check_platform_limits(rule_key(c.config_key), c.value_json)
     c.status = "PENDING_APPROVAL"
     c.submitted_at = timezone.now()
     c.row_version += 1
@@ -150,7 +168,7 @@ def approve_configuration(request, c):
     if c.created_by == who and _rules().get("four_eyes_required") is not False:
         raise FourEyesViolation("O criador não pode aprovar a própria configuração.")
     # Os tetos do fornecedor podem ter mudado desde a submissão.
-    check_platform_limits(c.config_key, c.value_json)
+    check_platform_limits(rule_key(c.config_key), c.value_json)
     now = timezone.now()
     # A nova versão substitui a anterior vigente da mesma chave.
     for old in (BusinessConfiguration.objects.select_for_update()

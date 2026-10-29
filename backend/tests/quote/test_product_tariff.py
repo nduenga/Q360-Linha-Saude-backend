@@ -52,7 +52,12 @@ def test_tariff_lists_the_steps_in_engine_order_with_owner_and_versions(admin_cl
     premium = next(c for c in stages["PURE_PREMIUM"]["configurations"] if c["configKey"] == "pricing.reference_premiums")
     assert premium["published"]["versionNo"] == 1 and premium["draft"] is None
     assert stages["PURE_PREMIUM"]["summary"] == {"source": "REFERENCE_PREMIUMS", "rows": 1}
-    assert stages["PRODUCT_SETUP"]["scope"] == "PRODUCT" and stages["RISK_FACTORS"]["scope"] == "TENANT"
+    assert stages["PRODUCT_SETUP"]["scope"] == "PRODUCT" and stages["RISK_FACTORS"]["scope"] == "PRODUCT_OR_TENANT"
+    assert stages["CHARGES"]["scope"] == "TENANT"
+    # Cada chave com versão por produto aparece duas vezes: a do produto e a geral (em uso).
+    own, general = stages["RISK_FACTORS"]["configurations"]
+    assert own["configKey"] == f"pricing.factors@{ref['productId']}" and own["scope"] == "PRODUCT" and not own["inUse"]
+    assert general["configKey"] == "pricing.factors" and general["scope"] == "TENANT" and general["inUse"]
     assert admin_client.get("/api/v1/products/00000000-0000-0000-0000-000000000000/tariff").status_code == 404
 
 

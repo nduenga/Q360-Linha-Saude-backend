@@ -25,8 +25,10 @@ class PublishedRules:
         return [r for r in self.rules if r.stage == stage and r.scope == scope]
 
 
-def load_published_rules(effective_date: datetime.date) -> PublishedRules:
-    config = BusinessConfigurationResolver.get(CONFIG_KEY, effective_date=effective_date)
+def load_published_rules(effective_date: datetime.date, product_id=None) -> PublishedRules:
+    """Com `product_id`, as regras do produto (se tiver versão própria)
+    substituem as gerais."""
+    config = BusinessConfigurationResolver.get(CONFIG_KEY, effective_date=effective_date, product_id=product_id)
     if config is None:
         return PublishedRules()
     rows = flatten(CONFIG_KEY, config.value_json).get("rules")

@@ -129,7 +129,7 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
     if claims_months_available is None:
         claims_months_available = history_months(proposer_id=quote.proposer_id)
     plan = quote.plan
-    snapshot = BusinessSnapshot.load(quote.reference_date)
+    snapshot = BusinessSnapshot.load(quote.reference_date).for_product(plan.product_id)
     raw_settings = plan.settings_json or {}
     settings = effective_plan_settings(plan, quote.reference_date, snapshot)
     segment = settings.get("segment")

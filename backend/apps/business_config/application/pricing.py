@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from apps.business_config.application.resolver import BusinessConfigurationResolver
+from apps.business_config.domain.scope import is_product_scoped
 from apps.business_config.domain.shape import flatten
 from apps.pricing.domain.errors import PricingConfigError
 
@@ -40,12 +41,18 @@ class PublishedBusinessPricing:
         return str(value).upper()
 
 
-def resolve_published_business_pricing(*, effective_date: date) -> PublishedBusinessPricing:
+def _scope(config) -> str:
+    return "PRODUCT" if is_product_scoped(config.config_key) else "TENANT"
+
+
+def resolve_published_business_pricing(*, effective_date: date, product_id=None) -> PublishedBusinessPricing:
+    """Tarifa publicada e vigente. Com `product_id`, cada chave resolve para
+    a versão do produto, se existir, senão para a geral (`domain/scope.py`)."""
     configs: dict[str, Any] = {}
     versions: dict[str, dict[str, Any]] = {}
 
     for key in PRICING_KEYS:
-        config = BusinessConfigurationResolver.get(key, effective_date=effective_date)
+        config = BusinessConfigurationResolver.get(key, effective_date=effective_date, product_id=product_id)
         if config is None:
             raise PricingConfigError(
                 f"Não existe configuração PUBLISHED '{key}' vigente em {effective_date.isoformat()}."
@@ -61,10 +68,12 @@ def resolve_published_business_pricing(*, effective_date: date) -> PublishedBusi
             "effectiveFrom": config.effective_from.isoformat(),
             "effectiveTo": config.effective_to.isoformat() if config.effective_to else None,
             "checksum": config.checksum,
+            "scope": _scope(config),
         }
 
     actuarial_model = None
-    actuarial_config = BusinessConfigurationResolver.get("pricing.actuarial_model", effective_date=effective_date)
+    actuarial_config = BusinessConfigurationResolver.get(
+        "pricing.actuarial_model", effective_date=effective_date, product_id=product_id)
     if actuarial_config is not None:
         if not actuarial_config.approved_by or not actuarial_config.published_at:
             raise PricingConfigError("O modelo atuarial precisa de aprovação explícita antes de ser usado no pricing.")
@@ -78,6 +87,7 @@ def resolve_published_business_pricing(*, effective_date: date) -> PublishedBusi
             "effectiveFrom": actuarial_config.effective_from.isoformat(),
             "effectiveTo": actuarial_config.effective_to.isoformat() if actuarial_config.effective_to else None,
             "checksum": actuarial_config.checksum,
+            "scope": _scope(actuarial_config),
         }
 
     
@@ -85,6 +95,7 @@ def resolve_published_business_pricing(*, effective_date: date) -> PublishedBusi
     formulas_config = BusinessConfigurationResolver.get(
         "pricing.formulas",
         effective_date=effective_date,
+        product_id=product_id,
     )
 
     if formulas_config is not None:
@@ -106,6 +117,7 @@ def resolve_published_business_pricing(*, effective_date: date) -> PublishedBusi
                 else None
             ),
             "checksum": formulas_config.checksum,
+            "scope": _scope(formulas_config),
         }
 
 
@@ -582,3 +594,54 @@ def resolve_actuarial_commercial_discount(
             "uncappedDiscount": str(combined), "maximumDiscount": str(cap), "capped": applied != combined,
         },
     }
+
+
+MINIMUM_PREMIUM_KEY = "product.minimum_premium"
+
+
+def resolve_minimum_premium(*, plan, effective_date: date) -> dict[str, Any] | None:
+    """Prémio mínimo do plano (`product.minimum_premium`): a versão do produto
+    ou a geral; dentro dela, a linha sem plano e, por cima, a do plano (só os
+    valores preenchidos). Sem configuração ou sem valores: None."""
+    from apps.business_config.application.readers import matches_plan
+
+    config = BusinessConfigurationResolver.get(MINIMUM_PREMIUM_KEY, effective_date=effective_date, product_id=plan.product_id)
+    if config is None:
+        return None
+    rows = [r for r in (flatten(MINIMUM_PREMIUM_KEY, config.value_json).get("items") or []) if isinstance(r, dict)]
+    values: dict[str, Decimal] = {}
+    for row in sorted(rows, key=lambda r: 1 if r.get("plan") else 0):
+        if not matches_plan(row.get("plan"), plan):
+            continue
+        for src, dst in (("annual_minimum", "annualMinimum"), ("per_person_minimum", "perPersonMinimum")):
+            if row.get(src) in (None, ""):
+                continue
+            try:
+                amount = Decimal(str(row[src]))
+            except InvalidOperation as exc:
+                raise PricingConfigError(f"Prémio mínimo inválido: {row!r}") from exc
+            if amount < 0:
+                raise PricingConfigError("O prémio mínimo não pode ser negativo.")
+            values[dst] = amount
+    if not values:
+        return None
+    return {
+        **values,
+        "version": {
+            "configurationId": str(config.id),
+            "configKey": config.config_key,
+            "versionNo": config.version_no,
+            "effectiveFrom": config.effective_from.isoformat(),
+            "effectiveTo": config.effective_to.isoformat() if config.effective_to else None,
+            "checksum": config.checksum,
+            "scope": _scope(config),
+        },
+    }
+
+
+def minimum_premium_amount(minimum: dict[str, Any], members_count: int) -> Decimal:
+    """O maior entre o mínimo da apólice e o mínimo por pessoa × pessoas."""
+    return max(
+        minimum.get("annualMinimum") or Decimal("0"),
+        (minimum.get("perPersonMinimum") or Decimal("0")) * members_count,
+    )

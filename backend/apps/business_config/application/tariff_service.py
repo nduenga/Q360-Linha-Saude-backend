@@ -1,12 +1,14 @@
 """Tarifa de um produto, pela ordem em que o motor a aplica, e simulação
 de rascunhos antes de os submeter.
 
-A tarifa continua guardada nas chaves de configuração de sempre: as chaves
-`pricing.*`, `pricing.formulas` e `rules.custom` valem para todos os
-produtos do tenant (o plano entra como dimensão dentro delas) e
-`product.pricing_setup:<produto>` é só deste produto. Este módulo junta-as
-numa vista por passo, com o estado de cada versão e o dono de cada passo:
-CODE (o motor), PLATFORM (o fornecedor) ou TENANT (a seguradora).
+A tarifa segue a cascata seguradora → produto → plano (`domain/scope.py`):
+cada chave `pricing.*`, `rules.custom`, `product.minimum_premium`… tem uma
+versão geral e pode ter uma versão do produto (`<chave>@<produto>`), que a
+substitui nesse produto; o plano entra como dimensão dentro delas.
+`pricing.taxes_fees` fica sempre geral e `product.pricing_setup:<produto>` é
+só deste produto. Este módulo junta-as numa vista por passo, com o estado de
+cada versão, de onde vem o valor em uso e o dono de cada passo: CODE (o
+motor), PLATFORM (o fornecedor) ou TENANT (a seguradora).
 
 A simulação corre o cálculo real de uma cotação de exemplo, numa transação
 que é sempre revertida: os rascunhos escolhidos passam a valer só dentro
@@ -22,6 +24,7 @@ from django.utils import timezone
 
 from apps.business_config.domain.errors import InvalidConfiguration
 from apps.business_config.domain.product_setup import config_key as product_setup_key
+from apps.business_config.domain.scope import is_scopable, product_key
 from apps.business_config.infrastructure.models import BusinessConfiguration
 from apps.foundation.application import platform_parameter_service
 from apps.foundation.domain.problem import DomainProblem
@@ -57,17 +60,25 @@ def _stages(product_id) -> list[dict[str, Any]]:
         {"code": "QUOTE_FORMULAS", "label": "Fórmulas da cotação", "owner": TENANT, "configKeys": ["pricing.formulas"]},
         {"code": "PRODUCT_SETUP", "label": "Opções, campos e fórmulas do produto", "owner": TENANT,
          "configKeys": [setup_key], "productOnly": True},
+        {"code": "MINIMUM_PREMIUM", "label": "Prémio mínimo", "owner": TENANT,
+         "configKeys": ["product.minimum_premium"]},
         {"code": "FRACTIONATION", "label": "Fracionamento", "owner": TENANT,
          "configKeys": ["pricing.fractionation", "pricing.actuarial_model"]},
     ]
 
 
+def _versions_of(key: str, product_id) -> list[str]:
+    """A versão do produto (se a chave a admitir) e a geral."""
+    return [product_key(key, product_id), key] if is_scopable(key) else [key]
+
+
 def tariff_keys(product_id) -> list[str]:
     keys: list[str] = []
     for stage in _stages(product_id):
-        for key in stage["configKeys"]:
-            if key not in keys:
-                keys.append(key)
+        for base in stage["configKeys"]:
+            for key in _versions_of(base, product_id):
+                if key not in keys:
+                    keys.append(key)
     return keys
 
 
@@ -82,7 +93,7 @@ def _row(c: BusinessConfiguration | None) -> dict[str, Any] | None:
     }
 
 
-def _key_state(key: str, day: datetime.date) -> dict[str, Any]:
+def key_state(key: str, day: datetime.date) -> dict[str, Any]:
     rows = BusinessConfiguration.objects.filter(config_key=key)
     published = (
         rows.filter(status="PUBLISHED", effective_from__lte=day)
@@ -141,6 +152,8 @@ def _summary(stage: str, values: dict[str, Any], product_id) -> dict[str, Any]:
         setup = values.get(product_setup_key(product_id)) or {}
         return {"optionGroups": len(setup.get("optionGroups") or []), "fields": len(setup.get("fields") or []),
                 "formulas": len(setup.get("formulas") or [])}
+    if stage == "MINIMUM_PREMIUM":
+        return {"rows": len((values.get("product.minimum_premium") or {}).get("items") or [])}
     if stage == "FRACTIONATION":
         rows = (values.get("pricing.fractionation") or {}).get("installments")
         if rows is None and model:
@@ -149,24 +162,41 @@ def _summary(stage: str, values: dict[str, Any], product_id) -> dict[str, Any]:
     return {}
 
 
+def _stage_scope(stage: dict[str, Any]) -> str:
+    if stage.get("productOnly"):
+        return "PRODUCT"
+    return "PRODUCT_OR_TENANT" if any(is_scopable(k) for k in stage["configKeys"]) else "TENANT"
+
+
 def describe_tariff(product) -> dict[str, Any]:
     day = timezone.localdate()
-    states = {key: _key_state(key, day) for key in tariff_keys(product.id)}
+    states = {key: key_state(key, day) for key in tariff_keys(product.id)}
+    # Valor em uso por chave geral: o do produto, se publicado, senão o geral.
     values: dict[str, Any] = {}
-    for key, state in states.items():
-        if state["published"]:
-            values[key] = BusinessConfiguration.objects.get(id=state["published"]["configurationId"]).value_json
+    in_use: dict[str, str] = {}
+    for stage in _stages(product.id):
+        for base in stage["configKeys"]:
+            for key in _versions_of(base, product.id):
+                if base not in values and states[key]["published"]:
+                    values[base] = BusinessConfiguration.objects.get(id=states[key]["published"]["configurationId"]).value_json
+                    in_use[base] = key
     stages = []
     for order, stage in enumerate(_stages(product.id), start=1):
         params = [platform_parameter_service.describe(code) for code in stage.get("platformParameters", [])]
+        configurations = []
+        for base in stage["configKeys"]:
+            for key in _versions_of(base, product.id):
+                scope = "PRODUCT" if stage.get("productOnly") or key != base else "TENANT"
+                configurations.append({**states[key], "baseConfigKey": base, "scope": scope,
+                                       "inUse": in_use.get(base) == key})
         stages.append({
             "order": order,
             "code": stage["code"],
             "label": stage["label"],
             "owner": stage["owner"],
             "editable": stage["owner"] == TENANT,
-            "scope": "PRODUCT" if stage.get("productOnly") else "TENANT",
-            "configurations": [states[k] for k in stage["configKeys"]],
+            "scope": _stage_scope(stage),
+            "configurations": configurations,
             "platformParameters": [
                 {"code": p["code"], "value": p["value"], "versionNo": p["versionNo"], "unit": p["unit"]} for p in params
             ],

@@ -67,7 +67,7 @@ def resolve_plan_pricing_context(
     *, plan: Plan, selection: dict[str, Any] | None, effective_date: datetime.date | None = None
 ) -> PlanPricingContext:
     selection = selection or {}
-    snapshot = BusinessSnapshot.load(effective_date)
+    snapshot = BusinessSnapshot.load(effective_date).for_product(plan.product_id)
     settings = effective_plan_settings(plan, effective_date, snapshot)
     plan_benefits = {pb.benefit.code: pb for pb in PlanBenefit.objects.filter(plan=plan).select_related("benefit")}
     coverages = {code: (pb.configuration_json or {}) for code, pb in plan_benefits.items()}

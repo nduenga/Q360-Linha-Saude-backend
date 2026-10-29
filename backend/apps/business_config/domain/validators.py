@@ -114,6 +114,20 @@ def validate_structure(key: str, value: dict[str, Any]) -> None:
     _check_rules(key, value)
 
 
+def _unique_per_plan(key: str, rows: list, identity) -> None:
+    """Uma só linha por plano (e por cobertura, quando a linha a tem): a linha
+    sem plano vale para todos e a do plano prevalece sobre ela."""
+    seen: set[tuple[str, str]] = set()
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        marker = (str(row.get("plan") or "").strip().casefold(), identity(row))
+        if marker in seen:
+            plan = row.get("plan") or "todos os planos"
+            raise InvalidConfiguration(f"{key}: items[{index}] repete a linha de «{plan}»")
+        seen.add(marker)
+
+
 def _check_rules(key: str, value: dict[str, Any]) -> None:
     value = flatten(key, value)
     if key == "proposal.branding":
@@ -128,6 +142,18 @@ def _check_rules(key: str, value: dict[str, Any]) -> None:
         if key == "product.age_limits" and row.get("renewal_max_age") is not None and row.get("entry_max_age") is not None:
             if row["renewal_max_age"] < row["entry_max_age"]:
                 raise InvalidConfiguration("age_limits: a idade máxima de renovação não pode ser inferior à de entrada")
+        if key == "product.age_limits" and row.get("entry_min_age") is not None and row.get("entry_max_age") is not None:
+            if row["entry_max_age"] < row["entry_min_age"]:
+                raise InvalidConfiguration("age_limits: a idade máxima de entrada não pode ser inferior à mínima")
+    if key in ("product.age_limits", "product.minimum_premium"):
+        _unique_per_plan(key, value.get("items") or [], lambda row: "")
+    if key == "product.waiting_periods":
+        _unique_per_plan(key, value.get("items") or [], lambda row: str(row.get("coverage") or "").strip().casefold())
+    if key == "product.minimum_premium":
+        for index, row in enumerate(value.get("items") or []):
+            if row.get("annual_minimum") in (None, "") and row.get("per_person_minimum") in (None, ""):
+                raise InvalidConfiguration(
+                    f"items[{index}]: indique o prémio mínimo da apólice, o prémio mínimo por pessoa ou os dois")
     if key == "rules.custom":
         validate_rules(value)
     if key == "policy.endorsements":

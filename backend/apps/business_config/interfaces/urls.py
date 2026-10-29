@@ -27,6 +27,7 @@ from .views import (
     DocumentUploadView,
 )
 from .approvals_views import PendingApprovalsCountView, PendingApprovalsView
+from .product_configuration_views import ProductConfigurationCopyView, ProductConfigurationView
 from .tariff_views import ProductTariffSimulationView, ProductTariffView
 from .template_views import TemplateAdoptView, TemplateDetailView, TemplateListView
 from .formula_views import (
@@ -52,6 +53,8 @@ urlpatterns = [
     path("templates/<str:code>", TemplateDetailView.as_view()),
     path("templates/<str:code>/adopt", TemplateAdoptView.as_view()),
     path("business-config/approvals/pending/count", PendingApprovalsCountView.as_view()),
+    path("products/<uuid:product_id>/configuration", ProductConfigurationView.as_view()),
+    path("products/<uuid:product_id>/configuration/copy", ProductConfigurationCopyView.as_view()),
     path("products/<uuid:product_id>/tariff", ProductTariffView.as_view()),
     path("products/<uuid:product_id>/tariff/simulate", ProductTariffSimulationView.as_view()),
     path("products/<uuid:product_id>/pricing-setup/validate", ProductPricingSetupValidateView.as_view()),

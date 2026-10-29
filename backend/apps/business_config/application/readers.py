@@ -6,7 +6,10 @@ nada muda (os valores do plano continuam a valer). Nenhum valor comercial
 nasce aqui.
 
 `BusinessSnapshot.load(on)` faz uma única consulta com todas as chaves
-vigentes do inquilino na data `on`.
+vigentes do inquilino na data `on`, gerais e de produto. Sem produto, `get`
+devolve a versão geral; `for_product(id)` devolve a vista desse produto: a
+versão do produto (`<chave>@<id>`) quando existe, senão a geral (ver
+`domain/scope.py`).
 """
 from __future__ import annotations
 
@@ -17,6 +20,7 @@ from typing import Any
 from django.db import models
 from django.utils import timezone
 
+from apps.business_config.domain.scope import is_scopable, product_key
 from apps.business_config.domain.shape import flatten
 from apps.business_config.infrastructure.models import BusinessConfiguration
 from apps.foundation.application.context import CurrentTenantProvider
@@ -30,6 +34,7 @@ def _fold(value: Any) -> str:
 class BusinessSnapshot:
     values: dict[str, dict[str, Any]] = field(default_factory=dict)
     versions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    product_id: str | None = None
 
     @classmethod
     def load(cls, on: datetime.date | None = None) -> "BusinessSnapshot":
@@ -49,11 +54,31 @@ class BusinessSnapshot:
             versions[row.config_key] = {"configurationId": str(row.id), "versionNo": row.version_no, "checksum": row.checksum}
         return cls(values=values, versions=versions)
 
+    def for_product(self, product_id: Any) -> "BusinessSnapshot":
+        """Vista do produto: cada chave resolve para a versão do produto, se
+        publicada, e senão para a geral."""
+        if product_id is None or str(product_id) == self.product_id:
+            return self
+        return BusinessSnapshot(values=self.values, versions=self.versions, product_id=str(product_id))
+
+    def resolved_key(self, key: str) -> str | None:
+        """Chave publicada que vale para `key` nesta vista (a do produto ou a geral)."""
+        if self.product_id and is_scopable(key):
+            scoped = product_key(key, self.product_id)
+            if scoped in self.values:
+                return scoped
+        return key if key in self.values else None
+
     def get(self, key: str) -> dict[str, Any] | None:
-        return self.values.get(key)
+        resolved = self.resolved_key(key)
+        return self.values.get(resolved) if resolved else None
+
+    def version(self, key: str) -> dict[str, Any] | None:
+        resolved = self.resolved_key(key)
+        return {**self.versions[resolved], "configKey": resolved} if resolved else None
 
     def rows(self, key: str, list_name: str) -> list[dict[str, Any]]:
-        raw = (self.values.get(key) or {}).get(list_name)
+        raw = (self.get(key) or {}).get(list_name)
         return [r for r in raw if isinstance(r, dict)] if isinstance(raw, list) else []
 
 
