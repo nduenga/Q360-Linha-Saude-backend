@@ -1,20 +1,20 @@
 PACOTE DE MODELOS DE IMPORTAÇÃO Q360
 
 01 Modelo actuarial de referência SAU/SAG (dados indicativos do projecto).
-02 Exemplo sintético de membros para testes.
+02 Exemplo sintético de membros para testes: 30 pessoas de uma empresa (12 titulares e dependentes).
 03 Modelo vazio de membros para produção.
-04 Exemplo sintético de 36 meses de sinistros (2023–2025).
+04 Exemplo sintético de 36 meses de sinistros (2023–2025): 177 sinistros pagos, rejeitados, em aberto e um em USD.
 05 Modelo vazio de sinistros para produção.
-06 Exemplo sintético de 36 meses de prémios (2023–2025).
+06 Exemplo sintético de 36 meses de prémios (2023–2025): 36 períodos mensais; sinistralidade paga perto de 73%.
 07 Modelo vazio de prémios para produção.
-08 Exemplo sintético de coberturas complementares.
+08 Exemplo sintético de 10 coberturas complementares.
 09 Modelo vazio de coberturas para produção.
-10 Exemplo de tabela de referência (fatores fictícios).
+10 Exemplo de tabela de referência: fator fictício para as 18 províncias.
 11 Modelo vazio de tabela de referência para produção.
 
 UTILIZAÇÃO
 - Modelo actuarial: Administração > Tarifação/Modelo actuarial. A importação cria rascunho; publicação depende de aprovação actuarial.
-- Membros: importar no proponente e confirmar a importação.
+- Membros: importar num cliente empresa (o exemplo tem vários titulares) e confirmar a importação. Importe os membros antes dos sinistros: as referências DEMO-PESS-001 a 030 são as mesmas.
 - Sinistros/prémios: Sinistralidade > Importações; para análise de experiência, usar períodos correspondentes.
 - Coberturas: Administração > Produtos/Coberturas > Importar.
 - Tabela de referência: Plataforma > Tabelas de referência; seleccionar coluna-chave e submeter para aprovação.

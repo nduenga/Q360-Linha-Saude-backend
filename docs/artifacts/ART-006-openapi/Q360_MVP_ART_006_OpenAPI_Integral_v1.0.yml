@@ -10155,6 +10155,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/templates/import-preview:
+    post:
+      operationId: postPlatformTemplateImportPreview
+      description: 'Lê um .xlsx (chave de configuração / caminho / valor) e devolve o
+
+        `content` já reconstruído, pronto a rever/editar na caixa de JSON do
+
+        formulário de "Propor modelo" antes de submeter — não grava nada nem
+
+        valida contra um `kind` (isso só se sabe depois, no POST do modelo).'
+      summary: Pré-validar um Excel de modelo do fornecedor
+      tags:
+      - Platform
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TemplateImport'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParsedTemplateWorkbook'
+          description: ''
+  /api/v1/platform/templates/import-template:
+    get:
+      operationId: getPlatformTemplateImportTemplate
+      description: Descarregar um .xlsx de exemplo com o layout esperado (3 colunas).
+      summary: Descarregar o Excel modelo para importar um modelo do fornecedor
+      tags:
+      - Platform
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
   /api/v1/platform/templates/{code}:
     get:
       operationId: getPlatformTemplateDetail
@@ -32798,6 +32845,24 @@ components:
       required:
       - copiedVersionNo
       - generalVersionNo
+    ParsedTemplateWorkbook:
+      type: object
+      properties:
+        content: {}
+        truncated:
+          type: boolean
+      required:
+      - content
+      - truncated
+    TemplateImport:
+      type: object
+      properties:
+        file:
+          type: string
+          format: uri
+          description: Excel .xlsx com 3 colunas (chave, caminho, valor); máx. 10 MB
+      required:
+      - file
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:
