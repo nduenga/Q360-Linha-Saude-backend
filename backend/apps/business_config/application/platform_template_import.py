@@ -111,12 +111,38 @@ def parse_template_workbook(raw_bytes: bytes) -> dict[str, Any]:
     }
 
 
+# Dados de teste: três planos, regras de grupo e de renovação — tudo passa
+# o `validate_content`/`validate` reais (form_schemas de "product.plans",
+# "group.rules" e "renewal.rules").
+_EXAMPLE_ROWS = [
+    *[
+        row
+        for index, (code, name, description, copayment) in enumerate([
+            ("basico", "Básico", "Hospitalização e urgências", 20),
+            ("standard", "Standard", "Básico com ambulatório e medicamentos", 15),
+            ("premium", "Premium", "Standard com estomatologia, oftalmologia e evacuação", 10),
+        ])
+        for row in (
+            ["product.plans", f"plans[{index}].code", code],
+            ["product.plans", f"plans[{index}].name", name],
+            ["product.plans", f"plans[{index}].description", description],
+            ["product.plans", f"plans[{index}].active", "TRUE"],
+            ["product.plans", f"plans[{index}].default_copayment_percent", copayment],
+        )
+    ],
+    ["group.rules", "group.minimum_members", 5],
+    ["group.rules", "group.below_minimum_behavior", "INDIVIDUAL"],
+    ["group.rules", "group.mandatory_enrolment", "TRUE"],
+    ["group.rules", "group.questionnaire_exemption_threshold", 20],
+    ["renewal.rules", "renewal.automatic_renewal", "TRUE"],
+    ["renewal.rules", "renewal.medical_inflation_percent", "8.50"],
+    ["renewal.rules", "renewal.continuity_without_new_waiting_period", "TRUE"],
+    ["marketProducts", "", "FALSE"],
+]
+
+
 def build_import_template() -> bytes:
-    """.xlsx de exemplo, em memória — monta
-    `configurations["product.plans"] = {"plans": [{"code": "basico", "name": "Básico", "active": true}]}`,
-    uma estrutura que passa mesmo `validate_content`/`validate` reais
-    (apps.business_config.domain.form_schemas: secção "plans" de
-    "product.plans", campos code/name/active obrigatórios)."""
+    """.xlsx de exemplo, em memória, com as linhas de `_EXAMPLE_ROWS`."""
     import io
 
     from openpyxl import Workbook
@@ -125,10 +151,8 @@ def build_import_template() -> bytes:
     sheet = workbook.active
     sheet.title = "Modelo"
     sheet.append(["chave (configKey)", "caminho (path)", "valor"])
-    sheet.append(["product.plans", "plans[0].code", "basico"])
-    sheet.append(["product.plans", "plans[0].name", "Básico"])
-    sheet.append(["product.plans", "plans[0].active", "TRUE"])
-    sheet.append(["marketProducts", "", "FALSE"])
+    for row in _EXAMPLE_ROWS:
+        sheet.append(row)
     buffer = io.BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()

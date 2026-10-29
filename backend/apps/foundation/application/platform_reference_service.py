@@ -101,6 +101,16 @@ def parse_workbook_preview(content: bytes) -> dict[str, Any]:
     return {"headers": headers, "rows": rows, "truncated": truncated}
 
 
+# Dados de teste: fator regional fictício por província.
+_REFERENCE_EXAMPLE_ROWS = [
+    ["LUA", "Luanda", 1.10], ["BGO", "Bengo", 1.00], ["BEN", "Benguela", 1.00], ["BIE", "Bié", 0.95],
+    ["CAB", "Cabinda", 1.05], ["CCU", "Cuando Cubango", 0.95], ["CNO", "Cuanza Norte", 0.95],
+    ["CUS", "Cuanza Sul", 0.95], ["CNN", "Cunene", 0.95], ["HUA", "Huambo", 1.00], ["HUI", "Huíla", 1.00],
+    ["LNO", "Lunda Norte", 0.95], ["LSU", "Lunda Sul", 0.95], ["MAL", "Malanje", 0.95],
+    ["MOX", "Moxico", 0.90], ["NAM", "Namibe", 1.00], ["UIG", "Uíge", 0.95], ["ZAI", "Zaire", 1.00],
+]
+
+
 def build_import_template() -> bytes:
     """Gera, em memória, um .xlsx de exemplo para a importação — não há
     ficheiro estático para manter sincronizado, e a estrutura esperada é
@@ -113,8 +123,8 @@ def build_import_template() -> bytes:
     sheet = workbook.active
     sheet.title = "Tabela de referência"
     sheet.append(["codigo", "nome", "fator"])
-    sheet.append(["LUA", "Luanda", 1.10])
-    sheet.append(["BEN", "Benguela", 1.00])
+    for row in _REFERENCE_EXAMPLE_ROWS:
+        sheet.append(row)
     buffer = io.BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()
