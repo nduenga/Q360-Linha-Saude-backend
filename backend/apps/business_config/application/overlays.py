@@ -249,8 +249,13 @@ def apply_coverage_overlay(
                     if definition.get("noParticipation"):
                         continue
                     _apply_participation(cfg, row, settings.get("accessSystem"))
-            for row in snap.rows("product.waiting_periods", "items"):
-                if matches_coverage(row.get("coverage"), code, name):
+            # Linhas sem plano primeiro, com plano depois: a última a bater
+            # certo "ganha" (ver abaixo), por isso uma excepção específica de
+            # plano nunca é atropelada por um valor geral da cobertura,
+            # seja qual for a ordem em que o GTE as escreveu.
+            waiting_rows = sorted(snap.rows("product.waiting_periods", "items"), key=lambda r: bool(r.get("plan")))
+            for row in waiting_rows:
+                if matches_plan(row.get("plan"), plan, settings) and matches_coverage(row.get("coverage"), code, name):
                     waiting = dict(cfg.get("waitingDays") or {})
                     individual, group = integer(row.get("individual_days")), integer(row.get("group_days"))
                     if individual is not None:

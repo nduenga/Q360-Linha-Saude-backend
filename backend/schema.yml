@@ -7166,6 +7166,69 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/households/{household_id}/people/dependents:
+    post:
+      operationId: postHouseholdPersonDependentCreate
+      description: 'Create a civil person linked to a household, without an insurance enrollment.
+
+
+        Requer: scope q360.write.'
+      summary: Criar household person dependent create
+      parameters:
+      - in: path
+        name: household_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HouseholdLinkPerson'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseholdMember'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/import-templates/{kind}:
     get:
       operationId: getImportTemplate
@@ -8038,6 +8101,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/people:
+    get:
+      operationId: getPersonList
+      description: 'Tenant-scoped search for reusing civil identities across households.
+
+
+        Requer: scope q360.read.'
+      summary: Listar person list
+      parameters:
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Filtro.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Person'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/plans:
     get:
       operationId: getPlanListCreate
@@ -10211,6 +10320,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/templates/import-preview:
+    post:
+      operationId: postPlatformTemplateImportPreview
+      description: 'Lê um .xlsx (chave de configuração / caminho / valor) e devolve o
+
+        `content` já reconstruído, pronto a rever/editar na caixa de JSON do
+
+        formulário de "Propor modelo" antes de submeter — não grava nada nem
+
+        valida contra um `kind` (isso só se sabe depois, no POST do modelo).'
+      summary: Pré-validar um Excel de modelo do fornecedor
+      tags:
+      - Platform
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TemplateImport'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParsedTemplateWorkbook'
+          description: ''
+  /api/v1/platform/templates/import-template:
+    get:
+      operationId: getPlatformTemplateImportTemplate
+      description: Descarregar um .xlsx de exemplo com o layout esperado (3 colunas).
+      summary: Descarregar o Excel modelo para importar um modelo do fornecedor
+      tags:
+      - Platform
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+          description: ''
   /api/v1/platform/tenants:
     get:
       operationId: getPlatformTenantListCreate
@@ -14795,7 +14951,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/QuoteMemberRequest'
-        required: true
       security:
       - oauth2:
         - q360.write
@@ -21393,6 +21548,11 @@ components:
         primaryMemberId:
           type: string
           format: uuid
+        primaryPersonId:
+          type:
+          - string
+          - 'null'
+          format: uuid
         status:
           type: string
         rowVersion:
@@ -21400,6 +21560,7 @@ components:
       required:
       - id
       - primaryMemberId
+      - primaryPersonId
       - proposerId
       - rowVersion
       - status
@@ -21476,6 +21637,44 @@ components:
       - firstName
       - joinedAt
       - relationshipCode
+    HouseholdLinkPerson:
+      type: object
+      description: 'Um campo desconhecido era ignorado em silêncio (p.ex. `fullName`): a
+
+        pessoa ficava gravada sem nome sem ninguém dar por isso. Agora é um erro 400.'
+      properties:
+        personId:
+          type: string
+          format: uuid
+        relationshipCode:
+          type: string
+          maxLength: 40
+          minLength: 1
+        firstName:
+          type: string
+          maxLength: 120
+        lastName:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          type: string
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 30
+        joinedAt:
+          type: string
+          format: date
+      required:
+      - joinedAt
+      - relationshipCode
     HouseholdMember:
       type: object
       properties:
@@ -21486,8 +21685,19 @@ components:
           type: string
           format: uuid
         memberId:
-          type: string
+          type:
+          - string
+          - 'null'
           format: uuid
+        personId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        relationshipCode:
+          type:
+          - string
+          - 'null'
         joinedAt:
           type: string
           format: date
@@ -21499,8 +21709,14 @@ components:
         rowVersion:
           type: integer
         member:
-          allOf:
+          oneOf:
           - $ref: '#/components/schemas/Member'
+          - type: 'null'
+          readOnly: true
+        person:
+          oneOf:
+          - $ref: '#/components/schemas/Person'
+          - type: 'null'
           readOnly: true
       required:
       - householdId
@@ -21509,6 +21725,9 @@ components:
       - leftAt
       - member
       - memberId
+      - person
+      - personId
+      - relationshipCode
       - rowVersion
     HouseholdRemoveDependent:
       type: object
@@ -21930,6 +22149,11 @@ components:
         id:
           type: string
           format: uuid
+        personId:
+          type:
+          - string
+          - 'null'
+          format: uuid
         proposerId:
           type: string
           format: uuid
@@ -21973,6 +22197,7 @@ components:
       - id
       - lastName
       - nif
+      - personId
       - proposerId
       - relationshipCode
       - rowVersion
@@ -22397,6 +22622,15 @@ components:
       - headers
       - rows
       - truncated
+    ParsedTemplateWorkbook:
+      type: object
+      properties:
+        content: {}
+        truncated:
+          type: boolean
+      required:
+      - content
+      - truncated
     PasswordLogin:
       type: object
       properties:
@@ -22742,6 +22976,38 @@ components:
       - byArea
       - canApprove
       - total
+    Person:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          type:
+          - string
+          - 'null'
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+        nif:
+          type:
+          - string
+          - 'null'
+      required:
+      - dateOfBirth
+      - firstName
+      - id
+      - lastName
+      - nif
+      - sexCode
     Plan:
       type: object
       description: 'DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): `productId` replaces
@@ -26241,6 +26507,11 @@ components:
         memberId:
           type: string
           format: uuid
+        personId:
+          type:
+          - string
+          - 'null'
+          format: uuid
         status:
           type: string
         eligibilityEvaluationId:
@@ -26253,6 +26524,7 @@ components:
       - eligibilityEvaluationId
       - id
       - memberId
+      - personId
       - preExisting
       - status
     QuoteMemberPage:
@@ -26274,8 +26546,9 @@ components:
         memberId:
           type: string
           format: uuid
-      required:
-      - memberId
+        personId:
+          type: string
+          format: uuid
     QuotePage:
       type: object
       description: Página de QuoteSerializer.
@@ -28459,6 +28732,15 @@ components:
       - code
       - pendingVersions
       - published
+    TemplateImport:
+      type: object
+      properties:
+        file:
+          type: string
+          format: uri
+          description: Excel .xlsx com 3 colunas (chave, caminho, valor); máx. 10 MB
+      required:
+      - file
     TemplateKindEnum:
       enum:
       - PRODUCT

@@ -330,6 +330,59 @@ def _template_audit(request, action: str, payload: dict) -> None:
     )
 
 
+class TemplateImportSerializer(serializers.Serializer):
+    file = serializers.FileField(help_text="Excel .xlsx com 3 colunas (chave, caminho, valor); máx. 10 MB")
+
+
+_TEMPLATE_IMPORT_PREVIEW = inline_serializer("ParsedTemplateWorkbook", fields={
+    "content": serializers.JSONField(),
+    "truncated": serializers.BooleanField(),
+})
+
+
+class PlatformTemplateImportPreviewView(APIView):
+    """Lê um .xlsx (chave de configuração / caminho / valor) e devolve o
+    `content` já reconstruído, pronto a rever/editar na caixa de JSON do
+    formulário de "Propor modelo" antes de submeter — não grava nada nem
+    valida contra um `kind` (isso só se sabe depois, no POST do modelo)."""
+
+    permission_classes = [IsPlatformAdmin]
+    parser_classes = [MultiPartParser]
+
+    @extend_schema(operation_id="postPlatformTemplateImportPreview", tags=["Platform"],
+                   summary="Pré-validar um Excel de modelo do fornecedor",
+                   request={"multipart/form-data": TemplateImportSerializer},
+                   responses={200: _TEMPLATE_IMPORT_PREVIEW})
+    def post(self, request):
+        from apps.business_config.application import platform_template_import
+
+        body = TemplateImportSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        upload = body.validated_data["file"]
+        if upload.size > reference_service.MAX_WORKBOOK_BYTES:
+            return Response(
+                {"detail": f"O ficheiro excede {reference_service.MAX_WORKBOOK_BYTES // (1024 * 1024)} MB."},
+                status=400,
+            )
+        return Response(platform_template_import.parse_template_workbook(upload.read()))
+
+
+class PlatformTemplateImportTemplateView(APIView):
+    """Descarregar um .xlsx de exemplo com o layout esperado (3 colunas)."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    @extend_schema(operation_id="getPlatformTemplateImportTemplate", tags=["Platform"],
+                   summary="Descarregar o Excel modelo para importar um modelo do fornecedor",
+                   responses={(200, XLSX): OpenApiTypes.BINARY})
+    def get(self, request):
+        from apps.business_config.application import platform_template_import
+
+        content = platform_template_import.build_import_template()
+        return FileResponse(io.BytesIO(content), as_attachment=True,
+                             filename="modelo-fornecedor.xlsx", content_type=XLSX)
+
+
 @requires_idempotency
 class PlatformTemplateListView(APIView):
     """GET: os modelos (publicado e pendentes). POST: propor uma versão nova
