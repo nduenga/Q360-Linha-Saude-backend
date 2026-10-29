@@ -2070,3 +2070,13 @@ O modelo e a pré-validação Excel das tabelas de referência da plataforma usa
 | `POST /admin/staff-accounts/{id}/unlock` | **Novo** | Sem corpo; 204. Só ADMIN. Levanta o bloqueio sem mudar a palavra-passe; regista `staff_account.unlocked`. |
 | `POST /policies/{id}/endorsements/inclusions` · `GET/PUT /quotes/{id}/endorsement` | Contrato (resposta) + comportamento | `calculation.prepaidPeriodCharge` (`IMMEDIATE` \| `SPREAD`). Com `IMMEDIATE` (omissão), a 1.ª linha de `installments` vence na data de inclusão e cobre o período até à próxima prestação por pagar. Configuração nova `policy.endorsements.prepaid_period_charge`. |
 | Todos os recursos | Comportamento | `updatedAt` passa a mudar em todas as alterações, também nas transições de estado. |
+### Alterações de 29/10/2026 (fórmulas e modelo atuarial por produto; regras de segmento e arredondamento)
+
+| Endpoint | Tipo | O que muda |
+|---|---|---|
+| `GET /business-config/formulas?productId=` | Contrato (parâmetro) | Com `productId`, lista as versões desse produto (`pricing.formulas@<produto>`); sem ele, só as gerais. `productId` inválido → 400. |
+| `POST /business-config/formulas` | Contrato (pedido) | Novo `productId?: uuid \| null`: cria a versão do produto, que substitui a geral nesse produto. Produto inexistente → 400. As rotas por id (`/formulas/{id}`, `/submit`, `/approve`…) aceitam as versões de produto. |
+| `POST /business-config/actuarial-model/import` | Contrato (pedido) | Novo `productId?` (multipart): cria `pricing.actuarial_model@<produto>`; também no `dryRun`, que mantém as definições publicadas desse produto (ou da geral). |
+| `GET /products/{id}/configuration` | Contrato (resposta) | `items[].generalChangedSinceCopy: {copiedVersionNo, generalVersionNo} \| null`: a geral mudou depois de o produto copiar a sua versão. |
+| `POST /quotes` | Comportamento | A regra «plano de grupo só para organização / plano individual só para pessoa» passa a aplicar-se também aos planos `INDIVIDUAL_FAMILY` (antes só reconhecia `INDIVIDUAL`, que não é um segmento válido). |
+| `POST /platform/system-parameters/pricing.rounding_policy/versions` | Comportamento | Valor fora de `HALF_UP_2DP`, `HALF_EVEN_2DP`, `DOWN_2DP` → 400 com a explicação «Outro valor exige uma nova versão do sistema». |

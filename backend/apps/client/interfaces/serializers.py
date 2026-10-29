@@ -233,7 +233,7 @@ class MemberCreateRequestSerializer(_RejectUnknownFields, serializers.Serializer
     relationshipCode = serializers.CharField(min_length=1, max_length=40)
     # Obrigatório: uma pessoa segura sem nome não se identifica na apólice, no cartão nem nos documentos.
     firstName = serializers.CharField(max_length=120)
-    lastName = serializers.CharField(allow_null=True, required=False)
+    lastName = serializers.CharField(allow_null=True, required=False, default=None)
     # Obrigatória para todo o beneficiário/membro. Email e telefone NÃO existem
     # aqui: herdam os do titular (campos do proponente).
     dateOfBirth = serializers.DateField(required=True, allow_null=False)
@@ -346,8 +346,8 @@ class HouseholdCreateDependentSerializer(_RejectUnknownFields, serializers.Seria
     firstName = serializers.CharField(max_length=120)
     lastName = serializers.CharField(allow_null=True, required=False, default=None)
     dateOfBirth = serializers.DateField(required=True, allow_null=False)
-    sexCode = serializers.CharField(allow_null=True, required=False)
-    nif = serializers.CharField(allow_null=True, allow_blank=True, required=False, max_length=30)
+    sexCode = serializers.CharField(allow_null=True, required=False, default=None)
+    nif = serializers.CharField(allow_null=True, allow_blank=True, required=False, default=None, max_length=30)
     attributes = serializers.JSONField(required=False, default=dict)
     joinedAt = serializers.DateField()
 

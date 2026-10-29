@@ -38,6 +38,11 @@ REGISTRY: dict[str, dict] = {
     },
     "PendingApprovalsCountView.get": {"response": d.PendingApprovalsCount},
     "ProductTariffView.get": {"response": d.ProductTariff},
+    "ProductConfigurationView.get": {"response": d.ProductConfiguration},
+    "ProductConfigurationCopyView.post": {
+        "response": d.ProductConfigurationCopyResult, "status": 201,
+        "notes": "Cria rascunhos `<chave>@<produto>` copiados da configuração geral ou do que vale noutro produto; nada é publicado.",
+    },
     "ProductHistoryView.get": {"response": d.ProductHistoryEntry, "many": True, "notes": "Histórico de nome, descrição e estado do produto a partir de eventos de auditoria; não representa versões de tarifa ou configurações."},
     "ProductTariffSimulationView.post": {"response": d.TariffSimulationResult},
     "FormulaTestView.post": {"response": d.FormulaTestResult},

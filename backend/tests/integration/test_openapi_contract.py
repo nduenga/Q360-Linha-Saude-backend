@@ -17,7 +17,7 @@ PUBLIC = {
     "/api/v1/auth/dev-login", "/api/v1/schema",
     "/api/v1/customer-portal/{tenant_id}/auth/request-access", "/api/v1/customer-portal/{tenant_id}/auth/verify-otp",
 }
-BODYLESS_POST = re.compile(r"/(approve|publish|retire|select|recalculate|retry|proposal|reset-password|unlock|logout|market|signed-url)$")
+BODYLESS_POST = re.compile(r"/(approve|publish|retire|suspend|terminate|select|recalculate|retry|proposal|reset-password|unlock|logout|market|signed-url)$")
 
 
 def _routes():

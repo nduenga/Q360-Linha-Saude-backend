@@ -399,7 +399,7 @@ class TariffConfigVersion(s.Serializer):
     rowVersion = s.IntegerField()
 
 
-class TariffConfigState(s.Serializer):
+class ConfigKeyState(s.Serializer):
     configKey = s.CharField()
     published = TariffConfigVersion(allow_null=True, help_text="Em vigor hoje.")
     draft = TariffConfigVersion(allow_null=True)
@@ -407,15 +407,24 @@ class TariffConfigState(s.Serializer):
     scheduled = TariffConfigVersion(allow_null=True, help_text="Publicada com vigência futura.")
 
 
+class TariffConfigState(ConfigKeyState):
+    baseConfigKey = s.CharField(help_text="A chave geral (sem o produto).")
+    scope = s.ChoiceField(choices=["TENANT", "PRODUCT"],
+                          help_text="PRODUCT: versão do produto (`<chave>@<produto>`); TENANT: versão geral.")
+    inUse = s.BooleanField(help_text="É esta a versão que vale hoje neste produto.")
+
+
 class TariffStage(s.Serializer):
     order = s.IntegerField()
     code = s.ChoiceField(choices=["PURE_PREMIUM", "RISK_FACTORS", "PERSON_RULES", "PERSON_FORMULAS", "LOADINGS",
                                   "ADJUSTMENTS", "LEGAL_TAXES", "CHARGES", "QUOTE_FORMULAS", "PRODUCT_SETUP",
-                                  "FRACTIONATION"])
+                                  "MINIMUM_PREMIUM", "FRACTIONATION"])
     label = s.CharField()
     owner = s.ChoiceField(choices=["CODE", "PLATFORM", "TENANT"])
     editable = s.BooleanField()
-    scope = s.ChoiceField(choices=["TENANT", "PRODUCT"], help_text="TENANT: a chave vale para todos os produtos.")
+    scope = s.ChoiceField(choices=["TENANT", "PRODUCT", "PRODUCT_OR_TENANT"],
+                          help_text="TENANT: só geral; PRODUCT: só do produto; PRODUCT_OR_TENANT: geral, "
+                                    "substituível por uma versão do produto.")
     configurations = TariffConfigState(many=True)
     platformParameters = s.ListField(child=s.DictField(), help_text="code, value, versionNo, unit.")
     summary = s.DictField(help_text="Resumo do passo (depende do passo).")
@@ -430,6 +439,68 @@ class ProductTariff(s.Serializer):
     stages = TariffStage(many=True)
     openDrafts = TariffConfigVersion(many=True)
     platformVersions = s.DictField(child=s.IntegerField())
+
+
+# ---------------------------------------- configuração do produto (cascata)
+class GeneralChangedSinceCopy(s.Serializer):
+    copiedVersionNo = s.IntegerField(help_text="Versão da geral de onde a versão do produto foi copiada.")
+    generalVersionNo = s.IntegerField(help_text="Versão geral publicada hoje.")
+
+
+class ProductConfigurationItem(s.Serializer):
+    configKey = s.CharField(help_text="Chave geral.")
+    productConfigKey = s.CharField(help_text="`<chave>@<produto>`: a versão deste produto.")
+    label = s.CharField()
+    category = s.CharField()
+    area = s.CharField()
+    areaLabel = s.CharField()
+    source = s.ChoiceField(choices=["PRODUCT", "GENERAL", "NONE"],
+                           help_text="De onde vem o valor em uso hoje neste produto.")
+    product = ConfigKeyState()
+    general = ConfigKeyState()
+    generalChangedSinceCopy = GeneralChangedSinceCopy(
+        allow_null=True,
+        help_text="A geral mudou depois da cópia para o produto (o produto não recebe a alteração); null se não.",
+    )
+    formSchema = s.DictField(help_text="Formulário da chave, com os planos deste produto nas opções de plano.")
+
+
+class GeneralOnlyConfiguration(s.Serializer):
+    configKey = s.CharField()
+    label = s.CharField()
+    area = s.CharField()
+
+
+class ProductConfiguration(s.Serializer):
+    productId = s.UUIDField()
+    productCode = s.CharField()
+    productName = s.CharField()
+    plans = s.ListField(child=s.DictField(), help_text="id, code, name, status.")
+    planOptions = s.ListField(child=s.CharField(), help_text="Códigos dos planos (para o campo «plano» das linhas).")
+    items = ProductConfigurationItem(many=True)
+    pricingSetup = ConfigKeyState(help_text="Opções, campos e fórmulas do produto (só do produto).")
+    generalOnly = GeneralOnlyConfiguration(many=True, help_text="Configurações que ficam sempre gerais.")
+
+
+class ProductConfigurationCopied(s.Serializer):
+    configKey = s.CharField()
+    productConfigKey = s.CharField()
+    configurationId = s.UUIDField()
+    versionNo = s.IntegerField()
+    copiedFrom = s.CharField(help_text="Chave da versão publicada copiada.")
+
+
+class ProductConfigurationSkipped(s.Serializer):
+    configKey = s.CharField()
+    reason = s.CharField()
+
+
+class ProductConfigurationCopyResult(s.Serializer):
+    productId = s.UUIDField()
+    source = s.ChoiceField(choices=["GENERAL", "PRODUCT"])
+    sourceProductId = s.UUIDField(allow_null=True)
+    created = ProductConfigurationCopied(many=True)
+    skipped = ProductConfigurationSkipped(many=True)
 
 
 class TariffSimulationStep(s.Serializer):

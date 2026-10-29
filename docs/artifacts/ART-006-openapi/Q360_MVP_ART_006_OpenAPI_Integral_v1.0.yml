@@ -1691,6 +1691,12 @@ paths:
       summary: Listar versões do conjunto de fórmulas
       parameters:
       - in: query
+        name: productId
+        schema:
+          type: string
+          format: uuid
+        description: Só as versões desse produto
+      - in: query
         name: status
         schema:
           type: string
@@ -10149,53 +10155,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
-  /api/v1/platform/templates/import-preview:
-    post:
-      operationId: postPlatformTemplateImportPreview
-      description: 'Lê um .xlsx (chave de configuração / caminho / valor) e devolve o
-
-        `content` já reconstruído, pronto a rever/editar na caixa de JSON do
-
-        formulário de "Propor modelo" antes de submeter — não grava nada nem
-
-        valida contra um `kind` (isso só se sabe depois, no POST do modelo).'
-      summary: Pré-validar um Excel de modelo do fornecedor
-      tags:
-      - Platform
-      requestBody:
-        content:
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/TemplateImport'
-        required: true
-      security:
-      - oauth2:
-        - q360.read
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ParsedTemplateWorkbook'
-          description: ''
-  /api/v1/platform/templates/import-template:
-    get:
-      operationId: getPlatformTemplateImportTemplate
-      description: Descarregar um .xlsx de exemplo com o layout esperado (3 colunas).
-      summary: Descarregar o Excel modelo para importar um modelo do fornecedor
-      tags:
-      - Platform
-      security:
-      - oauth2:
-        - q360.read
-      responses:
-        '200':
-          content:
-            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
-              schema:
-                type: string
-                format: binary
-          description: ''
   /api/v1/platform/templates/{code}:
     get:
       operationId: getPlatformTemplateDetail
@@ -13063,6 +13022,111 @@ paths:
       responses:
         '204':
           description: Sem conteúdo.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/products/{product_id}/configuration:
+    get:
+      operationId: getProductConfiguration
+      description: 'Requer: scope q360.read.'
+      summary: 'Configuração do produto: o que é do produto, o que herda da geral e o que fica sempre geral'
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductConfiguration'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/products/{product_id}/configuration/copy:
+    post:
+      operationId: copyProductConfiguration
+      description: 'Requer: scope q360.write, permissão pricing-config:manage.
+
+
+        Cria rascunhos `<chave>@<produto>` copiados da configuração geral ou do que vale noutro produto; nada é
+        publicado.'
+      summary: Criar rascunhos do produto a partir da configuração geral ou de outro produto
+      parameters:
+      - in: path
+        name: product_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Configuration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductConfigurationCopy'
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductConfigurationCopyResult'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
         '401':
           content:
             application/problem+json:
@@ -26269,7 +26333,9 @@ components:
       type: object
       properties:
         configKey:
-          $ref: '#/components/schemas/ConfigKeyEnum'
+          type: string
+          description: Chave do catálogo (geral) ou `<chave>@<id do produto>` (versão do produto)
+          maxLength: 120
         value: {}
         effectiveFrom:
           type: string
@@ -28968,6 +29034,13 @@ components:
           - 'null'
           format: date
         metadata: {}
+        productId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: Com produto, a versão é só desse produto (pricing.formulas@<produto>) e substitui a geral
+            nele.
       required:
       - effectiveFrom
       - value
@@ -29052,6 +29125,13 @@ components:
           type: boolean
           default: false
           description: Só valida e mostra o resumo; não grava nada
+        productId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: Com produto, cria a versão desse produto (pricing.actuarial_model@<produto>), que substitui
+            a geral nele.
       required:
       - effectiveFrom
       - file
@@ -30058,6 +30138,7 @@ components:
       - CHARGES
       - QUOTE_FORMULAS
       - PRODUCT_SETUP
+      - MINIMUM_PREMIUM
       - FRACTIONATION
       type: string
       description: '* `PURE_PREMIUM` - PURE_PREMIUM
@@ -30079,6 +30160,8 @@ components:
         * `QUOTE_FORMULAS` - QUOTE_FORMULAS
 
         * `PRODUCT_SETUP` - PRODUCT_SETUP
+
+        * `MINIMUM_PREMIUM` - MINIMUM_PREMIUM
 
         * `FRACTIONATION` - FRACTIONATION'
     FormulaExplanationStep:
@@ -30507,12 +30590,30 @@ components:
           - $ref: '#/components/schemas/TariffConfigVersion'
           - type: 'null'
           description: Publicada com vigência futura.
+        baseConfigKey:
+          type: string
+          description: A chave geral (sem o produto).
+        scope:
+          allOf:
+          - $ref: '#/components/schemas/TariffConfigStateScopeEnum'
+          description: 'PRODUCT: versão do produto (`<chave>@<produto>`); TENANT: versão geral.
+
+
+            * `TENANT` - TENANT
+
+            * `PRODUCT` - PRODUCT'
+        inUse:
+          type: boolean
+          description: É esta a versão que vale hoje neste produto.
       required:
+      - baseConfigKey
       - configKey
       - draft
+      - inUse
       - pending
       - published
       - scheduled
+      - scope
     TariffConfigVersion:
       type: object
       properties:
@@ -30649,12 +30750,15 @@ components:
         scope:
           allOf:
           - $ref: '#/components/schemas/TariffStageScopeEnum'
-          description: 'TENANT: a chave vale para todos os produtos.
+          description: 'TENANT: só geral; PRODUCT: só do produto; PRODUCT_OR_TENANT: geral, substituível por uma
+            versão do produto.
 
 
             * `TENANT` - TENANT
 
-            * `PRODUCT` - PRODUCT'
+            * `PRODUCT` - PRODUCT
+
+            * `PRODUCT_OR_TENANT` - PRODUCT_OR_TENANT'
         configurations:
           type: array
           items:
@@ -30683,10 +30787,13 @@ components:
       enum:
       - TENANT
       - PRODUCT
+      - PRODUCT_OR_TENANT
       type: string
       description: '* `TENANT` - TENANT
 
-        * `PRODUCT` - PRODUCT'
+        * `PRODUCT` - PRODUCT
+
+        * `PRODUCT_OR_TENANT` - PRODUCT_OR_TENANT'
     TemplateAdoptDraft:
       type: object
       properties:
@@ -32301,6 +32408,113 @@ components:
       - dependent
       - holderMemberId
       - inclusionDate
+    ConfigKeyState:
+      type: object
+      properties:
+        configKey:
+          type: string
+        published:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+          description: Em vigor hoje.
+        draft:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+        pending:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+        scheduled:
+          oneOf:
+          - $ref: '#/components/schemas/TariffConfigVersion'
+          - type: 'null'
+          description: Publicada com vigência futura.
+      required:
+      - configKey
+      - draft
+      - pending
+      - published
+      - scheduled
+    ConfigKeysEnum:
+      enum:
+      - product.plans
+      - product.coverages
+      - product.capitals_sublimits
+      - product.member_participation
+      - product.waiting_periods
+      - product.age_limits
+      - product.exclusions
+      - product.minimum_premium
+      - network.rules
+      - foreign_coverage.rules
+      - pricing.reference_premiums
+      - pricing.factors
+      - pricing.adjustments
+      - pricing.actuarial_model
+      - pricing.formulas
+      - pricing.fractionation
+      - underwriting.acceptance_rules
+      - underwriting.pre_existing_conditions
+      - underwriting.medical_review
+      - group.rules
+      - rules.custom
+      type: string
+      description: '* `product.plans` - product.plans
+
+        * `product.coverages` - product.coverages
+
+        * `product.capitals_sublimits` - product.capitals_sublimits
+
+        * `product.member_participation` - product.member_participation
+
+        * `product.waiting_periods` - product.waiting_periods
+
+        * `product.age_limits` - product.age_limits
+
+        * `product.exclusions` - product.exclusions
+
+        * `product.minimum_premium` - product.minimum_premium
+
+        * `network.rules` - network.rules
+
+        * `foreign_coverage.rules` - foreign_coverage.rules
+
+        * `pricing.reference_premiums` - pricing.reference_premiums
+
+        * `pricing.factors` - pricing.factors
+
+        * `pricing.adjustments` - pricing.adjustments
+
+        * `pricing.actuarial_model` - pricing.actuarial_model
+
+        * `pricing.formulas` - pricing.formulas
+
+        * `pricing.fractionation` - pricing.fractionation
+
+        * `underwriting.acceptance_rules` - underwriting.acceptance_rules
+
+        * `underwriting.pre_existing_conditions` - underwriting.pre_existing_conditions
+
+        * `underwriting.medical_review` - underwriting.medical_review
+
+        * `group.rules` - group.rules
+
+        * `rules.custom` - rules.custom'
+    GeneralOnlyConfiguration:
+      type: object
+      properties:
+        configKey:
+          type: string
+        label:
+          type: string
+        area:
+          type: string
+      required:
+      - area
+      - configKey
+      - label
     HouseholdLinkPerson:
       type: object
       description: 'Um campo desconhecido era ignorado em silêncio (p.ex. `fullName`): a
@@ -32339,15 +32553,6 @@ components:
       required:
       - joinedAt
       - relationshipCode
-    ParsedTemplateWorkbook:
-      type: object
-      properties:
-        content: {}
-        truncated:
-          type: boolean
-      required:
-      - content
-      - truncated
     Person:
       type: object
       properties:
@@ -32380,15 +32585,219 @@ components:
       - lastName
       - nif
       - sexCode
-    TemplateImport:
+    ProductConfiguration:
       type: object
       properties:
-        file:
+        productId:
           type: string
-          format: uri
-          description: Excel .xlsx com 3 colunas (chave, caminho, valor); máx. 10 MB
+          format: uuid
+        productCode:
+          type: string
+        productName:
+          type: string
+        plans:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: id, code, name, status.
+        planOptions:
+          type: array
+          items:
+            type: string
+          description: Códigos dos planos (para o campo «plano» das linhas).
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductConfigurationItem'
+        pricingSetup:
+          allOf:
+          - $ref: '#/components/schemas/ConfigKeyState'
+          description: Opções, campos e fórmulas do produto (só do produto).
+        generalOnly:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeneralOnlyConfiguration'
+          description: Configurações que ficam sempre gerais.
       required:
-      - file
+      - generalOnly
+      - items
+      - planOptions
+      - plans
+      - pricingSetup
+      - productCode
+      - productId
+      - productName
+    ProductConfigurationCopied:
+      type: object
+      properties:
+        configKey:
+          type: string
+        productConfigKey:
+          type: string
+        configurationId:
+          type: string
+          format: uuid
+        versionNo:
+          type: integer
+        copiedFrom:
+          type: string
+          description: Chave da versão publicada copiada.
+      required:
+      - configKey
+      - configurationId
+      - copiedFrom
+      - productConfigKey
+      - versionNo
+    ProductConfigurationCopy:
+      type: object
+      properties:
+        source:
+          allOf:
+          - $ref: '#/components/schemas/Source662Enum'
+          default: GENERAL
+        sourceProductId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        configKeys:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigKeysEnum'
+        includePricingSetup:
+          type: boolean
+          default: true
+    ProductConfigurationCopyResult:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        source:
+          $ref: '#/components/schemas/Source662Enum'
+        sourceProductId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        created:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductConfigurationCopied'
+        skipped:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductConfigurationSkipped'
+      required:
+      - created
+      - productId
+      - skipped
+      - source
+      - sourceProductId
+    ProductConfigurationItem:
+      type: object
+      properties:
+        configKey:
+          type: string
+          description: Chave geral.
+        productConfigKey:
+          type: string
+          description: '`<chave>@<produto>`: a versão deste produto.'
+        label:
+          type: string
+        category:
+          type: string
+        area:
+          type: string
+        areaLabel:
+          type: string
+        source:
+          allOf:
+          - $ref: '#/components/schemas/ProductConfigurationItemSourceEnum'
+          description: 'De onde vem o valor em uso hoje neste produto.
+
+
+            * `PRODUCT` - PRODUCT
+
+            * `GENERAL` - GENERAL
+
+            * `NONE` - NONE'
+        product:
+          $ref: '#/components/schemas/ConfigKeyState'
+        general:
+          $ref: '#/components/schemas/ConfigKeyState'
+        generalChangedSinceCopy:
+          oneOf:
+          - $ref: '#/components/schemas/GeneralChangedSinceCopy'
+          - type: 'null'
+          description: A geral mudou depois da cópia para o produto (o produto não recebe a alteração); null se
+            não.
+        formSchema:
+          type: object
+          additionalProperties: {}
+          description: Formulário da chave, com os planos deste produto nas opções de plano.
+      required:
+      - area
+      - areaLabel
+      - category
+      - configKey
+      - formSchema
+      - general
+      - generalChangedSinceCopy
+      - label
+      - product
+      - productConfigKey
+      - source
+    ProductConfigurationItemSourceEnum:
+      enum:
+      - PRODUCT
+      - GENERAL
+      - NONE
+      type: string
+      description: '* `PRODUCT` - PRODUCT
+
+        * `GENERAL` - GENERAL
+
+        * `NONE` - NONE'
+    ProductConfigurationSkipped:
+      type: object
+      properties:
+        configKey:
+          type: string
+        reason:
+          type: string
+      required:
+      - configKey
+      - reason
+    Source662Enum:
+      enum:
+      - GENERAL
+      - PRODUCT
+      type: string
+      description: '* `GENERAL` - GENERAL
+
+        * `PRODUCT` - PRODUCT'
+    TariffConfigStateScopeEnum:
+      enum:
+      - TENANT
+      - PRODUCT
+      type: string
+      description: '* `TENANT` - TENANT
+
+        * `PRODUCT` - PRODUCT'
+    GeneralChangedSinceCopy:
+      type: object
+      properties:
+        copiedVersionNo:
+          type: integer
+          description: Versão da geral de onde a versão do produto foi copiada.
+        generalVersionNo:
+          type: integer
+          description: Versão geral publicada hoje.
+      required:
+      - copiedVersionNo
+      - generalVersionNo
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

@@ -4,6 +4,9 @@ O ficheiro é convertido no valor de `pricing.actuarial_model`, validado e
 gravado como uma nova versão DRAFT, que segue o ciclo normal (submeter ->
 aprovar por outro utilizador -> PUBLISHED). Nada é publicado diretamente e o
 ficheiro original fica anexado à versão (com o SHA-256) para auditoria.
+
+Com `product_id`, o modelo importado é a versão desse produto
+(`pricing.actuarial_model@<produto>`), que substitui a geral nesse produto.
 """
 from __future__ import annotations
 
@@ -21,6 +24,7 @@ from apps.business_config.application.resolver import BusinessConfigurationResol
 from apps.business_config.application.service import actor_id, create_configuration, tid
 from apps.business_config.domain.actuarial_model import CONFIG_KEY, validate_actuarial_model
 from apps.business_config.domain.errors import InvalidConfiguration
+from apps.business_config.domain.scope import product_key
 from apps.business_config.infrastructure.models import BusinessConfiguration, BusinessConfigurationDocument
 from apps.business_config.seed.actuarial_model import ActuarialWorkbookError, build_actuarial_model
 
@@ -46,7 +50,8 @@ def summarize(model: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_from_upload(*, content: bytes, filename: str, effective_from: date, keep_published_settings: bool) -> tuple[dict, list[str]]:
+def build_from_upload(*, content: bytes, filename: str, effective_from: date, keep_published_settings: bool,
+                      product_id=None) -> tuple[dict, list[str]]:
     if not content:
         raise InvalidConfiguration("O ficheiro está vazio.")
     if len(content) > MAX_WORKBOOK_BYTES:
@@ -61,7 +66,8 @@ def build_from_upload(*, content: bytes, filename: str, effective_from: date, ke
         raise InvalidConfiguration("O ficheiro não segue a estrutura do modelo atuarial (células/tabelas em falta).") from exc
     kept: list[str] = []
     if keep_published_settings:
-        published = BusinessConfigurationResolver.get(CONFIG_KEY, effective_date=effective_from)
+        # O que vale hoje no produto (a versão dele ou a geral).
+        published = BusinessConfigurationResolver.get(CONFIG_KEY, effective_date=effective_from, product_id=product_id)
         if published is not None and isinstance(published.value_json, dict):
             for key in KEPT_FROM_PUBLISHED:
                 if key in published.value_json:
@@ -73,12 +79,13 @@ def build_from_upload(*, content: bytes, filename: str, effective_from: date, ke
 
 @transaction.atomic
 def import_actuarial_workbook(request, *, content: bytes, filename: str, effective_from: date,
-                              keep_published_settings: bool = True) -> tuple[BusinessConfiguration, list[str]]:
+                              keep_published_settings: bool = True, product_id=None) -> tuple[BusinessConfiguration, list[str]]:
     model, kept = build_from_upload(content=content, filename=filename, effective_from=effective_from,
-                                    keep_published_settings=keep_published_settings)
+                                    keep_published_settings=keep_published_settings, product_id=product_id)
     sha256 = hashlib.sha256(content).hexdigest()
+    key = product_key(CONFIG_KEY, product_id) if product_id else CONFIG_KEY
     configuration = create_configuration(
-        request, CONFIG_KEY, model, effective_from,
+        request, key, model, effective_from,
         metadata={"source": "EXCEL_IMPORT", "fileName": model["source_file"], "sha256": sha256,
                   "keptFromPublished": kept},
     )

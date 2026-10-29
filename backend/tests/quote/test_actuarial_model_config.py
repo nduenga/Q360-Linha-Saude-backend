@@ -146,8 +146,10 @@ def test_group_without_profile_uses_the_configured_defaults(admin_client, approv
     assert priced.status_code == 200, priced.data
     steps = admin_client.get(f"/api/v1/pricing/{priced.data['pricingRunId']}/explanation").data["steps"]
     resolved = next(s for s in steps if s["stepCode"] == "ACTUARIAL_PROFILE_RESOLVED")
+    # A adesão vem da regra do plano (obrigatória/facultativa), não das predefinições.
     assert resolved["output"]["defaultsApplied"] == [
-        "adhesion", "costSharing", "crossSell", "industry", "noClaimsRenewal", "region"]
+        "costSharing", "crossSell", "industry", "noClaimsRenewal", "region"]
+    assert resolved["output"]["profile"]["adhesion"] in ("MANDATORY", "VOLUNTARY")
     assert resolved["output"]["profile"]["groupHeadcount"] == 40  # o que o tomador indicou prevalece
     assert resolved["output"]["profile"]["industry"] == "Comércio e Serviços"
 
@@ -159,7 +161,8 @@ def test_model_without_settings_keeps_the_strict_behaviour(admin_client, approve
     quote = _market_quote(admin_client, approver, "GRP-QUADROS", GROUP_WITH_HEADCOUNT, model)
     priced = admin_client.post(f"/api/v1/quotes/{quote['id']}/price", {"recalculate": True}, format="json")
     assert priced.status_code == 422, priced.data
-    assert "actuarialProfile.industry" in priced.data["detail"]
+    # Mensagem para quem usa o ecrã: nomes de negócio, não os campos técnicos.
+    assert "sector de atividade" in priced.data["detail"] and "região" in priced.data["detail"]
 
 
 # --- A6: idade de adesão em renovações -------------------------------------
@@ -218,3 +221,23 @@ def test_person_formulas_change_each_member_premium(admin_client, approver):
     steps = admin_client.get(f"/api/v1/pricing/{after.data['pricingRunId']}/explanation").data["steps"]
     applied = next(s for s in steps if s["stepCode"] == "FORMULA_APPLIED")
     assert applied["input"]["stage"] == "PERSON" and applied["input"]["memberId"] == component["memberId"]
+
+
+@pytest.mark.django_db
+def test_import_for_one_product_creates_the_product_version(admin_client):
+    """Com `productId`, a importação cria `pricing.actuarial_model@<produto>`
+    (substitui a geral nesse produto) e não mexe na versão geral."""
+    product = admin_client.post("/api/v1/products", {"code": "ACT-PROD", "name": "Produto atuarial"}).data
+    preview = admin_client.post(f"{ACTUARIAL}/import", {"file": _workbook(), "effectiveFrom": "2026-01-01",
+                                                         "dryRun": "true", "productId": product["id"]}, format="multipart")
+    assert preview.status_code == 200, preview.data
+    created = admin_client.post(f"{ACTUARIAL}/import", {"file": _workbook(), "effectiveFrom": "2026-01-01",
+                                                         "productId": product["id"]}, format="multipart")
+    assert created.status_code == 201, created.data
+    assert created.data["configKey"] == f"pricing.actuarial_model@{product['id']}" and created.data["status"] == "DRAFT"
+    general = admin_client.get("/api/v1/business-config/configurations", {"configKey": "pricing.actuarial_model"}).data
+    assert all(item["configKey"] == "pricing.actuarial_model" for item in general.get("items", general))
+    unknown = admin_client.post(f"{ACTUARIAL}/import", {"file": _workbook(), "effectiveFrom": "2026-01-01",
+                                                         "productId": "00000000-0000-0000-0000-000000000000"},
+                                format="multipart")
+    assert unknown.status_code == 400

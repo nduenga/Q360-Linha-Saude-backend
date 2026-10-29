@@ -7,6 +7,10 @@
   - `effective_exclusions`     : exclusões habituais + as do negócio;
   - `plan_availability`        : planos que o negócio desativou.
 
+Cada função lê a vista do produto do plano (`BusinessSnapshot.for_product`):
+a versão do produto de cada chave, se existir, senão a geral. Dentro dela,
+as linhas com plano prevalecem sobre as linhas sem plano.
+
 Sem configuração publicada a função devolve exatamente o que recebeu. Uma
 linha de negócio que viole as invariantes da cobertura é ignorada (com aviso
 `BUSINESS_CONFIG_OVERLAY_REJECTED`), nunca grava lixo no cálculo.
@@ -53,9 +57,27 @@ def _as_bool(raw: Any) -> bool | None:
     return None
 
 
+def _product_view(plan, snap: BusinessSnapshot) -> BusinessSnapshot:
+    return snap.for_product(getattr(plan, "product_id", None))
+
+
+def age_limits(plan, settings: dict[str, Any], snap: BusinessSnapshot) -> dict[str, int]:
+    """Idades de `product.age_limits` para o plano: a linha sem plano e, por
+    cima, a linha do plano (só os campos preenchidos)."""
+    limits: dict[str, int] = {}
+    for row in _generic_first(snap.rows("product.age_limits", "items")):
+        if not matches_plan(row.get("plan"), plan, settings):
+            continue
+        for src, dst in (("entry_min_age", "entryMin"), ("entry_max_age", "entryMax"), ("renewal_max_age", "renewalMax")):
+            value = integer(row.get(src))
+            if value is not None:
+                limits[dst] = value
+    return limits
+
+
 # --------------------------------------------------------------------- plan
 def plan_availability(plan, on: datetime.date | None = None, snapshot: BusinessSnapshot | None = None) -> tuple[bool, str | None]:
-    snap = snapshot or BusinessSnapshot.load(on)
+    snap = _product_view(plan, snapshot or BusinessSnapshot.load(on))
     for row in snap.rows("product.plans", "plans"):
         code = str(row.get("code") or "").strip().casefold()
         if code and code in {str(plan.code).casefold(), str(plan.name).casefold()} and row.get("active") is False:
@@ -65,18 +87,17 @@ def plan_availability(plan, on: datetime.date | None = None, snapshot: BusinessS
 
 def effective_plan_settings(plan, on: datetime.date | None = None, snapshot: BusinessSnapshot | None = None) -> dict[str, Any]:
     settings = copy.deepcopy(plan.settings_json or {})
-    snap = snapshot or BusinessSnapshot.load(on)
+    snap = _product_view(plan, snapshot or BusinessSnapshot.load(on))
     if not snap.values:
         return settings
 
-    for row in _generic_first(snap.rows("product.age_limits", "items")):
-        if not matches_plan(row.get("plan"), plan, settings):
-            continue
-        entry_max, renewal_max = integer(row.get("entry_max_age")), integer(row.get("renewal_max_age"))
-        if entry_max is not None:
-            settings["entryAge"] = {**(settings.get("entryAge") or {"min": 0}), "max": entry_max}
-        if renewal_max is not None:
-            settings["permanenceAge"] = {**(settings.get("permanenceAge") or {}), "max": renewal_max}
+    limits = age_limits(plan, settings, snap)
+    if "entryMin" in limits:
+        settings["entryAge"] = {**(settings.get("entryAge") or {}), "min": limits["entryMin"]}
+    if "entryMax" in limits:
+        settings["entryAge"] = {**(settings.get("entryAge") or {"min": 0}), "max": limits["entryMax"]}
+    if "renewalMax" in limits:
+        settings["permanenceAge"] = {**(settings.get("permanenceAge") or {}), "max": limits["renewalMax"]}
 
     group = snap.get("group.rules") or {}
     if group and settings.get("segment") == "GROUP":
@@ -209,7 +230,7 @@ def apply_coverage_overlay(
     snapshot: BusinessSnapshot | None = None,
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, str]]]:
     """`benefits[code] = (name, category, definition)`. Devolve (configs, avisos)."""
-    snap = snapshot or BusinessSnapshot.load(on)
+    snap = _product_view(plan, snapshot or BusinessSnapshot.load(on))
     if not snap.values:
         return coverages, []
 
@@ -249,12 +270,16 @@ def apply_coverage_overlay(
                     if definition.get("noParticipation"):
                         continue
                     _apply_participation(cfg, row, settings.get("accessSystem"))
+<<<<<<< HEAD
             # Linhas sem plano primeiro, com plano depois: a última a bater
             # certo "ganha" (ver abaixo), por isso uma excepção específica de
             # plano nunca é atropelada por um valor geral da cobertura,
             # seja qual for a ordem em que o GTE as escreveu.
             waiting_rows = sorted(snap.rows("product.waiting_periods", "items"), key=lambda r: bool(r.get("plan")))
             for row in waiting_rows:
+=======
+            for row in _generic_first(snap.rows("product.waiting_periods", "items")):
+>>>>>>> 735f4bcc00a5e322750f170836c7374b7f10226a
                 if matches_plan(row.get("plan"), plan, settings) and matches_coverage(row.get("coverage"), code, name):
                     waiting = dict(cfg.get("waitingDays") or {})
                     individual, group = integer(row.get("individual_days")), integer(row.get("group_days"))
@@ -290,7 +315,7 @@ def apply_coverage_overlay(
 
 # -------------------------------------------------------------- exclusions
 def effective_exclusions(plan, base: list[dict[str, Any]], on: datetime.date | None = None, snapshot: BusinessSnapshot | None = None) -> list[dict[str, Any]]:
-    snap = snapshot or BusinessSnapshot.load(on)
+    snap = _product_view(plan, snapshot or BusinessSnapshot.load(on))
     rows = snap.rows("product.exclusions", "items")
     if not rows:
         return [dict(x) for x in base]

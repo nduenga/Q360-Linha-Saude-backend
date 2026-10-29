@@ -10,9 +10,14 @@ class BusinessConfigurationSerializer(serializers.ModelSerializer):
         model=BusinessConfiguration
         fields=["id","configKey","version","effectiveFrom","effectiveTo","status","value","metadata","checksum","created_by","approved_by","published_by","submitted_at","approved_at","published_at","rowVersion"]
 class BusinessConfigurationWriteSerializer(serializers.Serializer):
-    configKey=serializers.ChoiceField(choices=list(CATALOG_BY_KEY));value=serializers.JSONField()
+    configKey=serializers.CharField(max_length=120,help_text="Chave do catálogo (geral) ou `<chave>@<id do produto>` (versão do produto)");value=serializers.JSONField()
     effectiveFrom=serializers.DateField();effectiveTo=serializers.DateField(required=False,allow_null=True)
     metadata=serializers.JSONField(required=False,default=dict)
+    def validate_configKey(self,value):
+        from apps.business_config.domain.scope import base_key
+        if base_key(value) not in CATALOG_BY_KEY:
+            raise serializers.ValidationError(f"«{value}» não é uma configuração do catálogo.")
+        return value
 class BusinessConfigurationUpdateSerializer(serializers.Serializer):
     value=serializers.JSONField();effectiveFrom=serializers.DateField(required=False);effectiveTo=serializers.DateField(required=False,allow_null=True);metadata=serializers.JSONField(required=False);rowVersion=serializers.IntegerField(min_value=0,required=False)
 class BusinessConfigurationActionSerializer(serializers.Serializer):

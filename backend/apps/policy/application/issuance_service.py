@@ -78,11 +78,12 @@ def fractionation_loading(quote: Quote, payment_frequency: str) -> Decimal:
 
     Decisão A8 (2026-10-14): aplica-se a todas as apólices.
       1. `pricing.fractionation` publicada e vigente na data de efeito da
-         cotação (editável pela interface);
+         cotação (editável pela interface; a do produto prevalece sobre a geral);
       2. senão, a tabela do modelo atuarial registado no cálculo do prémio
          (a versão usada nesse cálculo, não a publicada hoje);
       3. senão, sem encargo (partes iguais)."""
-    config = BusinessConfigurationResolver.get("pricing.fractionation", effective_date=quote.reference_date)
+    config = BusinessConfigurationResolver.get(
+        "pricing.fractionation", effective_date=quote.reference_date, product_id=quote.plan.product_id)
     if config is not None:
         rows = flatten("pricing.fractionation", config.value_json).get("installments") or []
         return _loading_for(rows, payment_frequency)

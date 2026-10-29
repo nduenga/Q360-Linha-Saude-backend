@@ -54,13 +54,14 @@ def _version(row) -> dict[str, Any]:
     return {"configurationId": str(row.id), "configKey": row.config_key, "versionNo": row.version_no}
 
 
-def _pricing_formula_variables() -> tuple[list[dict[str, Any]], dict[str, Any] | None, str | None]:
+def _pricing_formula_variables(product_id=None) -> tuple[list[dict[str, Any]], dict[str, Any] | None, str | None]:
     variables: list[dict[str, Any]] = []
     for stage in STAGES:
         for name, meta in SYSTEM_VARIABLES[stage].items():
             variables.append({"token": name, "label": meta["label"], "unit": meta["unit"], "source": "SYSTEM",
                               "usableIn": [f"PRICING_FORMULAS:{stage}"]})
-    row = BusinessConfigurationResolver.get(CONFIG_KEY, effective_date=timezone.localdate())
+    # Com produto: as fórmulas que valem nele (a versão do produto ou a geral).
+    row = BusinessConfigurationResolver.get(CONFIG_KEY, effective_date=timezone.localdate(), product_id=product_id)
     if row is None:
         return variables, None, None
     try:
@@ -98,7 +99,7 @@ def _product_variables(product_id) -> tuple[list[dict[str, Any]], dict[str, Any]
 
 
 def variable_catalog(*, product_id=None, usable_in: str | None = None) -> dict[str, Any]:
-    variables, formulas_version, formulas_error = _pricing_formula_variables()
+    variables, formulas_version, formulas_error = _pricing_formula_variables(product_id)
     product_version = product_error = None
     if product_id is not None:
         product_variables, product_version, product_error = _product_variables(product_id)

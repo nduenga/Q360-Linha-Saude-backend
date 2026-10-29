@@ -145,7 +145,7 @@ DEFINITIONS: dict[str, ParameterDefinition] = {
             default="HALF_UP_2DP",
             description="Política de arredondamento dos valores monetários: meio para cima, meio para par ou por defeito, sempre a 2 casas.",
             allowed_values=("HALF_UP_2DP", "HALF_EVEN_2DP", "DOWN_2DP"),
-            used_by="Cálculo do prémio: cada parcela é arredondada a 2 casas decimais, meio para cima.",
+            used_by="Cálculo do prémio: cada parcela é arredondada a 2 casas decimais com a política escolhida (cada cálculo regista a que usou).",
         ),
         ParameterDefinition(
             code="pricing.formula",
@@ -288,14 +288,16 @@ LEGAL_TAX_CODES: dict[str, str] = {
 def validate_platform_value(definition: ParameterDefinition, raw: Any) -> Any:
     """Validation for a value set by the platform: the definition's hard
     limits plus, for structural parameters, the values the engine executes."""
-    clean = validate_value(definition, raw)
-    if definition.allowed_values is not None and clean not in definition.allowed_values:
+    # Antes da validação genérica, que recusaria com uma mensagem mais seca:
+    # na plataforma explica-se que um valor fora da lista exige nova versão.
+    candidate = raw.strip() if isinstance(raw, str) else raw
+    if definition.allowed_values is not None and candidate not in definition.allowed_values:
         raise InvalidSystemParameterError(
             f"{definition.code} só aceita os valores que o motor sabe executar: "
             + ", ".join(repr(v) for v in definition.allowed_values)
             + ". Outro valor exige uma nova versão do sistema."
         )
-    return clean
+    return validate_value(definition, raw)
 
 
 def validate_limits(definition: ParameterDefinition, minimum: Any, maximum: Any) -> tuple[Any, Any]:

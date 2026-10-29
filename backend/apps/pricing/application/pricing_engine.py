@@ -91,6 +91,8 @@ from apps.business_config.application.pricing import (
     resolve_actuarial_entry_age_surcharge,
     resolve_actuarial_group_adjustment,
     resolve_taxes_and_fees,
+    minimum_premium_amount,
+    resolve_minimum_premium,
 )
 from apps.pricing.infrastructure.parameter_repository import resolve_decimal_parameter, resolve_pricing_parameter_set
 from apps.pricing.infrastructure.rule_repository import parse_pricing_config, resolve_pricing_rule_version
@@ -290,14 +292,14 @@ def _execute(
     config_overrides: dict[str, Any] = (context.get("configOverrides") or {}) if allow_config_overrides else {}
     business_pricing: PublishedBusinessPricing | None = None
     business_reference = BusinessConfigurationResolver.get(
-        "pricing.reference_premiums", effective_date=effective_date
+        "pricing.reference_premiums", effective_date=effective_date, product_id=plan.product_id
     )
 
     rating_table = None
     parameter_set = None
     base_premium = None
     if business_reference is not None and not config_overrides:
-        business_pricing = resolve_published_business_pricing(effective_date=effective_date)
+        business_pricing = resolve_published_business_pricing(effective_date=effective_date, product_id=plan.product_id)
     else:
         if not rating_table_code or not parameter_set_code:
             raise ReferencedEntityNotFoundError(
@@ -341,7 +343,7 @@ def _execute(
 
     per_member_context: dict[str, dict[str, Any]] = context.get("members") or {}
 
-    custom_rules = load_published_rules(effective_date)
+    custom_rules = load_published_rules(effective_date, plan.product_id)
     config_snapshot = dict(business_pricing.versions) if business_pricing else {}
     if custom_rules.version is not None:
         config_snapshot["rules.custom"] = custom_rules.version
@@ -358,6 +360,10 @@ def _execute(
         config_snapshot[setup_row.config_key] = {
             "configurationId": str(setup_row.id), "versionNo": setup_row.version_no, "checksum": setup_row.checksum,
         }
+    # Prémio mínimo do produto/plano: aplica-se no fim, sobre o total.
+    minimum_premium = resolve_minimum_premium(plan=plan, effective_date=effective_date)
+    if minimum_premium is not None:
+        config_snapshot["product.minimum_premium"] = minimum_premium["version"]
 
     pricing_run = PricingRun.objects.create(
         tenant_id=tenant_id.value,
@@ -399,6 +405,7 @@ def _execute(
                     custom_rules=custom_rules,
                     context=context,
                     product_setup=product_setup,
+                    minimum_premium=minimum_premium,
                 )
             PricingRun.objects.filter(id=pricing_run.id).update(
                 status=PricingRunStatus.CALCULATED.value,
@@ -473,6 +480,7 @@ def _run_calculation(
     custom_rules: PublishedRules | None = None,
     context: dict[str, Any] | None = None,
     product_setup: tuple[Any, ProductSetup] | None = None,
+    minimum_premium: dict[str, Any] | None = None,
 ) -> Decimal:
     context = context or {}
     custom_rules = custom_rules or PublishedRules()
@@ -1337,6 +1345,37 @@ def _run_calculation(
                   output_data={"results": outcome["results"], "groupValues": outcome["groupValues"],
                                "premium": outcome["premium"], "installments": outcome["installments"],
                                "totalAmount": str(total_amount), "configurationVersion": setup_row.version_no})
+
+    # Prémio mínimo (`product.minimum_premium`): o total anual nunca fica
+    # abaixo do mínimo da apólice nem do mínimo por pessoa × pessoas seguras.
+    if minimum_premium is not None:
+        minimum = round_amount(minimum_premium_amount(minimum_premium, len(member_ids)))
+        details = {
+            "annualMinimum": str(minimum_premium["annualMinimum"]) if "annualMinimum" in minimum_premium else None,
+            "perPersonMinimum": str(minimum_premium["perPersonMinimum"]) if "perPersonMinimum" in minimum_premium else None,
+            "membersCount": len(member_ids), "minimumAmount": str(minimum),
+            "scope": minimum_premium["version"]["scope"],
+        }
+        if total_amount < minimum:
+            before_total = total_amount
+            total_amount = minimum
+            _guard_amount(total_amount)
+            PricingComponent.objects.create(
+                tenant_id=tenant_id, pricing_run=pricing_run, member=None, component_order=order,
+                component_code="MINIMUM_PREMIUM", component_type=PricingComponentType.ADJUSTMENT.value,
+                adjustment_amount=round_amount(total_amount - before_total), result_amount=total_amount,
+                source_code="BUSINESS_CONFIG:product.minimum_premium",
+                source_version=str(minimum_premium["version"]["versionNo"]),
+                metadata_json=details,
+            )
+            order += 1
+            trace("MINIMUM_PREMIUM_APPLIED", rule_code="MINIMUM_PREMIUM",
+                  input_data={"totalBefore": str(before_total), **details},
+                  output_data={"totalAmount": str(total_amount)})
+        else:
+            trace("MINIMUM_PREMIUM_NOT_APPLIED", rule_code="MINIMUM_PREMIUM",
+                  input_data={"totalAmount": str(total_amount), **details},
+                  output_data={"reason": "TOTAL_ABOVE_MINIMUM"})
 
     # O componente TOTAL deve existir mesmo quando não há fórmulas.
     PricingComponent.objects.create(

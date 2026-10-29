@@ -109,11 +109,14 @@ def test_parameters_separate_operational_from_structural(admin_client):
     items = {p["code"]: p for p in admin_client.get("/api/v1/system-parameters").data}
     assert items["quote.validity_days"]["category"] == "OPERATIONAL" and items["quote.validity_days"]["editable"] is True
     assert items["quote.validity_days"]["value"] == 30 and items["quote.validity_days"]["isDefault"] is True
-    for code in ("pricing.rounding_policy", "pricing.formula", "capital.pro_rata_rule"):
+    for code in ("pricing.formula", "capital.pro_rata_rule"):
         assert items[code]["category"] == "STRUCTURAL" and items[code]["editable"] is False
+    # Desde 26/10 o arredondamento é escolhido pela seguradora entre as políticas que o motor executa.
+    rounding = items["pricing.rounding_policy"]
+    assert rounding["category"] == "OPERATIONAL" and rounding["editable"] is True and rounding["value"] == "HALF_UP_2DP"
     assert items["capital.pro_rata_rule"]["value"] is False  # PDF: não há regra de rateio
     structural = admin_client.get("/api/v1/system-parameters?category=STRUCTURAL").data
-    assert {p["code"] for p in structural} == {"pricing.rounding_policy", "pricing.formula", "capital.pro_rata_rule"}
+    assert {p["code"] for p in structural} == {"pricing.formula", "capital.pro_rata_rule"}
 
 
 @pytest.mark.django_db
@@ -147,9 +150,14 @@ def test_validation_of_parameter_values_and_unknown_codes(admin_client):
 @pytest.mark.django_db
 def test_structural_parameters_cannot_be_changed_by_the_gte(admin_client):
     resp = admin_client.put(
-        "/api/v1/system-parameters/pricing.rounding_policy", {"value": "OTHER", "rowVersion": 0, "reason": REASON}, format="json"
+        "/api/v1/system-parameters/pricing.formula", {"value": "OTHER", "rowVersion": 0, "reason": REASON}, format="json"
     )
     assert resp.status_code == 403 and resp.data["code"] == "SEC-403" and "estrutural" in resp.data["detail"]
+    # O arredondamento é operacional, mas só aceita as políticas que o motor executa.
+    rounding = "/api/v1/system-parameters/pricing.rounding_policy"
+    assert admin_client.put(rounding, {"value": "OTHER", "rowVersion": 0, "reason": REASON}, format="json").status_code == 400
+    assert admin_client.put(rounding, {"value": "HALF_EVEN_2DP", "rowVersion": 0, "reason": REASON},
+                            format="json").data["value"] == "HALF_EVEN_2DP"
     assert admin_client.put(
         "/api/v1/system-parameters/capital.pro_rata_rule", {"value": True, "rowVersion": 0, "reason": REASON}, format="json"
     ).status_code == 403

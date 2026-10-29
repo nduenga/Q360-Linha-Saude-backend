@@ -13,6 +13,7 @@ from apps.business_config.application.readers import BusinessSnapshot
 from apps.business_config.application.service import diff_values
 from apps.business_config.domain.catalog import AREA_LABELS, CATALOG_BY_KEY, area_of
 from apps.business_config.domain.product_setup import is_product_setup_key, product_id_of
+from apps.business_config.domain.scope import split_key
 from apps.business_config.infrastructure.models import BusinessConfiguration
 from apps.foundation.application.context import CurrentActorProvider
 
@@ -20,8 +21,12 @@ from apps.foundation.application.context import CurrentActorProvider
 def _label(key: str, products: dict[str, str]) -> str:
     if is_product_setup_key(key):
         return f"Configuração do produto {products.get(product_id_of(key), product_id_of(key))}"
-    entry = CATALOG_BY_KEY.get(key)
-    return entry["label"] if entry else key
+    base, product_id = split_key(key)
+    entry = CATALOG_BY_KEY.get(base)
+    label = entry["label"] if entry else base
+    if product_id is not None:
+        return f"{label} · produto {products.get(product_id, product_id)}"
+    return label
 
 
 def _can_approve(row: BusinessConfiguration, actor, rules: dict) -> tuple[bool, str | None]:
@@ -43,7 +48,8 @@ def pending_queue(*, area: str | None = None) -> dict[str, Any]:
     rules = BusinessSnapshot.load().get("security.approval_rules") or {}
     pending = list(BusinessConfiguration.objects.filter(status="PENDING_APPROVAL").order_by("submitted_at", "created_at"))
     products = {str(p.id): p.name for p in Product.objects.filter(
-        id__in=[product_id_of(r.config_key) for r in pending if is_product_setup_key(r.config_key)])}
+        id__in=[product_id_of(r.config_key) if is_product_setup_key(r.config_key) else split_key(r.config_key)[1]
+                for r in pending if is_product_setup_key(r.config_key) or split_key(r.config_key)[1]])}
     items = []
     for row in pending:
         row_area = area_of(row.config_key)

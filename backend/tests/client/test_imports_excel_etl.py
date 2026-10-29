@@ -10,6 +10,8 @@ import openpyxl
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
+from tests.xlsx import csv_to_xlsx
+
 
 def _proposer(client) -> dict:
     return client.post(
@@ -42,7 +44,8 @@ def _xlsx_file(rows: list[list[str]], name: str = "members.xlsx") -> SimpleUploa
 def _csv_file(rows: list[str], name: str = "members.csv") -> SimpleUploadedFile:
     header = "relationshipCode,firstName,lastName,dateOfBirth,sexCode,externalReference"
     content = "\n".join([header, *rows]) + "\n"
-    return SimpleUploadedFile(name, content.encode("utf-8"), content_type="text/csv")
+    # Os dados escrevem-se em CSV, mas o ficheiro enviado é o modelo Excel (o único formato aceite).
+    return SimpleUploadedFile(name.replace(".csv", ".xlsx"), csv_to_xlsx(content), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @pytest.mark.django_db

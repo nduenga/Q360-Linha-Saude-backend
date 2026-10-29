@@ -5,6 +5,7 @@ CONFIG_CATALOG=[
 {"key":"product.member_participation","category":"PRODUCT","label":"Co-participações","priority":"HIGH","value_type":"object"},
 {"key":"product.waiting_periods","category":"PRODUCT","label":"Períodos de carência","priority":"HIGH","value_type":"object"},
 {"key":"product.age_limits","category":"PRODUCT","label":"Limites de idade","priority":"HIGH","value_type":"object"},
+{"key":"product.minimum_premium","category":"PRODUCT","label":"Prémio mínimo","priority":"HIGH","value_type":"object"},
 {"key":"product.exclusions","category":"PRODUCT","label":"Exclusões","priority":"HIGH","value_type":"object"},
 {"key":"pricing.reference_premiums","category":"PRICING","label":"Prémios de referência","priority":"HIGH","value_type":"object"},
 {"key":"pricing.factors","category":"PRICING","label":"Fatores de tarifação","priority":"HIGH","value_type":"object"},
@@ -51,6 +52,7 @@ AREA_LABELS = {
     "DOCUMENTS": "Comunicação · Documentos e marca",
 }
 _AREA_BY_KEY = {
+    "product.minimum_premium": "TARIFF",
     "group.rules": "RULES",
     "renewal.rules": "RULES",
     "renewal.deadlines": "RULES",
@@ -77,8 +79,11 @@ _AREA_BY_CATEGORY = {
 
 
 def area_of(config_key: str) -> str:
+    from apps.business_config.domain.scope import base_key
+
     if config_key.startswith("product.pricing_setup:"):
         return "TARIFF"
+    config_key = base_key(config_key)
     if config_key in _AREA_BY_KEY:
         return _AREA_BY_KEY[config_key]
     entry = CATALOG_BY_KEY.get(config_key)

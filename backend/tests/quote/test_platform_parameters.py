@@ -61,11 +61,12 @@ def test_platform_lists_levels_and_tenants_cannot_use_platform_routes(maker, adm
     rows = {r["code"]: r for r in maker.get(PLATFORM).data}
     assert rows["tax.arseg_levy_pct"]["level"] == "PLATFORM_MANDATORY" and rows["tax.arseg_levy_pct"]["value"] == "1"
     assert rows["tax.stamp_duty_pct"]["category"] == "LEGAL" and rows["tax.stamp_duty_pct"]["value"] == "0"
-    assert rows["pricing.rounding_policy"]["allowedValues"] == ["OD-006-OFFICIAL-HALF-UP-2DP"]
+    assert rows["pricing.rounding_policy"]["allowedValues"] == ["HALF_UP_2DP", "HALF_EVEN_2DP", "DOWN_2DP"]
+    assert rows["pricing.rounding_policy"]["level"] == "PLATFORM_DEFAULT"
     assert rows["quote.validity_days"]["level"] == "PLATFORM_DEFAULT"
     assert rows["quote.validity_days"]["tenantOverrides"] == {"count": 0, "outOfLimits": 0}
     assert {r["code"] for r in maker.get(PLATFORM, {"level": "PLATFORM_MANDATORY"}).data} == {
-        "pricing.rounding_policy", "pricing.formula", "capital.pro_rata_rule", "tax.stamp_duty_pct", "tax.arseg_levy_pct",
+        "pricing.formula", "capital.pro_rata_rule", "tax.stamp_duty_pct", "tax.arseg_levy_pct",
         "legal.age_of_majority", "limits.dependent_max_age_with_proof", "limits.max_acquisition_commission_pct",
         "market.usd_aoa", "market.inflation_pct",
     }
@@ -103,6 +104,8 @@ def test_legal_tax_needs_a_second_platform_account_and_is_read_only_for_tenants(
 def test_structural_values_are_limited_to_what_the_engine_executes(maker):
     bad = maker.post(f"{PLATFORM}/pricing.rounding_policy/versions", {"value": "HALF-EVEN", "reason": REASON}, format="json")
     assert bad.status_code == 400 and "nova versão do sistema" in bad.data["detail"]
+    formula = maker.post(f"{PLATFORM}/pricing.formula/versions", {"value": "outra", "reason": REASON}, format="json")
+    assert formula.status_code == 400 and "nova versão do sistema" in formula.data["detail"]
     assert maker.post(f"{PLATFORM}/capital.pro_rata_rule/versions", {"value": True, "reason": REASON},
                       format="json").status_code == 400
     with_limits = maker.post(f"{PLATFORM}/tax.stamp_duty_pct/versions",

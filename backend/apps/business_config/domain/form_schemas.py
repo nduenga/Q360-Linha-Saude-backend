@@ -17,6 +17,7 @@ FORM_SCHEMAS={
 "product.coverages":{"sections":[{"key":"coverages","label":"Coberturas","repeatable":True,"fields":[f("code","Código","text",True),f("name","Cobertura","text",True),f("included_in_plans","Planos","multiselect",options=PLANS),f("optional","Opcional","boolean"),f("enabled","Disponível","boolean",True),f("description","Descrição","textarea")]}]},
 "product.capitals_sublimits":{"sections":[{"key":"items","label":"Capitais","repeatable":True,"fields":[f("plan","Plano","select",True,PLANS),f("coverage","Cobertura","select",True,COV),f("annual_capital","Capital anual","money"),f("sublimit","Sublimite","money"),f("per_event_limit","Limite por evento","money"),f("per_day_limit","Limite por dia","money"),f("quantity_limit","Limite de quantidade","integer")]}]},
 "product.member_participation":{"sections":[{"key":"items","label":"Co-participações","repeatable":True,"fields":[f("plan","Plano","select",True,PLANS),f("coverage","Cobertura","select",True,COV),f("fixed_copayment","Copagamento fixo","money"),f("reimbursement_percent","Comparticipação (%)","decimal"),f("annual_deductible","Franquia anual","money"),f("event_deductible","Franquia por evento","money"),f("annual_cap","Teto anual","money")]}]},
+<<<<<<< HEAD
 # `plan` aqui é opcional (ao contrário de capitals_sublimits/member_participation/age_limits,
 # onde é obrigatório): uma carência tipicamente vale para todos os planos do produto, só com
 # excepções por plano (ex.: o Superior aceita preexistências com carência menor) — uma linha
@@ -24,6 +25,10 @@ FORM_SCHEMAS={
 # "aplica-se a todos" (apps/business_config/application/readers.py).
 "product.waiting_periods":{"sections":[{"key":"items","label":"Carências","repeatable":True,"fields":[f("plan","Plano (vazio = todos)","select",options=PLANS),f("coverage","Cobertura","select",True,COV),f("individual_days","Individual (dias)","integer"),f("group_days","Grupo (dias)","integer"),f("accident_exempt","Dispensa em acidente","boolean")]}]},
 "product.age_limits":{"sections":[{"key":"items","label":"Idades","repeatable":True,"fields":[f("plan","Plano","select",True,PLANS),f("entry_max_age","Entrada máxima","integer"),f("renewal_max_age","Renovação máxima","integer")]}]},
+=======
+"product.waiting_periods":{"sections":[{"key":"items","label":"Carências","repeatable":True,"fields":[f("plan","Plano (vazio = todos os planos)","select",False,PLANS,help="Uma linha com plano prevalece sobre a linha sem plano da mesma cobertura"),f("coverage","Cobertura","select",True,COV),f("individual_days","Individual (dias)","integer"),f("group_days","Grupo (dias)","integer"),f("accident_exempt","Dispensa em acidente","boolean")]}]},
+"product.age_limits":{"sections":[{"key":"items","label":"Idades","repeatable":True,"fields":[f("plan","Plano (vazio = todos os planos)","select",False,PLANS,help="Uma linha com plano prevalece sobre a linha sem plano"),f("entry_min_age","Entrada mínima","integer"),f("entry_max_age","Entrada máxima","integer"),f("renewal_max_age","Renovação máxima","integer")]}]},
+>>>>>>> 735f4bcc00a5e322750f170836c7374b7f10226a
 "product.exclusions":{"sections":[{"key":"items","label":"Exclusões","repeatable":True,"fields":[f("code","Código","text"),f("text","Texto","textarea",True),f("active","Ativa","boolean",True),f("applies_to","Planos","multiselect",options=PLANS)]}]},
 "pricing.reference_premiums":{"sections":[{"key":"settings","label":"Configuração","fields":[f("currency_code","Moeda","select",True,["AOA","USD"])]},{"key":"premiums","label":"Prémios","repeatable":True,"fields":[f("age_from","Idade inicial","integer",True),f("age_to","Idade final","integer"),f("plan","Plano","select",True,PLANS),f("annual_premium","Prémio anual","money",True)]}]},
 "pricing.factors":{"sections":[{"key":"factors","label":"Fatores","repeatable":True,"fields":[f("code","Código","text",True),f("dimension","Dimensão","text",True),f("condition","Condição","text",True),f("factor","Multiplicador","decimal",True)]}]},
@@ -132,5 +137,14 @@ RULES_CUSTOM={"sections":[{"key":"rules","label":"Regras (Quando… então…)",
 RULES_CUSTOM["meta"]=cr.field_catalog()
 FORM_SCHEMAS["rules.custom"]=RULES_CUSTOM
 
+FORM_SCHEMAS["product.minimum_premium"]={"sections":[{"key":"items","label":"Prémio mínimo","repeatable":True,"fields":[
+    f("plan","Plano (vazio = todos os planos)","select",False,PLANS,help="Uma linha com plano prevalece sobre a linha sem plano"),
+    f("annual_minimum","Prémio mínimo anual da apólice (Kz)","money",help="O prémio anual total nunca fica abaixo deste valor"),
+    f("per_person_minimum","Prémio mínimo anual por pessoa segura (Kz)","money",help="Multiplica-se pelo número de pessoas seguras"),
+]}]}
+
 def get_form_schema(key):
+    from apps.business_config.domain.scope import base_key
+
+    key=base_key(key)
     return FORM_SCHEMAS.get(key,{"sections":[{"key":"value","label":"Configuração","fields":[f("value","Valor","json",True)]}]})

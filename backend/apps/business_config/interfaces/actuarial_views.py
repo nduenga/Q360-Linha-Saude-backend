@@ -65,6 +65,10 @@ class ActuarialImportSerializer(serializers.Serializer):
         help_text=f"Mantém da versão publicada: {', '.join(KEPT_FROM_PUBLISHED)} (não vêm do Excel)",
     )
     dryRun = serializers.BooleanField(default=False, help_text="Só valida e mostra o resumo; não grava nada")
+    productId = serializers.UUIDField(
+        required=False, allow_null=True, default=None,
+        help_text="Com produto, cria a versão desse produto (pricing.actuarial_model@<produto>), que substitui a geral nele.",
+    )
 
 
 _IMPORT_PREVIEW = inline_serializer("ActuarialImportPreview", fields={
@@ -108,11 +112,12 @@ class ActuarialModelImportView(_ConfigPermissions, APIView):
         content = upload.read()
         if data["dryRun"]:
             model, kept = build_from_upload(content=content, filename=upload.name, effective_from=data["effectiveFrom"],
-                                            keep_published_settings=data["keepPublishedSettings"])
+                                            keep_published_settings=data["keepPublishedSettings"],
+                                            product_id=data.get("productId"))
             return Response({"valid": True, "keptFromPublished": kept, "summary": summarize(model)})
         configuration, kept = import_actuarial_workbook(
             request, content=content, filename=upload.name, effective_from=data["effectiveFrom"],
-            keep_published_settings=data["keepPublishedSettings"],
+            keep_published_settings=data["keepPublishedSettings"], product_id=data.get("productId"),
         )
         return Response({**BusinessConfigurationSerializer(configuration).data, "keptFromPublished": kept,
                          "summary": summarize(configuration.value_json)}, status=201)
