@@ -66,16 +66,17 @@ def _scope(client, *, members=2, settings=SETTINGS):
     ).data
     client.post(f"/api/v1/configuration/rule-version/{rule['id']}/publish")
     
+    # Um plano de grupo só aceita uma organização como tomador (quote_service
+    # recusa a combinação plano GROUP + proponente individual desde 21/10).
+    if (settings or {}).get("segment") == "GROUP":
+        proposer_body = {"proposerType": "ORGANISATION", "displayName": "Holder, Lda.",
+                         "registrationNumber": "5417000042"}
+    else:
+        proposer_body = {"proposerType": "INDIVIDUAL", "displayName": "Holder",
+                         "registrationNumber": "123456789LA042", "dateOfBirth": "1990-01-01"}
     proposer_response = client.post(
         "/api/v1/proposers",
-        {
-            "proposerType": "INDIVIDUAL",
-            "displayName": "Holder",
-            "registrationNumber": "123456789LA042",
-            "dateOfBirth": "1990-01-01",
-            "email": "holder@example.com",
-            "phone": "+244900000000",
-        },
+        {**proposer_body, "email": "holder@example.com", "phone": "+244900000000"},
         format="json",
     )
     assert proposer_response.status_code in (200, 201), proposer_response.data

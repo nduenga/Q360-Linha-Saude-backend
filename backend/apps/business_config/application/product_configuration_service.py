@@ -62,6 +62,7 @@ def describe_product_configuration(product) -> dict[str, Any]:
         general = key_state(base, day)
         source = PRODUCT if own["published"] else GENERAL if general["published"] else NONE
         area = area_of(base)
+        behind = _general_changed_since_copy(own, general, base) if source == PRODUCT else None
         items.append({
             "configKey": base,
             "productConfigKey": own["configKey"],
@@ -72,6 +73,7 @@ def describe_product_configuration(product) -> dict[str, Any]:
             "source": source,
             "product": own,
             "general": general,
+            "generalChangedSinceCopy": behind,
             "formSchema": product_form_schema(base, product),
         })
     setup = key_state(product_setup_key(product.id), day)
@@ -90,6 +92,22 @@ def describe_product_configuration(product) -> dict[str, Any]:
             for x in CONFIG_CATALOG if x["key"] not in PRODUCT_SCOPED_KEYS
         ],
     }
+
+
+def _general_changed_since_copy(own: dict[str, Any], general: dict[str, Any], base: str) -> dict[str, Any] | None:
+    """A versão do produto substitui a geral por inteiro, por isso uma
+    alteração posterior à geral não chega ao produto. Quando a versão do
+    produto foi copiada da geral e a geral publicada já é outra, devolve as
+    duas versões para o ecrã avisar e propor nova cópia; senão None."""
+    if not own["published"] or not general["published"]:
+        return None
+    row = BusinessConfiguration.objects.filter(id=own["published"]["configurationId"]).values_list("metadata_json", flat=True).first()
+    origin = (row or {}).get("copiedFrom") or {}
+    if origin.get("configKey") != base or origin.get("versionNo") is None:
+        return None
+    if origin["versionNo"] >= general["published"]["versionNo"]:
+        return None
+    return {"copiedVersionNo": origin["versionNo"], "generalVersionNo": general["published"]["versionNo"]}
 
 
 def _published_value(key: str) -> BusinessConfiguration | None:

@@ -1691,6 +1691,12 @@ paths:
       summary: Listar versões do conjunto de fórmulas
       parameters:
       - in: query
+        name: productId
+        schema:
+          type: string
+          format: uuid
+        description: Só as versões desse produto
+      - in: query
         name: status
         schema:
           type: string
@@ -29028,6 +29034,13 @@ components:
           - 'null'
           format: date
         metadata: {}
+        productId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: Com produto, a versão é só desse produto (pricing.formulas@<produto>) e substitui a geral
+            nele.
       required:
       - effectiveFrom
       - value
@@ -29112,6 +29125,13 @@ components:
           type: boolean
           default: false
           description: Só valida e mostra o resumo; não grava nada
+        productId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: Com produto, cria a versão desse produto (pricing.actuarial_model@<produto>), que substitui
+            a geral nele.
       required:
       - effectiveFrom
       - file
@@ -32707,6 +32727,12 @@ components:
           $ref: '#/components/schemas/ConfigKeyState'
         general:
           $ref: '#/components/schemas/ConfigKeyState'
+        generalChangedSinceCopy:
+          oneOf:
+          - $ref: '#/components/schemas/GeneralChangedSinceCopy'
+          - type: 'null'
+          description: A geral mudou depois da cópia para o produto (o produto não recebe a alteração); null se
+            não.
         formSchema:
           type: object
           additionalProperties: {}
@@ -32718,6 +32744,7 @@ components:
       - configKey
       - formSchema
       - general
+      - generalChangedSinceCopy
       - label
       - product
       - productConfigKey
@@ -32759,6 +32786,18 @@ components:
       description: '* `TENANT` - TENANT
 
         * `PRODUCT` - PRODUCT'
+    GeneralChangedSinceCopy:
+      type: object
+      properties:
+        copiedVersionNo:
+          type: integer
+          description: Versão da geral de onde a versão do produto foi copiada.
+        generalVersionNo:
+          type: integer
+          description: Versão geral publicada hoje.
+      required:
+      - copiedVersionNo
+      - generalVersionNo
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

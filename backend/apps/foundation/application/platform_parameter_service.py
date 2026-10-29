@@ -190,7 +190,10 @@ def list_versions(code: str) -> list[dict[str, Any]]:
 def _clean_proposal(d: ParameterDefinition, value: Any, minimum: Any, maximum: Any) -> tuple[Any, Any, Any]:
     if d.level == PLATFORM_DEFAULT:
         lo, hi = validate_limits(d, minimum, maximum)
-        clean = validate_value(d, value) if value is not None else None
+        # Valores fechados (p.ex. a política de arredondamento) usam a mensagem da
+        # plataforma: só o que o motor executa; outro valor exige nova versão.
+        clean = (validate_platform_value(d, value) if d.allowed_values is not None else validate_value(d, value)) \
+            if value is not None else None
         if clean is not None and not within_limits(clean, (lo, hi)):
             raise InvalidSystemParameterError(f"{d.code}: o valor por omissão tem de respeitar os limites propostos")
         # Guarda só os limites que o fornecedor de facto estreitou.

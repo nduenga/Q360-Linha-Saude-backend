@@ -13,6 +13,8 @@ import io
 import json
 
 import pytest
+
+from tests.xlsx import csv_to_xlsx
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from apps.product.domain.market_catalog import BASE_CODES, CATALOG, CATALOG_BY_CODE
@@ -338,7 +340,7 @@ def test_import_creates_updates_and_reports_row_errors(admin_client):
 
     dry = admin_client.post(
         "/api/v1/benefits/import",
-        {"file": SimpleUploadedFile("c.csv", content, content_type="text/csv"), "dryRun": "true"},
+        {"file": SimpleUploadedFile("c.xlsx", csv_to_xlsx(content.decode() if isinstance(content, bytes) else content), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), "dryRun": "true"},
         format="multipart",
     )
     assert dry.status_code == 200
@@ -349,7 +351,7 @@ def test_import_creates_updates_and_reports_row_errors(admin_client):
 
     real = admin_client.post(
         "/api/v1/benefits/import",
-        {"file": SimpleUploadedFile("c.csv", content, content_type="text/csv")},
+        {"file": SimpleUploadedFile("c.xlsx", csv_to_xlsx(content.decode() if isinstance(content, bytes) else content), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
         format="multipart",
     )
     assert real.status_code == 200

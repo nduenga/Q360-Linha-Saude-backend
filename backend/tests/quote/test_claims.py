@@ -10,6 +10,8 @@ from decimal import Decimal
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 
+from tests.xlsx import csv_to_xlsx
+
 from tests.quote.conftest import make_client
 from tests.quote.test_quote_simulator import _scope
 
@@ -31,6 +33,8 @@ ASSUMPTIONS = {
 
 
 def _upload(client, scope, content, *, kind, name="dados.csv", **extra):
+    if isinstance(content, str) and name.endswith(".csv"):
+        content, name = csv_to_xlsx(content), name[:-4] + ".xlsx"
     data = content.encode("utf-8") if isinstance(content, str) else content
     return client.post(
         "/api/v1/claims/imports",
@@ -73,7 +77,7 @@ def test_import_claims_and_premiums_with_row_errors(admin_client):
     real = _upload(admin_client, scope, bad, kind="CLAIMS", source="OTHER_INSURER", policyId=policy_id)
     assert real.status_code == 201 and real.data["importedRows"] == 2
     detail = admin_client.get(f"/api/v1/claims/imports/{real.data['importId']}").data
-    assert detail["source"] == "OTHER_INSURER" and detail["errorRows"] == 5 and detail["fileName"] == "dados.csv"
+    assert detail["source"] == "OTHER_INSURER" and detail["errorRows"] == 5 and detail["fileName"] == "dados.xlsx"
     assert detail["policyId"] == policy_id
     assert len(admin_client.get(f"/api/v1/claims/imports?proposerId={scope['proposerId']}").data["items"]) == 1
     assert len(admin_client.get(f"/api/v1/claims/imports?proposerId={scope['proposerId']}&policyId={policy_id}").data["items"]) == 1
@@ -393,9 +397,12 @@ def test_methodology_is_labelled_indicative_and_template_matches_the_import(admi
     meta = admin_client.get("/api/v1/claims/methodology")
     assert meta.status_code == 200, meta.data
     assert meta.data["method"] == "SIMPLE_TREND_V1" and meta.data["indicative"] is True
-    assert meta.data["importFormats"]["CLAIMS"]["required"] == ["occurrence_date", "benefit_code", "paid_amount"]
+    assert meta.data["importFormats"]["CLAIMS"]["required"] == ["Data de ocorrência", "Código da cobertura", "Valor pago"]
     template = admin_client.get("/api/v1/claims/import-template?kind=PREMIUMS")
-    assert template.status_code == 200 and "text/csv" in template["Content-Type"]
-    header = template.content.decode().splitlines()[0].split(",")
-    assert header[:3] == ["period_start", "period_end", "premium_amount"]
+    assert template.status_code == 200 and "spreadsheetml" in template["Content-Type"]
+    import openpyxl
+
+    sheet = openpyxl.load_workbook(io.BytesIO(template.content), read_only=True).worksheets[0]
+    header = [str(c) for c in next(sheet.iter_rows(values_only=True)) if c is not None]
+    assert header[:3] == meta.data["importFormats"]["PREMIUMS"]["required"]
     assert admin_client.get("/api/v1/claims/import-template?kind=NOPE").status_code == 400

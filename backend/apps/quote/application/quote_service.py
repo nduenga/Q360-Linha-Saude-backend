@@ -342,7 +342,11 @@ def create_quote(
             # Evita descobrir só no cálculo que o tipo de tomador não pode
             # aderir ao segmento do plano escolhido.
             segment = (plan.settings_json or {}).get("segment")
-            expected_proposer_type = {"INDIVIDUAL": "INDIVIDUAL", "GROUP": "ORGANISATION"}.get(segment)
+            # Os segmentos válidos são INDIVIDUAL_FAMILY e GROUP (plan_settings.SEGMENTS);
+            # "INDIVIDUAL" fica aceite por compatibilidade com configurações antigas.
+            expected_proposer_type = {
+                "INDIVIDUAL_FAMILY": "INDIVIDUAL", "INDIVIDUAL": "INDIVIDUAL", "GROUP": "ORGANISATION",
+            }.get(segment)
             if expected_proposer_type and proposer.proposer_type != expected_proposer_type:
                 expected_label = "pessoa individual" if expected_proposer_type == "INDIVIDUAL" else "organização"
                 raise ReferencedEntityNotFoundError(

@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import uuid
 
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -27,6 +30,7 @@ from apps.business_config.application.service import (
 )
 from apps.business_config.application.formula_variables import variable_catalog
 from apps.business_config.domain.errors import InvalidConfiguration
+from apps.business_config.domain.scope import SEPARATOR, product_key, valid_product_id
 from apps.business_config.domain.formula_engine import FormulaError, explain_formula, referenced_names
 from apps.business_config.domain.formulas import (
     CONFIG_KEY,
@@ -55,10 +59,24 @@ class FormulaCreateSerializer(serializers.Serializer):
     effectiveFrom = serializers.DateField()
     effectiveTo = serializers.DateField(required=False, allow_null=True)
     metadata = serializers.JSONField(required=False, default=dict)
+    productId = serializers.UUIDField(
+        required=False, allow_null=True, default=None,
+        help_text="Com produto, a versão é só desse produto (pricing.formulas@<produto>) e substitui a geral nele.",
+    )
+
+
+def _formulas_key(product_id) -> str:
+    return product_key(CONFIG_KEY, product_id) if product_id else CONFIG_KEY
 
 
 def _formulas(configuration_id) -> BusinessConfiguration:
-    return get_object_or_404(BusinessConfiguration, id=configuration_id, config_key=CONFIG_KEY)
+    """Uma versão do conjunto de fórmulas: a geral ou a de um produto."""
+    return get_object_or_404(
+        BusinessConfiguration.objects.filter(
+            Q(config_key=CONFIG_KEY) | Q(config_key__startswith=f"{CONFIG_KEY}{SEPARATOR}")
+        ),
+        id=configuration_id,
+    )
 
 
 def _with_analysis(configuration: BusinessConfiguration) -> dict:
@@ -116,9 +134,13 @@ class FormulaVariablesView(_ConfigPermissions, APIView):
 
 
 class FormulaListCreateView(_ConfigPermissions, APIView):
-    @extend_schema(operation_id="listFormulaSets", summary="Listar versões do conjunto de fórmulas", tags=["Configuration"])
+    @extend_schema(operation_id="listFormulaSets", summary="Listar versões do conjunto de fórmulas", tags=["Configuration"],
+                   parameters=[OpenApiParameter("productId", OpenApiTypes.UUID, description="Só as versões desse produto")])
     def get(self, request):
-        qs = BusinessConfiguration.objects.filter(config_key=CONFIG_KEY).order_by("-version_no")
+        product_id = request.query_params.get("productId") or None
+        if product_id and not valid_product_id(product_id):
+            raise ValidationError({"productId": "Identificador de produto inválido."})
+        qs = BusinessConfiguration.objects.filter(config_key=_formulas_key(product_id)).order_by("-version_no")
         if request.query_params.get("status"):
             qs = qs.filter(status=request.query_params["status"])
         return Response({"items": BusinessConfigurationSerializer(qs, many=True).data})
@@ -130,7 +152,8 @@ class FormulaListCreateView(_ConfigPermissions, APIView):
         s.is_valid(raise_exception=True)
         data = s.validated_data
         configuration = create_configuration(
-            request, CONFIG_KEY, data["value"], data["effectiveFrom"], data.get("effectiveTo"), data.get("metadata")
+            request, _formulas_key(data.get("productId")), data["value"], data["effectiveFrom"], data.get("effectiveTo"),
+            data.get("metadata"),
         )
         return Response(_with_analysis(configuration), status=201)
 

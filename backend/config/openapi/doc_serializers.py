@@ -442,6 +442,11 @@ class ProductTariff(s.Serializer):
 
 
 # ---------------------------------------- configuração do produto (cascata)
+class GeneralChangedSinceCopy(s.Serializer):
+    copiedVersionNo = s.IntegerField(help_text="Versão da geral de onde a versão do produto foi copiada.")
+    generalVersionNo = s.IntegerField(help_text="Versão geral publicada hoje.")
+
+
 class ProductConfigurationItem(s.Serializer):
     configKey = s.CharField(help_text="Chave geral.")
     productConfigKey = s.CharField(help_text="`<chave>@<produto>`: a versão deste produto.")
@@ -453,6 +458,10 @@ class ProductConfigurationItem(s.Serializer):
                            help_text="De onde vem o valor em uso hoje neste produto.")
     product = ConfigKeyState()
     general = ConfigKeyState()
+    generalChangedSinceCopy = GeneralChangedSinceCopy(
+        allow_null=True,
+        help_text="A geral mudou depois da cópia para o produto (o produto não recebe a alteração); null se não.",
+    )
     formSchema = s.DictField(help_text="Formulário da chave, com os planos deste produto nas opções de plano.")
 
 

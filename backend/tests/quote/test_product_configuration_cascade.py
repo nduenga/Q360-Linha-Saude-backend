@@ -157,6 +157,13 @@ def test_product_configuration_shows_origin_and_copies_drafts(admin_client, appr
     assert approver.post(f"{BASE}/{cid}/approve").status_code == 200
     items = {i["configKey"]: i for i in admin_client.get(url).data["items"]}
     assert items["pricing.reference_premiums"]["source"] == "PRODUCT"
+    assert items["pricing.reference_premiums"]["generalChangedSinceCopy"] is None
+    assert items["pricing.factors"]["generalChangedSinceCopy"] is None  # o produto ainda usa a geral
+
+    # A geral muda depois da cópia: o produto não recebe a alteração e o ecrã é avisado.
+    _publish(admin_client, approver, "pricing.reference_premiums", _values("120000")["pricing.reference_premiums"])
+    items = {i["configKey"]: i for i in admin_client.get(url).data["items"]}
+    assert items["pricing.reference_premiums"]["generalChangedSinceCopy"] == {"copiedVersionNo": 1, "generalVersionNo": 2}
 
     # Copiar de outro produto: leva o que vale nele (a versão dele ou a geral).
     from_a = admin_client.post(f"/api/v1/products/{product_b['productId']}/configuration/copy",

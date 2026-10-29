@@ -182,3 +182,27 @@ def test_versions_can_be_compared(admin_client):
         {"path": "parameters[0].value", "change": "CHANGED", "before": "0.10", "after": "0.12"}
     ]
     assert admin_client.get(f"/api/v1/business-config/configurations/{first['id']}/compare").status_code == 400
+
+
+@pytest.mark.django_db
+def test_product_formula_versions_are_separate_from_the_general_ones(admin_client, approver):
+    """Fórmulas por produto: `productId` cria e lista `pricing.formulas@<produto>`,
+    e as rotas por id (consultar, submeter, aprovar) aceitam essas versões."""
+    plan_ref = _plan(admin_client, product_code="FORM-PROD")
+    product_id = admin_client.get(f"/api/v1/plans/{plan_ref['planId']}").data["productId"]
+
+    general = admin_client.post(FORMULAS, {"value": VALUE, "effectiveFrom": "2026-01-01"}, format="json")
+    own = admin_client.post(FORMULAS, {"value": VALUE, "effectiveFrom": "2026-01-01", "productId": product_id},
+                            format="json")
+    assert general.status_code == 201 and own.status_code == 201, own.data
+    assert own.data["configKey"] == f"pricing.formulas@{product_id}"
+
+    assert [i["id"] for i in admin_client.get(FORMULAS).data["items"]] == [general.data["id"]]
+    assert [i["id"] for i in admin_client.get(FORMULAS, {"productId": product_id}).data["items"]] == [own.data["id"]]
+    assert admin_client.get(FORMULAS, {"productId": "não-é-uuid"}).status_code == 400
+
+    detail = admin_client.get(f"{FORMULAS}/{own.data['id']}")
+    assert detail.status_code == 200 and detail.data["analysis"]["valid"] is True
+    unknown = admin_client.post(FORMULAS, {"value": VALUE, "effectiveFrom": "2026-01-01",
+                                           "productId": "00000000-0000-0000-0000-000000000000"}, format="json")
+    assert unknown.status_code == 400
