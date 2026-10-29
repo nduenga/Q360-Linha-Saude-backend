@@ -109,6 +109,8 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 | 84 | POST | `/quotes/{quote_id}/decision` | postQuoteDecision | Alterado (comportamento: endosso) |
 | 85 | GET | `/quotes/{quote_id}/requirements` | getQuoteRequirements | Alterado (comportamento: recém-nascidos) |
 | 86 | POST | `/quotes/{quote_id}/policy` | postIssuePolicy | Alterado (comportamento: endosso) |
+| 87 | GET | `/platform/templates/import-template` | getPlatformTemplateImportTemplate | Novo |
+| 88 | POST | `/platform/templates/import-preview` | postPlatformTemplateImportPreview | Novo |
 
 ## Atualização de 27/10/2026 — ciclo de vida, agregados familiares e controlo operacional
 
@@ -2080,3 +2082,8 @@ O modelo e a pré-validação Excel das tabelas de referência da plataforma usa
 | `GET /products/{id}/configuration` | Contrato (resposta) | `items[].generalChangedSinceCopy: {copiedVersionNo, generalVersionNo} \| null`: a geral mudou depois de o produto copiar a sua versão. |
 | `POST /quotes` | Comportamento | A regra «plano de grupo só para organização / plano individual só para pessoa» passa a aplicar-se também aos planos `INDIVIDUAL_FAMILY` (antes só reconhecia `INDIVIDUAL`, que não é um segmento válido). |
 | `POST /platform/system-parameters/pricing.rounding_policy/versions` | Comportamento | Valor fora de `HALF_UP_2DP`, `HALF_EVEN_2DP`, `DOWN_2DP` → 400 com a explicação «Outro valor exige uma nova versão do sistema». |
+| `GET /platform/templates/import-template` | **Novo** | Descarrega um `.xlsx` de exemplo (3 colunas: chave de configuração, caminho, valor) para propor um modelo do fornecedor sem escrever JSON à mão — mesmo padrão de `GET /platform/reference-tables/import-template`. |
+| `POST /platform/templates/import-preview` | **Novo** | Lê esse `.xlsx` (multipart, campo `file`, máx. 10 MB) e devolve `{content, truncated}` — `content` já na forma de `TemplateProposal.content` (`configurations: {configKey: valor}`, `marketProducts`), para pré-preencher a caixa de JSON do formulário "Propor modelo". Não grava nada nem valida contra um `kind` (isso só acontece no `POST /platform/templates`). Erros: 400 (ficheiro inválido ou > 10 MB), 401, 403. |
+| `GET /quotes/{quote_id}/adjustments` · `POST /quotes/{quote_id}/adjustments` · `DELETE /quotes/{quote_id}/adjustments/{adjustment_id}` | Contrato (resposta) | Novos campos `appliedByName`/`removedByName: string \| null` em cada `QuoteAdjustment` — nome resolvido de quem aplicou/removeu o ajuste (antes só vinha o UUID em `appliedBy`/`removedBy`); `null` quando o ator não é uma conta de staff. |
+| `GET /quotes/{quote_id}/versions` · `POST /quotes/{quote_id}/versions` · `GET /quotes/{quote_id}/versions/{version_no}` | Contrato (resposta) | Novo campo `createdByName: string \| null` em cada `QuoteVersion` — nome resolvido de quem criou a versão; `null` para atores técnicos (ex.: `"system-scheduler"`). O snapshot de cada versão passa também a incluir `proposerId`, `proposerName`, `proposerTaxId`, `productId` e `productName` (antes só tinha `planId`/`planName`), para a versão ficar autónoma de alterações posteriores ao proponente ou ao produto. |
+| `GET /platform/audit` | Contrato (resposta) | Novo campo `actorName: string \| null` em cada evento — nome resolvido do super administrador que fez a ação; `null` para `"ANONYMOUS"` (login falhado antes de autenticar) ou para uma conta de super administrador já removida. |
