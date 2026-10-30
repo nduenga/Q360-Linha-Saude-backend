@@ -497,6 +497,14 @@ class DocumentTemplateHeaderSerializer(serializers.Serializer):
         return {"fileName": obj.word_name, "placeholders": meta.get("placeholders", [])}
 
 
+class DocumentTemplateDetailSerializer(DocumentTemplateHeaderSerializer):
+    """`GET /document-templates/{id}` — o cabeçalho mais o conteúdo
+    guardado (`storageRef`), que a listagem nunca devolve. Sem isto, editar
+    uma versão DRAFT obrigava a reescrever o JSON todo de memória."""
+
+    storageRef = serializers.CharField(source="storage_ref")
+
+
 class TemplateLetterheadUploadSerializer(serializers.Serializer):
     file = serializers.FileField(help_text="PDF com o aspeto da seguradora (logótipo, cabeçalho, rodapé, fundo). Até 10 MB.")
     left = serializers.FloatField(required=False, help_text="Margem esquerda em cm (por omissão 2).")

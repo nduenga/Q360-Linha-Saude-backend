@@ -5693,6 +5693,52 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/document-templates/{template_id}:
+    get:
+      operationId: getDocumentTemplateDetail
+      description: 'ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
+
+        in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`.
+
+
+        Requer: scope q360.admin, permissão product:manage.'
+      summary: Obter document template detail
+      parameters:
+      - in: path
+        name: template_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Documents
+      security:
+      - oauth2:
+        - q360.admin
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentTemplateDetail'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
     patch:
       operationId: patchDocumentTemplateDetail
       description: 'ROADMAP_ANGOLA_CUSTOMIZATION.md Épico 6, pragmatic V1 addition, not
@@ -20620,6 +20666,71 @@ components:
       description: '* `QUOTE_PROPOSAL` - QUOTE_PROPOSAL
 
         * `POLICY` - POLICY'
+    DocumentTemplateDetail:
+      type: object
+      description: '`GET /document-templates/{id}` — o cabeçalho mais o conteúdo
+
+        guardado (`storageRef`), que a listagem nunca devolve. Sem isto, editar
+
+        uma versão DRAFT obrigava a reescrever o JSON todo de memória.'
+      properties:
+        id:
+          type: string
+          format: uuid
+        templateCode:
+          type: string
+        versionNo:
+          type: integer
+        status:
+          $ref: '#/components/schemas/VersionedConfigStatusEnum'
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type:
+          - string
+          - 'null'
+          format: date
+        checksum:
+          type:
+          - string
+          - 'null'
+        documentType:
+          type: string
+        hasLetterhead:
+          type: boolean
+          readOnly: true
+        letterhead:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          readOnly: true
+        hasWordTemplate:
+          type: boolean
+          readOnly: true
+        word:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+          readOnly: true
+        storageRef:
+          type: string
+      required:
+      - checksum
+      - documentType
+      - effectiveFrom
+      - effectiveTo
+      - hasLetterhead
+      - hasWordTemplate
+      - id
+      - letterhead
+      - status
+      - storageRef
+      - templateCode
+      - versionNo
+      - word
     DocumentTemplateHeader:
       type: object
       properties:

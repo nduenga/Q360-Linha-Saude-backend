@@ -48,6 +48,7 @@ from apps.quote.interfaces.serializers import (
     DecisionRequestSerializer,
     DocumentSerializer,
     DocumentTemplateCreateRequestSerializer,
+    DocumentTemplateDetailSerializer,
     DocumentTemplateHeaderSerializer,
     TemplateLetterheadUploadSerializer,
     TemplateWordUploadSerializer,
@@ -473,6 +474,10 @@ class DocumentTemplateDetailView(APIView):
     in ART-006. `PATCH`/`DELETE` only work while `status=DRAFT`."""
 
     permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
+
+    def get(self, request, template_id):
+        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        return Response(DocumentTemplateDetailSerializer(template).data)
 
     def patch(self, request, template_id):
         template = get_object_or_404(DocumentTemplateVersion, id=template_id)

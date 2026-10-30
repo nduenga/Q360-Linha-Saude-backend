@@ -267,11 +267,19 @@ def _my_request(request_number: str) -> PortalRequest:
     return request
 
 
-def _events(request: PortalRequest) -> list[dict]:
+def _events(request: PortalRequest, *, viewer: str, customer_name: str | None = None) -> list[dict]:
+    """`by` é relativo a quem está a ver — "Você" é sempre "o lado de quem
+    lê" (ver o mesmo princípio em messages_service._item)."""
+    def by(actor_type: str) -> str:
+        is_customer = actor_type == "CUSTOMER"
+        if viewer == "CUSTOMER":
+            return "Você" if is_customer else "Seguradora"
+        return (customer_name or "Cliente") if is_customer else "Você"
+
     return [
         {
             "status": e.to_status, "statusLabel": rules.STATUS_LABELS[e.to_status],
-            "note": e.note, "by": "Você" if e.actor_type == "CUSTOMER" else "Seguradora", "at": e.created_at,
+            "note": e.note, "by": by(e.actor_type), "at": e.created_at,
         }
         for e in PortalRequestEvent.objects.filter(request=request).order_by("created_at")
     ]
@@ -279,7 +287,7 @@ def _events(request: PortalRequest) -> list[dict]:
 
 def get_my_request(request_number: str) -> dict:
     request = _my_request(request_number)
-    return {**items_for([request])[0], "history": _events(request)}
+    return {**items_for([request])[0], "history": _events(request, viewer="CUSTOMER")}
 
 
 # ---------------------------------------------------------------- staff
@@ -378,11 +386,12 @@ def staff_get(request_number: str) -> dict:
     if request is None:
         raise PortalResourceNotFoundError("Não foi encontrado nenhum pedido com este número (requestNumber)")
     holder = Proposer.objects.filter(id=request.proposer_id).first()
+    customer_name = holder.display_name if holder else None
     return {
         **items_for([request])[0],
-        "customerName": holder.display_name if holder else None,
+        "customerName": customer_name,
         "payload": request.payload_json,
-        "history": _events(request),
+        "history": _events(request, viewer="STAFF", customer_name=customer_name),
     }
 
 

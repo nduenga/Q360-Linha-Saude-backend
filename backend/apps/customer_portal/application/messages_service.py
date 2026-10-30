@@ -65,11 +65,22 @@ def _resolve(context_type: str, ref: str, *, proposer_ids: list[uuid.UUID] | Non
     return row
 
 
-def _item(message: PortalMessage) -> dict:
+def _item(message: PortalMessage, *, viewer: str, customer_name: str | None = None) -> dict:
+    """`fromLabel` é relativo a quem está a ver a conversa — "Você" tem de
+    ser sempre "o lado de quem está a ler", nunca um texto fixo. No portal
+    do cliente, "Você" é o próprio cliente e "Seguradora" é qualquer membro
+    da equipa (identidade coletiva, de propósito). No atendimento (staff),
+    é o inverso: "Você" é a equipa e o cliente aparece pelo nome (ou
+    "Cliente" se não houver)."""
+    is_customer_sender = message.sender_type == "CUSTOMER"
+    if viewer == "CUSTOMER":
+        from_label = "Você" if is_customer_sender else "Seguradora"
+    else:
+        from_label = (customer_name or "Cliente") if is_customer_sender else "Você"
     return {
         "id": str(message.id),
-        "from": "CUSTOMER" if message.sender_type == "CUSTOMER" else "STAFF",
-        "fromLabel": "Você" if message.sender_type == "CUSTOMER" else "Seguradora",
+        "from": "CUSTOMER" if is_customer_sender else "STAFF",
+        "fromLabel": from_label,
         "body": message.body,
         "createdAt": message.created_at,
     }
@@ -89,7 +100,7 @@ def customer_send(*, account_id: uuid.UUID, context_type: str, context_ref: str,
         action="customer_portal.message_sent", entity_type="PortalMessage", entity_id=str(message.id),
         metadata={"contextType": context_type, "result": "SUCCESS"},
     )
-    return _item(message)
+    return _item(message, viewer="CUSTOMER")
 
 
 def customer_thread(*, context_type: str, context_ref: str) -> list[dict]:
@@ -100,7 +111,7 @@ def customer_thread(*, context_type: str, context_ref: str) -> list[dict]:
     with transaction.atomic():
         messages = list(queryset.order_by("created_at"))
         queryset.filter(sender_type="STAFF", read_by_customer_at__isnull=True).update(read_by_customer_at=timezone.now())
-    return [_item(m) for m in messages]
+    return [_item(m, viewer="CUSTOMER") for m in messages]
 
 
 def customer_conversations() -> list[dict]:
@@ -135,6 +146,10 @@ def _conversations(queryset, *, unread_sender: str, unread_field: str) -> list[d
 
 
 # ---------------------------------------------------------------- staff
+def _customer_name(proposer_id: uuid.UUID) -> str | None:
+    return Proposer.objects.filter(id=proposer_id).values_list("display_name", flat=True).first()
+
+
 def staff_send(*, context_type: str, context_ref: str, body: str, actor_ref: str) -> dict:
     body = _clean_body(body)
     row = _resolve(context_type, context_ref, proposer_ids=None)
@@ -153,7 +168,7 @@ def staff_send(*, context_type: str, context_ref: str, body: str, actor_ref: str
         action="customer_portal.message_sent", entity_type="PortalMessage", entity_id=str(message.id),
         metadata={"contextType": context_type, "result": "SUCCESS"},
     )
-    return _item(message)
+    return _item(message, viewer="STAFF", customer_name=_customer_name(row.proposer_id))
 
 
 def staff_thread(*, context_type: str, context_ref: str) -> list[dict]:
@@ -163,7 +178,8 @@ def staff_thread(*, context_type: str, context_ref: str) -> list[dict]:
     )
     messages = list(queryset.order_by("created_at"))
     queryset.filter(sender_type="CUSTOMER", read_by_staff_at__isnull=True).update(read_by_staff_at=timezone.now())
-    return [_item(m) for m in messages]
+    customer_name = _customer_name(row.proposer_id)
+    return [_item(m, viewer="STAFF", customer_name=customer_name) for m in messages]
 
 
 def staff_inbox(*, unread_only: bool = False) -> list[dict]:
