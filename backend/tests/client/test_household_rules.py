@@ -15,7 +15,7 @@ from apps.client.domain.errors import (
     TitularRequiredError,
 )
 from apps.client.domain.nif import NifFormatError, validate_agt_nif
-from apps.client.domain.rules import Person, require_date_of_birth, validate_household
+from apps.client.domain.rules import Person, require_date_of_birth, validate_corporate_family, validate_household
 
 D = datetime.date
 
@@ -65,9 +65,8 @@ def test_dependent_without_titular_is_rejected():
         validate_household([_p("SPOUSE", D(1990, 1, 1))], individual=True, max_beneficiaries=5)
 
 
-def test_dependent_without_titular_is_rejected_for_organisations_too():
-    with pytest.raises(TitularRequiredError):
-        validate_household([_p("CHILD", D(2010, 1, 1))], individual=False, max_beneficiaries=None)
+def test_organisation_population_does_not_require_a_global_titular():
+    validate_household([_p("COLLABORATOR", D(1990, 1, 1)), _p("CHILD", D(2010, 1, 1))], individual=False, max_beneficiaries=None)
 
 
 def test_titular_alone_is_fine():
@@ -81,12 +80,21 @@ def test_individual_cannot_have_two_titulars():
         )
 
 
-def test_organisation_may_have_many_titulars():
+def test_organisation_may_have_many_employees():
     validate_household(
-        [_p("TITULAR", D(1990, 1, 1)), _p("TITULAR", D(1991, 1, 1)), _p("CHILD", D(2015, 1, 1))],
+        [_p("COLLABORATOR", D(1990, 1, 1)), _p("COLLABORATOR", D(1991, 1, 1)), _p("CHILD", D(2015, 1, 1))],
         individual=False,
         max_beneficiaries=None,
     )
+
+
+def test_corporate_family_age_is_checked_against_its_employee():
+    employee = _p("COLLABORATOR", D(1990, 1, 1), "Colaborador")
+    validate_corporate_family(employee=employee, relatives=[_p("CHILD", D(2003, 1, 1))])
+    with pytest.raises(GenerationGapError):
+        validate_corporate_family(employee=employee, relatives=[_p("DESCENDANT", D(2002, 12, 31))])
+    with pytest.raises(GenerationGapError):
+        validate_corporate_family(employee=employee, relatives=[_p("ASCENDANT", D(1977, 1, 2))])
 
 
 def test_child_needs_13_years_or_more_than_titular():

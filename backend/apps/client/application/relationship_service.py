@@ -1,9 +1,9 @@
 
 """Catálogo de relações familiares por tenant.
 
-O código TITULAR é mantido no catálogo interno para permitir a criação
-do primeiro membro e validar as regras de parentesco, mas não é
-disponibilizado como opção no endpoint público GET /api/v1/relationship-codes.
+TITULAR é usado pelo proponente individual. Em organizações, COLABORADOR é o
+papel do empregado e o titular do seu agregado; ambos são opções contextuais,
+não relações familiares do dropdown normal.
 """
 from __future__ import annotations
 
@@ -15,9 +15,14 @@ from apps.client.domain.errors import UnknownRelationshipCodeError
 from apps.client.infrastructure.models import RelationshipCode
 
 
-# Catálogo interno: TITULAR é necessário para as regras de negócio,
-# mas deve ser ocultado na listagem pública.
+# Catálogo com relações internas e familiares. Os papéis do agregado são
+# listados apenas nos contextos HOLDER e EMPLOYEE.
 MARKET_CATALOG: list[dict[str, str]] = [
+    {
+        "code": "COLABORADOR",
+        "label": "Colaborador(a)",
+        "category": RelationshipCategory.COLLABORATOR.value,
+    },
     {
         "code": "TITULAR",
         "label": "Titular",
@@ -34,9 +39,24 @@ MARKET_CATALOG: list[dict[str, str]] = [
         "category": RelationshipCategory.CHILD.value,
     },
     {
+        "code": "PAI",
+        "label": "Pai",
+        "category": RelationshipCategory.ASCENDANT.value,
+    },
+    {
+        "code": "MAE",
+        "label": "Mãe",
+        "category": RelationshipCategory.ASCENDANT.value,
+    },
+    {
         "code": "ASCENDENTE",
         "label": "Pai / Mãe / Avô / Avó (Ascendente Direto)",
         "category": RelationshipCategory.ASCENDANT.value,
+    },
+    {
+        "code": "DESCENDENTE",
+        "label": "Descendente",
+        "category": RelationshipCategory.DESCENDANT.value,
     },
     {
         "code": "OUTRO",
@@ -66,8 +86,8 @@ def ensure_relationship_catalog(tenant_id: uuid.UUID) -> None:
 def list_relationship_codes(*, household_role: str = "DEPENDENT"):
     """Return choices for a holder or dependant selection control.
 
-    ``HOLDER`` returns only ``TITULAR``. ``DEPENDENT`` remains the default
-    and deliberately excludes it.
+    ``HOLDER`` returns ``TITULAR``; ``EMPLOYEE`` returns ``COLABORADOR``.
+    ``DEPENDENT`` excludes both anchor roles.
     """
     tenant_id = CurrentTenantProvider.require().value
     ensure_relationship_catalog(tenant_id)
@@ -75,7 +95,9 @@ def list_relationship_codes(*, household_role: str = "DEPENDENT"):
     queryset = RelationshipCode.objects.filter(tenant_id=tenant_id)
     if household_role == "HOLDER":
         return queryset.filter(category=RelationshipCategory.TITULAR.value).order_by("code")
-    return queryset.exclude(category=RelationshipCategory.TITULAR.value).order_by("category", "code")
+    if household_role == "EMPLOYEE":
+        return queryset.filter(category=RelationshipCategory.COLLABORATOR.value).order_by("code")
+    return queryset.exclude(category__in=(RelationshipCategory.TITULAR.value, RelationshipCategory.COLLABORATOR.value)).order_by("category", "code")
 
 
 def validate_relationship_code(

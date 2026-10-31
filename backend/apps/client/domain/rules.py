@@ -2,7 +2,7 @@
 
 Regras de negócio (2026-10):
   R1. A data de nascimento é obrigatória (e não pode estar no futuro).
-  R2. Tem de existir sempre um TITULAR antes de qualquer outra relação.
+  R2. Em proponente individual, tem de existir um TITULAR antes de outras relações.
   R3. Filho(a) vs titular e titular vs ascendente: diferença de idade
       mínima de 13 anos (o filho nunca pode ter a mesma idade ou mais do
       que o pai/mãe).
@@ -11,8 +11,9 @@ Regras de negócio (2026-10):
       (parâmetro `client.individual_max_beneficiaries`).
   R5. Proponente individual: um único titular ativo.
 
-As regras R3-R5 só se aplicam a proponentes INDIVIDUAIS: numa empresa há um
-titular por colaborador, pelo que "o pai/titular" não é inequívoco.
+As regras R3-R5 só se aplicam ao proponente individual. Em organizações, as
+regras de idade são aplicadas por agregado, comparando cada familiar com o
+COLABORADOR que o encabeça.
 """
 from __future__ import annotations
 
@@ -88,7 +89,7 @@ def validate_household(
     titulars = [p for p in people if p.category == RelationshipCategory.TITULAR.value]
     dependents = [p for p in people if p.category != RelationshipCategory.TITULAR.value]
 
-    if dependents and not titulars:  # R2
+    if individual and dependents and not titulars:  # R2 applies to individual policyholders only
         raise TitularRequiredError(
             "É obrigatório existir um titular antes de adicionar outras relações "
             "(cônjuge, filho(a), ascendente, outro)."
@@ -118,10 +119,38 @@ def validate_household(
                 parent_label=f"o titular {titular.label}".strip(),
                 child_label=f"O filho(a) {person.label}".strip(),
             )
+        elif person.category == RelationshipCategory.DESCENDANT.value:
+            check_generation_gap(
+                parent_dob=titular.date_of_birth,
+                child_dob=person.date_of_birth,
+                parent_label=f"o titular {titular.label}".strip(),
+                child_label=f"O descendente {person.label}".strip(),
+            )
         elif person.category == RelationshipCategory.ASCENDANT.value:
             check_generation_gap(
                 parent_dob=person.date_of_birth,
                 child_dob=titular.date_of_birth,
                 parent_label=f"o ascendente {person.label}".strip(),
                 child_label=f"O titular {titular.label}".strip(),
+            )
+
+
+def validate_corporate_family(*, employee: Person, relatives: Iterable[Person]) -> None:
+    """Validates family age gaps against that household's employee anchor."""
+    for relative in relatives:
+        if employee.date_of_birth is None or relative.date_of_birth is None:
+            continue
+        if relative.category in (RelationshipCategory.CHILD.value, RelationshipCategory.DESCENDANT.value):
+            check_generation_gap(
+                parent_dob=employee.date_of_birth,
+                child_dob=relative.date_of_birth,
+                parent_label=f"o colaborador {employee.label}".strip(),
+                child_label=f"O descendente {relative.label}".strip(),
+            )
+        elif relative.category == RelationshipCategory.ASCENDANT.value:
+            check_generation_gap(
+                parent_dob=relative.date_of_birth,
+                child_dob=employee.date_of_birth,
+                parent_label=f"o ascendente {relative.label}".strip(),
+                child_label=f"O colaborador {employee.label}".strip(),
             )

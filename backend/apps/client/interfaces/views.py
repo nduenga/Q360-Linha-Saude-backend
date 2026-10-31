@@ -61,13 +61,13 @@ class RelationshipCodeListView(APIView):
 
     @extend_schema(parameters=[OpenApiParameter(
         name="householdRole", type=OpenApiTypes.STR, location=OpenApiParameter.QUERY,
-        enum=["HOLDER", "DEPENDENT"], required=False,
-        description="HOLDER devolve apenas TITULAR; DEPENDENT devolve relações elegíveis como dependente.",
+        enum=["HOLDER", "EMPLOYEE", "DEPENDENT"], required=False,
+        description="HOLDER devolve TITULAR individual; EMPLOYEE devolve COLABORADOR; DEPENDENT devolve relações familiares.",
     )])
     def get(self, request):
         household_role = request.query_params.get("householdRole", "DEPENDENT").upper()
-        if household_role not in {"HOLDER", "DEPENDENT"}:
-            raise ValidationError({"householdRole": "Use HOLDER ou DEPENDENT."})
+        if household_role not in {"HOLDER", "EMPLOYEE", "DEPENDENT"}:
+            raise ValidationError({"householdRole": "Use HOLDER, EMPLOYEE ou DEPENDENT."})
         queryset = list_relationship_codes(household_role=household_role)
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)

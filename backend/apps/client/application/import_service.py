@@ -204,6 +204,10 @@ def _population_problem(*, proposer: Proposer | None, rows: list[_ParsedRow]) ->
             )
         )
     individual = proposer.proposer_type == ProposerType.INDIVIDUAL.value
+    if not individual:
+        for row in rows:
+            if row.is_valid and categories.get(row.values["relationshipCode"].strip()) != RelationshipCategory.COLLABORATOR.value:
+                return "A importação de uma organização só aceita COLABORADOR; familiares devem ser associados a um agregado familiar."
     try:
         validate_household(
             people, individual=individual, max_beneficiaries=max_beneficiaries_for_individual() if individual else None

@@ -35,10 +35,11 @@ from apps.client.domain.errors import (
     DuplicateExternalReferenceError,
     DuplicateMemberNifError,
     RowVersionMismatchError,
+    HouseholdValidationError,
 )
 from apps.client.domain.enums import MemberStatus, ProposerType, RelationshipCategory
 from apps.client.domain.rules import Person, require_date_of_birth, validate_household
-from apps.client.infrastructure.models import InsuredMember, Person as PersonRecord, Proposer, RelationshipCode
+from apps.client.infrastructure.models import FamilyHouseholdMember, InsuredMember, Person as PersonRecord, Proposer, RelationshipCode
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
@@ -60,6 +61,43 @@ def _category_by_code() -> dict[str, str]:
 
 def _person_label(first_name: str | None, last_name: str | None) -> str:
     return " ".join(x for x in (first_name, last_name) if x)
+
+
+def _validate_corporate_member_age(*, member: InsuredMember, category: str, date_of_birth: datetime.date,
+                                   first_name: str | None, last_name: str | None) -> None:
+    """Recheck the family when an employee or an enrolled relative changes."""
+    from apps.client.domain.rules import validate_corporate_family
+
+    candidate = Person(category, date_of_birth, _person_label(first_name, last_name))
+    dependent_membership = member.household_membership.filter(left_at__isnull=True).exclude(
+        household__primary_member=member
+    ).select_related("household__primary_member").first()
+    if dependent_membership:
+        employee = dependent_membership.household.primary_member
+        validate_corporate_family(
+            employee=Person(RelationshipCategory.COLLABORATOR.value, employee.date_of_birth,
+                            _person_label(employee.first_name, employee.last_name)),
+            relatives=[candidate],
+        )
+        return
+
+    household = member.primary_household.filter(status="ACTIVE").first()
+    if household is None:
+        return
+    categories = _category_by_code()
+    relatives = []
+    for membership in FamilyHouseholdMember.objects.filter(
+        household=household, left_at__isnull=True,
+    ).exclude(member=member).select_related("member", "person"):
+        person = membership.member or membership.person
+        if person is None:
+            continue
+        relatives.append(Person(
+            categories.get(membership.relationship_code, RelationshipCategory.OTHER.value),
+            person.date_of_birth,
+            _person_label(person.first_name, person.last_name),
+        ))
+    validate_corporate_family(employee=candidate, relatives=relatives)
 
 
 def _validate_population(
@@ -119,10 +157,20 @@ def create_member(
     external_reference: str | None,
     attributes: dict[str, Any] | None,
     nif: str | None = None,
+    corporate_dependent: bool = False,
 ) -> InsuredMember:
     date_of_birth = require_date_of_birth(date_of_birth)
     tenant_id = CurrentTenantProvider.require()
     rel = validate_relationship_code(tenant_id=tenant_id.value, code=relationship_code)
+    if proposer.proposer_type == ProposerType.ORGANISATION.value:
+        if corporate_dependent:
+            if rel.category in (RelationshipCategory.COLLABORATOR.value, RelationshipCategory.TITULAR.value):
+                raise HouseholdValidationError("O familiar deve ter uma relação familiar, não COLABORADOR.")
+        else:
+            # A relação do empregado não é uma escolha familiar: normaliza
+            # qualquer valor legado recebido pela UI para COLABORADOR.
+            relationship_code = "COLABORADOR"
+            rel = validate_relationship_code(tenant_id=tenant_id.value, code=relationship_code)
     _raise_if_nif_taken(nif, proposer_id=proposer.id)
     try:
         with transaction.atomic():
@@ -192,6 +240,25 @@ def update_member(
     """`keep_nif=True` (omitido no pedido) preserva o NIF guardado."""
     date_of_birth = require_date_of_birth(date_of_birth)
     rel = validate_relationship_code(tenant_id=member.tenant_id, code=relationship_code)
+    if member.proposer.proposer_type == ProposerType.ORGANISATION.value:
+        is_dependent = member.household_membership.filter(left_at__isnull=True).exclude(
+            household__primary_member=member
+        ).exists()
+        expected_categories = (
+            (RelationshipCategory.COLLABORATOR.value, RelationshipCategory.TITULAR.value)
+            if is_dependent
+            else (RelationshipCategory.COLLABORATOR.value,)
+        )
+        if is_dependent and rel.category in expected_categories:
+            raise HouseholdValidationError("Os familiares devem manter a sua relação familiar.")
+        if not is_dependent:
+            relationship_code = "COLABORADOR"
+            rel = validate_relationship_code(tenant_id=member.tenant_id, code=relationship_code)
+        if member.status == MemberStatus.ACTIVE.value:
+            _validate_corporate_member_age(
+                member=member, category=rel.category, date_of_birth=date_of_birth,
+                first_name=first_name, last_name=last_name,
+            )
     if not keep_nif:
         _raise_if_nif_taken(nif, proposer_id=member.proposer_id, exclude_member_id=member.id)
     try:
@@ -222,6 +289,10 @@ def update_member(
                     nif=member.nif if keep_nif else nif,
                     row_version=models.F("row_version") + 1,
                 )
+            if updated and proposer.proposer_type == ProposerType.ORGANISATION.value:
+                FamilyHouseholdMember.objects.filter(member=member, left_at__isnull=True).exclude(
+                    household__primary_member=member
+                ).update(relationship_code=relationship_code)
     except IntegrityError as exc:  # corrida perdida com outra pessoa segura com o mesmo NIF
         raise DuplicateMemberNifError(f"Já existe uma pessoa segura com o NIF '{nif}' neste cliente.") from exc
     if updated == 0:
@@ -258,6 +329,10 @@ def deactivate_member(*, member: InsuredMember, row_version: int) -> InsuredMemb
     """
     # Não se pode desativar o titular enquanto houver outras relações ativas.
     proposer = Proposer.objects.get(id=member.proposer_id)
+    if proposer.proposer_type == ProposerType.ORGANISATION.value and member.primary_household.filter(
+        status="ACTIVE", memberships__left_at__isnull=True,
+    ).exclude(memberships__member=member).exists():
+        raise HouseholdValidationError("Remova primeiro os familiares do agregado antes de desativar o colaborador titular.")
     _validate_population(proposer=proposer, candidate=None, exclude_member_id=member.id, titular_rule_only=True)
     updated = InsuredMember.objects.filter(
         id=member.id,

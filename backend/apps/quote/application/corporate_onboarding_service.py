@@ -42,7 +42,7 @@ def create_corporate_quotation(
             holder_input = household_input["holder"]
             joined_at = household_input["joinedAt"]
             holder = member_service.create_member(
-                proposer=proposer, relationship_code=holder_input["relationshipCode"],
+                proposer=proposer, relationship_code="COLABORADOR",
                 first_name=holder_input["firstName"], last_name=holder_input.get("lastName"),
                 date_of_birth=holder_input["dateOfBirth"], sex_code=holder_input.get("sexCode"),
                 external_reference=holder_input.get("externalReference"), attributes=holder_input.get("attributes"),
@@ -57,14 +57,15 @@ def create_corporate_quotation(
 
             dependant_ids = []
             for dependant_input in household_input["dependents"]:
-                dependant = member_service.create_member(
-                    proposer=proposer, relationship_code=dependant_input["relationshipCode"],
+                membership = household_service.create_dependent(
+                    household=household, relationship_code=dependant_input["relationshipCode"],
                     first_name=dependant_input["firstName"], last_name=dependant_input.get("lastName"),
                     date_of_birth=dependant_input["dateOfBirth"], sex_code=dependant_input.get("sexCode"),
                     external_reference=dependant_input.get("externalReference"), attributes=dependant_input.get("attributes"),
                     nif=dependant_input.get("nif"),
+                    joined_at=joined_at,
                 )
-                household_service.add_dependent(household=household, member=dependant, joined_at=joined_at)
+                dependant = membership.member
                 quote_service.add_quote_member(quote=quote, member_id=dependant.id, correlation_id=get_correlation_id())
                 dependant_ids.append(str(dependant.id))
 

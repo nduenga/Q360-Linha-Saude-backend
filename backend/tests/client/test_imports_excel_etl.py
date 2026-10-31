@@ -51,7 +51,7 @@ def _csv_file(rows: list[str], name: str = "members.csv") -> SimpleUploadedFile:
 @pytest.mark.django_db
 def test_upload_accepts_xlsx_and_creates_the_member(admin_client):
     proposer = _proposer(admin_client)
-    file = _xlsx_file([["TITULAR", "Joao", "Silva", "1990-05-20", "M", "EXT-XLSX-1"]])
+    file = _xlsx_file([["COLABORADOR", "Joao", "Silva", "1990-05-20", "M", "EXT-XLSX-1"]])
 
     uploaded = admin_client.post(
         "/api/v1/member-imports", {"proposerId": proposer["id"], "file": file}, format="multipart"
@@ -73,9 +73,9 @@ def test_xlsx_blank_rows_are_skipped_not_counted_as_errors(admin_client):
     proposer = _proposer(admin_client)
     file = _xlsx_file(
         [
-            ["TITULAR", "Joao", "Silva", "1990-05-20", "M", "EXT-1"],
+            ["COLABORADOR", "Joao", "Silva", "1990-05-20", "M", "EXT-1"],
             ["", "", "", "", "", ""],
-            ["CONJUGE", "Maria", "Silva", "1992-01-01", "F", "EXT-2"],
+            ["COLABORADOR", "Maria", "Silva", "1992-01-01", "F", "EXT-2"],
         ]
     )
     uploaded = admin_client.post(
@@ -90,7 +90,7 @@ def test_null_lookalike_placeholder_is_rejected_as_invalid_row(admin_client):
     proposer = _proposer(admin_client)
     file = _csv_file(
         [
-            "TITULAR,Joao,Silva,1990-05-20,N/A,EXT-1",  # sexCode looks like a null placeholder
+            "COLABORADOR,Joao,Silva,1990-05-20,N/A,EXT-1",  # sexCode looks like a null placeholder
         ]
     )
     uploaded = admin_client.post(

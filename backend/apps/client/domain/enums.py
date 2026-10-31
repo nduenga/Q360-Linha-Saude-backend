@@ -27,8 +27,10 @@ class RelationshipCategory(str, Enum):
     hardcoding every individual relationship code."""
 
     TITULAR = "TITULAR"
+    COLLABORATOR = "COLLABORATOR"
     SPOUSE = "SPOUSE"
     CHILD = "CHILD"
+    DESCENDANT = "DESCENDANT"
     ASCENDANT = "ASCENDANT"
     OTHER = "OTHER"
 

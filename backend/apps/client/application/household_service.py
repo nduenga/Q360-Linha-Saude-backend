@@ -11,6 +11,7 @@ from apps.client.application.relationship_service import validate_relationship_c
 from apps.client.application import member_service
 from apps.client.domain.enums import MemberStatus, ProposerType, RelationshipCategory
 from apps.client.domain.errors import HouseholdConflictError, HouseholdValidationError, RowVersionMismatchError
+from apps.client.domain.rules import Person as RulePerson, validate_corporate_family
 from apps.client.infrastructure.models import FamilyHousehold, FamilyHouseholdMember, InsuredMember, Person, Proposer
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
@@ -27,8 +28,8 @@ def _require_corporate_holder(*, proposer: Proposer, member: InsuredMember) -> N
     if member.proposer_id != proposer.id or member.status != MemberStatus.ACTIVE.value:
         raise HouseholdValidationError("O titular tem de ser uma pessoa segura ativa da mesma empresa.")
     relationship = validate_relationship_code(tenant_id=member.tenant_id, code=member.relationship_code)
-    if relationship.category != RelationshipCategory.TITULAR.value:
-        raise HouseholdValidationError("O membro indicado tem de ter a relação TITULAR.")
+    if relationship.category != RelationshipCategory.COLLABORATOR.value:
+        raise HouseholdValidationError("O titular do agregado de uma organização tem de ser COLABORADOR.")
 
 
 def create_household(*, proposer: Proposer, primary_member: InsuredMember, joined_at: datetime.date) -> FamilyHousehold:
@@ -61,8 +62,13 @@ def add_dependent(*, household: FamilyHousehold, member: InsuredMember, joined_a
     if member.proposer_id != household.proposer_id or member.status != MemberStatus.ACTIVE.value:
         raise HouseholdValidationError("O dependente tem de ser uma pessoa segura ativa da mesma empresa.")
     relationship = validate_relationship_code(tenant_id=member.tenant_id, code=member.relationship_code)
-    if relationship.category == RelationshipCategory.TITULAR.value:
-        raise HouseholdValidationError("Um titular deve criar o seu próprio agregado; não pode ser dependente.")
+    if relationship.category in (RelationshipCategory.TITULAR.value, RelationshipCategory.COLLABORATOR.value):
+        raise HouseholdValidationError("Um familiar deve ter uma relação familiar, não COLABORADOR/TITULAR.")
+    validate_corporate_family(
+        employee=RulePerson(RelationshipCategory.COLLABORATOR.value, household.primary_member.date_of_birth,
+                            household.primary_member.first_name or "Colaborador"),
+        relatives=[RulePerson(relationship.category, member.date_of_birth, member.first_name or "Familiar")],
+    )
     with transaction.atomic():
         existing_by_person = FamilyHouseholdMember.objects.filter(
             household=household, person_id=member.person_id, left_at__isnull=True,
@@ -113,8 +119,13 @@ def create_dependent(
 
     tenant = CurrentTenantProvider.require()
     relationship = validate_relationship_code(tenant_id=tenant.value, code=relationship_code)
-    if relationship.category == RelationshipCategory.TITULAR.value:
-        raise HouseholdValidationError("Use a relação de dependente; TITULAR não pode ser criado como familiar.")
+    if relationship.category in (RelationshipCategory.TITULAR.value, RelationshipCategory.COLLABORATOR.value):
+        raise HouseholdValidationError("Use uma relação familiar; COLABORADOR/TITULAR não pode ser familiar.")
+    validate_corporate_family(
+        employee=RulePerson(RelationshipCategory.COLLABORATOR.value, household.primary_member.date_of_birth,
+                            household.primary_member.first_name or "Colaborador"),
+        relatives=[RulePerson(relationship.category, date_of_birth, first_name or "Familiar")],
+    )
 
     with transaction.atomic():
         member = member_service.create_member(
@@ -127,6 +138,7 @@ def create_dependent(
             external_reference=external_reference,
             attributes=attributes,
             nif=nif,
+            corporate_dependent=True,
         )
         membership = add_dependent(household=household, member=member, joined_at=joined_at)
     return membership
@@ -145,8 +157,8 @@ def create_household_person(
         raise HouseholdValidationError("Os agregados familiares são exclusivos de empresas.")
     tenant = CurrentTenantProvider.require()
     relationship = validate_relationship_code(tenant_id=tenant.value, code=relationship_code)
-    if relationship.category == RelationshipCategory.TITULAR.value:
-        raise HouseholdValidationError("Use uma relação de dependente; TITULAR não pode ser criado como familiar.")
+    if relationship.category in (RelationshipCategory.TITULAR.value, RelationshipCategory.COLLABORATOR.value):
+        raise HouseholdValidationError("Use uma relação familiar; COLABORADOR/TITULAR não pode ser familiar.")
 
     with transaction.atomic():
         if person_id:
@@ -158,6 +170,11 @@ def create_household_person(
                 tenant_id=tenant.value, first_name=first_name or "Pessoa", last_name=last_name,
                 date_of_birth=date_of_birth, sex_code=sex_code, nif=nif,
             )
+        validate_corporate_family(
+            employee=RulePerson(RelationshipCategory.COLLABORATOR.value, household.primary_member.date_of_birth,
+                                household.primary_member.first_name or "Colaborador"),
+            relatives=[RulePerson(relationship.category, person.date_of_birth, person.first_name or "Familiar")],
+        )
         if FamilyHouseholdMember.objects.filter(
             person=person, household__proposer_id=household.proposer_id, left_at__isnull=True,
         ).exists():

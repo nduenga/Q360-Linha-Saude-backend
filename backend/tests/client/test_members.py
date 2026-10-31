@@ -63,7 +63,7 @@ def test_create_unregistered_dependant_and_add_it_to_corporate_household(admin_c
         "/api/v1/members",
         {
             "proposerId": proposer["id"],
-            "relationshipCode": "TITULAR",
+            "relationshipCode": "COLABORADOR",
             "firstName": "Funcionário",
             "dateOfBirth": "1988-05-20",
         },

@@ -236,7 +236,7 @@ def create_quote(
     plan_id: uuid.UUID,
     # Atalho para o formulário "nova cotação" que ainda não tem um Proposer
     # persistido. Passar `proposerInput` cria o Proposer atomáticamente e,
-    # opcionalmente, passar `titularMemberInput` cria o membro titular (TITULAR)
+    # opcionalmente, passar `titularMemberInput` cria o membro da cotação
     # e junta-o à cotação no mesmo passo — tudo transacional: se a cotação
     # falhar, nada fica para trás e nenhuma pessoa/proponente órfão é criada.
     proposer_input: dict[str, Any] | None = None,
@@ -290,10 +290,13 @@ def create_quote(
 
                 invite_proposer(created_proposer)  # convite para o Portal do Cliente (após o commit)
                 if titular_member_input is not None:
-                    # O titular criado no mesmo passo é sempre relação TITULAR
-                    # com o próprio Proposer (a menos que o formulário indique
-                    # outro, mas por default é TITULAR)
-                    relationship_code = (titular_member_input.get("relationshipCode") or "TITULAR").upper()
+                    # Proponente individual: TITULAR. Organização: empregado
+                    # que encabeça o agregado, sempre COLABORADOR.
+                    relationship_code = (
+                        "COLABORADOR"
+                        if created_proposer.proposer_type == "ORGANISATION"
+                        else (titular_member_input.get("relationshipCode") or "TITULAR").upper()
+                    )
                     first_name = titular_member_input.get("firstName")
                     last_name = titular_member_input.get("lastName")
                     if first_name is None and created_proposer.display_name:

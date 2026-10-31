@@ -37,7 +37,7 @@ def test_upload_validates_rows_and_reports_counts(admin_client):
     proposer = _proposer(admin_client)
     file = _csv_file(
         [
-            "TITULAR,Joao,Silva,1990-05-20,M,EXT-1",
+            "COLABORADOR,Joao,Silva,1990-05-20,M,EXT-1",
             ",Sem,Relacao,1990-05-20,M,EXT-2",  # invalid: missing relationshipCode
         ]
     )
@@ -57,7 +57,7 @@ def test_commit_creates_only_valid_members(admin_client):
     proposer = _proposer(admin_client)
     file = _csv_file(
         [
-            "TITULAR,Joao,Silva,1990-05-20,M,EXT-1",
+            "COLABORADOR,Joao,Silva,1990-05-20,M,EXT-1",
             ",Sem,Relacao,1990-05-20,M,EXT-2",
         ]
     )
@@ -79,7 +79,7 @@ def test_commit_creates_only_valid_members(admin_client):
 @pytest.mark.django_db
 def test_commit_twice_is_conflict(admin_client):
     proposer = _proposer(admin_client)
-    file = _csv_file(["TITULAR,Joao,Silva,1990-05-20,M,EXT-1"])
+    file = _csv_file(["COLABORADOR,Joao,Silva,1990-05-20,M,EXT-1"])
     uploaded = admin_client.post(
         "/api/v1/member-imports", {"proposerId": proposer["id"], "file": file}, format="multipart"
     ).data
@@ -94,7 +94,7 @@ def test_commit_twice_is_conflict(admin_client):
 
 @pytest.mark.django_db
 def test_commit_without_proposer_is_conflict(admin_client):
-    file = _csv_file(["TITULAR,Joao,Silva,1990-05-20,M,EXT-1"])
+    file = _csv_file(["COLABORADOR,Joao,Silva,1990-05-20,M,EXT-1"])
     uploaded = admin_client.post("/api/v1/member-imports", {"file": file}, format="multipart").data
     assert uploaded["proposerId"] is None
 
@@ -108,7 +108,7 @@ def test_commit_without_proposer_is_conflict(admin_client):
 @pytest.mark.django_db
 def test_get_import_job_status(admin_client):
     proposer = _proposer(admin_client)
-    file = _csv_file(["TITULAR,Joao,Silva,1990-05-20,M,EXT-1"])
+    file = _csv_file(["COLABORADOR,Joao,Silva,1990-05-20,M,EXT-1"])
     uploaded = admin_client.post(
         "/api/v1/member-imports", {"proposerId": proposer["id"], "file": file}, format="multipart"
     ).data

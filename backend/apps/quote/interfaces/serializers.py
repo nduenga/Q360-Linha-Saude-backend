@@ -144,7 +144,8 @@ class _ProposerInputSerializer(serializers.Serializer):
 class QuoteCreateRequestSerializer(serializers.Serializer):
     """Aceita dois caminhos:
     - Modo "referência": `proposerId` (UUID) + `planId`.
-    - Modo "inline":    `proposerInput` (e opcionalmente `titularMemberInput`)
+    - Modo "inline":    `proposerInput` (e opcionalmente `titularMemberInput`;
+                         para organização representa o empregado COLABORADOR)
                          + `planId`. Cria tudo no mesmo request.
 
     A cotação não tem data de efeito: fica com a data de criação e a validade
@@ -230,8 +231,13 @@ class CorporatePopulationMemberInputSerializer(serializers.Serializer):
             raise serializers.ValidationError(str(exc)) from exc
 
 
+class CorporateEmployeeInputSerializer(CorporatePopulationMemberInputSerializer):
+    """O colaborador é o titular do agregado; não escolhe parentesco."""
+    relationshipCode = serializers.CharField(min_length=1, max_length=40, required=False, default="COLABORADOR")
+
+
 class CorporateHouseholdInputSerializer(serializers.Serializer):
-    holder = CorporatePopulationMemberInputSerializer()
+    holder = CorporateEmployeeInputSerializer()
     dependents = CorporatePopulationMemberInputSerializer(many=True, required=False, default=list)
     createHousehold = serializers.BooleanField(required=False, default=True)
     joinedAt = serializers.DateField(required=False, default=datetime.date.today)
