@@ -14,7 +14,7 @@ PACOTE DE MODELOS DE IMPORTAÇÃO Q360
 
 UTILIZAÇÃO
 - Modelo actuarial: Administração > Tarifação/Modelo actuarial. A importação cria rascunho; publicação depende de aprovação actuarial.
-- Membros: importar num cliente empresa (o exemplo tem vários titulares) e confirmar a importação. Importe os membros antes dos sinistros: as referências DEMO-PESS-001 a 030 são as mesmas.
+- Membros: para testar a importação atual de clientes organizacionais, usar `docs/ficheiros_teste_modulos/01_Colaboradores_QA.xlsx` (30 pessoas fictícias com relação COLABORADOR). Importe esses membros antes dos sinistros: as referências DEMO-PESS-001 a 030 coincidem. O antigo `02_Exemplo_Membros_TESTE.xlsx` preserva relações de um modelo anterior e não é o ficheiro recomendado para a importação organizacional atual.
 - Sinistros/prémios: Sinistralidade > Importações; para análise de experiência, usar períodos correspondentes.
 - Coberturas: Administração > Produtos/Coberturas > Importar.
 - Tabela de referência: Plataforma > Tabelas de referência; seleccionar coluna-chave e submeter para aprovação.

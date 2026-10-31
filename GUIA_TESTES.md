@@ -2,6 +2,8 @@
 
 Tudo o que precisa para pôr o sistema a funcionar com dados de demonstração e testar cada parte, passo a passo.
 
+Para o roteiro completo por módulos — incluindo produtos, elegibilidade, fórmulas, regras, parâmetros, tarifação, sinistros e os ficheiros prontos para upload — consulte [GUIA_TESTES_POR_MODULO.md](docs/GUIA_TESTES_POR_MODULO.md).
+
 ## 1. Como o sistema funciona (em 1 minuto)
 
 **Plataforma (backoffice)** — usada pelos colaboradores da seguradora.
