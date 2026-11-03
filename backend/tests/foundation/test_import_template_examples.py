@@ -124,3 +124,20 @@ def test_package_benefit_and_reference_examples_are_valid(admin_client):
         columns=[{"code": "provincia"}, {"code": "fator", "type": "NUMBER"}],
         rows=[dict(zip(["provincia", "fator"], row)) for row in parsed["rows"]],
     )
+
+
+@pytest.mark.django_db
+def test_family_relationships_in_an_organisation_import_are_row_errors_not_a_crash(admin_client):
+    """Regressão: uma relação familiar numa importação de organização gravava um
+    erro na «linha 0», recusado pela base de dados (erro 500). Agora é um erro
+    dessa linha, com o motivo, e a importação não pode ser confirmada."""
+    from apps.claims.application.import_service import xlsx_from_rows
+
+    proposer_id = _organisation(admin_client)
+    rows = [["Relação com o titular", "Nome", "Apelido", "Data de nascimento", "Sexo", "Referência externa"],
+            ["COLABORADOR", "Rui", "Costa", "1985-01-01", "M", "R-1"],
+            ["CONJUGE", "Eva", "Costa", "1987-01-01", "F", "R-2"]]
+    file = SimpleUploadedFile("membros.xlsx", xlsx_from_rows(rows), content_type=XLSX)
+    uploaded = admin_client.post("/api/v1/member-imports", {"proposerId": proposer_id, "file": file}, format="multipart")
+    assert uploaded.status_code == 202, uploaded.data
+    assert (uploaded.data["validRows"], uploaded.data["invalidRows"]) == (1, 1)

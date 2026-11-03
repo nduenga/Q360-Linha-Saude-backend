@@ -449,11 +449,11 @@ def evaluate(
     # ELIG-005 — Relationship not allowed by plan.
     if (
         config.allowed_relationship_codes is not None
-        and data.relationship_code not in config.allowed_relationship_codes
+        and not _relationship_allowed(data.relationship_code, config.allowed_relationship_codes)
     ):
         return EligibilityDecision.HARD_STOP, [
             EligibilityMessage(
-                "ELIG-RELATIONSHIP", "ERROR", "Relationship not eligible for selected plan"
+                "ELIG-RELATIONSHIP", "ERROR", "Esta relação familiar não é aceite neste plano."
             )
         ]
 
@@ -513,7 +513,7 @@ def evaluate(
             EligibilityMessage(
                 "ELIG-RELATIONSHIP-ALLOWED",
                 "INFO",
-                f"A relação familiar ({data.relationship_code or 'não informada'}) está permitida para o plano.",
+                f"A relação ({data.relationship_code or 'não informada'}) está permitida para o plano.",
             )
         )
 
@@ -575,3 +575,12 @@ def evaluate(
     if wp_message is not None:
         eligible_messages.append(wp_message)
     return EligibilityDecision.ELIGIBLE, eligible_messages
+
+
+def _relationship_allowed(code: str | None, allowed: frozenset[str]) -> bool:
+    """O COLABORADOR de uma empresa é o titular do seu agregado: uma regra que
+    aceita TITULAR aceita-o também. As regras publicadas antes de existir a
+    relação COLABORADOR só listam TITULAR e não podem recusar os colaboradores."""
+    if code in allowed:
+        return True
+    return code == "COLABORADOR" and "TITULAR" in allowed

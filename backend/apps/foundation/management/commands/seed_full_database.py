@@ -100,7 +100,7 @@ AGE_FACTORS = (("0-17", "0.60"), ("18-29", "0.80"), ("30-39", "1.00"), ("40-49",
 ELIGIBILITY_ARTIFACT = {
     "minEntryAge": 0,
     "maxEntryAge": 75,
-    "allowedRelationshipCodes": ["TITULAR", "CONJUGE", "FILHO", "ASCENDENTE"],
+    "allowedRelationshipCodes": ["TITULAR", "COLABORADOR", "CONJUGE", "FILHO", "ASCENDENTE"],
     "categoryRules": {
         "CHILD": {"maxAgeWithoutProof": 18, "maxAgeWithProof": 25},
         "SPOUSE": {"requiresUnionProofFor": ["UNIAO_DE_FACTO"]},

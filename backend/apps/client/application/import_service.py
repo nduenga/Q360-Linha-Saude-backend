@@ -250,6 +250,19 @@ def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFi
         )
         return import_job
 
+    if proposer is not None and proposer.proposer_type != ProposerType.INDIVIDUAL.value:
+        # Numa organização cada linha é um colaborador: uma relação familiar é
+        # um erro dessa linha (com o número dela), não do ficheiro inteiro.
+        categories = _category_by_code()
+        for row in rows:
+            code = (row.values.get("relationshipCode") or "").strip()
+            if row.is_valid and categories.get(code) != RelationshipCategory.COLLABORATOR.value:
+                row.errors.append((
+                    "relationshipCode", "VALIDATION-400",
+                    "Numa organização cada pessoa importada é um colaborador (COLABORADOR); "
+                    "os familiares associam-se depois ao agregado do colaborador.",
+                ))
+
     ImportRowError.objects.bulk_create(
         [
             ImportRowError(
@@ -266,11 +279,12 @@ def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFi
     )
     population_problem = _population_problem(proposer=proposer, rows=rows)
     if population_problem:
-        # Erro ao nível do ficheiro (linha 0): o commit volta a validar e recusa.
+        # Erro do conjunto (não de uma linha): fica na primeira linha de dados,
+        # porque a tabela só aceita números de linha > 0; o commit volta a validar e recusa.
         ImportRowError.objects.create(
             tenant_id=tenant_id.value,
             import_job=import_job,
-            row_number=0,
+            row_number=min((r.row_number for r in rows), default=2),
             field_name="relationshipCode",
             error_code="VALIDATION-400",
             error_message=population_problem,
