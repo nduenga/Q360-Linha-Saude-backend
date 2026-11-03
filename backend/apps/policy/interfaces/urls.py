@@ -3,6 +3,7 @@ from django.urls import path
 from apps.policy.interfaces.coverage_views import CoverageLookupView, PolicyCoverageView
 from apps.policy.interfaces.endorsement_views import (
     PolicyEndorsementListView,
+    PolicyCoverageChangeView,
     PolicyInclusionView,
     PolicyDependentInclusionView,
     QuoteEndorsementDocumentView,
@@ -55,6 +56,7 @@ urlpatterns = [
     path("policies/<uuid:policy_id>/installments/<int:installment_no>/terminate", PolicyTerminateView.as_view(), name="policy-terminate"),
     path("policies/<uuid:policy_id>/endorsements", PolicyEndorsementListView.as_view(), name="policy-endorsements"),
     path("policies/<uuid:policy_id>/endorsements/inclusions", PolicyInclusionView.as_view(), name="policy-inclusion"),
+    path("policies/<uuid:policy_id>/endorsements/coverages", PolicyCoverageChangeView.as_view(), name="policy-coverage-change"),
     path("policies/<uuid:policy_id>/dependents", PolicyDependentInclusionView.as_view(), name="policy-dependent-inclusion"),
     path("quotes/<uuid:quote_id>/endorsement", QuoteEndorsementView.as_view(), name="quote-endorsement"),
     path("quotes/<uuid:quote_id>/endorsement/response", QuoteEndorsementResponseView.as_view(),

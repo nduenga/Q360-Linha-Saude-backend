@@ -51,6 +51,10 @@ REGISTRY: dict[str, dict] = {
         "request": d.EndorsementInclusionRequest, "response": d.EndorsementState, "status": 201,
         "notes": "Cria a cotação de endosso (ENDORSEMENT) ligada à apólice ativa, com a data de inclusão como data de referência do cálculo, e calcula logo o prémio anual das pessoas indicadas.",
     },
+    "PolicyCoverageChangeView.post": {
+        "request": d.CoverageChangeRequest, "response": d.EndorsementState, "status": 201,
+        "notes": "Cria uma cotação de endosso com a população ativa e coberturas atuais. A proposta só altera a apólice depois de ser aprovada e aceite; o prémio é recalculado e a diferença pro-rata é aplicada às prestações futuras ou registada como crédito.",
+    },
     "PolicyEndorsementListView.get": {"response": d.PolicyEndorsements},
     "QuoteEndorsementView.get": {"response": d.EndorsementState},
     "QuoteEndorsementView.put": {

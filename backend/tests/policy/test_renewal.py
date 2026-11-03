@@ -63,6 +63,13 @@ def test_renewal_quote_from_an_active_policy(admin_client, tenant):
 
     members = admin_client.get(f"/api/v1/quotes/{body['id']}/members").data["items"]
     assert [m["memberId"] for m in members] == [policy["memberId"]]
+    assert members[0]["eligibilityEvaluationId"]
+    assert members[0]["eligibilityDecision"]
+    evaluation = admin_client.get(
+        f"/api/v1/eligibility/evaluations/{members[0]['eligibilityEvaluationId']}"
+    )
+    assert evaluation.status_code == 200, evaluation.data
+    assert evaluation.data["effectiveDate"] == body["renewal"]["proposedStartDate"]
     versions = admin_client.get(f"/api/v1/quotes/{body['id']}/versions").data
     assert versions[0]["source"] == "RENEWAL" and "Renovação da apólice" in versions[0]["reason"]
 

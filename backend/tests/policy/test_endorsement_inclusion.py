@@ -7,6 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 import pytest
 
+from apps.product.domain.market_templates import PARTICIPATION_OPTIONS
 from tests.policy.test_issuance import _approved_quote, _approver
 
 
@@ -74,6 +75,86 @@ def test_inclusion_prorata_approval_and_client_acceptance(admin_client, tenant):
     assert "Prémio pro-rata" in html.content.decode()
     pdf = admin_client.get(f"/api/v1/quotes/{qid}/endorsement/document")
     assert pdf.status_code == 200 and pdf.content[:4] == b"%PDF"
+
+
+@pytest.mark.django_db
+def test_coverage_change_is_priced_approved_accepted_and_recorded(admin_client, tenant):
+    policy, source_quote = _active_policy(admin_client, tenant)
+    plan = admin_client.get(f"/api/v1/plans/{policy['planId']}").data
+    settings = {
+        "segment": "INDIVIDUAL_FAMILY",
+        "tier": "MEDIUM",
+        "accessSystem": "MIXED",
+        "entryAge": {"min": 0, "max": 65},
+        "permanenceAge": {"max": 75},
+        "participationOptions": PARTICIPATION_OPTIONS,
+        "participationOption": "B",
+    }
+    configured = admin_client.patch(
+        f"/api/v1/plans/{plan['id']}",
+        {"name": plan["name"], "rowVersion": plan["rowVersion"], "settings": settings},
+        format="json",
+    )
+    assert configured.status_code == 200, configured.data
+
+    effective_date = datetime.date.today() + datetime.timedelta(days=10)
+    created = admin_client.post(
+        f"/api/v1/policies/{policy['id']}/endorsements/coverages",
+        {"effectiveDate": effective_date.isoformat()},
+        format="json",
+    )
+    assert created.status_code == 201, created.data
+    quote_id = created.data["quoteId"]
+
+    quote = admin_client.get(f"/api/v1/quotes/{quote_id}").data
+    selection = admin_client.put(
+        f"/api/v1/quotes/{quote_id}/selection",
+        {"selection": {"participationOption": "C"}, "rowVersion": quote["rowVersion"]},
+        format="json",
+    )
+    assert selection.status_code == 200, selection.data
+    priced = admin_client.post(f"/api/v1/quotes/{quote_id}/price")
+    assert priced.status_code == 200, priced.data
+    calculation = admin_client.get(f"/api/v1/quotes/{quote_id}/endorsement").data["coverageChangeCalculation"]
+    assert Decimal(calculation["annualPremiumDelta"]) < 0
+    assert Decimal(calculation["totalAdjustment"]) < 0
+
+    before_installments = admin_client.get(f"/api/v1/policies/{policy['id']}/installments").data
+    future_due_before = sum(
+        (Decimal(row["amount"]) for row in before_installments
+         if row["status"] == "DUE" and row["dueDate"] >= effective_date.isoformat()),
+        Decimal("0"),
+    )
+    quote = admin_client.get(f"/api/v1/quotes/{quote_id}").data
+    submitted = admin_client.post(
+        f"/api/v1/quotes/{quote_id}/submit", {"rowVersion": quote["rowVersion"]}, format="json"
+    )
+    assert submitted.status_code == 200, submitted.data
+    approved = _approver(tenant).post(
+        f"/api/v1/quotes/{quote_id}/decision",
+        {"decision": "APPROVE", "reasonCode": "OK", "rowVersion": submitted.data["rowVersion"]},
+        format="json",
+    )
+    assert approved.status_code == 200, approved.data
+    accepted = _approver(tenant).post(
+        f"/api/v1/quotes/{quote_id}/endorsement/response", {"decision": "ACCEPT"}, format="json"
+    )
+    assert accepted.status_code == 200, accepted.data
+    assert accepted.data["status"] == "BOUND"
+    assert accepted.data["appliedEndorsementNo"] == 1
+
+    after_installments = admin_client.get(f"/api/v1/policies/{policy['id']}/installments").data
+    future_due_after = sum(
+        (Decimal(row["amount"]) for row in after_installments
+         if row["status"] == "DUE" and row["dueDate"] >= effective_date.isoformat()),
+        Decimal("0"),
+    )
+    assert future_due_after == future_due_before + Decimal(calculation["totalAdjustment"])
+    updated_source_quote = admin_client.get(f"/api/v1/quotes/{source_quote['id']}").data
+    assert updated_source_quote["selection"]["participationOption"] == "C"
+    history = admin_client.get(f"/api/v1/policies/{policy['id']}/endorsements").data
+    assert history["endorsements"][0]["type"] == "CHANGE_COVERAGES"
+    assert history["endorsements"][0]["payload"]["afterSelection"]["participationOption"] == "C"
 
 
 def _child(admin_client, proposer_id, birth: datetime.date) -> str:

@@ -372,12 +372,89 @@ BASIS_TEXT = {"ACTUAL_PERIOD": "dias reais do período", "FIXED_366": "366 dias"
               "FIXED_360": "360 dias"}
 
 
+def _coverage_selection_text(selection: dict[str, Any]) -> str:
+    parts = []
+    option = selection.get("participationOption")
+    if option:
+        parts.append(f"Participação: {option}")
+    optional_codes = selection.get("optionalBenefitCodes") or []
+    if optional_codes:
+        parts.append("Coberturas opcionais: " + ", ".join(sorted(str(code) for code in optional_codes)))
+    overrides = selection.get("coverageOverrides") or {}
+    if isinstance(overrides, dict):
+        for code, configuration in sorted(overrides.items()):
+            limits = configuration.get("limits", []) if isinstance(configuration, dict) else []
+            descriptions = []
+            for limit in limits:
+                if not isinstance(limit, dict):
+                    continue
+                label = limit.get("label") or limit.get("kind") or "Capital"
+                amount = limit.get("amount")
+                descriptions.append(f"{label}: {amount}" if amount is not None else str(label))
+            if descriptions:
+                parts.append(f"{code}: {'; '.join(descriptions)}")
+    return " · ".join(parts) or "Opções padrão do plano"
+
+
 def endorsement_blocks(quote) -> tuple[list[tuple], str]:
-    """Proposta de endosso de inclusão (antes da aceitação) ou ata adicional
-    (depois de aplicada): pessoas novas, cálculo pro-rata e prestações."""
+    """Proposta de endosso or ata adicional, according to its change kind."""
     from apps.policy.application import endorsement_service
 
     data = endorsement_service.describe(quote)
+    if data.get("kind") == "COVERAGE_CHANGE":
+        calc = data.get("coverageChangeCalculation")
+        if not calc:
+            raise PolicyStateError("O endosso ainda não tem cálculo: recalcule o prémio das coberturas propostas")
+        policy = endorsement_service.policy_of(quote)
+        content = _policy_content(policy)
+        holder, plan = content["client"], content["plan"]
+        currency = calc.get("currencyCode") or policy.currency_code or "AOA"
+        applied = data.get("appliedEndorsementNo")
+        title = (f"Ata adicional n.º {applied} — alteração de coberturas da apólice {policy.policy_number}" if applied
+                 else f"Proposta de alteração de coberturas — apólice {policy.policy_number}")
+        blocks = _brand_block(content) + [
+            ("title", title),
+            ("kv", [
+                ("Apólice n.º", policy.policy_number or "—"),
+                ("Tomador", holder["name"]),
+                ("Plano", f"{plan['name']} ({plan['product']})"),
+                ("Período da apólice", f"{_day(policy.start_date)} a {_day(policy.end_date)}"),
+                ("Data de efeito", _day(datetime.date.fromisoformat(calc["effectiveDate"]))),
+                ("Estado", ENDORSEMENT_STATUS_TEXT.get(data["status"], data["status"])),
+                ("Responder até", _day(datetime.date.fromisoformat(data["acceptanceDeadline"])) if data.get("acceptanceDeadline") else "—"),
+            ]),
+            ("heading", "Coberturas e opções"),
+            ("table", ["Condição atual", "Condição proposta"], [[
+                _coverage_selection_text(calc.get("beforeSelection") or {}),
+                _coverage_selection_text(calc.get("afterSelection") or {}),
+            ]]),
+            ("heading", "Alteração do prémio"),
+            ("kv", [
+                ("Prémio anual atual", proposal_content.money(calc["annualPremiumBefore"], currency)),
+                ("Prémio anual proposto", proposal_content.money(calc["annualPremiumAfter"], currency)),
+                ("Diferença anual", proposal_content.money(calc["annualPremiumDelta"], currency)),
+                ("Diferença pro-rata", proposal_content.money(calc["totalAdjustment"], currency)),
+                ("Valor a cobrar após crédito", proposal_content.money(calc["chargeAmount"], currency)),
+                ("Crédito remanescente estimado", proposal_content.money(calc["creditBalanceAfter"], currency)),
+                ("Encargo de fracionamento", f"{(Decimal(calc['fractionation']['loading']) * 100).normalize()} %"
+                 if calc["fractionation"]["applied"] else "Não aplicado"),
+            ]),
+        ]
+        changes = calc.get("installmentChanges") or []
+        if changes:
+            blocks.extend([
+                ("heading", "Ajuste das prestações futuras"),
+                ("table", ["Prestação", "Valor atual", "Variação", "Novo valor"], [
+                    [str(item["installmentNo"]), proposal_content.money(item["previousAmount"], currency),
+                     proposal_content.money(item["amountChange"], currency),
+                     proposal_content.money(item["newAmount"], currency)]
+                    for item in changes
+                ]),
+            ])
+        blocks.append(("note", "A alteração só produz efeitos depois da aprovação e aceitação do cliente. "
+                               "A diferença é ajustada nas prestações futuras; créditos não utilizados ficam registados na apólice."))
+        return blocks, title
+
     calc = data.get("calculation")
     if not calc:
         raise PolicyStateError("O endosso ainda não tem cálculo: calcule o prémio das pessoas novas primeiro")

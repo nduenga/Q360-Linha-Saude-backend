@@ -18,9 +18,9 @@ _AGE_BAND_BUCKETS: list[tuple[int | None, str]] = [
 ]
 
 
-def compute_age(date_of_birth: datetime.date) -> int:
-    """Calcula a idade atual com base na data de nascimento."""
-    today = timezone.localdate()
+def compute_age(date_of_birth: datetime.date, reference_date: datetime.date | None = None) -> int:
+    """Calcula a idade na data indicada, ou hoje quando não for especificada."""
+    today = reference_date or timezone.localdate()
 
     age = today.year - date_of_birth.year
 
@@ -35,12 +35,13 @@ def compute_age(date_of_birth: datetime.date) -> int:
 
 def compute_age_band(
     date_of_birth: datetime.date | None,
+    reference_date: datetime.date | None = None,
 ) -> str | None:
-    """Determina o escalão etário sem exigir uma data de referência."""
+    """Determina o escalão etário na data indicada (ou hoje, por omissão)."""
     if date_of_birth is None:
         return None
 
-    age = compute_age(date_of_birth)
+    age = compute_age(date_of_birth, reference_date)
 
     for max_age, band in _AGE_BAND_BUCKETS:
         if max_age is None or age <= max_age:

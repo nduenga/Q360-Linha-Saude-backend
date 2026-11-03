@@ -375,6 +375,8 @@ class QuoteMemberSerializer(serializers.Serializer):
     personId = serializers.UUIDField(source="member.person_id", allow_null=True)
     status = serializers.CharField()
     eligibilityEvaluationId = serializers.UUIDField(source="eligibility_evaluation_id", allow_null=True)
+    eligibilityDecision = serializers.CharField(source="eligibility_evaluation.decision", allow_null=True)
+    eligibilityMessages = serializers.JSONField(source="eligibility_evaluation.evidence_json", allow_null=True)
     preExisting = serializers.JSONField(source="pre_existing_json")
 
 

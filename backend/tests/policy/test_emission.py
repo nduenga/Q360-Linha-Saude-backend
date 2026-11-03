@@ -76,6 +76,11 @@ def test_emit_without_payment_leaves_the_policy_waiting_for_the_first_premium(ad
     )
     assert response.status_code == 201, response.data
     assert response.data["status"] == "PENDING_FIRST_PREMIUM"
+    installments = admin_client.get(
+        "/api/v1/installments", {"policyNumber": response.data["policyNumber"]}
+    ).data["items"]
+    assert len(installments) == 1
+    assert installments[0]["canRegisterPayment"] is True
     assert admin_client.get(response.data["documentPath"]).status_code == 200
 
 
@@ -206,6 +211,7 @@ def test_later_installments_are_paid_in_order_and_listed_as_collections(admin_cl
     assert items[0]["installmentNo"] == 3 and items[0]["holderName"] == "Holder" and items[0]["canRegisterPayment"] is True
     paid = admin_client.get("/api/v1/installments", {"policyNumber": policy["policyNumber"], "status": "PAID"}).data["items"]
     assert [i["installmentNo"] for i in paid] == [1, 2]
+    assert all(i["canRegisterPayment"] is False for i in paid)
     assert admin_client.get("/api/v1/installments", {"status": "NOPE"}).status_code == 400
 
 

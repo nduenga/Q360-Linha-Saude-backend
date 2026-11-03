@@ -313,7 +313,23 @@ class InstallmentListView(APIView):
                     "policyStatus": installment.policy.status,
                     "holderName": holders.get(installment.policy.proposer_id),
                     "daysOverdue": (today - installment.due_date).days if effective == "OVERDUE" else 0,
-                    "canRegisterPayment": effective in ("DUE", "OVERDUE") and installment.policy.status == "ACTIVE",
+                    "canRegisterPayment": (
+                        effective in ("DUE", "OVERDUE")
+                        and (
+                            (
+                                installment.installment_no == 1
+                                and installment.policy.status == "PENDING_FIRST_PREMIUM"
+                            )
+                            or (
+                                installment.installment_no > 1
+                                and installment.policy.status in ("ACTIVE", "SUSPENDED")
+                                and not PremiumInstallment.objects.filter(
+                                    policy_id=installment.policy_id,
+                                    installment_no__lt=installment.installment_no,
+                                ).exclude(status__in=("PAID", "VOID")).exists()
+                            )
+                        )
+                    ),
                 }
             )
         return paginator.get_paginated_response(items)

@@ -169,6 +169,32 @@ def create_renewal(
     with transaction.atomic():
         renewal = quote_service.create_quote(proposer_id=policy.proposer_id, plan_id=target_plan_id)
         effective_settings = effective_plan_settings(renewal.plan, renewal_date)
+        deadlines = effective_settings.get("renewalDeadlines") or {}
+        rules = effective_settings.get("renewal") or {}
+        renewal_json = {
+            "sourcePolicyId": str(policy.id),
+            "sourcePolicyNumber": policy.policy_number,
+            "sourceQuoteId": str(source_quote.id),
+            "previousPeriod": {"start": policy.start_date.isoformat() if policy.start_date else None, "end": policy.end_date.isoformat()},
+            "proposedStartDate": renewal_date.isoformat(),
+            "previousPremium": {"amount": previous_total, "currencyCode": policy.currency_code},
+            "planChanged": not same_plan,
+            "carriedMembers": carried,
+            "skippedMembers": skipped,
+            "capitalIndexation": {"medicalInflationPct": (effective_settings.get("capitalIndexation") or {}).get("medicalInflationPct"), "applied": False},
+            "deadlines": deadlines,
+            "rules": rules,
+        }
+        acceptance_days = deadlines.get("acceptance_days")
+        if isinstance(acceptance_days, int) and acceptance_days > 0:
+            deadline = datetime.date.today() + datetime.timedelta(days=acceptance_days)
+            renewal_json["acceptanceDeadline"] = deadline.isoformat()
+        Quote.objects.filter(id=renewal.id).update(
+            quote_type="RENEWAL",
+            source_policy_id=policy.id,
+            renewal_json=renewal_json,
+        )
+        renewal.refresh_from_db()
         permanence = (effective_settings.get("permanenceAge") or {}).get("max")
         for policy_member in policy.members.select_related("member").order_by("created_at", "id"):
             if policy_member.status != "ACTIVE" or policy_member.exclusion_date is not None:
@@ -193,30 +219,9 @@ def create_renewal(
                 pre_existing_json=source_member.pre_existing_json
             )
         indexation = effective_settings.get("capitalIndexation") or {}
-        deadlines = effective_settings.get("renewalDeadlines") or {}
-        rules = effective_settings.get("renewal") or {}
-        renewal_json = {
-            "sourcePolicyId": str(policy.id),
-            "sourcePolicyNumber": policy.policy_number,
-            "sourceQuoteId": str(source_quote.id),
-            "previousPeriod": {"start": policy.start_date.isoformat() if policy.start_date else None, "end": policy.end_date.isoformat()},
-            "proposedStartDate": renewal_date.isoformat(),
-            "previousPremium": {"amount": previous_total, "currencyCode": policy.currency_code},
-            "planChanged": not same_plan,
-            "carriedMembers": carried,
-            "skippedMembers": skipped,
-            "capitalIndexation": {"medicalInflationPct": indexation.get("medicalInflationPct"), "applied": False},
-            "deadlines": deadlines,
-            "rules": rules,
-        }
-        # `renewal.deadlines.acceptance_days`: prazo para o cliente aceitar a
-        # proposta de renovação. A validade da cotação nunca pode ser anterior
-        # à data de início (ck_quote_dates), por isso o prazo fica registado
-        # em `acceptanceDeadline` e a validade é a mais tardia das duas.
-        acceptance_days = deadlines.get("acceptance_days")
-        if isinstance(acceptance_days, int) and acceptance_days > 0:
-            deadline = datetime.date.today() + datetime.timedelta(days=acceptance_days)
-            renewal_json["acceptanceDeadline"] = deadline.isoformat()
+        renewal_json["capitalIndexation"] = {"medicalInflationPct": indexation.get("medicalInflationPct"), "applied": False}
+        renewal_json["carriedMembers"] = carried
+        renewal_json["skippedMembers"] = skipped
         updates: dict[str, Any] = {
             "quote_type": "RENEWAL", "source_policy_id": policy.id, "renewal_json": renewal_json, "selection_json": selection,
         }

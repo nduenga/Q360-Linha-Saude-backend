@@ -222,7 +222,9 @@ class QuoteMemberListCreateView(APIView):
     def get(self, request, quote_id):
         quote = get_object_or_404(Quote, id=quote_id)
         paginator = Q360PageNumberPagination()
-        page = paginator.paginate_queryset(quote.members.all().order_by("created_at"), request)
+        page = paginator.paginate_queryset(
+            quote.members.select_related("eligibility_evaluation").order_by("created_at"), request
+        )
         return paginator.get_paginated_response(QuoteMemberSerializer(page, many=True).data)
 
     def post(self, request, quote_id):

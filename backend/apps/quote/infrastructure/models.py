@@ -110,17 +110,24 @@ class Quote(TenantScopedModel):
         """Data de referência do cálculo: idades, configurações, tarifas e
         regras em vigor, disponibilidade do plano.
 
-        Cotação aberta (DRAFT/READY, ou ainda sem cálculo): o dia de hoje — o
-        que for publicado na interface passa a valer no próximo cálculo.
+        Cotação de renovação: data de início proposta. Cotação aberta
+        (DRAFT/READY, ou ainda sem cálculo): o dia de hoje — o que for
+        publicado na interface passa a valer no próximo cálculo.
         Depois de submetida o prémio fica congelado: vale o dia do último
         cálculo, para documentos, emissão e reavaliações baterem com ele.
         (A cotação não tem data de efeito; a validade conta da criação.)"""
         if self.quote_type == "ENDORSEMENT":
-            # Endosso: tarifa, idades e regras da data de inclusão, sempre
-            # (decisão de 2026-10-22: tarifa em vigor na data de inclusão).
+            # Endosso: usar a data de efeito escolhida para a alteração.
+            effective_date = (self.endorsement_json or {}).get("effectiveDate")
+            if effective_date:
+                return datetime.date.fromisoformat(effective_date)
             inclusion = (self.endorsement_json or {}).get("inclusionDate")
             if inclusion:
                 return datetime.date.fromisoformat(inclusion)
+        if self.quote_type == "RENEWAL":
+            proposed_start = (self.renewal_json or {}).get("proposedStartDate")
+            if proposed_start:
+                return datetime.date.fromisoformat(proposed_start)
         if self.status in ("DRAFT", "READY") or self.latest_pricing_run_id is None:
             return pricing_today()
         return self.latest_pricing_run.effective_date

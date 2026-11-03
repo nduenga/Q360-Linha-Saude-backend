@@ -31,6 +31,10 @@ class InclusionRequestSerializer(serializers.Serializer):
                                       help_text="Pessoas novas (já registadas no tomador). Podem juntar-se depois.")
 
 
+class CoverageChangeRequestSerializer(serializers.Serializer):
+    effectiveDate = serializers.DateField(help_text="Data de efeito dentro do período da apólice, não anterior a hoje.")
+
+
 class InclusionDateSerializer(serializers.Serializer):
     inclusionDate = serializers.DateField()
 
@@ -82,6 +86,21 @@ class PolicyInclusionView(APIView):
         quote = endorsement_service.create_inclusion(
             policy_id=policy_id, inclusion_date=body.validated_data["inclusionDate"],
             member_ids=body.validated_data["memberIds"], correlation_id=get_correlation_id(),
+        )
+        return Response(endorsement_service.describe(quote), status=status.HTTP_201_CREATED)
+
+
+@requires_idempotency
+class PolicyCoverageChangeView(APIView):
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_CREATE)]
+
+    def post(self, request, policy_id):
+        body = CoverageChangeRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        quote = endorsement_service.create_coverage_change(
+            policy_id=policy_id,
+            effective_date=body.validated_data["effectiveDate"],
+            correlation_id=get_correlation_id(),
         )
         return Response(endorsement_service.describe(quote), status=status.HTTP_201_CREATED)
 

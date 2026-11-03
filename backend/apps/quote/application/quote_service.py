@@ -650,7 +650,7 @@ def build_pricing_context(
         "members": {
             str(member_id): (
                 {"ageBand": band}
-                if (band := compute_age_band(members_by_id[member_id].date_of_birth))
+                if (band := compute_age_band(members_by_id[member_id].date_of_birth, quote.reference_date))
                 else {}
             )
             for member_id in priceable_member_ids

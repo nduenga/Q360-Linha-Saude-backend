@@ -11181,6 +11181,77 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/policies/{policy_id}/endorsements/coverages:
+    post:
+      operationId: postPolicyCoverageChange
+      description: 'Requer: scope q360.write, permissão quote:create.
+
+
+        Cria uma cotação de endosso com a população ativa e coberturas atuais. A proposta só altera a apólice depois
+        de ser aprovada e aceite; o prémio é recalculado e a diferença pro-rata é aplicada às prestações futuras
+        ou registada como crédito.'
+      summary: Criar policy coverage change
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoverageChangeRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndorsementState'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/policies/{policy_id}/endorsements/inclusions:
     post:
       operationId: postPolicyInclusion
@@ -20212,6 +20283,104 @@ components:
       - pricing
       - quote
       - requirements
+    CoverageChangeCalculation:
+      type: object
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        policyId:
+          type: string
+          format: uuid
+        effectiveDate:
+          type: string
+          format: date
+        beforeSelection:
+          type: object
+          additionalProperties: {}
+          description: Coberturas e opções atuais antes da alteração.
+        afterSelection:
+          type: object
+          additionalProperties: {}
+          description: Coberturas e opções propostas.
+        currencyCode:
+          type: string
+        pricingRunId:
+          type: string
+          format: uuid
+        tariffDate:
+          type: string
+          format: date
+        annualPremiumBefore:
+          type: string
+        annualPremiumAfter:
+          type: string
+        annualPremiumDelta:
+          type: string
+        days:
+          type: object
+          additionalProperties: {}
+          description: remaining, basis e factor.
+        proRataAdjustment:
+          type: string
+        fractionation:
+          type: object
+          additionalProperties: {}
+          description: frequency, loading, applied e installments.
+        totalAdjustment:
+          type: string
+          description: Diferença pro-rata após encargo de fracionamento.
+        creditBalanceBefore:
+          type: string
+        creditUsed:
+          type: string
+        chargeAmount:
+          type: string
+          description: Valor líquido a cobrar depois de usar créditos anteriores.
+        creditBalanceAfter:
+          type: string
+          description: Crédito remanescente depois de abater as prestações futuras.
+        installmentChanges:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        newInstallment:
+          type:
+          - object
+          - 'null'
+          additionalProperties: {}
+      required:
+      - afterSelection
+      - annualPremiumAfter
+      - annualPremiumBefore
+      - annualPremiumDelta
+      - beforeSelection
+      - chargeAmount
+      - creditBalanceAfter
+      - creditBalanceBefore
+      - creditUsed
+      - currencyCode
+      - days
+      - effectiveDate
+      - fractionation
+      - installmentChanges
+      - newInstallment
+      - policyId
+      - pricingRunId
+      - proRataAdjustment
+      - quoteId
+      - tariffDate
+      - totalAdjustment
+    CoverageChangeRequest:
+      type: object
+      properties:
+        effectiveDate:
+          type: string
+          format: date
+          description: Data de efeito dentro do período da apólice; não pode ser anterior a hoje.
+      required:
+      - effectiveDate
     CoverageMemberResult:
       type: object
       properties:
@@ -21318,7 +21487,16 @@ components:
           type: string
           description: DRAFT, READY, IN_REVIEW, APPROVED (à espera do cliente), BOUND (aplicado), CANCELLED (recusado),
             EXPIRED.
+        kind:
+          type:
+          - string
+          - 'null'
         inclusionDate:
+          type:
+          - string
+          - 'null'
+          format: date
+        effectiveDate:
           type:
           - string
           - 'null'
@@ -21354,13 +21532,21 @@ components:
           - $ref: '#/components/schemas/EndorsementCalculation'
           - type: 'null'
           description: Congelado na submissão; antes disso, o cálculo atual.
+        coverageChangeCalculation:
+          oneOf:
+          - $ref: '#/components/schemas/CoverageChangeCalculation'
+          - type: 'null'
+          description: Prémio anual antes/depois, diferença pro-rata, cobrança e crédito da alteração de coberturas.
       required:
       - acceptanceDeadline
       - appliedEndorsementNo
       - autoApproved
       - calculation
       - clientResponse
+      - coverageChangeCalculation
+      - effectiveDate
       - inclusionDate
+      - kind
       - policyId
       - policyNumber
       - quoteId
@@ -24184,7 +24370,16 @@ components:
           - 'null'
         status:
           type: string
+        kind:
+          type:
+          - string
+          - 'null'
         inclusionDate:
+          type:
+          - string
+          - 'null'
+          format: date
+        effectiveDate:
           type:
           - string
           - 'null'
@@ -24206,7 +24401,9 @@ components:
       required:
       - acceptanceDeadline
       - createdAt
+      - effectiveDate
       - inclusionDate
+      - kind
       - quoteId
       - quoteNumber
       - status

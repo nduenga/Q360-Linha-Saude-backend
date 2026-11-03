@@ -135,6 +135,19 @@ def _check_inclusion_date(policy: Policy, inclusion: datetime.date) -> None:
         )
 
 
+def _check_coverage_change_date(policy: Policy, effective_date: datetime.date) -> None:
+    today = _today()
+    if effective_date < today:
+        raise EndorsementError(
+            f"A data da alteração ({fmt.date(effective_date)}) não pode ser anterior a hoje ({fmt.date(today)})"
+        )
+    if effective_date < policy.start_date or effective_date > policy.end_date:
+        raise EndorsementError(
+            f"A data da alteração tem de estar dentro do período da apólice "
+            f"({fmt.date(policy.start_date)} a {fmt.date(policy.end_date)})"
+        )
+
+
 def policy_of(quote: Quote) -> Policy:
     policy = Policy.objects.select_related("plan", "source_quote").filter(id=quote.source_policy_id).first()
     if policy is None:
@@ -150,7 +163,7 @@ def require_endorsement(quote: Quote) -> None:
 def assert_member_can_join(quote: Quote, member: InsuredMember) -> None:
     """Chamado ao juntar uma pessoa a uma cotação de endosso: não pode já
     estar segura (ou pendente) na apólice."""
-    if quote.quote_type != ENDORSEMENT:
+    if quote.quote_type != ENDORSEMENT or (quote.endorsement_json or {}).get("kind") != "INCLUSION":
         return
     if PolicyMember.objects.filter(
         policy_id=quote.source_policy_id, member_id=member.id, exclusion_date__isnull=True,
@@ -160,6 +173,63 @@ def assert_member_can_join(quote: Quote, member: InsuredMember) -> None:
 
 
 # ------------------------------------------------------------------ criação
+def create_coverage_change(
+    *, policy_id, effective_date: datetime.date, correlation_id: str | None,
+) -> Quote:
+    """Cria uma proposta de alteração de coberturas para a população ativa."""
+    from apps.pricing.application.plan_dimensions import resolve_plan_pricing_context
+    from apps.quote.application import quote_service
+
+    policy = _active_policy(policy_id)
+    _check_coverage_change_date(policy, effective_date)
+    if Quote.objects.filter(source_policy_id=policy.id, quote_type=ENDORSEMENT, status__in=_OPEN_STATUSES).exists():
+        raise EndorsementStateError(
+            f"A apólice {policy.policy_number} já tem um endosso em curso; conclua-o ou cancele-o primeiro"
+        )
+
+    if not policy.members.filter(
+        status=PolicyMemberStatus.ACTIVE.value, exclusion_date__isnull=True,
+    ).exists():
+        raise EndorsementStateError("A apólice não tem pessoas ativas para recalcular as coberturas")
+
+    selection = resolve_plan_pricing_context(
+        plan=policy.plan, selection=policy.source_quote.selection_json or {}, effective_date=effective_date,
+    ).selection
+    with transaction.atomic():
+        quote = quote_service.create_quote(proposer_id=policy.proposer_id, plan_id=policy.plan_id)
+        Quote.objects.filter(id=quote.id).update(
+            quote_type=ENDORSEMENT,
+            source_policy_id=policy.id,
+            selection_json=selection,
+            endorsement_json={
+                "kind": "COVERAGE_CHANGE",
+                "policyId": str(policy.id),
+                "policyNumber": policy.policy_number,
+                "effectiveDate": effective_date.isoformat(),
+                "beforeSelection": selection,
+                "sourceSelection": policy.source_quote.selection_json or {},
+                "policyPeriod": {"start": policy.start_date.isoformat(), "end": policy.end_date.isoformat()},
+            },
+        )
+        quote.refresh_from_db()
+        active_members = policy.members.filter(
+            status=PolicyMemberStatus.ACTIVE.value,
+            exclusion_date__isnull=True,
+        ).order_by("created_at", "id")
+        for policy_member in active_members:
+            quote = quote_service.add_quote_member(
+                quote=quote, member_id=policy_member.member_id, correlation_id=correlation_id,
+            )
+    _audit.record(
+        action="policy.coverage_change_started",
+        entity_type="Policy",
+        entity_id=str(policy.id),
+        correlation_id=correlation_id,
+        metadata={"quoteId": str(quote.id), "effectiveDate": effective_date.isoformat()},
+    )
+    return _try_price(quote)
+
+
 def create_inclusion(*, policy_id, inclusion_date: datetime.date, member_ids: list, correlation_id: str | None) -> Quote:
     from apps.quote.application import quote_service
 
@@ -268,6 +338,8 @@ def set_inclusion_date(*, quote: Quote, inclusion_date: datetime.date) -> Quote:
     from apps.quote.application import quote_service
 
     require_endorsement(quote)
+    if (quote.endorsement_json or {}).get("kind") != "INCLUSION":
+        raise EndorsementStateError("A data de efeito desta alteração é definida ao criar o endosso")
     if quote.status not in (QuoteStatus.DRAFT.value, QuoteStatus.READY.value):
         raise EndorsementStateError("A data de inclusão só muda antes da submissão (DRAFT ou READY)")
     policy = _active_policy(quote.source_policy_id)
@@ -296,6 +368,14 @@ def _inclusion_date(quote: Quote) -> datetime.date:
     raw = (quote.endorsement_json or {}).get("inclusionDate")
     if not raw:
         raise EndorsementError("O endosso não tem data de inclusão")
+    return datetime.date.fromisoformat(raw)
+
+
+def _effective_date(quote: Quote) -> datetime.date:
+    data = quote.endorsement_json or {}
+    raw = data.get("effectiveDate") or data.get("inclusionDate")
+    if not raw:
+        raise EndorsementError("O endosso não tem data de efeito")
     return datetime.date.fromisoformat(raw)
 
 
@@ -363,6 +443,151 @@ def _future_due_installments(policy: Policy, inclusion: datetime.date) -> list[P
         seen.add(row.due_date)
         result.append(row)
     return result
+
+
+def _coverage_credit_balance(policy: Policy) -> Decimal:
+    latest = policy.endorsements.filter(
+        endorsement_type=EndorsementType.CHANGE_COVERAGES.value,
+    ).order_by("-endorsement_number").first()
+    return round_amount(Decimal(str((latest.payload_json or {}).get("creditBalanceAfter") or "0")))
+
+
+def _coverage_adjustment_plan(
+    *,
+    policy: Policy,
+    effective_date: datetime.date,
+    amount: Decimal,
+    credit_balance: Decimal,
+    lock: bool = False,
+) -> dict[str, Any]:
+    """Preview/applies the net pro-rata delta to future installments."""
+    due_query = policy.installments.filter(
+        status="DUE", due_date__gte=effective_date, due_date__lte=policy.end_date,
+    ).order_by("due_date", "installment_no")
+    if lock:
+        due_query = due_query.select_for_update()
+    due = list(due_query)
+    credit_used = Decimal("0")
+    charge_amount = Decimal("0")
+    credit_after = credit_balance
+    changes: list[dict[str, Any]] = []
+    new_installment = None
+
+    if amount > 0:
+        credit_used = min(credit_balance, amount)
+        charge_amount = round_amount(amount - credit_used)
+        credit_after = round_amount(credit_balance - credit_used)
+        if due and charge_amount > 0:
+            each = round_amount(charge_amount / len(due))
+            for index, installment in enumerate(due):
+                share = each if index < len(due) - 1 else round_amount(charge_amount - each * (len(due) - 1))
+                changes.append({
+                    "installmentNo": installment.installment_no,
+                    "previousAmount": str(round_amount(installment.amount)),
+                    "amountChange": str(share),
+                    "newAmount": str(round_amount(installment.amount + share)),
+                })
+        elif charge_amount > 0:
+            new_installment = {
+                "dueDate": effective_date.isoformat(),
+                "periodFrom": effective_date.isoformat(),
+                "periodTo": policy.end_date.isoformat(),
+                "amount": str(charge_amount),
+            }
+    elif amount < 0:
+        remaining_credit = round_amount(-amount)
+        for installment in due:
+            if remaining_credit <= 0:
+                break
+            reduction = min(round_amount(installment.amount), remaining_credit)
+            changes.append({
+                "installmentNo": installment.installment_no,
+                "previousAmount": str(round_amount(installment.amount)),
+                "amountChange": str(-reduction),
+                "newAmount": str(round_amount(installment.amount - reduction)),
+            })
+            remaining_credit = round_amount(remaining_credit - reduction)
+        credit_after = round_amount(credit_balance + remaining_credit)
+
+    return {
+        "creditBalanceBefore": str(round_amount(credit_balance)),
+        "creditUsed": str(round_amount(credit_used)),
+        "chargeAmount": str(round_amount(charge_amount)),
+        "creditBalanceAfter": str(round_amount(credit_after)),
+        "installmentChanges": changes,
+        "newInstallment": new_installment,
+    }
+
+
+def calculate_coverage_change(quote: Quote) -> dict[str, Any]:
+    """Calculates the prorated premium difference between current and chosen covers."""
+    from apps.policy.application.issuance_service import fractionation_loading
+    from apps.quote.application import simulator_service
+
+    require_endorsement(quote)
+    if (quote.endorsement_json or {}).get("kind") != "COVERAGE_CHANGE":
+        raise EndorsementStateError("A cotação não representa uma alteração de coberturas")
+    policy = policy_of(quote)
+    effective = datetime.date.fromisoformat(quote.endorsement_json["effectiveDate"])
+    _check_coverage_change_date(policy, effective)
+    if quote.latest_pricing_run_id is None or quote.latest_pricing_run.total_amount is None:
+        raise EndorsementStateError("Calcule primeiro o prémio das coberturas propostas")
+
+    preview = simulator_service.preview_quote(
+        quote=quote,
+        selection=(quote.endorsement_json or {}).get("beforeSelection") or {},
+        extra_adjustments=None,
+        render=lambda run: {
+            "totalAmount": str(round_amount(run.total_amount)),
+            "currencyCode": run.currency_code,
+        },
+    )
+    previous_annual = round_amount(Decimal(str(preview["totalAmount"])))
+    proposed_annual = round_amount(Decimal(str(preview["baseline"]["totalAmount"])))
+    annual_delta = round_amount(proposed_annual - previous_annual)
+    remaining = (policy.end_date - effective).days + 1
+    basis = (policy.end_date - policy.start_date).days + 1
+    pro_rata_delta = round_amount(annual_delta * Decimal(remaining) / Decimal(basis))
+    due = policy.installments.filter(
+        status="DUE", due_date__gte=effective, due_date__lte=policy.end_date,
+    )
+    loading = Decimal("0")
+    if due and policy.payment_frequency != "ANUAL":
+        loading = fractionation_loading(quote, policy.payment_frequency)
+    total_adjustment = round_amount(pro_rata_delta * (Decimal("1") + loading))
+    adjustment_plan = _coverage_adjustment_plan(
+        policy=policy,
+        effective_date=effective,
+        amount=total_adjustment,
+        credit_balance=_coverage_credit_balance(policy),
+    )
+    return {
+        "quoteId": str(quote.id),
+        "policyId": str(policy.id),
+        "effectiveDate": effective.isoformat(),
+        "beforeSelection": (quote.endorsement_json or {}).get("beforeSelection") or {},
+        "afterSelection": quote.selection_json or {},
+        "currencyCode": quote.latest_pricing_run.currency_code,
+        "pricingRunId": str(quote.latest_pricing_run_id),
+        "tariffDate": quote.latest_pricing_run.effective_date.isoformat(),
+        "annualPremiumBefore": str(previous_annual),
+        "annualPremiumAfter": str(proposed_annual),
+        "annualPremiumDelta": str(annual_delta),
+        "days": {
+            "remaining": remaining,
+            "basis": basis,
+            "factor": str((Decimal(remaining) / Decimal(basis)).quantize(Decimal("0.000001"))),
+        },
+        "proRataAdjustment": str(pro_rata_delta),
+        "fractionation": {
+            "frequency": policy.payment_frequency,
+            "loading": str(loading),
+            "applied": loading > 0,
+            "installments": len(due),
+        },
+        "totalAdjustment": str(total_adjustment),
+        **adjustment_plan,
+    }
 
 
 def calculate(quote: Quote) -> dict[str, Any]:
@@ -481,15 +706,25 @@ def describe(quote: Quote) -> dict[str, Any]:
     quote.refresh_from_db()
     data = quote.endorsement_json or {}
     frozen = data.get("calculation")
-    calculation = frozen if frozen and quote.status not in ("DRAFT", "READY") else (
-        calculate(quote) if quote.latest_pricing_run_id else None
-    )
+    coverage_change = data.get("kind") == "COVERAGE_CHANGE"
+    if frozen and quote.status not in ("DRAFT", "READY"):
+        calculation = frozen if not coverage_change else None
+        coverage_calculation = frozen if coverage_change else None
+    elif quote.latest_pricing_run_id and coverage_change:
+        calculation = None
+        coverage_calculation = calculate_coverage_change(quote)
+    elif quote.latest_pricing_run_id and data.get("kind") == "INCLUSION":
+        calculation = calculate(quote)
+        coverage_calculation = None
+    else:
+        calculation = coverage_calculation = None
     return {
-        "quoteId": str(quote.id), "status": quote.status, "inclusionDate": data.get("inclusionDate"),
+        "quoteId": str(quote.id), "status": quote.status, "kind": data.get("kind"),
+        "inclusionDate": data.get("inclusionDate"), "effectiveDate": data.get("effectiveDate"),
         "policyId": data.get("policyId"), "policyNumber": data.get("policyNumber"),
         "acceptanceDeadline": data.get("acceptanceDeadline"), "clientResponse": data.get("clientResponse"),
         "autoApproved": data.get("autoApproved", False), "appliedEndorsementNo": data.get("appliedEndorsementNo"),
-        "calculation": calculation,
+        "calculation": calculation, "coverageChangeCalculation": coverage_calculation,
     }
 
 
@@ -497,6 +732,18 @@ def describe(quote: Quote) -> dict[str, Any]:
 def before_submit(quote: Quote) -> None:
     """Chamado por `submit_quote`: valida a data e congela o cálculo."""
     if quote.quote_type != ENDORSEMENT:
+        return
+    if (quote.endorsement_json or {}).get("kind") == "COVERAGE_CHANGE":
+        policy = _active_policy(quote.source_policy_id)
+        _check_coverage_change_date(policy, _effective_date(quote))
+        if quote.selection_json == (quote.endorsement_json or {}).get("beforeSelection"):
+            raise EndorsementError("Altere pelo menos uma cobertura antes de submeter a proposta")
+        calculation = calculate_coverage_change(quote)
+        Quote.objects.filter(id=quote.id).update(
+            endorsement_json={**(quote.endorsement_json or {}), "calculation": calculation,
+                              "submittedCalculationAt": timezone.now().isoformat()},
+        )
+        quote.refresh_from_db()
         return
     policy = _active_policy(quote.source_policy_id)
     _check_inclusion_date(policy, _inclusion_date(quote))
@@ -551,9 +798,8 @@ def after_approval(quote: Quote) -> None:
         return
     days = int(settings(quote.reference_date).get("acceptance_days") or DEFAULTS["acceptance_days"])
     deadline = _today() + datetime.timedelta(days=days)
-    inclusion = _inclusion_date(quote)
-    # O cliente tem de responder até à data de inclusão (não há inclusões com data passada).
-    deadline = min(deadline, inclusion)
+    effective_date = _effective_date(quote)
+    deadline = min(deadline, effective_date)
     Quote.objects.filter(id=quote.id).update(
         endorsement_json={**(quote.endorsement_json or {}), "acceptanceDeadline": deadline.isoformat(),
                           "offeredAt": timezone.now().isoformat()},
@@ -623,6 +869,9 @@ def respond(*, quote: Quote, decision: str, reason: str | None, channel: str, co
 
 
 def _apply(quote: Quote, *, channel: str, correlation_id: str | None) -> dict[str, Any]:
+    if (quote.endorsement_json or {}).get("kind") == "COVERAGE_CHANGE":
+        return _apply_coverage_change(quote, channel=channel, correlation_id=correlation_id)
+
     from apps.policy.application.issuance_service import (
         _ELIGIBILITY_TO_POLICY_MEMBER_STATUS,
         _waiting_period_ends,
@@ -716,6 +965,303 @@ def _apply(quote: Quote, *, channel: str, correlation_id: str | None) -> dict[st
     return describe(quote)
 
 
+def _apply_coverage_change(
+    quote: Quote, *, channel: str, correlation_id: str | None,
+) -> dict[str, Any]:
+    from apps.quote.application import quote_version_service
+
+    effective_date = _effective_date(quote)
+    if effective_date < _today():
+        raise EndorsementStateError("A data de efeito da alteração já passou; crie uma nova proposta")
+    calculation = (quote.endorsement_json or {}).get("calculation")
+    if not calculation:
+        raise EndorsementStateError("O endosso não tem cálculo congelado (submeta-o primeiro)")
+
+    tenant_id = CurrentTenantProvider.require().value
+    actor_id = _actor_id()
+    before_selection = (quote.endorsement_json or {}).get("beforeSelection") or {}
+    source_selection = (quote.endorsement_json or {}).get("sourceSelection") or {}
+    after_selection = quote.selection_json or {}
+    if before_selection == after_selection:
+        raise EndorsementError("Altere pelo menos uma cobertura antes de aceitar a proposta")
+
+    with transaction.atomic():
+        policy = Policy.objects.select_for_update().select_related("source_quote").get(id=quote.source_policy_id)
+        if policy.status != PolicyStatus.ACTIVE.value:
+            raise EndorsementStateError(f"A apólice {policy.policy_number} já não está ativa ({policy.status})")
+        _check_coverage_change_date(policy, effective_date)
+        active_member_ids = set(policy.members.filter(
+            status=PolicyMemberStatus.ACTIVE.value, exclusion_date__isnull=True,
+        ).values_list("member_id", flat=True))
+        quoted_member_ids = set(quote.members.values_list("member_id", flat=True))
+        if active_member_ids != quoted_member_ids:
+            raise EndorsementStateError("A população da apólice mudou durante a proposta; crie um novo endosso")
+        if (policy.source_quote.selection_json or {}) != source_selection:
+            raise EndorsementStateError("As coberturas da apólice mudaram durante a proposta; crie um novo endosso")
+        locked = Quote.objects.filter(id=quote.id, status=QuoteStatus.APPROVED.value).update(
+            status=QuoteStatus.BOUND.value, row_version=quote.row_version + 1,
+        )
+        if not locked:
+            raise EndorsementStateError("O endosso mudou de estado entretanto; recarregue")
+
+        adjustment_plan = _coverage_adjustment_plan(
+            policy=policy,
+            effective_date=effective_date,
+            amount=Decimal(str(calculation["totalAdjustment"])),
+            credit_balance=_coverage_credit_balance(policy),
+            lock=True,
+        )
+        changed_installments: list[int] = []
+        for change in adjustment_plan["installmentChanges"]:
+            installment = PremiumInstallment.objects.select_for_update().get(
+                policy=policy, installment_no=change["installmentNo"],
+            )
+            new_amount = Decimal(change["newAmount"])
+            installment.amount = new_amount
+            if new_amount == 0:
+                installment.status = "VOID"
+            installment.save(update_fields=["amount", "status", "updated_at"])
+            changed_installments.append(installment.installment_no)
+
+        created_installments: list[int] = []
+        new_installment = adjustment_plan["newInstallment"]
+        if new_installment:
+            top = policy.installments.aggregate(m=Max("installment_no"))["m"] or 0
+            created = PremiumInstallment.objects.create(
+                tenant_id=tenant_id,
+                policy=policy,
+                installment_no=top + 1,
+                period_from=datetime.date.fromisoformat(new_installment["periodFrom"]),
+                period_to=datetime.date.fromisoformat(new_installment["periodTo"]),
+                due_date=datetime.date.fromisoformat(new_installment["dueDate"]),
+                amount=Decimal(new_installment["amount"]),
+                currency_code=policy.currency_code or calculation["currencyCode"] or "AOA",
+                status="DUE",
+            )
+            created_installments.append(created.installment_no)
+
+        number = (policy.endorsements.aggregate(top=Max("endorsement_number"))["top"] or 0) + 1
+        payload = {
+            "quoteId": str(quote.id),
+            "beforeSelection": before_selection,
+            "afterSelection": after_selection,
+            "annualPremiumBefore": calculation["annualPremiumBefore"],
+            "annualPremiumAfter": calculation["annualPremiumAfter"],
+            "annualPremiumDelta": calculation["annualPremiumDelta"],
+            "proRataAdjustment": calculation["proRataAdjustment"],
+            "totalAdjustment": calculation["totalAdjustment"],
+            "chargeAmount": adjustment_plan["chargeAmount"],
+            "creditBalanceBefore": adjustment_plan["creditBalanceBefore"],
+            "creditUsed": adjustment_plan["creditUsed"],
+            "creditBalanceAfter": adjustment_plan["creditBalanceAfter"],
+            "installmentChanges": adjustment_plan["installmentChanges"],
+            "changedInstallmentNumbers": changed_installments,
+            "createdInstallmentNumbers": created_installments,
+            "channel": channel,
+        }
+        PolicyEndorsement.objects.create(
+            tenant_id=tenant_id,
+            policy=policy,
+            endorsement_number=number,
+            endorsement_type=EndorsementType.CHANGE_COVERAGES.value,
+            effective_date=effective_date,
+            payload_json=payload,
+            created_by=actor_id,
+        )
+
+        source_quote = Quote.objects.select_for_update().get(id=policy.source_quote_id)
+        Quote.objects.filter(id=source_quote.id).update(
+            selection_json=after_selection,
+            latest_pricing_run_id=quote.latest_pricing_run_id,
+            currency_code=quote.currency_code,
+            row_version=source_quote.row_version + 1,
+        )
+        source_quote.refresh_from_db()
+        quote_version_service.record_version(
+            quote=source_quote,
+            source="ENDORSEMENT",
+            reason=f"Alteração de coberturas da apólice {policy.policy_number}",
+            dedupe=False,
+        )
+        contract_snapshot = quote.snapshots.filter(snapshot_type="APPROVAL").order_by("-snapshot_no").first()
+        if contract_snapshot is None:
+            raise EndorsementStateError("A proposta aprovada não tem snapshot contratual")
+        Policy.objects.filter(id=policy.id).update(
+            contracted_terms_snapshot_id=contract_snapshot.id,
+            row_version=policy.row_version + 1,
+        )
+        Quote.objects.filter(id=quote.id).update(endorsement_json={
+            **(quote.endorsement_json or {}),
+            "calculation": {**calculation, **adjustment_plan},
+            "clientResponse": {
+                "decision": "ACCEPT", "channel": channel,
+                "at": timezone.now().isoformat(), "by": actor_id,
+            },
+            "appliedEndorsementNo": number,
+        })
+
+    _audit.record(
+        action="policy.coverage_change_applied",
+        entity_type="Policy",
+        entity_id=str(policy.id),
+        correlation_id=correlation_id,
+        metadata=payload | {"endorsementNo": number, "effectiveDate": effective_date.isoformat()},
+    )
+    _outbox.append(
+        aggregate_type="Policy",
+        aggregate_id=str(policy.id),
+        event_type="POLICY.COVERAGES_CHANGED",
+        correlation_id=correlation_id,
+        payload={"policyId": str(policy.id), "endorsementNo": number, "quoteId": str(quote.id),
+                 "effectiveDate": effective_date.isoformat()},
+    )
+    quote.refresh_from_db()
+    return describe(quote)
+
+
+def _apply_coverage_change(
+    quote: Quote, *, channel: str, correlation_id: str | None,
+) -> dict[str, Any]:
+    from apps.quote.application import quote_version_service
+
+    effective_date = _effective_date(quote)
+    if effective_date < _today():
+        raise EndorsementStateError("A data de efeito da alteração já passou; crie uma nova proposta")
+    calculation = (quote.endorsement_json or {}).get("calculation")
+    if not calculation:
+        raise EndorsementStateError("O endosso não tem cálculo congelado (submeta-o primeiro)")
+
+    tenant_id = CurrentTenantProvider.require().value
+    actor_id = _actor_id()
+    before_selection = (quote.endorsement_json or {}).get("beforeSelection") or {}
+    after_selection = quote.selection_json or {}
+    if before_selection == after_selection:
+        raise EndorsementError("Altere pelo menos uma cobertura antes de aceitar a proposta")
+
+    with transaction.atomic():
+        policy = Policy.objects.select_for_update().select_related("source_quote").get(id=quote.source_policy_id)
+        if policy.status != PolicyStatus.ACTIVE.value:
+            raise EndorsementStateError(f"A apólice {policy.policy_number} já não está ativa ({policy.status})")
+        _check_coverage_change_date(policy, effective_date)
+        locked = Quote.objects.filter(id=quote.id, status=QuoteStatus.APPROVED.value).update(
+            status=QuoteStatus.BOUND.value, row_version=quote.row_version + 1,
+        )
+        if not locked:
+            raise EndorsementStateError("O endosso mudou de estado entretanto; recarregue")
+
+        adjustment_plan = _coverage_adjustment_plan(
+            policy=policy,
+            effective_date=effective_date,
+            amount=Decimal(str(calculation["totalAdjustment"])),
+            credit_balance=_coverage_credit_balance(policy),
+            lock=True,
+        )
+        changed_installments: list[int] = []
+        for change in adjustment_plan["installmentChanges"]:
+            installment = PremiumInstallment.objects.select_for_update().get(
+                policy=policy, installment_no=change["installmentNo"],
+            )
+            new_amount = Decimal(change["newAmount"])
+            installment.amount = new_amount
+            if new_amount == 0:
+                installment.status = "VOID"
+            installment.save(update_fields=["amount", "status", "updated_at"])
+            changed_installments.append(installment.installment_no)
+
+        created_installments: list[int] = []
+        new_installment = adjustment_plan["newInstallment"]
+        if new_installment:
+            top = policy.installments.aggregate(m=Max("installment_no"))["m"] or 0
+            created = PremiumInstallment.objects.create(
+                tenant_id=tenant_id,
+                policy=policy,
+                installment_no=top + 1,
+                period_from=datetime.date.fromisoformat(new_installment["periodFrom"]),
+                period_to=datetime.date.fromisoformat(new_installment["periodTo"]),
+                due_date=datetime.date.fromisoformat(new_installment["dueDate"]),
+                amount=Decimal(new_installment["amount"]),
+                currency_code=policy.currency_code or calculation["currencyCode"] or "AOA",
+                status="DUE",
+            )
+            created_installments.append(created.installment_no)
+
+        number = (policy.endorsements.aggregate(top=Max("endorsement_number"))["top"] or 0) + 1
+        payload = {
+            "quoteId": str(quote.id),
+            "beforeSelection": before_selection,
+            "afterSelection": after_selection,
+            "annualPremiumBefore": calculation["annualPremiumBefore"],
+            "annualPremiumAfter": calculation["annualPremiumAfter"],
+            "annualPremiumDelta": calculation["annualPremiumDelta"],
+            "proRataAdjustment": calculation["proRataAdjustment"],
+            "totalAdjustment": calculation["totalAdjustment"],
+            "chargeAmount": adjustment_plan["chargeAmount"],
+            "creditBalanceBefore": adjustment_plan["creditBalanceBefore"],
+            "creditUsed": adjustment_plan["creditUsed"],
+            "creditBalanceAfter": adjustment_plan["creditBalanceAfter"],
+            "installmentChanges": adjustment_plan["installmentChanges"],
+            "changedInstallmentNumbers": changed_installments,
+            "createdInstallmentNumbers": created_installments,
+            "channel": channel,
+        }
+        PolicyEndorsement.objects.create(
+            tenant_id=tenant_id,
+            policy=policy,
+            endorsement_number=number,
+            endorsement_type=EndorsementType.CHANGE_COVERAGES.value,
+            effective_date=effective_date,
+            payload_json=payload,
+            created_by=actor_id,
+        )
+
+        source_quote = Quote.objects.select_for_update().get(id=policy.source_quote_id)
+        Quote.objects.filter(id=source_quote.id).update(
+            selection_json=after_selection,
+            row_version=source_quote.row_version + 1,
+        )
+        source_quote.refresh_from_db()
+        quote_version_service.record_version(
+            quote=source_quote,
+            source="ENDORSEMENT",
+            reason=f"Alteração de coberturas da apólice {policy.policy_number}",
+            dedupe=False,
+        )
+        contract_snapshot = quote.snapshots.filter(snapshot_type="APPROVAL").order_by("-snapshot_no").first()
+        if contract_snapshot is None:
+            raise EndorsementStateError("A proposta aprovada não tem snapshot contratual")
+        Policy.objects.filter(id=policy.id).update(
+            contracted_terms_snapshot_id=contract_snapshot.id,
+            row_version=policy.row_version + 1,
+        )
+        Quote.objects.filter(id=quote.id).update(endorsement_json={
+            **(quote.endorsement_json or {}),
+            "calculation": {**calculation, **adjustment_plan},
+            "clientResponse": {
+                "decision": "ACCEPT", "channel": channel,
+                "at": timezone.now().isoformat(), "by": actor_id,
+            },
+            "appliedEndorsementNo": number,
+        })
+
+    _audit.record(
+        action="policy.coverage_change_applied",
+        entity_type="Policy",
+        entity_id=str(policy.id),
+        correlation_id=correlation_id,
+        metadata=payload | {"endorsementNo": number, "effectiveDate": effective_date.isoformat()},
+    )
+    _outbox.append(
+        aggregate_type="Policy",
+        aggregate_id=str(policy.id),
+        event_type="POLICY.COVERAGES_CHANGED",
+        correlation_id=correlation_id,
+        payload={"policyId": str(policy.id), "endorsementNo": number, "quoteId": str(quote.id),
+                 "effectiveDate": effective_date.isoformat()},
+    )
+    quote.refresh_from_db()
+    return describe(quote)
+
+
 # ------------------------------------------------------------------ listagens
 def list_for_policy(policy_id) -> dict[str, Any]:
     policy = Policy.objects.filter(id=policy_id).first()
@@ -728,11 +1274,18 @@ def list_for_policy(policy_id) -> dict[str, Any]:
         for e in policy.endorsements.order_by("-endorsement_number")
     ]
     quotes = [
-        {"quoteId": str(q.id), "quoteNumber": q.quote_number, "status": q.status,
-         "inclusionDate": (q.endorsement_json or {}).get("inclusionDate"),
-         "acceptanceDeadline": (q.endorsement_json or {}).get("acceptanceDeadline"),
-         "totalCharged": ((q.endorsement_json or {}).get("calculation") or {}).get("totalCharged"),
-         "createdAt": q.created_at.isoformat() if q.created_at else None}
+        {
+            "quoteId": str(q.id), "quoteNumber": q.quote_number, "status": q.status,
+            "kind": (q.endorsement_json or {}).get("kind"),
+            "inclusionDate": (q.endorsement_json or {}).get("inclusionDate"),
+            "effectiveDate": (q.endorsement_json or {}).get("effectiveDate"),
+            "acceptanceDeadline": (q.endorsement_json or {}).get("acceptanceDeadline"),
+            "totalCharged": (
+                ((q.endorsement_json or {}).get("calculation") or {}).get("totalCharged")
+                or ((q.endorsement_json or {}).get("calculation") or {}).get("chargeAmount")
+            ),
+            "createdAt": q.created_at.isoformat() if q.created_at else None,
+        }
         for q in Quote.objects.filter(source_policy_id=policy.id, quote_type=ENDORSEMENT).order_by("-created_at")
     ]
     return {"policyId": str(policy.id), "policyNumber": policy.policy_number, "endorsements": applied, "quotes": quotes}

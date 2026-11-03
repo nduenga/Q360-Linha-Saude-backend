@@ -565,6 +565,10 @@ class EndorsementInclusionRequest(s.Serializer):
     memberIds = s.ListField(child=s.UUIDField(), required=False, help_text="Pessoas novas do tomador (podem juntar-se depois em /quotes/{id}/members).")
 
 
+class CoverageChangeRequest(s.Serializer):
+    effectiveDate = s.DateField(help_text="Data de efeito dentro do período da apólice; não pode ser anterior a hoje.")
+
+
 class EndorsementDateRequest(s.Serializer):
     inclusionDate = s.DateField()
 
@@ -615,10 +619,36 @@ class EndorsementCalculation(s.Serializer):
     newbornAutoInclusion = s.BooleanField()
 
 
+class CoverageChangeCalculation(s.Serializer):
+    quoteId = s.UUIDField()
+    policyId = s.UUIDField()
+    effectiveDate = s.DateField()
+    beforeSelection = s.DictField(help_text="Coberturas e opções atuais antes da alteração.")
+    afterSelection = s.DictField(help_text="Coberturas e opções propostas.")
+    currencyCode = s.CharField()
+    pricingRunId = s.UUIDField()
+    tariffDate = s.DateField()
+    annualPremiumBefore = s.CharField()
+    annualPremiumAfter = s.CharField()
+    annualPremiumDelta = s.CharField()
+    days = s.DictField(help_text="remaining, basis e factor.")
+    proRataAdjustment = s.CharField()
+    fractionation = s.DictField(help_text="frequency, loading, applied e installments.")
+    totalAdjustment = s.CharField(help_text="Diferença pro-rata após encargo de fracionamento.")
+    creditBalanceBefore = s.CharField()
+    creditUsed = s.CharField()
+    chargeAmount = s.CharField(help_text="Valor líquido a cobrar depois de usar créditos anteriores.")
+    creditBalanceAfter = s.CharField(help_text="Crédito remanescente depois de abater as prestações futuras.")
+    installmentChanges = s.ListField(child=s.DictField())
+    newInstallment = s.DictField(allow_null=True)
+
+
 class EndorsementState(s.Serializer):
     quoteId = s.UUIDField()
     status = s.CharField(help_text="DRAFT, READY, IN_REVIEW, APPROVED (à espera do cliente), BOUND (aplicado), CANCELLED (recusado), EXPIRED.")
+    kind = s.CharField(allow_null=True)
     inclusionDate = s.DateField(allow_null=True)
+    effectiveDate = s.DateField(allow_null=True)
     policyId = s.UUIDField(allow_null=True)
     policyNumber = s.CharField(allow_null=True)
     acceptanceDeadline = s.DateField(allow_null=True)
@@ -626,6 +656,7 @@ class EndorsementState(s.Serializer):
     autoApproved = s.BooleanField()
     appliedEndorsementNo = s.IntegerField(allow_null=True)
     calculation = EndorsementCalculation(allow_null=True, help_text="Congelado na submissão; antes disso, o cálculo atual.")
+    coverageChangeCalculation = CoverageChangeCalculation(allow_null=True, help_text="Prémio anual antes/depois, diferença pro-rata, cobrança e crédito da alteração de coberturas.")
 
 
 class PolicyEndorsementItem(s.Serializer):
@@ -641,7 +672,9 @@ class PolicyEndorsementQuoteItem(s.Serializer):
     quoteId = s.UUIDField()
     quoteNumber = s.CharField(allow_null=True)
     status = s.CharField()
+    kind = s.CharField(allow_null=True)
     inclusionDate = s.DateField(allow_null=True)
+    effectiveDate = s.DateField(allow_null=True)
     acceptanceDeadline = s.DateField(allow_null=True)
     totalCharged = s.CharField(allow_null=True)
     createdAt = s.DateTimeField(allow_null=True)
