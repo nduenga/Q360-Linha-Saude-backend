@@ -108,6 +108,7 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 | 83 | POST | `/quotes/{quote_id}/submit` | postQuoteSubmit | Alterado (comportamento: endosso) |
 | 84 | POST | `/quotes/{quote_id}/decision` | postQuoteDecision | Alterado (comportamento: endosso) |
 | 85 | GET | `/quotes/{quote_id}/requirements` | getQuoteRequirements | Alterado (comportamento: recém-nascidos) |
+| 86 | POST | `/policies/{policy_id}/endorsements/coverages` | postPolicyCoverageChange | Novo |
 | 86 | POST | `/quotes/{quote_id}/policy` | postIssuePolicy | Alterado (comportamento: endosso) |
 | 87 | GET | `/platform/templates/import-template` | getPlatformTemplateImportTemplate | Novo |
 | 88 | POST | `/platform/templates/import-preview` | postPlatformTemplateImportPreview | Novo |
@@ -1542,6 +1543,19 @@ Fluxo:
 - 404: apólice inexistente;
 - 409: apólice não ativa, ou já há um endosso em curso.
 
+### `POST /policies/{policy_id}/endorsements/coverages`
+
+**Novo** · `postPolicyCoverageChange` · Criar proposta de alteração de coberturas
+
+- **Quem pode:** scope `q360.write`, permissão `quote:create`.
+- **Parâmetros no caminho:** `policy_id` (UUID).
+- **Cabeçalho:** `Idempotency-Key` obrigatório.
+- **Recebe:** `effectiveDate` (data, obrigatória), dentro da vigência e não anterior a hoje.
+- **Envia** (201, `EndorsementState`): uma cotação `ENDORSEMENT` com as pessoas ativas e as coberturas atuais; edite as coberturas em `PUT /quotes/{id}/selection`.
+- **Fluxo:** recalcular o prémio, submeter à subscrição e aguardar a aceitação do cliente. Só então se atualizam os termos e as prestações da apólice.
+- **Cobrança:** a diferença anual é calculada em pro-rata até ao fim da vigência. Aumentos usam crédito disponível e são acrescentados às prestações futuras; reduções abatem às prestações futuras e qualquer excedente fica registado como crédito na trilha do endosso.
+- **Erros:** 400 (data inválida), 404 (apólice inexistente), 409 (apólice inativa, sem pessoas ativas ou com outro endosso em curso).
+
 ### `GET /policies/{policy_id}/endorsements`
 
 **Novo** · `getPolicyEndorsementList` · Endossos da apólice
@@ -1555,8 +1569,8 @@ Fluxo:
 |---|---|---|---|
 | `policyId` | texto (UUID) | sim | |
 | `policyNumber` | texto ou null | sim | |
-| `endorsements[]` | lista de `PolicyEndorsementItem` | sim | Endossos aplicados (`endorsementNo`, `type` ADD_MEMBER…, `effectiveDate`, `createdBy`, `createdAt`, `payload` com o cálculo e as prestações criadas) |
-| `quotes[]` | lista de `PolicyEndorsementQuoteItem` | sim | Cotações de endosso (`quoteId`, `quoteNumber`, `status`, `inclusionDate`, `acceptanceDeadline`, `totalCharged`, `createdAt`) |
+| `endorsements[]` | lista de `PolicyEndorsementItem` | sim | Endossos aplicados (`endorsementNo`, `type` ADD_MEMBER/CHANGE_COVERAGES…, `effectiveDate`, `createdBy`, `createdAt`, `payload` com antes/depois, cálculo e ajustes de prestações/crédito) |
+| `quotes[]` | lista de `PolicyEndorsementQuoteItem` | sim | Cotações de endosso (`quoteId`, `quoteNumber`, `status`, `kind`, `inclusionDate`, `effectiveDate`, `acceptanceDeadline`, `totalCharged`, `createdAt`) |
 
 ### `GET /quotes/{quote_id}/endorsement`
 
@@ -1571,13 +1585,16 @@ Fluxo:
 |---|---|---|---|
 | `quoteId` | texto (UUID) | sim | |
 | `status` | texto | sim | DRAFT, READY, IN_REVIEW, APPROVED (à espera do cliente), BOUND (aplicado), CANCELLED (recusado), EXPIRED |
+| `kind` | texto ou null | sim | `INCLUSION` ou `COVERAGE_CHANGE` |
 | `inclusionDate` | texto (data) ou null | sim | |
+| `effectiveDate` | texto (data) ou null | sim | Data de efeito da alteração de coberturas |
 | `policyId` / `policyNumber` | texto ou null | sim | |
 | `acceptanceDeadline` | texto (data) ou null | sim | Prazo do cliente (a partir da aprovação; nunca depois da data de inclusão) |
 | `clientResponse` | objeto ou null | sim | `decision`, `reason`, `channel` (STAFF/PORTAL), `at`, `by` |
 | `autoApproved` | booleano | sim | Recém-nascido aprovado automaticamente |
 | `appliedEndorsementNo` | inteiro ou null | sim | N.º do endosso na apólice, depois de aceite |
 | `calculation` | objeto `EndorsementCalculation` ou null | sim | Congelado na submissão; antes, o cálculo atual |
+| `coverageChangeCalculation` | objeto ou null | sim | Para `COVERAGE_CHANGE`: prémios anual anterior/proposto, diferença pro-rata, cobrança líquida, prestações alteradas e crédito remanescente |
 | `calculation.annualPremium` | texto (decimal) | sim | Prémio anual das pessoas novas na data de inclusão |
 | `calculation.tariffDate` | texto (data) | sim | Data da tarifa usada |
 | `calculation.days` | objeto | sim | `remaining`, `basis`, `basisCode` (ACTUAL_PERIOD, FIXED_366, FIXED_365, FIXED_360), `factor` |
@@ -1618,9 +1635,9 @@ Fluxo:
 
 **Envia** (200, `EndorsementState`). Com ACCEPT:
 - a cotação passa a `BOUND`;
-- as pessoas entram na apólice com a data de inclusão e as carências a contar dela;
-- são criadas as prestações do endosso;
-- fica registado o endosso `ADD_MEMBER`.
+- para `INCLUSION`, as pessoas entram com a data de inclusão e são criadas as prestações do endosso;
+- para `COVERAGE_CHANGE`, os termos contratuais são atualizados e a diferença de prémio altera as prestações futuras ou fica como crédito;
+- fica registado o respetivo tipo de endosso no histórico da apólice.
 
 Com REFUSE a cotação passa a `CANCELLED`.
 
