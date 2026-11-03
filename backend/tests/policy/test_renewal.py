@@ -78,6 +78,51 @@ def test_renewal_quote_from_an_active_policy(admin_client, tenant):
 
 
 @pytest.mark.django_db
+def test_renewal_rechecks_and_prices_pending_policy_members(admin_client, tenant):
+    from apps.policy.infrastructure.models import Policy as PolicyModel, PolicyMember
+
+    policy = _activate(admin_client, tenant, suffix="R1P")
+    dependent = admin_client.post(
+        "/api/v1/members",
+        {
+            "firstName": "Dependente",
+            "proposerId": policy["proposerId"],
+            "relationshipCode": "CONJUGE",
+            "dateOfBirth": "1990-01-01",
+        },
+        format="json",
+    )
+    assert dependent.status_code == 201, dependent.data
+    PolicyMember.objects.create(
+        tenant_id=tenant.id,
+        policy=PolicyModel.objects.get(id=policy["id"]),
+        member_id=dependent.data["id"],
+        status="PENDING",
+    )
+
+    renewal = admin_client.post(
+        "/api/v1/quotes/renewals", {"sourcePolicyId": policy["id"]}, format="json"
+    )
+    assert renewal.status_code == 201, renewal.data
+    members = admin_client.get(f"/api/v1/quotes/{renewal.data['id']}/members").data["items"]
+    assert {item["memberId"] for item in members} == {policy["memberId"], dependent.data["id"]}
+
+    dependent_quote_member = next(item for item in members if item["memberId"] == dependent.data["id"])
+    assert dependent_quote_member["eligibilityEvaluationId"]
+    assert dependent_quote_member["status"] in ("INCLUDED", "REFERRAL")
+    evaluation = admin_client.get(
+        f"/api/v1/eligibility/evaluations/{dependent_quote_member['eligibilityEvaluationId']}"
+    )
+    assert evaluation.status_code == 200
+    assert evaluation.data["effectiveDate"] == renewal.data["renewal"]["proposedStartDate"]
+    pricing = admin_client.get(
+        f"/api/v1/pricing/runs/{renewal.data['latestPricingRunId']}"
+    )
+    assert pricing.status_code == 200, pricing.data
+    assert set(pricing.data["memberIds"]) == {policy["memberId"], dependent.data["id"]}
+
+
+@pytest.mark.django_db
 def test_only_one_open_renewal_per_policy(admin_client, tenant):
     policy = _activate(admin_client, tenant, suffix="R2")
     first = admin_client.post("/api/v1/quotes/renewals", {"sourcePolicyId": policy["id"]}, format="json").data

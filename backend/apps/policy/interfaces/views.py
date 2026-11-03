@@ -318,6 +318,7 @@ class InstallmentListView(APIView):
                         and (
                             (
                                 installment.installment_no == 1
+                                and installment.status == "DUE"
                                 and installment.policy.status == "PENDING_FIRST_PREMIUM"
                             )
                             or (

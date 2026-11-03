@@ -197,7 +197,7 @@ def create_renewal(
         renewal.refresh_from_db()
         permanence = (effective_settings.get("permanenceAge") or {}).get("max")
         for policy_member in policy.members.select_related("member").order_by("created_at", "id"):
-            if policy_member.status != "ACTIVE" or policy_member.exclusion_date is not None:
+            if policy_member.status not in ("ACTIVE", "PENDING") or policy_member.exclusion_date is not None:
                 skipped.append({"memberId": str(policy_member.member_id), "reason": "NOT_ACTIVE_IN_POLICY"})
                 continue
             age = _age_on(policy_member.member.date_of_birth, renewal_date)
