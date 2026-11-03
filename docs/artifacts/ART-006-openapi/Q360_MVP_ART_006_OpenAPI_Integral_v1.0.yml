@@ -17446,8 +17446,10 @@ paths:
           type: string
           enum:
           - DEPENDENT
+          - EMPLOYEE
           - HOLDER
-        description: HOLDER devolve apenas TITULAR; DEPENDENT devolve relações elegíveis como dependente.
+        description: HOLDER devolve TITULAR individual; EMPLOYEE devolve COLABORADOR; DEPENDENT devolve relações
+          familiares.
       - in: query
         name: page
         schema:
@@ -20072,9 +20074,10 @@ components:
     QuoteCreateRequest:
       type: object
       description: "Aceita dois caminhos:\n- Modo \"referência\": `proposerId` (UUID) + `planId`.\n- Modo \"inline\"\
-        :    `proposerInput` (e opcionalmente `titularMemberInput`)\n                     + `planId`. Cria tudo\
-        \ no mesmo request.\n\nA cotação não tem data de efeito: fica com a data de criação e a validade\n(`quote.validity_days`);\
-        \ o início da vigência escolhe-se na emissão."
+        :    `proposerInput` (e opcionalmente `titularMemberInput`;\n                     para organização representa\
+        \ o empregado COLABORADOR)\n                     + `planId`. Cria tudo no mesmo request.\n\nA cotação não\
+        \ tem data de efeito: fica com a data de criação e a validade\n(`quote.validity_days`); o início da vigência\
+        \ escolhe-se na emissão."
       properties:
         proposerId:
           type:
@@ -30466,6 +30469,11 @@ components:
           type:
           - string
           - 'null'
+        createdByName:
+          type:
+          - string
+          - 'null'
+          description: Nome de quem propôs (null se não for um utilizador).
         submittedAt:
           type:
           - string
@@ -30505,6 +30513,7 @@ components:
       - configKey
       - configurationId
       - createdBy
+      - createdByName
       - effectiveFrom
       - isNew
       - label
@@ -32285,7 +32294,7 @@ components:
       type: object
       properties:
         holder:
-          $ref: '#/components/schemas/CorporatePopulationMemberInput'
+          $ref: '#/components/schemas/CorporateEmployeeInput'
         dependents:
           type: array
           items:
@@ -32909,6 +32918,46 @@ components:
           description: Excel .xlsx com 3 colunas (chave, caminho, valor); máx. 10 MB
       required:
       - file
+    CorporateEmployeeInput:
+      type: object
+      description: O colaborador é o titular do agregado; não escolhe parentesco.
+      properties:
+        relationshipCode:
+          type: string
+          default: COLABORADOR
+          maxLength: 40
+          minLength: 1
+        firstName:
+          type: string
+          maxLength: 120
+          minLength: 1
+        lastName:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        dateOfBirth:
+          type: string
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 10
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 30
+        externalReference:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        attributes: {}
+      required:
+      - dateOfBirth
+      - firstName
     DocumentTemplateDetail:
       type: object
       description: '`GET /document-templates/{id}` — o cabeçalho mais o conteúdo

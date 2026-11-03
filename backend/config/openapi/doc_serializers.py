@@ -537,6 +537,7 @@ class PendingApprovalItem(s.Serializer):
     versionNo = s.IntegerField()
     effectiveFrom = s.DateField(allow_null=True)
     createdBy = s.CharField(allow_null=True)
+    createdByName = s.CharField(allow_null=True, help_text="Nome de quem propôs (null se não for um utilizador).")
     submittedAt = s.DateTimeField(allow_null=True)
     againstVersionNo = s.IntegerField(allow_null=True, help_text="Versão publicada com que se compara.")
     changeCount = s.IntegerField(allow_null=True)

@@ -71,6 +71,7 @@ def pending_queue(*, area: str | None = None) -> dict[str, Any]:
             "versionNo": row.version_no,
             "effectiveFrom": row.effective_from.isoformat() if row.effective_from else None,
             "createdBy": row.created_by,
+            "createdByName": _staff_name(row.created_by),
             "submittedAt": row.submitted_at.isoformat() if row.submitted_at else None,
             "againstVersionNo": published.version_no if published else None,
             "changeCount": len(changes) if changes is not None else None,
@@ -83,6 +84,19 @@ def pending_queue(*, area: str | None = None) -> dict[str, Any]:
     for item in items:
         by_area[item["area"]] = by_area.get(item["area"], 0) + 1
     return {"total": len(items), "byArea": by_area, "items": items}
+
+
+def _staff_name(actor_id: str | None) -> str | None:
+    """Nome de quem propôs, para a fila não mostrar o identificador técnico."""
+    import uuid as _uuid
+
+    from apps.staff_accounts.infrastructure.models import StaffAccount
+
+    try:
+        key = _uuid.UUID(str(actor_id))
+    except (TypeError, ValueError):
+        return None
+    return StaffAccount.objects.filter(id=key).values_list("name", flat=True).first()
 
 
 def pending_count() -> dict[str, Any]:

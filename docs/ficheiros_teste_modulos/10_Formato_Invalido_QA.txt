@@ -1,0 +1,1 @@
+Ficheiro de texto fictício para testar a recusa de formatos não suportados (o portal aceita só PDF, JPG ou PNG).

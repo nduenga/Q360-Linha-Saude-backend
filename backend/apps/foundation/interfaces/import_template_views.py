@@ -17,27 +17,28 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 # válidas, para se poder importar logo e experimentar a plataforma. As
 # referências dos membros (REF-...) são as mesmas nos sinistros, e os códigos
 # de cobertura existem no catálogo de mercado (market_catalog).
+# Numa organização cada linha é um colaborador (os familiares entram depois pelo agregado).
 MEMBER_EXAMPLES = [
-    ["TITULAR", "Ana", "Silva", "1985-05-21", "F", "REF-001"],
-    ["CONJUGE", "Paulo", "Silva", "1983-11-02", "M", "REF-002"],
-    ["FILHO", "Marta", "Silva", "2012-03-14", "F", "REF-003"],
-    ["FILHO", "João", "Silva", "2016-08-30", "M", "REF-004"],
-    ["TITULAR", "Carlos", "Mendes", "1978-01-09", "M", "REF-005"],
-    ["CONJUGE", "Teresa", "Mendes", "1980-06-17", "F", "REF-006"],
-    ["FILHO", "Nuno", "Mendes", "2005-12-01", "M", "REF-007"],
-    ["ASCENDENTE", "Rosa", "Mendes", "1952-04-25", "F", "REF-008"],
-    ["TITULAR", "Isabel", "Costa", "1992-09-12", "F", "REF-009"],
-    ["FILHO", "Tiago", "Costa", "2019-02-07", "M", "REF-010"],
-    ["TITULAR", "Manuel", "Domingos", "1969-07-30", "M", "REF-011"],
-    ["CONJUGE", "Luísa", "Domingos", "1971-10-05", "F", "REF-012"],
-    ["TITULAR", "Helena", "Neto", "1995-03-22", "F", "REF-013"],
-    ["TITULAR", "Rui", "Fernandes", "1988-12-15", "M", "REF-014"],
-    ["CONJUGE", "Sara", "Fernandes", "1990-01-28", "F", "REF-015"],
-    ["FILHO", "Beatriz", "Fernandes", "2018-05-19", "F", "REF-016"],
-    ["FILHO", "Daniel", "Fernandes", "2021-09-03", "M", "REF-017"],
-    ["TITULAR", "Pedro", "Lopes", "1975-02-11", "M", "REF-018"],
-    ["OUTRO", "Clara", "Lopes", "2001-07-08", "F", "REF-019"],
-    ["TITULAR", "Joana", "Pires", "1999-11-27", "F", "REF-020"],
+    ["COLABORADOR", "Ana", "Silva", "1985-05-21", "F", "REF-001"],
+    ["COLABORADOR", "Paulo", "Silva", "1983-11-02", "M", "REF-002"],
+    ["COLABORADOR", "Marta", "Silva", "1987-03-14", "F", "REF-003"],
+    ["COLABORADOR", "João", "Silva", "1991-08-30", "M", "REF-004"],
+    ["COLABORADOR", "Carlos", "Mendes", "1978-01-09", "M", "REF-005"],
+    ["COLABORADOR", "Teresa", "Mendes", "1980-06-17", "F", "REF-006"],
+    ["COLABORADOR", "Nuno", "Mendes", "2005-12-01", "M", "REF-007"],
+    ["COLABORADOR", "Rosa", "Mendes", "1952-04-25", "F", "REF-008"],
+    ["COLABORADOR", "Isabel", "Costa", "1992-09-12", "F", "REF-009"],
+    ["COLABORADOR", "Tiago", "Costa", "1994-02-07", "M", "REF-010"],
+    ["COLABORADOR", "Manuel", "Domingos", "1969-07-30", "M", "REF-011"],
+    ["COLABORADOR", "Luísa", "Domingos", "1971-10-05", "F", "REF-012"],
+    ["COLABORADOR", "Helena", "Neto", "1995-03-22", "F", "REF-013"],
+    ["COLABORADOR", "Rui", "Fernandes", "1988-12-15", "M", "REF-014"],
+    ["COLABORADOR", "Sara", "Fernandes", "1990-01-28", "F", "REF-015"],
+    ["COLABORADOR", "Beatriz", "Fernandes", "1993-05-19", "F", "REF-016"],
+    ["COLABORADOR", "Daniel", "Fernandes", "1996-09-03", "M", "REF-017"],
+    ["COLABORADOR", "Pedro", "Lopes", "1975-02-11", "M", "REF-018"],
+    ["COLABORADOR", "Clara", "Lopes", "2001-07-08", "F", "REF-019"],
+    ["COLABORADOR", "Joana", "Pires", "1999-11-27", "F", "REF-020"],
 ]
 
 CLAIM_EXAMPLES = [
