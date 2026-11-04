@@ -1,4 +1,5 @@
-"""Convite para o Portal do Cliente quando a seguradora regista um proponente.
+"""Convite para o Portal do Cliente quando a seguradora regista um proponente individual
+ou importa o titular de um proponente organizacional.
 
 O primeiro acesso normal pede o número de uma apólice ou cotação, que um
 cliente acabado de registar ainda não tem. Por isso o convite cria já a conta
@@ -25,11 +26,14 @@ logger = logging.getLogger(__name__)
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 
 
-def invite_proposer(proposer: Proposer) -> str | None:
+def invite_proposer(proposer: Proposer, *, recipient_email: str | None = None) -> str | None:
     """Liga o proponente a uma conta do portal e envia o convite depois do
-    commit. Devolve o email convidado, ou None se o proponente não tem email.
-    Uma falha no envio não desfaz o registo do proponente (fica no log)."""
-    email = (proposer.email or "").strip().lower()
+    commit. `recipient_email` permite convidar o titular importado de uma
+    organização sem substituir o email de contacto da empresa. Devolve o
+    email convidado, ou None se não houver email. Uma falha no envio não
+    desfaz o registo do proponente (fica no log)."""
+    raw_email = proposer.email if recipient_email is None else recipient_email
+    email = (raw_email or "").strip().lower()
     if "@" not in email:
         return None
     tenant_id = CurrentTenantProvider.require().value

@@ -17,7 +17,7 @@ def _no_ip_limit(settings):
     settings.CUSTOMER_PORTAL_URL = "https://portal.exemplo.ao/portal-cliente"
 
 
-def _create(admin_client, *, email, nif, kind="ORGANISATION"):
+def _create(admin_client, *, email, nif, kind="INDIVIDUAL"):
     body = {"proposerType": kind, "displayName": "Empresa Convite, Lda.", "registrationNumber": nif,
             "email": email, "phone": "+244923000000"}
     if kind == "INDIVIDUAL":
@@ -30,7 +30,7 @@ def _create(admin_client, *, email, nif, kind="ORGANISATION"):
 @pytest.mark.django_db(transaction=True)
 def test_new_proposer_gets_portal_link_and_can_set_password(admin_client, tenant):
     mail.outbox.clear()
-    proposer = _create(admin_client, email="rh@convite.ao", nif="5417000001")
+    proposer = _create(admin_client, email="rh@convite.ao", nif="023239343LA090")
 
     assert len(mail.outbox) == 1
     message = mail.outbox[0]
@@ -49,8 +49,8 @@ def test_new_proposer_gets_portal_link_and_can_set_password(admin_client, tenant
 @pytest.mark.django_db(transaction=True)
 def test_existing_account_is_not_linked_automatically(admin_client, tenant):
     """O mesmo email noutro cliente (p.ex. o do mediador) não dá acesso sozinho."""
-    first = _create(admin_client, email="mediador@convite.ao", nif="5417000003")
-    second = _create(admin_client, email="mediador@convite.ao", nif="5417000004")
+    first = _create(admin_client, email="mediador@convite.ao", nif="023239343LA091")
+    second = _create(admin_client, email="mediador@convite.ao", nif="023239343LA092")
     account = CustomerAccount.all_tenants.get(tenant_id=tenant.id, email="mediador@convite.ao")
     linked = set(CustomerAccountProposer.all_tenants.filter(customer_account=account).values_list("proposer_id", flat=True))
     assert {str(x) for x in linked} == {first["id"]}
@@ -58,10 +58,24 @@ def test_existing_account_is_not_linked_automatically(admin_client, tenant):
     assert second["id"] not in {str(x) for x in linked}
 
 
+@pytest.mark.django_db(transaction=True)
+def test_organisation_contact_does_not_get_portal_invitation_before_titular_import(admin_client):
+    mail.outbox.clear()
+    _create(
+        admin_client,
+        email="empresa@convite.ao",
+        nif="5417000005",
+        kind="ORGANISATION",
+    )
+    assert mail.outbox == []
+
+
 def test_no_email_no_invitation():
     """Sem email não há convite (p.ex. proponente criado na cotação sem email)."""
-    from types import SimpleNamespace
+    import uuid
 
+    from apps.client.infrastructure.models import Proposer
     from apps.customer_portal.application.invitation_service import invite_proposer
 
-    assert invite_proposer(SimpleNamespace(email="", display_name="X", id="p1")) is None
+    proposer = Proposer(id=uuid.uuid4(), email="", display_name="X")
+    assert invite_proposer(proposer) is None

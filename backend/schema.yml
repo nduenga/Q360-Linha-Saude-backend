@@ -7782,6 +7782,11 @@ paths:
       summary: Listar member list create
       parameters:
       - in: query
+        name: excludeHouseholdDependents
+        schema:
+          type: string
+        description: Filtro.
+      - in: query
         name: page
         schema:
           type: integer
@@ -11404,7 +11409,11 @@ paths:
       - oauth2:
         - q360.approve
       responses:
-        '201':
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
           description: Sucesso.
         '400':
           content:
@@ -11439,10 +11448,15 @@ paths:
   /api/v1/policies/{policy_id}/installments/{installment_no}/payment:
     post:
       operationId: postRegisterFirstPremiumPayment
-      description: "`POST /api/v1/policies/{policyId}/installments/{n}/payment` — regista o\npagamento de uma prestação.\n\
-        \n* n = 1: Decreto 2/02 art. 17.º, a 1.ª fração passa `PENDING_FIRST_PREMIUM`\n a `ACTIVE` e começa o risco\
-        \ (exige `rowVersion`).\n* n >= 2: apólice ativa; as prestações pagam-se por ordem.\n\nA suspensão por falta\
-        \ de pagamento (Fase 7) ainda não existe.\n\nRequer: scope q360.approve, permissão quote:approve."
+      description: 'Regista um pagamento antes do vencimento legalmente aplicável.
+
+
+        A falta de pagamento detectada após o vencimento resolve automaticamente
+
+        a apólice; este endpoint não permite regularizá-la retroactivamente.
+
+
+        Requer: scope q360.approve, permissão quote:approve.'
       summary: Criar register first premium payment
       parameters:
       - in: header
@@ -24099,6 +24113,50 @@ components:
           type:
           - string
           - 'null'
+        resolvedByLaw:
+          type: boolean
+        resolvedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        resolvedEffectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date
+        resolutionReason:
+          type:
+          - string
+          - 'null'
+        legalBasis:
+          type:
+          - string
+          - 'null'
+        refundAmount:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        refundCurrencyCode:
+          type:
+          - string
+          - 'null'
+        refundEffectivePeriodStart:
+          type:
+          - string
+          - 'null'
+          format: date
+          readOnly: true
+        refundEffectivePeriodEnd:
+          type:
+          - string
+          - 'null'
+          format: date
+          readOnly: true
+        refundStatus:
+          type: string
+          readOnly: true
         rowVersion:
           type: integer
         proposerName:
@@ -24115,6 +24173,7 @@ components:
       - currencyCode
       - endDate
       - id
+      - legalBasis
       - paymentFrequency
       - planId
       - planName
@@ -24122,6 +24181,15 @@ components:
       - policyType
       - proposerId
       - proposerName
+      - refundAmount
+      - refundCurrencyCode
+      - refundEffectivePeriodEnd
+      - refundEffectivePeriodStart
+      - refundStatus
+      - resolutionReason
+      - resolvedAt
+      - resolvedByLaw
+      - resolvedEffectiveFrom
       - rowVersion
       - sourceQuoteId
       - startDate
@@ -24529,6 +24597,7 @@ components:
       - ACTIVE
       - SUSPENDED
       - TERMINATED
+      - RESOLVED_BY_LAW
       - CANCELLED
       - EXPIRED
       - RENEWED
@@ -24540,6 +24609,8 @@ components:
         * `SUSPENDED` - SUSPENDED
 
         * `TERMINATED` - TERMINATED
+
+        * `RESOLVED_BY_LAW` - RESOLVED_BY_LAW
 
         * `CANCELLED` - CANCELLED
 

@@ -66,4 +66,4 @@ def send_portal_invitation_email(*, to_email: str, client_name: str, insurer_nam
         from_email=settings.CUSTOMER_PORTAL_EMAIL_FROM,
         recipient_list=[to_email],
         fail_silently=False,
-    )
+    ) 

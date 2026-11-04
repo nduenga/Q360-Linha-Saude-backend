@@ -28,7 +28,9 @@ import hashlib
 import io
 from dataclasses import dataclass, field
 
+from django.core.exceptions import ValidationError
 from django.core.files.storage import default_storage
+from django.core.validators import validate_email
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
 from django.utils import timezone
@@ -38,6 +40,7 @@ from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.client.application.relationship_service import validate_relationship_code
+from apps.client.application import household_service, member_service
 from apps.client.application.member_service import _category_by_code, _person_label, max_beneficiaries_for_individual
 from apps.client.domain.enums import ImportJobStatus, ImportType, MemberStatus, ProposerType, RelationshipCategory
 from apps.client.domain.errors import (
@@ -45,19 +48,27 @@ from apps.client.domain.errors import (
     ImportPopulationInvalidError,
     UnknownRelationshipCodeError,
 )
-from apps.client.domain.rules import Person, validate_household
+from apps.client.domain.rules import Person, validate_corporate_family, validate_household
 from apps.foundation.domain.problem import DomainProblem
 from apps.client.infrastructure.models import ImportJob, ImportRowError, InsuredMember, Person as PersonRecord, Proposer
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
-_EXPECTED_COLUMNS = ["relationshipCode", "firstName", "lastName", "dateOfBirth", "sexCode", "externalReference"]
+_EXPECTED_COLUMNS = [
+    "relationshipCode", "firstName", "lastName", "dateOfBirth", "sexCode",
+    "externalReference", "email", "phone",
+]
 _XLSX_EXTENSIONS = (".xlsx",)
 _HEADERS_PT = {
     "relação com o titular": "relationshipCode", "relacao com o titular": "relationshipCode",
     "relação": "relationshipCode", "relacao": "relationshipCode", "nome": "firstName",
     "apelido": "lastName", "data de nascimento": "dateOfBirth", "sexo": "sexCode",
     "referência externa": "externalReference", "referencia externa": "externalReference",
+    "tipo de pessoa": "memberType",
+    "referência do colaborador titular": "holderReference",
+    "referencia do colaborador titular": "holderReference",
+    "e-mail": "email", "email": "email",
+    "telefone": "phone",
 }
 # Common ETL "looks like a null but isn't really empty" placeholders that
 # spreadsheet exports/manual entry tend to leave behind - OD-004 asks that
@@ -162,6 +173,8 @@ def _validate_row(row_number: int, raw: dict[str, str], *, tenant_id) -> _Parsed
             )
 
     raw_dob = (raw.get("dateOfBirth") or "").strip()
+    if not (raw.get("firstName") or "").strip():
+        parsed.errors.append(("firstName", "VALIDATION-400", "Indique o nome próprio da pessoa."))
     if not raw_dob:
         # Regra de negócio: data de nascimento obrigatória para toda a pessoa segura.
         parsed.errors.append(("dateOfBirth", "VALIDATION-400", "dateOfBirth is required"))
@@ -177,11 +190,152 @@ def _validate_row(row_number: int, raw: dict[str, str], *, tenant_id) -> _Parsed
     return parsed
 
 
+def _is_organisation_household_import(rows: list[dict[str, str]]) -> bool:
+    return bool(rows and any("memberType" in row for row in rows))
+
+
+def _validate_organisation_household_rows(
+    *, proposer: Proposer | None, rows: list[_ParsedRow], tenant_id,
+) -> str | None:
+    """Validate collaborator anchors and optional dependent groups in a flat workbook."""
+    first_problem = None
+
+    def add_error(row: _ParsedRow, field: str, message: str) -> None:
+        nonlocal first_problem
+        row.errors.append((field, "VALIDATION-400", message))
+        first_problem = first_problem or f"Linha {row.row_number}: {message}"
+
+    if proposer is None or proposer.proposer_type != ProposerType.ORGANISATION.value:
+        message = "Este modelo só pode ser importado para um proponente do tipo organização."
+        for row in rows:
+            add_error(row, "memberType", message)
+        return first_problem
+
+    categories = _category_by_code()
+    existing_members = {
+        (member.external_reference or ""): member
+        for member in InsuredMember.objects.filter(proposer=proposer)
+        if member.external_reference
+    }
+    new_holders: dict[str, _ParsedRow] = {}
+    seen_references: set[str] = set()
+    existing_titular = InsuredMember.objects.filter(
+        proposer=proposer,
+        relationship_code="TITULAR",
+        status=MemberStatus.ACTIVE.value,
+    ).exists()
+    seen_titular = False
+
+    for row in rows:
+        kind = (row.values.get("memberType") or "").strip().upper()
+        row.values["memberType"] = kind
+        code = (row.values.get("relationshipCode") or "").strip().upper()
+        row.values["relationshipCode"] = code
+        reference = (row.values.get("externalReference") or "").strip()
+        holder_reference = (row.values.get("holderReference") or "").strip()
+
+        if kind not in {"TITULAR", "COLABORADOR", "DEPENDENTE"}:
+            add_error(row, "memberType", "Indique TITULAR, COLABORADOR ou DEPENDENTE.")
+            continue
+
+        if kind == "TITULAR":
+            if categories.get(code) != RelationshipCategory.TITULAR.value:
+                add_error(row, "relationshipCode", "Na linha de titular, a relação tem de ser TITULAR.")
+            if holder_reference:
+                add_error(row, "holderReference", "Deixe esta coluna vazia na linha do titular do proponente.")
+            if existing_titular or seen_titular:
+                add_error(row, "memberType", "A organização já tem um titular ativo; só pode existir um titular por organização.")
+            seen_titular = True
+            email = (row.values.get("email") or "").strip()
+            phone = (row.values.get("phone") or "").strip()
+            if not email:
+                add_error(row, "email", "O e-mail do titular é obrigatório.")
+            else:
+                try:
+                    validate_email(email)
+                except ValidationError:
+                    add_error(row, "email", "Indique um e-mail válido para o titular.")
+                if proposer.email and email.casefold() == proposer.email.strip().casefold():
+                    add_error(row, "email", "O e-mail do titular deve ser diferente do e-mail de contacto da organização.")
+            if not phone:
+                add_error(row, "phone", "O telefone do titular é obrigatório.")
+            continue
+
+        if kind == "COLABORADOR":
+            if code and categories.get(code) != RelationshipCategory.COLLABORATOR.value:
+                add_error(row, "relationshipCode", "Na linha de colaborador, a relação tem de ser COLABORADOR.")
+            row.values["relationshipCode"] = "COLABORADOR"
+            if holder_reference:
+                add_error(row, "holderReference", "Deixe esta coluna vazia na linha do colaborador.")
+            if not reference:
+                add_error(row, "externalReference", "A referência externa do colaborador é obrigatória.")
+            elif reference in seen_references:
+                add_error(row, "externalReference", f"A referência '{reference}' está repetida no ficheiro.")
+            elif reference in existing_members:
+                add_error(row, "externalReference", f"A referência '{reference}' já existe nesta organização.")
+            elif row.is_valid:
+                seen_references.add(reference)
+                new_holders[reference] = row
+            continue
+
+        if not holder_reference:
+            add_error(row, "holderReference", "Indique a referência do colaborador titular do agregado.")
+        if not code or categories.get(code) in (
+            RelationshipCategory.COLLABORATOR.value, RelationshipCategory.TITULAR.value,
+        ):
+            add_error(row, "relationshipCode", "Indique uma relação familiar válida para o dependente.")
+        if row.is_valid:
+            try:
+                validate_relationship_code(tenant_id=tenant_id, code=code)
+            except UnknownRelationshipCodeError:
+                add_error(row, "relationshipCode", f"'{code}' não é uma relação familiar válida neste tenant.")
+
+    for row in rows:
+        if not row.is_valid or row.values.get("memberType") != "DEPENDENTE":
+            continue
+        holder_reference = (row.values.get("holderReference") or "").strip()
+        holder_row = new_holders.get(holder_reference)
+        if holder_row is not None:
+            holder_dob, _ = _parse_date((holder_row.values.get("dateOfBirth") or "").strip())
+            holder_name = (holder_row.values.get("firstName") or "").strip()
+        else:
+            existing = existing_members.get(holder_reference)
+            if (
+                existing is None
+                or existing.status != MemberStatus.ACTIVE.value
+                or categories.get(existing.relationship_code) != RelationshipCategory.COLLABORATOR.value
+            ):
+                add_error(row, "holderReference", f"Não foi encontrado colaborador com a referência '{holder_reference}'.")
+                continue
+            holder_dob = existing.date_of_birth
+            holder_name = _person_label(existing.first_name, existing.last_name)
+
+        if not row.is_valid:
+            continue
+        dependent_dob, _ = _parse_date((row.values.get("dateOfBirth") or "").strip())
+        relationship = categories.get(row.values["relationshipCode"], RelationshipCategory.OTHER.value)
+        try:
+            validate_corporate_family(
+                employee=Person(RelationshipCategory.COLLABORATOR.value, holder_dob, holder_name),
+                relatives=[Person(
+                    relationship,
+                    dependent_dob,
+                    _person_label(row.values.get("firstName"), row.values.get("lastName")),
+                )],
+            )
+        except DomainProblem as exc:
+            add_error(row, "dateOfBirth", str(exc))
+
+    return first_problem
+
+
 def _population_problem(*, proposer: Proposer | None, rows: list[_ParsedRow]) -> str | None:
     """Aplica titular-primeiro, limite de beneficiários e diferença de 13
     anos ao conjunto FINAL (membros ativos já existentes + linhas válidas do
     ficheiro). Devolve a mensagem do problema, ou None se estiver tudo bem."""
     if proposer is None:
+        return None
+    if any(row.values.get("memberType") for row in rows):
         return None
     categories = _category_by_code()
     people = [
@@ -250,7 +404,15 @@ def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFi
         )
         return import_job
 
-    if proposer is not None and proposer.proposer_type != ProposerType.INDIVIDUAL.value:
+    organisation_household_import = _is_organisation_household_import(raw_rows)
+    if organisation_household_import:
+        _validate_organisation_household_rows(proposer=proposer, rows=rows, tenant_id=tenant_id.value)
+
+    if (
+        proposer is not None
+        and proposer.proposer_type != ProposerType.INDIVIDUAL.value
+        and not organisation_household_import
+    ):
         # Numa organização cada linha é um colaborador: uma relação familiar é
         # um erro dessa linha (com o número dela), não do ficheiro inteiro.
         categories = _category_by_code()
@@ -319,6 +481,11 @@ def commit_member_import(*, import_job: ImportJob, actor_id: str) -> ImportJob:
         raise ImportCommitNotAllowedError(
             f"O processo de importação {import_job.id} não tem cliente (proposer); é necessário um para confirmar as pessoas seguras"
         )
+    proposer = import_job.proposer
+    if proposer is None:
+        raise ImportCommitNotAllowedError(
+            f"O processo de importação {import_job.id} não conseguiu carregar o cliente necessário para confirmar as pessoas seguras"
+        )
 
     tenant_id = CurrentTenantProvider.require()
     path = _storage_path(tenant_id.value, import_job.id, import_job.original_filename)
@@ -326,6 +493,14 @@ def commit_member_import(*, import_job: ImportJob, actor_id: str) -> ImportJob:
         content = fh.read()
     raw_rows = _parse_uploaded_rows(filename=import_job.original_filename, content=content)
     rows = [_validate_row(i, raw, tenant_id=tenant_id.value) for i, raw in enumerate(raw_rows, start=1)]
+
+    organisation_household_import = _is_organisation_household_import(raw_rows)
+    if organisation_household_import:
+        household_problem = _validate_organisation_household_rows(
+            proposer=import_job.proposer, rows=rows, tenant_id=tenant_id.value,
+        )
+        if household_problem:
+            raise ImportPopulationInvalidError(household_problem)
 
     population_problem = _population_problem(proposer=import_job.proposer, rows=rows)
     if population_problem:
@@ -336,37 +511,118 @@ def commit_member_import(*, import_job: ImportJob, actor_id: str) -> ImportJob:
     import_job.save(update_fields=["status"])
 
     created = 0
+    titular_email = None
     with transaction.atomic():
-        for row in rows:
-            if not row.is_valid:
-                continue
-            date_of_birth, _ = _parse_date((row.values.get("dateOfBirth") or "").strip())
-            first_name = (row.values.get("firstName") or "").strip() or None
-            last_name = (row.values.get("lastName") or "").strip() or None
-            sex_code = (row.values.get("sexCode") or "").strip() or None
-            person_record = PersonRecord.objects.create(
-                tenant_id=tenant_id.value,
-                first_name=first_name or "Pessoa",
-                last_name=last_name,
-                date_of_birth=date_of_birth,
-                sex_code=sex_code,
-            )
-            InsuredMember.objects.create(
-                tenant_id=tenant_id.value,
-                proposer=import_job.proposer,
-                person=person_record,
-                relationship_code=row.values["relationshipCode"].strip(),
-                first_name=first_name,
-                last_name=last_name,
-                date_of_birth=date_of_birth,
-                sex_code=sex_code,
-                external_reference=(row.values.get("externalReference") or "").strip() or None,
-            )
-            created += 1
+        if organisation_household_import:
+            holders = {
+                (member.external_reference or ""): member
+                for member in InsuredMember.objects.filter(proposer=import_job.proposer, status=MemberStatus.ACTIVE.value)
+                if member.external_reference
+            }
+            households = {}
+            for row in rows:
+                if not row.is_valid or row.values.get("memberType") != "TITULAR":
+                    continue
+                date_of_birth, _ = _parse_date(row.values["dateOfBirth"].strip())
+                member_service.create_member(
+                    proposer=import_job.proposer,
+                    relationship_code="TITULAR",
+                    first_name=row.values["firstName"].strip(),
+                    last_name=(row.values.get("lastName") or "").strip() or None,
+                    date_of_birth=date_of_birth,
+                    sex_code=(row.values.get("sexCode") or "").strip() or None,
+                    external_reference=(row.values.get("externalReference") or "").strip() or None,
+                    attributes={
+                        "email": row.values["email"].strip(),
+                        "phone": row.values["phone"].strip(),
+                    },
+                    allow_organisation_titular=True,
+                )
+                titular_email = row.values["email"].strip()
+                created += 1
+
+            for row in rows:
+                if not row.is_valid or row.values.get("memberType") != "COLABORADOR":
+                    continue
+                reference = row.values["externalReference"].strip()
+                date_of_birth, _ = _parse_date(row.values["dateOfBirth"].strip())
+                holders[reference] = member_service.create_member(
+                    proposer=import_job.proposer,
+                    relationship_code="COLABORADOR",
+                    first_name=row.values["firstName"].strip(),
+                    last_name=(row.values.get("lastName") or "").strip() or None,
+                    date_of_birth=date_of_birth,
+                    sex_code=(row.values.get("sexCode") or "").strip() or None,
+                    external_reference=reference,
+                    attributes=None,
+                )
+                created += 1
+
+            for row in rows:
+                if not row.is_valid or row.values.get("memberType") != "DEPENDENTE":
+                    continue
+                holder_reference = row.values["holderReference"].strip()
+                holder = holders[holder_reference]
+                household = households.get(holder_reference)
+                if household is None:
+                    household = holder.primary_household.filter(status="ACTIVE").first()
+                    if household is None:
+                        household = household_service.create_household(
+                            proposer=import_job.proposer,
+                            primary_member=holder,
+                            joined_at=timezone.now().date(),
+                        )
+                    households[holder_reference] = household
+                date_of_birth, _ = _parse_date(row.values["dateOfBirth"].strip())
+                household_service.create_dependent(
+                    household=household,
+                    relationship_code=row.values["relationshipCode"].strip(),
+                    first_name=row.values["firstName"].strip(),
+                    last_name=(row.values.get("lastName") or "").strip() or None,
+                    date_of_birth=date_of_birth,
+                    sex_code=(row.values.get("sexCode") or "").strip() or None,
+                    external_reference=(row.values.get("externalReference") or "").strip() or None,
+                    attributes=None,
+                    nif=None,
+                    joined_at=timezone.now().date(),
+                )
+                created += 1
+        else:
+            for row in rows:
+                if not row.is_valid:
+                    continue
+                date_of_birth, _ = _parse_date((row.values.get("dateOfBirth") or "").strip())
+                first_name = (row.values.get("firstName") or "").strip() or None
+                last_name = (row.values.get("lastName") or "").strip() or None
+                sex_code = (row.values.get("sexCode") or "").strip() or None
+                person_record = PersonRecord.objects.create(
+                    tenant_id=tenant_id.value,
+                    first_name=first_name or "Pessoa",
+                    last_name=last_name,
+                    date_of_birth=date_of_birth,
+                    sex_code=sex_code,
+                )
+                InsuredMember.objects.create(
+                    tenant_id=tenant_id.value,
+                    proposer=import_job.proposer,
+                    person=person_record,
+                    relationship_code=row.values["relationshipCode"].strip(),
+                    first_name=first_name,
+                    last_name=last_name,
+                    date_of_birth=date_of_birth,
+                    sex_code=sex_code,
+                    external_reference=(row.values.get("externalReference") or "").strip() or None,
+                )
+                created += 1
 
         import_job.status = ImportJobStatus.COMPLETED.value
         import_job.completed_at = timezone.now()
         import_job.save(update_fields=["status", "completed_at"])
+
+    if titular_email:
+        from apps.customer_portal.application.invitation_service import invite_proposer
+
+        invite_proposer(proposer, recipient_email=titular_email)
 
     _audit.record(
         action="member_import.committed",

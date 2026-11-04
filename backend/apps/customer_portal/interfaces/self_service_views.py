@@ -45,10 +45,13 @@ def _outstanding_installments_by_policy(policies: list) -> dict:
     incluindo recibos em dívida"): `DUE`/`OVERDUE` installments, grouped
     per policy — just a count and total, not the installments themselves
     (a customer needs to know "do I owe something", not a ledger)."""
-    if not policies:
+    collectible_policy_ids = [
+        policy.id for policy in policies if policy.status != "RESOLVED_BY_LAW"
+    ]
+    if not collectible_policy_ids:
         return {}
     installments = PremiumInstallment.objects.filter(
-        policy_id__in=[p.id for p in policies], status__in=["DUE", "OVERDUE"]
+        policy_id__in=collectible_policy_ids, status__in=["DUE", "OVERDUE"]
     )
     totals: dict = {}
     for installment in installments:

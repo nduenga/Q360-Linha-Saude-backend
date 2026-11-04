@@ -158,6 +158,7 @@ def create_member(
     attributes: dict[str, Any] | None,
     nif: str | None = None,
     corporate_dependent: bool = False,
+    allow_organisation_titular: bool = False,
 ) -> InsuredMember:
     date_of_birth = require_date_of_birth(date_of_birth)
     tenant_id = CurrentTenantProvider.require()
@@ -165,17 +166,31 @@ def create_member(
     if proposer.proposer_type == ProposerType.ORGANISATION.value:
         if corporate_dependent:
             if rel.category in (RelationshipCategory.COLLABORATOR.value, RelationshipCategory.TITULAR.value):
-                raise HouseholdValidationError("O familiar deve ter uma relação familiar, não COLABORADOR.")
+                raise HouseholdValidationError("O familiar deve ter uma relação familiar, não COLABORADOR ou TITULAR.")
         else:
-            # A relação do empregado não é uma escolha familiar: normaliza
-            # qualquer valor legado recebido pela UI para COLABORADOR.
-            relationship_code = "COLABORADOR"
-            rel = validate_relationship_code(tenant_id=tenant_id.value, code=relationship_code)
+            if allow_organisation_titular and rel.category == RelationshipCategory.TITULAR.value:
+                relationship_code = "TITULAR"
+                rel = validate_relationship_code(tenant_id=tenant_id.value, code=relationship_code)
+            else:
+                # A relação do empregado não é uma escolha familiar: normaliza
+                # qualquer valor legado recebido pela UI para COLABORADOR.
+                relationship_code = "COLABORADOR"
+                rel = validate_relationship_code(tenant_id=tenant_id.value, code=relationship_code)
     _raise_if_nif_taken(nif, proposer_id=proposer.id)
     try:
         with transaction.atomic():
             # Bloqueia o proponente para duas criações em paralelo não furarem o limite.
             Proposer.objects.select_for_update().filter(id=proposer.id).first()
+            if (
+                proposer.proposer_type == ProposerType.ORGANISATION.value
+                and relationship_code == "TITULAR"
+                and InsuredMember.objects.filter(
+                    proposer=proposer,
+                    relationship_code="TITULAR",
+                    status=MemberStatus.ACTIVE.value,
+                ).exists()
+            ):
+                raise HouseholdValidationError("Uma organização só pode ter um titular ativo.")
             _validate_population(
                 proposer=proposer,
                 candidate=Person(rel.category, date_of_birth, _person_label(first_name, last_name)),
@@ -252,7 +267,11 @@ def update_member(
         if is_dependent and rel.category in expected_categories:
             raise HouseholdValidationError("Os familiares devem manter a sua relação familiar.")
         if not is_dependent:
-            relationship_code = "COLABORADOR"
+            relationship_code = (
+                "TITULAR"
+                if member.relationship_code == "TITULAR"
+                else "COLABORADOR"
+            )
             rel = validate_relationship_code(tenant_id=member.tenant_id, code=relationship_code)
         if member.status == MemberStatus.ACTIVE.value:
             _validate_corporate_member_age(

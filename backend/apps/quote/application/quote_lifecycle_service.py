@@ -145,6 +145,11 @@ def create_renewal(
     policy = Policy.objects.select_related("source_quote", "plan", "proposer").filter(id=source_policy_id).first()
     if policy is None:
         raise ReferencedEntityNotFoundError(f"A apólice de origem (sourcePolicyId) {source_policy_id} não existe neste tenant")
+    if policy.status in ("ACTIVE", "EXPIRED"):
+        from apps.policy.application.lifecycle_service import resolve_policy_for_overdue_premium
+
+        resolve_policy_for_overdue_premium(policy=policy)
+        policy.refresh_from_db()
     if policy.status not in _RENEWABLE_POLICY_STATUSES:
         raise QuoteStateError(f"A apólice {policy.policy_number} está em {policy.status}; só uma apólice ativa (ACTIVE) ou expirada (EXPIRED) pode ser renovada")
     if policy.end_date is None:

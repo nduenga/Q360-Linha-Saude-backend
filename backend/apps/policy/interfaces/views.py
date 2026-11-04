@@ -141,14 +141,11 @@ class PolicyInstallmentListView(APIView):
 
 @requires_idempotency
 class RegisterFirstPremiumPaymentView(APIView):
-    """`POST /api/v1/policies/{policyId}/installments/{n}/payment` — regista o
-    pagamento de uma prestação.
+    """Regista um pagamento antes do vencimento legalmente aplicável.
 
-    * n = 1: Decreto 2/02 art. 17.º, a 1.ª fração passa `PENDING_FIRST_PREMIUM`
-      a `ACTIVE` e começa o risco (exige `rowVersion`).
-    * n >= 2: apólice ativa; as prestações pagam-se por ordem.
-
-    A suspensão por falta de pagamento (Fase 7) ainda não existe."""
+    A falta de pagamento detectada após o vencimento resolve automaticamente
+    a apólice; este endpoint não permite regularizá-la retroactivamente.
+    """
 
     permission_classes = [require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_APPROVE)]
 
@@ -195,14 +192,13 @@ class PolicyDefaultNoticeView(APIView):
         policy = get_object_or_404(Policy, id=policy_id)
         body = DefaultNoticeRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        data = body.validated_data
-        notice = lifecycle_service.register_default_notice(
-            policy=policy, installment_no=installment_no,
-            registered_mail_reference=data["registeredMailReference"], new_deadline=data["newDeadline"],
-            sent_at=data["sentAt"],
+        resolved = lifecycle_service.resolve_policy_for_overdue_premium(
+            policy=policy, correlation_id=get_correlation_id(),
         )
-        return Response({"id": str(notice.id), "installmentNo": installment_no,
-                         "newDeadline": notice.new_deadline, "status": "NOTICE_REGISTERED"}, status=201)
+        policy.refresh_from_db()
+        if not resolved and policy.status != "RESOLVED_BY_LAW":
+            raise ValidationError("Não existe prestação vencida elegível para resolução automática.")
+        return Response(PolicySerializer(policy).data)
 
 
 @requires_idempotency
@@ -210,8 +206,9 @@ class PolicySuspendView(APIView):
     permission_classes = [require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_APPROVE)]
 
     def post(self, request, policy_id, installment_no):
+        policy = get_object_or_404(Policy, id=policy_id)
         policy = lifecycle_service.suspend_for_default(
-            policy=get_object_or_404(Policy, id=policy_id), installment_no=installment_no,
+            policy=policy, installment_no=installment_no,
             correlation_id=get_correlation_id(),
         )
         return Response(PolicySerializer(policy).data)
@@ -222,8 +219,9 @@ class PolicyTerminateView(APIView):
     permission_classes = [require_scope(Scope.APPROVE), require_permission(Permission.QUOTE_APPROVE)]
 
     def post(self, request, policy_id, installment_no):
+        policy = get_object_or_404(Policy, id=policy_id)
         policy = lifecycle_service.terminate_for_default(
-            policy=get_object_or_404(Policy, id=policy_id), installment_no=installment_no,
+            policy=policy, installment_no=installment_no,
             correlation_id=get_correlation_id(),
         )
         return Response(PolicySerializer(policy).data)
@@ -315,6 +313,7 @@ class InstallmentListView(APIView):
                     "daysOverdue": (today - installment.due_date).days if effective == "OVERDUE" else 0,
                     "canRegisterPayment": (
                         effective in ("DUE", "OVERDUE")
+<<<<<<< HEAD
                         and (
                             (
                                 installment.installment_no == 1
@@ -330,6 +329,10 @@ class InstallmentListView(APIView):
                                 ).exclude(status__in=("PAID", "VOID")).exists()
                             )
                         )
+=======
+                        and installment.due_date >= today
+                        and installment.policy.status == "ACTIVE"
+>>>>>>> 43b283d (update)
                     ),
                 }
             )

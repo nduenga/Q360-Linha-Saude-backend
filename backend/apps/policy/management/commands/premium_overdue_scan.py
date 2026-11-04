@@ -1,4 +1,4 @@
-"""Marca prestações vencidas; o envio da carta e a suspensão são humanos."""
+"""Marca prestações vencidas e aplica a resolução legal automática."""
 from django.core.management.base import BaseCommand
 
 from apps.foundation.application.context import CurrentActorProvider
@@ -7,11 +7,11 @@ from apps.foundation.domain.permissions import Role
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.domain.tenant import TenantId
 from apps.foundation.infrastructure.models import Tenant
-from apps.policy.application.lifecycle_service import mark_overdue
+from apps.policy.application.lifecycle_service import resolve_overdue_policies
 
 
 class Command(BaseCommand):
-    help = "Marca como OVERDUE as prestações vencidas ainda não pagas. Idempotente."
+    help = "Marca prestações em atraso e resolve automaticamente apólices elegíveis. Idempotente."
 
     def handle(self, *args, **options):
         total = 0
@@ -21,7 +21,7 @@ class Command(BaseCommand):
                 roles=frozenset({Role.ADMIN}), scopes=frozenset({Scope.READ, Scope.WRITE}),
             ))
             try:
-                total += mark_overdue()
+                total += resolve_overdue_policies()
             finally:
                 CurrentActorProvider.reset(token)
-        self.stdout.write(self.style.SUCCESS(f"Done. {total} installment(s) marked overdue."))
+        self.stdout.write(self.style.SUCCESS(f"Done. {total} policy(ies) resolved by law."))

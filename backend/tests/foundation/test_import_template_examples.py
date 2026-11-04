@@ -85,6 +85,30 @@ def test_supplier_template_passes_the_real_validation():
     platform_templates.validate_content("PRODUCT", content)
 
 
+def test_organisation_member_template_has_portuguese_guidance_and_optional_dependants(admin_client):
+    response = admin_client.get("/api/v1/import-templates/ORGANISATION_MEMBERS")
+    assert response.status_code == 200
+    from openpyxl import load_workbook
+    import io
+
+    workbook = load_workbook(io.BytesIO(response.content), data_only=True)
+    sheet = workbook["Colaboradores e famílias"]
+    assert [cell.value for cell in sheet[1]] == [
+        "Tipo de pessoa", "Referência do colaborador titular", "Relação com o titular",
+        "Nome", "Apelido", "Data de nascimento", "Sexo", "Referência externa", "E-mail", "Telefone",
+    ]
+    assert sheet.max_row == 6
+    assert sheet["A2"].value == "TITULAR"
+    assert sheet["I2"].value == "rosa.responsavel@empresa-teste.ao"
+    assert sheet["J2"].value == "+244900000001"
+    instructions = workbook["Instruções"]
+    assert instructions["A1"].value == "Campo"
+    assert instructions["A2"].value == "Tipo de pessoa"
+    assert "dependente" in instructions["D3"].value.lower()
+    assert "e-mail da organização" in instructions["D10"].value.lower()
+    assert "convite do portal do cliente" in instructions["D10"].value.lower()
+
+
 # --- Pacote estático docs/modelos_importacao: os exemplos TESTE também têm de entrar inteiros.
 PACKAGE = Path(__file__).resolve().parents[3] / "docs" / "modelos_importacao"
 

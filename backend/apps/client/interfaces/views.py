@@ -7,7 +7,7 @@ docs/08-integration-contract/BACKEND_FRONTEND_ALIGNMENT.md.
 """
 from __future__ import annotations
 
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404
 from rest_framework.parsers import MultiPartParser
 from rest_framework.exceptions import ValidationError
@@ -114,10 +114,12 @@ class ProposerListCreateView(APIView):
         body = ProposerCreateRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         proposer = proposer_service.create_proposer(**body.validated_data)
-        # Convite por email para o Portal do Cliente (enviado depois do commit).
-        from apps.customer_portal.application.invitation_service import invite_proposer
+        if proposer.proposer_type == "INDIVIDUAL":
+            # Para organizações, o convite só é enviado ao titular quando
+            # este é importado; o email do proponente é o contacto da empresa.
+            from apps.customer_portal.application.invitation_service import invite_proposer
 
-        invite_proposer(proposer)
+            invite_proposer(proposer)
         return Response(ProposerSerializer(proposer).data, status=201)
 
 
@@ -208,6 +210,14 @@ class MemberListCreateView(APIView):
         proposer_id = request.query_params.get("proposerId")
         if proposer_id:
             queryset = queryset.filter(proposer_id=proposer_id)
+        if request.query_params.get("excludeHouseholdDependents", "").lower() == "true":
+            active_dependent_memberships = FamilyHouseholdMember.objects.filter(
+                member_id=OuterRef("pk"),
+                left_at__isnull=True,
+            ).exclude(household__primary_member_id=OuterRef("pk"))
+            queryset = queryset.annotate(
+                is_household_dependent=Exists(active_dependent_memberships),
+            ).filter(is_household_dependent=False)
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
         return paginator.get_paginated_response(MemberSerializer(page, many=True).data)

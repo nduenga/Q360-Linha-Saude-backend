@@ -10,6 +10,7 @@ import datetime
 
 import pytest
 from django.core import mail
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 _EMAIL = "cliente@example.com"
@@ -163,6 +164,41 @@ def test_me_reports_outstanding_installments(admin_client, tenant):
 
     assert response.status_code == 200
     assert response.data["policies"][0]["outstandingInstallments"] == {"count": 1, "totalAmount": "500.00"}
+
+
+@pytest.mark.django_db
+def test_me_excludes_resolved_policy_installments_from_outstanding(admin_client, tenant):
+    mine = _setup_active_policy_with_member(
+        admin_client, tenant, policy_number="APO-ME-004", registration_number="161616161LA016"
+    )
+
+    from apps.policy.infrastructure.models import Policy, PremiumInstallment
+
+    PremiumInstallment.all_tenants.create(
+        tenant_id=tenant.id,
+        policy_id=mine["policyId"],
+        installment_no=1,
+        period_from=_START_DATE,
+        period_to=_END_DATE,
+        due_date=_START_DATE,
+        amount="500.00",
+        currency_code="AOA",
+        status="OVERDUE",
+    )
+    Policy.all_tenants.filter(id=mine["policyId"]).update(
+        status="RESOLVED_BY_LAW",
+        resolved_by_law=True,
+        resolved_at=timezone.now(),
+        resolved_effective_from=_START_DATE,
+        resolution_reason_code="INSTALLMENT",
+        legal_basis="ART_18_3",
+    )
+
+    token = _login(tenant, mine)
+    response = _portal_client(token).get("/api/v1/customer-portal/me")
+
+    assert response.status_code == 200
+    assert response.data["policies"][0]["outstandingInstallments"] == {"count": 0, "totalAmount": "0.00"}
 
 
 @pytest.mark.django_db

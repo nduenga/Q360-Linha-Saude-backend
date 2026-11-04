@@ -451,10 +451,16 @@ def register_first_premium_payment(
     row_version: int,
     correlation_id: str | None,
 ) -> Policy:
+    from apps.policy.application.lifecycle_service import resolve_policy_for_overdue_premium
+
+    resolve_policy_for_overdue_premium(policy=policy, today=timezone_now().date(), correlation_id=correlation_id)
+    policy.refresh_from_db()
     if policy.status != PolicyStatus.PENDING_FIRST_PREMIUM.value:
         raise PolicyStateError(_not_pending_message(policy))
 
-    installment = PremiumInstallment.objects.filter(policy=policy, installment_no=1, status="DUE").first()
+    installment = PremiumInstallment.objects.filter(
+        policy=policy, installment_no=1, status="DUE", due_date__gte=timezone_now().date()
+    ).first()
     if installment is None:
         raise ReferencedEntityNotFoundError(f"A apólice {policy.id} não tem a 1.ª prestação por pagar")
 
@@ -592,6 +598,10 @@ def register_installment_payment(
     vigor. As prestações pagam-se por ordem: a anterior tem de estar paga."""
     if installment_no < 2:
         raise ReferencedEntityNotFoundError("A 1.ª prestação regista-se com o fluxo de ativação da apólice")
+    from apps.policy.application.lifecycle_service import resolve_policy_for_overdue_premium
+
+    resolve_policy_for_overdue_premium(policy=policy, today=timezone_now().date(), correlation_id=correlation_id)
+    policy.refresh_from_db()
     if policy.status not in (PolicyStatus.ACTIVE.value, PolicyStatus.SUSPENDED.value):
         raise PolicyStateError(
             f"A apólice {policy.policy_number} está em {policy.status}; só se registam pagamentos em apólices ativas ou suspensas"

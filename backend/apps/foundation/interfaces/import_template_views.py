@@ -41,6 +41,14 @@ MEMBER_EXAMPLES = [
     ["COLABORADOR", "Joana", "Pires", "1999-11-27", "F", "REF-020"],
 ]
 
+ORGANISATION_MEMBER_EXAMPLES = [
+    ["TITULAR", "", "TITULAR", "Rosa", "Exemplo", "1979-02-11", "F", "", "rosa.responsavel@empresa-teste.ao", "+244900000001"],
+    ["COLABORADOR", "", "COLABORADOR", "Ana", "Silva", "1985-05-21", "F", "FUNC-001"],
+    ["DEPENDENTE", "FUNC-001", "CONJUGE", "Paulo", "Silva", "1983-11-02", "M", "FAM-001"],
+    ["DEPENDENTE", "FUNC-001", "FILHO", "Marta", "Silva", "2012-03-14", "F", "FAM-002"],
+    ["COLABORADOR", "", "COLABORADOR", "Rui", "Costa", "1991-08-30", "M", "FUNC-002"],
+]
+
 CLAIM_EXAMPLES = [
     ["2024-02-12", "OUTPATIENT", 18000, "REF-001", 0, "AOA", "PAGO"],
     ["2024-03-05", "PHARMACY", 9500, "REF-003", 0, "AOA", "PAGO"],
@@ -92,6 +100,38 @@ TEMPLATES = {
         "examples": MEMBER_EXAMPLES,
         "help": ["Código de relação configurado no tenant", "Texto obrigatório", "Texto obrigatório", "Data AAAA-MM-DD", "M ou F", "Texto opcional"],
     },
+    "ORGANISATION_MEMBERS": {
+        "sheet": "Colaboradores e famílias",
+        "headers": [
+            "Tipo de pessoa", "Referência do colaborador titular", "Relação com o titular",
+            "Nome", "Apelido", "Data de nascimento", "Sexo", "Referência externa", "E-mail", "Telefone",
+        ],
+        "required": ["Tipo de pessoa", "Nome", "Data de nascimento"],
+        "requiredness": {
+            "Referência do colaborador titular": "Obrigatório para dependente",
+            "Relação com o titular": "Obrigatório para dependente",
+            "Referência externa": "Obrigatório para colaborador",
+            "E-mail": "Obrigatório para titular",
+            "Telefone": "Obrigatório para titular",
+        },
+        "types": [
+            "TITULAR, COLABORADOR ou DEPENDENTE", "Texto", "Código de relação", "Texto", "Texto",
+            "Data", "M ou F", "Texto", "E-mail", "Telefone",
+        ],
+        "examples": ORGANISATION_MEMBER_EXAMPLES,
+        "help": [
+            "Inclua no máximo uma linha TITULAR por organização. Use COLABORADOR para cada trabalhador e DEPENDENTE para familiares.",
+            "No dependente, indique a referência externa do colaborador que encabeça o agregado. Deixe vazio no titular e na linha do colaborador.",
+            "Use TITULAR para a pessoa responsável pelo proponente, COLABORADOR para trabalhador ou um código familiar permitido no dependente (ex.: CONJUGE ou FILHO).",
+            "Nome próprio obrigatório",
+            "Apelido opcional",
+            "Obrigatória no formato AAAA-MM-DD",
+            "M, F ou vazio",
+            "Referência única obrigatória para colaborador; opcional para titular e dependente.",
+            "E-mail válido obrigatório na linha TITULAR, diferente do e-mail da organização. O convite do Portal do Cliente é enviado para este endereço após confirmar a importação.",
+            "Telefone obrigatório na linha TITULAR; deixe vazio para colaborador/dependente.",
+        ],
+    },
     "CLAIMS": {
         "sheet": "Sinistros",
         "headers": ["Data de ocorrência", "Código da cobertura", "Valor pago", "Referência do membro", "Valor provisionado", "Moeda", "Estado"],
@@ -120,7 +160,8 @@ TEMPLATES = {
 
 
 def build_template(kind: str, *, relationship_codes: list[str] | None = None) -> bytes:
-    spec = TEMPLATES[kind.upper()]
+    key = kind.upper()
+    spec = TEMPLATES[key]
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = spec["sheet"]
@@ -135,10 +176,18 @@ def build_template(kind: str, *, relationship_codes: list[str] | None = None) ->
     instructions = workbook.create_sheet("Instruções")
     instructions.append(["Campo", "Obrigatoriedade", "Tipo de dado", "Formato e valores permitidos", "Exemplo"])
     help_by_field = dict(zip(spec["headers"], spec["help"]))
-    if kind.upper() == "MEMBERS" and relationship_codes:
+    if key == "MEMBERS" and relationship_codes:
         help_by_field["Relação com o titular"] = f"Escolha um código: {', '.join(relationship_codes)}."
+    if key == "ORGANISATION_MEMBERS" and relationship_codes:
+        help_by_field["Relação com o titular"] = (
+            "Titular da organização: TITULAR. Colaborador: COLABORADOR. "
+            "Dependente: escolha um código permitido: "
+            f"{', '.join(relationship_codes)}."
+        )
+    requiredness = spec.get("requiredness", {})
     for header, field_type, help_text, example in zip(spec["headers"], spec["types"], [help_by_field[h] for h in spec["headers"]], spec["examples"][0]):
-        instructions.append([header, "Obrigatório" if header in spec["required"] else "Opcional", field_type, help_text, example])
+        requirement = requiredness.get(header, "Obrigatório" if header in spec["required"] else "Opcional")
+        instructions.append([header, requirement, field_type, help_text, example])
     for cell in instructions[1]:
         cell.font = cell.font.copy(bold=True)
     instructions.column_dimensions["A"].width = 32
@@ -158,11 +207,17 @@ class ImportTemplateView(APIView):
         key = kind.upper()
         spec = TEMPLATES.get(key)
         if spec is None:
-            return Response({"detail": "Modelo inexistente. Use MEMBERS, CLAIMS, PREMIUMS ou BENEFITS."}, status=404)
+            return Response(
+                {"detail": "Modelo inexistente. Use MEMBERS, ORGANISATION_MEMBERS, CLAIMS, PREMIUMS ou BENEFITS."},
+                status=404,
+            )
         relationship_codes = None
         if key == "MEMBERS":
             from apps.client.application.relationship_service import list_relationship_codes
             relationship_codes = ["TITULAR", *(item.code for item in list_relationship_codes())]
+        elif key == "ORGANISATION_MEMBERS":
+            from apps.client.application.relationship_service import list_relationship_codes
+            relationship_codes = [item.code for item in list_relationship_codes(household_role="DEPENDENT")]
         response = HttpResponse(build_template(key, relationship_codes=relationship_codes), content_type=XLSX)
         response["Content-Disposition"] = f'attachment; filename="modelo-{key.lower()}.xlsx"'
         return response

@@ -50,6 +50,38 @@ def test_policy_terminated():
     assert result.reason_code == "POLICY_NOT_IN_FORCE"
 
 
+def test_policy_resolved_by_law_keeps_historical_coverage_before_effective_date():
+    policy = dataclasses_replace(
+        _ACTIVE_POLICY,
+        status="RESOLVED_BY_LAW",
+        resolved_effective_from=datetime.date(2026, 6, 16),
+    )
+    result = check_coverage(
+        policy=policy,
+        member=_ACTIVE_MEMBER,
+        on_date=datetime.date(2026, 6, 15),
+        benefit_category=None,
+    )
+    assert result.covered is True
+    assert result.reason_code == "COVERED"
+
+
+def test_policy_resolved_by_law_has_no_coverage_from_effective_date():
+    policy = dataclasses_replace(
+        _ACTIVE_POLICY,
+        status="RESOLVED_BY_LAW",
+        resolved_effective_from=datetime.date(2026, 6, 16),
+    )
+    result = check_coverage(
+        policy=policy,
+        member=_ACTIVE_MEMBER,
+        on_date=datetime.date(2026, 6, 16),
+        benefit_category=None,
+    )
+    assert result.covered is False
+    assert result.reason_code == "POLICY_RESOLVED_BY_LAW"
+
+
 def test_policy_active_but_date_outside_vigencia():
     result = check_coverage(policy=_ACTIVE_POLICY, member=_ACTIVE_MEMBER, on_date=datetime.date(2027, 1, 1), benefit_category=None)
     assert result.reason_code == "POLICY_NOT_IN_FORCE"

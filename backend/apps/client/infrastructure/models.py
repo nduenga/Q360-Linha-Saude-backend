@@ -238,4 +238,3 @@ class FamilyHouseholdMember(TenantScopedModel):
     class Meta:
         managed = False
         db_table = "family_household_member"
-

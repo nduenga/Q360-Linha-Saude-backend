@@ -4,9 +4,12 @@ match verbatim; field names follow this project's own established
 camelCase convention instead."""
 from __future__ import annotations
 
+from datetime import date
+
 from rest_framework import serializers
 
 from apps.pricing.domain.money import round_amount
+from apps.policy.application.lifecycle_service import calculate_resolution_refund
 from apps.policy.domain.enums import (
     PolicyMemberStatus,
     PolicyStatus,
@@ -84,6 +87,16 @@ class PolicySerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=[s.value for s in PolicyStatus])
     paymentFrequency = serializers.CharField(source="payment_frequency")
     currencyCode = serializers.CharField(source="currency_code", allow_null=True)
+    resolvedByLaw = serializers.BooleanField(source="resolved_by_law")
+    resolvedAt = serializers.DateTimeField(source="resolved_at", allow_null=True)
+    resolvedEffectiveFrom = serializers.DateField(source="resolved_effective_from", allow_null=True)
+    resolutionReason = serializers.CharField(source="resolution_reason_code", allow_null=True)
+    legalBasis = serializers.CharField(source="legal_basis", allow_null=True)
+    refundAmount = serializers.SerializerMethodField(method_name="get_refund_amount")
+    refundCurrencyCode = serializers.CharField(source="currency_code", allow_null=True)
+    refundEffectivePeriodStart = serializers.SerializerMethodField(method_name="get_refund_effective_period_start")
+    refundEffectivePeriodEnd = serializers.SerializerMethodField(method_name="get_refund_effective_period_end")
+    refundStatus = serializers.SerializerMethodField(method_name="get_refund_status")
     rowVersion = serializers.IntegerField(source="row_version")
     # Pragmatic addition: só para mostrar nomes em vez de ids na UI.
     proposerName = serializers.SerializerMethodField(method_name="get_proposer_name")
@@ -96,6 +109,28 @@ class PolicySerializer(serializers.Serializer):
     def get_plan_name(self, obj) -> str | None:
         plan = getattr(obj, "plan", None)
         return plan.name if plan else None
+
+    def _refund(self, obj) -> dict:
+        cache = getattr(self, "_resolution_refunds", None)
+        if cache is None:
+            cache = self._resolution_refunds = {}
+        key = str(obj.pk)
+        if key not in cache:
+            cache[key] = calculate_resolution_refund(obj)
+        return cache[key]
+
+    def get_refund_amount(self, obj) -> str | None:
+        amount = self._refund(obj)["amount"]
+        return str(amount) if amount is not None else None
+
+    def get_refund_effective_period_start(self, obj) -> date | None:
+        return self._refund(obj)["period_start"]
+
+    def get_refund_effective_period_end(self, obj) -> date | None:
+        return self._refund(obj)["period_end"]
+
+    def get_refund_status(self, obj) -> str:
+        return self._refund(obj)["status"]
 
 
 class PolicyMemberSerializer(serializers.Serializer):

@@ -114,6 +114,8 @@ def test_create_proposer_without_phone_is_rejected(admin_client):
 
 
 
+
+
 @pytest.mark.django_db
 def test_duplicate_external_reference_is_conflict(admin_client):
     first = admin_client.post(

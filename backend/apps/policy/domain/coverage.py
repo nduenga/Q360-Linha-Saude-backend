@@ -21,6 +21,7 @@ class PolicyFacts:
     end_date: datetime.date | None
     benefit_codes: frozenset[str]
     accident_waived_codes: frozenset[str] = frozenset()
+    resolved_effective_from: datetime.date | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -65,6 +66,9 @@ _MESSAGES: dict[str, str] = {
 
     "POLICY_NOT_IN_FORCE":
         "A apólice não está em vigor nesta data.",
+
+    "POLICY_RESOLVED_BY_LAW":
+        "A apólice foi resolvida automaticamente por falta de pagamento; não há cobertura a partir da data efectiva da resolução.",
 
     "MEMBER_DEACTIVATED":
         "Este beneficiário está desativado.",
@@ -142,6 +146,7 @@ def _not_covered(
 _POLICY_TERMINAL_STATUSES = frozenset(
     {
         "TERMINATED",
+        "RESOLVED_BY_LAW",
         "CANCELLED",
         "EXPIRED",
         "RENEWED",
@@ -176,6 +181,12 @@ def check_coverage(
             "POLICY_AWAITING_FIRST_PREMIUM"
         )
 
+    if policy.status == "RESOLVED_BY_LAW" and (
+        policy.resolved_effective_from is None
+        or on_date >= policy.resolved_effective_from
+    ):
+        return _not_covered("POLICY_RESOLVED_BY_LAW")
+
     # ---------------------------------------------------------
     # 2. Apólice suspensa
     # ---------------------------------------------------------
@@ -187,12 +198,12 @@ def check_coverage(
     # ---------------------------------------------------------
     # 3. Apólice fora de vigor
     # ---------------------------------------------------------
-    if policy.status in _POLICY_TERMINAL_STATUSES:
+    if policy.status in _POLICY_TERMINAL_STATUSES and policy.status != "RESOLVED_BY_LAW":
         return _not_covered(
             "POLICY_NOT_IN_FORCE"
         )
 
-    if policy.status != "ACTIVE":
+    if policy.status not in ("ACTIVE", "RESOLVED_BY_LAW"):
         return _not_covered(
             "POLICY_NOT_IN_FORCE"
         )

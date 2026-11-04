@@ -46,11 +46,9 @@ from apps.policy.infrastructure.models import Policy
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _tokens = PortalTokenService()
 
-# A customer can log in with a Policy that is currently in force or one
-# that has simply run its course (EXPIRED) — never one that never took
-# effect (PENDING_FIRST_PREMIUM) or was terminated/cancelled, which have
-# never had, or no longer have, anything a customer needs to self-serve.
-_LOGINABLE_POLICY_STATUSES = ("ACTIVE", "EXPIRED")
+# Resolved policies remain accessible so the customer can see the legal
+# outcome, effective date and any refund amount still to be processed.
+_LOGINABLE_POLICY_STATUSES = ("ACTIVE", "EXPIRED", "RESOLVED_BY_LAW")
 
 
 class CustomerPortalAuthService:

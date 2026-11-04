@@ -2,8 +2,12 @@
 pagamento → apólice digital), pela API real."""
 from __future__ import annotations
 
-import pytest
+from datetime import timedelta
 
+import pytest
+from django.utils import timezone
+
+from apps.policy.infrastructure.models import PremiumInstallment
 from tests.policy.test_issuance import _approved_quote, _approver
 
 _BODY = {
@@ -188,6 +192,15 @@ def test_later_installments_are_paid_in_order_and_listed_as_collections(admin_cl
         format="json",
     ).data
     assert policy["status"] == "ACTIVE"
+    today = timezone.localdate()
+    scheduled = list(
+        PremiumInstallment.all_tenants.filter(
+            tenant_id=tenant.id, policy_id=policy["id"], installment_no__gte=2
+        ).order_by("installment_no")
+    )
+    for installment in scheduled:
+        installment.due_date = today + timedelta(days=5 + 30 * (installment.installment_no - 2))
+    PremiumInstallment.all_tenants.bulk_update(scheduled, ["due_date"])
     base = f"/api/v1/policies/{policy['id']}/installments"
     pay = {"paidAt": "2026-07-11T10:00:00Z", "paymentMethod": "NUMERARIO", "paymentReference": "CX-2"}
 
@@ -204,10 +217,10 @@ def test_later_installments_are_paid_in_order_and_listed_as_collections(admin_cl
     future = approver.post(f"{base}/3/payment", {**pay, "paidAt": "2999-01-01T10:00:00Z"}, format="json")
     assert future.status_code == 400 and "futuro" in future.data["detail"]
 
-    listing = admin_client.get("/api/v1/installments", {"policyNumber": policy["policyNumber"], "status": "OVERDUE"})
+    listing = admin_client.get("/api/v1/installments", {"policyNumber": policy["policyNumber"], "status": "DUE"})
     assert listing.status_code == 200, listing.data
     items = listing.data["items"]
-    assert items and all(i["status"] == "OVERDUE" and i["daysOverdue"] > 0 for i in items)
+    assert len(items) == 10 and all(i["status"] == "DUE" and i["daysOverdue"] == 0 for i in items)
     assert items[0]["installmentNo"] == 3 and items[0]["holderName"] == "Holder" and items[0]["canRegisterPayment"] is True
     paid = admin_client.get("/api/v1/installments", {"policyNumber": policy["policyNumber"], "status": "PAID"}).data["items"]
     assert [i["installmentNo"] for i in paid] == [1, 2]

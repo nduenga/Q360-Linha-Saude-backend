@@ -170,18 +170,20 @@ Abra `https://api.seudominio.com/api/v1/health/ready`. Deve responder OK.
 
 ## Tarefas agendadas (cron)
 
-A API não tem fila de tarefas: dois comandos têm de ser agendados no servidor. Ambos são repetíveis sem efeitos secundários.
+A API não tem fila de tarefas: os comandos desta tabela têm de ser agendados no servidor. São repetíveis sem efeitos secundários.
 
 | Comando | Para quê | Frequência |
 |---|---|---|
 | `python manage.py expire_quotes` | Marca como expiradas as cotações fora de validade. | 1 vez por dia |
 | `python manage.py close_renewed_policies` | Passa a `RENEWED` a apólice antiga quando a renovação já está em vigor. | 1 vez por dia |
+| `python manage.py premium_overdue_scan` | Marca prestações vencidas e resolve apólices elegíveis por falta de pagamento. | 1 vez por dia |
 
 Exemplo (`sudo crontab -u www-data -e`; ajuste os caminhos):
 
 ```
 15 2 * * * cd /opt/q360/backend && set -a && . /etc/q360.env && set +a && .venv/bin/python manage.py expire_quotes
 30 2 * * * cd /opt/q360/backend && set -a && . /etc/q360.env && set +a && .venv/bin/python manage.py close_renewed_policies
+45 2 * * * cd /opt/q360/backend && set -a && . /etc/q360.env && set +a && .venv/bin/python manage.py premium_overdue_scan
 ```
 
 O `dispatch_outbox` só é preciso se ligar um broker de mensagens real; por omissão não envia nada para fora.

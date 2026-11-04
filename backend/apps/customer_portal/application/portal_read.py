@@ -36,6 +36,7 @@ from apps.policy.infrastructure.models import (
 from apps.pricing.domain.money import round_amount
 from apps.client.domain.member_documents import requirement_for_reason
 from apps.policy.application import issuance_service, policy_document
+from apps.policy.application.lifecycle_service import calculate_resolution_refund
 from apps.quote.application import proposal_service
 from apps.quote.domain.enums import QuoteStatus
 from apps.quote.infrastructure.models import Document, Quote
@@ -50,6 +51,7 @@ POLICY_STATUS_LABELS = {
     "ACTIVE": "Activa",
     "SUSPENDED": "Suspensa",
     "TERMINATED": "Terminada",
+    "RESOLVED_BY_LAW": "Resolvida por falta de pagamento",
     "CANCELLED": "Cancelada",
     "EXPIRED": "Expirada",
     "RENEWED": "Renovada",
@@ -66,6 +68,8 @@ def _today(today: datetime.date | None) -> datetime.date:
 
 def policy_phase(policy: Policy, today: datetime.date) -> str:
     """Customer-facing bucket used by the dashboard and the "Minhas Apólices" menu."""
+    if policy.status == "RESOLVED_BY_LAW":
+        return "OTHER"
     if policy.status == "ACTIVE":
         if policy.end_date is not None and policy.end_date <= today + datetime.timedelta(days=EXPIRING_SOON_DAYS):
             return "EXPIRING"
@@ -87,7 +91,12 @@ def _member_name(member: InsuredMember) -> str:
     return " ".join(part for part in (member.first_name, member.last_name) if part) or "Beneficiário"
 
 
-def _installment_item(installment: PremiumInstallment, policy_number: str | None) -> dict:
+def _installment_item(
+    installment: PremiumInstallment, policy_number: str | None, *, policy_status: str | None = None
+) -> dict:
+    status = issuance_service.effective_installment_status(installment)
+    if policy_status == "RESOLVED_BY_LAW" and status != "PAID":
+        status = "VOID"
     return {
         "id": str(installment.id),
         "policyNumber": policy_number,
@@ -97,7 +106,7 @@ def _installment_item(installment: PremiumInstallment, policy_number: str | None
         "dueDate": installment.due_date,
         "amount": _money(installment.amount),
         "currencyCode": installment.currency_code,
-        "status": issuance_service.effective_installment_status(installment),
+        "status": status,
         "paidAt": installment.paid_at,
     }
 
@@ -152,6 +161,7 @@ def get_my_policy(policy_number: str, *, today: datetime.date | None = None) -> 
     plan = policy.plan
     installments = list(PremiumInstallment.objects.filter(policy=policy).exclude(status="VOID").order_by("installment_no"))
     total = sum((i.amount for i in installments), Decimal("0"))
+    refund = calculate_resolution_refund(policy)
     members = _policy_members(policy)
     signature = PolicySignature.objects.filter(policy=policy).first()
 
@@ -175,7 +185,20 @@ def get_my_policy(policy_number: str, *, today: datetime.date | None = None) -> 
         },
         "signedAt": signature.signed_at if signature else None,
         "members": members,
-        "installments": [_installment_item(i, policy.policy_number) for i in installments],
+        "installments": [
+            _installment_item(i, policy.policy_number, policy_status=policy.status)
+            for i in installments
+        ],
+        "resolvedByLaw": policy.resolved_by_law,
+        "resolvedAt": policy.resolved_at,
+        "resolvedEffectiveFrom": policy.resolved_effective_from,
+        "resolutionReason": policy.resolution_reason_code,
+        "legalBasis": policy.legal_basis,
+        "refundAmount": _money(refund["amount"]) if refund["amount"] is not None else None,
+        "refundCurrencyCode": policy.currency_code,
+        "refundEffectivePeriodStart": refund["period_start"],
+        "refundEffectivePeriodEnd": refund["period_end"],
+        "refundStatus": refund["status"],
     }
 
 
@@ -272,16 +295,20 @@ def list_my_payments(*, status: str | None = None) -> dict:
     installments = list(queryset.order_by("due_date"))
     totals: dict[str, dict[str, Decimal]] = defaultdict(lambda: {"paid": Decimal("0"), "pending": Decimal("0"), "overdue": Decimal("0")})
     for installment in installments:
+        policy = policies[installment.policy_id]
+        if policy.status == "RESOLVED_BY_LAW" and installment.status != "PAID":
+            continue
         bucket = {"PAID": "paid", "DUE": "pending", "OVERDUE": "overdue"}.get(
             issuance_service.effective_installment_status(installment)
         )
         if bucket:
             totals[installment.currency_code][bucket] += installment.amount
-    items = [
-        _installment_item(i, policies[i.policy_id].policy_number)
-        for i in installments
-        if status is None or issuance_service.effective_installment_status(i) == status
-    ]
+    items = []
+    for installment in installments:
+        policy = policies[installment.policy_id]
+        item = _installment_item(installment, policy.policy_number, policy_status=policy.status)
+        if status is None or item["status"] == status:
+            items.append(item)
     return {
         "installments": items,
         "totals": [
@@ -446,6 +473,13 @@ def get_my_dashboard(*, today: datetime.date | None = None) -> dict:
         if policy.status == "SUSPENDED":
             alerts.append({"code": "POLICY_SUSPENDED", "severity": "danger", "policyNumber": policy.policy_number,
                            "message": f"A apólice {policy.policy_number} está suspensa."})
+        if policy.status == "RESOLVED_BY_LAW":
+            alerts.append({
+                "code": "POLICY_RESOLVED_BY_LAW",
+                "severity": "danger",
+                "policyNumber": policy.policy_number,
+                "message": f"A apólice {policy.policy_number} foi resolvida por falta de pagamento; a cobertura cessou em {policy.resolved_effective_from}.",
+            })
     for quote in quotes:
         if portal_quote_status(quote, today) == "AWAITING_SIGNATURE" and quote.valid_until is not None:
             if quote.valid_until <= today + datetime.timedelta(days=QUOTE_EXPIRING_SOON_DAYS):

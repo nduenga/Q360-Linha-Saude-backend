@@ -53,6 +53,7 @@ def _policy_facts(policy: Policy) -> PolicyFacts:
         end_date=policy.end_date,
         benefit_codes=benefit_codes,
         accident_waived_codes=accident_waived,
+        resolved_effective_from=policy.resolved_effective_from,
     )
 
 
