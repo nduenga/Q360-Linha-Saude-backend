@@ -313,26 +313,8 @@ class InstallmentListView(APIView):
                     "daysOverdue": (today - installment.due_date).days if effective == "OVERDUE" else 0,
                     "canRegisterPayment": (
                         effective in ("DUE", "OVERDUE")
-<<<<<<< HEAD
-                        and (
-                            (
-                                installment.installment_no == 1
-                                and installment.status == "DUE"
-                                and installment.policy.status == "PENDING_FIRST_PREMIUM"
-                            )
-                            or (
-                                installment.installment_no > 1
-                                and installment.policy.status in ("ACTIVE", "SUSPENDED")
-                                and not PremiumInstallment.objects.filter(
-                                    policy_id=installment.policy_id,
-                                    installment_no__lt=installment.installment_no,
-                                ).exclude(status__in=("PAID", "VOID")).exists()
-                            )
-                        )
-=======
                         and installment.due_date >= today
                         and installment.policy.status == "ACTIVE"
->>>>>>> 43b283d (update)
                     ),
                 }
             )
