@@ -350,8 +350,8 @@ Menu **Clientes** (Subscritor ou Administrador).
 
 ### 11.2 Proponente organização
 1. **Novo proponente → Organização:** `QA Empresa Kilamba Lda`, NIF de 10 dígitos `5400000011`, **Sector de atividade** e **Região atuarial** (disponíveis depois do Módulo 5) → **Guardar**.
-2. Na ficha da organização, secção **Membros**, carregue em «ou adicionar um membro individualmente» (ou importe o Excel, 11.3). O formulário não pede a relação: numa organização, todo o membro fica como **Colaborador**. **Esperado:** o colaborador aparece na lista com a relação COLABORADOR.
-3. O titular escolhe-se **por colaborador**: na linha do colaborador → **Editar** → separador **Núcleo familiar** → **Criar o primeiro núcleo familiar**. O titular já vem preenchido com esse colaborador → **Criar núcleo familiar**. Não existe um titular da organização, só um titular por núcleo.
+2. Na ficha da organização, secção **Membros**, importe o modelo ORGANISATION_MEMBERS (11.3). Inclua uma única linha **TITULAR** para a pessoa responsável, com nome, data de nascimento, sexo, e-mail e telefone. Inclua também as linhas **COLABORADOR** e, opcionalmente, **DEPENDENTE**.
+3. **Esperado:** a pessoa responsável aparece como TITULAR e cada trabalhador como COLABORADOR. O titular da organização é único e não é associado automaticamente ao agregado de nenhum colaborador. O titular do agregado familiar escolhe-se **por colaborador**: na linha do colaborador → **Editar** → separador **Núcleo familiar** → **Criar o primeiro núcleo familiar**. Cada núcleo tem o seu próprio titular.
 4. No núcleo: **Registar pessoa nova** (cônjuge e filho com parentesco) e **Associar pessoa já registada** (pesquisa por nome ou NIF).
 5. Tente criar um segundo núcleo para o mesmo colaborador. **Esperado:** impedido («Cada colaborador pode ter apenas um núcleo familiar»).
 6. **Remover do núcleo** um familiar.

@@ -149,7 +149,7 @@ No menu **Produtos** consulta-se o catálogo e compara-se até três produtos la
 
 ### 4.2 Clientes, agregados e beneficiários
 
-Um **cliente** (proponente) pode ser um particular ou uma organização. Num particular, o agregado tem um **titular** e os seus familiares (cônjuge, filhos, ascendentes). Numa organização, cada pessoa registada tem a relação **Colaborador** com a empresa e é o titular do seu próprio agregado familiar. O detalhe do cliente mostra também o histórico de cotações.
+Um **cliente** (proponente) pode ser um particular ou uma organização. Num particular, o agregado tem um **titular** e os seus familiares (cônjuge, filhos, ascendentes). Numa organização, a pessoa responsável/tomadora é importada como um único membro **TITULAR**, com nome, data de nascimento, sexo, e-mail e telefone. Os colaboradores são registados como **COLABORADOR** e cada um pode ter familiares opcionais no seu próprio agregado; o titular da organização não é associado automaticamente a esses agregados. O detalhe do cliente mostra também o histórico de cotações.
 
 | # | Passo | Resultado esperado | Estado |
 | --- | --- | --- | --- |

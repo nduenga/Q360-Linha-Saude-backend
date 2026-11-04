@@ -473,14 +473,14 @@ tempo da emissão.
 
 ## Fase 7 — Ciclo de vida
 
-- [ ] **Falta de pagamento (art. 18.º)**: o comando `premium_overdue_scan`
-      (padrão `expire_quotes`, actor `SYSTEM`, idempotente) marca os
-      recibos `OVERDUE` e cria uma tarefa de envio de carta registada.
-      A suspensão **só é aplicada depois de a carta ser registada** no
-      sistema (`premium_default_notice`), nunca automaticamente. Quando o
-      `new_deadline` se esgota, o comando propõe a resolução, que passa a
-      `TERMINATED` com confirmação humana. O pagamento durante a suspensão
-      reactiva a apólice, sem efeito retroactivo sobre o período suspenso.
+- [x] **Falta de pagamento (art. 18.º)**: `premium_overdue_scan` marca
+      prestações vencidas e aplica, de forma idempotente, `RESOLVED_BY_LAW`.
+      A falta do primeiro prémio tem efeito na data de assinatura; a falta
+      de prestação posterior tem efeito na data de vencimento. Pagamentos
+      tardios não reactivam nem liquidam uma apólice resolvida. A verificação
+      de cobertura respeita a data efectiva, permitindo consultar eventos
+      anteriores à resolução. O estorno é apresentado como estimativa a
+      processar, não como pagamento confirmado.
 - [ ] **Actas adicionais**: activar um membro pendente (motor com a
       `RuleVersion` congelada, inclusão na data da activação), incluir um
       membro (gera um recibo pro-rata; a cobertura desse membro depende
