@@ -13962,6 +13962,189 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/proposers/{proposer_id}/portal-invitation:
+    get:
+      operationId: getProposerPortalInvitation
+      description: 'Se o convite do Portal do Cliente saiu e reenvio quando não saiu.
+
+
+        Requer: scope q360.read.'
+      summary: Obter proposer portal invitation
+      parameters:
+      - in: path
+        name: proposer_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Clients
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalInvitationStatus'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    post:
+      operationId: postProposerPortalInvitation
+      description: 'Se o convite do Portal do Cliente saiu e reenvio quando não saiu.
+
+
+        Requer: scope q360.write.
+
+
+        Reenvia o convite. SENT significa que o servidor de email aceitou a mensagem, não que chegou à caixa de
+        entrada.'
+      summary: Criar proposer portal invitation
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: proposer_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Clients
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalInvitationStatus'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/proposers/{proposer_id}/titular:
+    post:
+      operationId: postProposerTitular
+      description: 'Indica o titular de uma organização que ainda não o tem.
+
+
+        Requer: scope q360.write.
+
+
+        Só para organizações sem titular ativo. O convite do portal vai para o e-mail do titular.'
+      summary: Criar proposer titular
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: proposer_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Clients
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganisationTitularRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganisationTitularMember'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/quote-discount-approvals:
     get:
       operationId: getQuoteDiscountApprovalQueue
@@ -17528,6 +17711,165 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/reports/{report}/pdf:
+    get:
+      operationId: getReportPdf
+      description: 'Exporta para PDF os mesmos dados que o relatório mostra no ecrã.
+
+
+        Requer: scope q360.audit.
+
+
+        O mesmo relatório do ecrã em PDF: report é top-products, top-coverages ou issuance.'
+      summary: Obter report pdf
+      parameters:
+      - in: query
+        name: from
+        schema:
+          type: string
+        description: Data inicial inclusiva (AAAA-MM-DD).
+      - in: path
+        name: report
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: to
+        schema:
+          type: string
+        description: Data final inclusiva (AAAA-MM-DD).
+      tags:
+      - Reports
+      security:
+      - oauth2:
+        - q360.audit
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/reports/{report}/xlsx:
+    get:
+      operationId: getReportExcel
+      description: 'Exporta para Excel os mesmos dados que o relatório mostra no ecrã.
+
+
+        Requer: scope q360.audit.
+
+
+        O mesmo relatório do ecrã em Excel: report é top-products, top-coverages ou issuance.'
+      summary: Obter report excel
+      parameters:
+      - in: query
+        name: from
+        schema:
+          type: string
+        description: Data inicial inclusiva (AAAA-MM-DD).
+      - in: path
+        name: report
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: to
+        schema:
+          type: string
+        description: Data final inclusiva (AAAA-MM-DD).
+      tags:
+      - Reports
+      security:
+      - oauth2:
+        - q360.audit
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/reports/issuance:
+    get:
+      operationId: getIssuanceReport
+      description: 'Resumo de cotações criadas e apólices iniciadas, agrupadas por estado.
+
+
+        Requer: scope q360.audit.'
+      summary: Obter issuance report
+      parameters:
+      - in: query
+        name: from
+        schema:
+          type: string
+        description: Data inicial inclusiva (AAAA-MM-DD); cotações usam criação e apólices usam início.
+      - in: query
+        name: to
+        schema:
+          type: string
+        description: Data final inclusiva (AAAA-MM-DD); cotações usam criação e apólices usam início.
+      tags:
+      - Reports
+      security:
+      - oauth2:
+        - q360.audit
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuanceReport'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/reports/operational:
     get:
       operationId: getOperationalReport
@@ -17537,7 +17879,7 @@ paths:
         Requer: scope q360.audit.'
       summary: Obter operational report
       tags:
-      - Other
+      - Reports
       security:
       - oauth2:
         - q360.audit
@@ -17549,6 +17891,96 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/AuditEvent'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/reports/top-coverages:
+    get:
+      operationId: getTopCoveragesReport
+      description: 'Relatório de coberturas presentes nos planos com cotações no período.
+
+
+        Requer: scope q360.audit.'
+      summary: Obter top coverages report
+      parameters:
+      - in: query
+        name: from
+        schema:
+          type: string
+        description: Data inicial inclusiva (AAAA-MM-DD), pela data de criação da cotação.
+      - in: query
+        name: to
+        schema:
+          type: string
+        description: Data final inclusiva (AAAA-MM-DD), pela data de criação da cotação.
+      tags:
+      - Reports
+      security:
+      - oauth2:
+        - q360.audit
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TopCoverageReportRow'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/reports/top-products:
+    get:
+      operationId: getTopProductsReport
+      description: 'Relatório de produtos mais cotados, agrupado pelo produto associado ao plano.
+
+
+        Requer: scope q360.audit.'
+      summary: Obter top products report
+      parameters:
+      - in: query
+        name: from
+        schema:
+          type: string
+        description: Data inicial inclusiva (AAAA-MM-DD), pela data de criação da cotação.
+      - in: query
+        name: to
+        schema:
+          type: string
+        description: Data final inclusiva (AAAA-MM-DD), pela data de criação da cotação.
+      tags:
+      - Reports
+      security:
+      - oauth2:
+        - q360.audit
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TopProductReportRow'
           description: Sucesso.
         '401':
           content:
@@ -22515,6 +22947,26 @@ components:
       - impact
       - medicalInflationPct
       - roundTo
+    IssuanceReport:
+      type: object
+      properties:
+        totalQuotes:
+          type: integer
+        totalPolicies:
+          type: integer
+        quotesByStatus:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportStatusCount'
+        policiesByStatus:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportStatusCount'
+      required:
+      - policiesByStatus
+      - quotesByStatus
+      - totalPolicies
+      - totalQuotes
     IssuePolicyRequest:
       type: object
       properties:
@@ -23068,6 +23520,72 @@ components:
       - quotations
       - subscriptions
       - underwriting
+    OrganisationTitularMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        proposerId:
+          type: string
+          format: uuid
+        relationshipCode:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          type: string
+          format: date
+        status:
+          type: string
+        attributes: {}
+        rowVersion:
+          type: integer
+      required:
+      - attributes
+      - dateOfBirth
+      - firstName
+      - id
+      - lastName
+      - proposerId
+      - relationshipCode
+      - rowVersion
+      - status
+    OrganisationTitularRequest:
+      type: object
+      description: 'Titular de uma organização: quem recebe o convite do Portal do Cliente.'
+      properties:
+        firstName:
+          type: string
+          maxLength: 120
+        lastName:
+          type:
+          - string
+          - 'null'
+        dateOfBirth:
+          type: string
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        phone:
+          type: string
+          maxLength: 30
+          minLength: 1
+      required:
+      - dateOfBirth
+      - email
+      - firstName
+      - phone
     OwnerEnum:
       enum:
       - CODE
@@ -24736,6 +25254,44 @@ components:
           description: Hoje só propostas geradas.
       required:
       - documents
+    PortalInvitationStatus:
+      type: object
+      properties:
+        status:
+          allOf:
+          - $ref: '#/components/schemas/PortalInvitationStatusStatusEnum'
+          description: 'SENT: o servidor de email aceitou a mensagem.
+
+
+            * `NONE` - NONE
+
+            * `SENT` - SENT
+
+            * `FAILED` - FAILED'
+        email:
+          type:
+          - string
+          - 'null'
+        occurredAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - email
+      - occurredAt
+      - status
+    PortalInvitationStatusStatusEnum:
+      enum:
+      - NONE
+      - SENT
+      - FAILED
+      type: string
+      description: '* `NONE` - NONE
+
+        * `SENT` - SENT
+
+        * `FAILED` - FAILED'
     PortalMarkRead:
       type: object
       properties:
@@ -26846,6 +27402,10 @@ components:
           - 'null'
           maxLength: 100
         attributes: {}
+        titular:
+          oneOf:
+          - $ref: '#/components/schemas/OrganisationTitularRequest'
+          - type: 'null'
       required:
       - displayName
       - email
@@ -27274,9 +27834,19 @@ components:
           - string
           - 'null'
           format: uuid
+        eligibilityDecision:
+          type:
+          - string
+          - 'null'
+        eligibilityMessages:
+          oneOf:
+          - {}
+          - type: 'null'
         preExisting: {}
       required:
+      - eligibilityDecision
       - eligibilityEvaluationId
+      - eligibilityMessages
       - id
       - memberId
       - personId
@@ -28041,6 +28611,16 @@ components:
       required:
       - items
       - page
+    ReportStatusCount:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+      required:
+      - count
+      - status
     RequestAccess:
       type: object
       properties:
@@ -29929,6 +30509,40 @@ components:
       - name
       - refreshToken
       - roles
+    TopCoverageReportRow:
+      type: object
+      properties:
+        benefitId:
+          type: string
+          format: uuid
+        benefitName:
+          type: string
+        category:
+          type: string
+        planCount:
+          type: integer
+      required:
+      - benefitId
+      - benefitName
+      - category
+      - planCount
+    TopProductReportRow:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        productName:
+          type: string
+        quoteCount:
+          type: integer
+        issuedCount:
+          type: integer
+      required:
+      - issuedCount
+      - productId
+      - productName
+      - quoteCount
     TypeEnum:
       enum:
       - NUMBER

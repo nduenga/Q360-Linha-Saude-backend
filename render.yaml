@@ -27,6 +27,60 @@ services:
         fromDatabase:
           name: q360-health-db
           property: connectionString
+      # Email: preencher no painel do Render. Confirmar com `python manage.py check_email`.
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: CUSTOMER_PORTAL_EMAIL_FROM
+        sync: false
+      - key: CUSTOMER_PORTAL_URL
+        sync: false
+
+  # Tarefas diárias às 02:45 de Luanda (01:45 UTC). O Render não tem plano
+  # gratuito para serviços cron. As chaves são as mesmas da API.
+  - type: cron
+    name: q360-daily-jobs
+    runtime: python
+    region: frankfurt
+    plan: starter
+    rootDir: backend
+    schedule: "45 1 * * *"
+    buildCommand: pip install --no-cache-dir -r requirements.render.txt
+    startCommand: python manage.py run_daily_jobs
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: DJANGO_DEBUG
+        value: "false"
+      - key: DJANGO_SECRET_KEY
+        fromService:
+          type: web
+          name: q360-health-api
+          envVarKey: DJANGO_SECRET_KEY
+      - key: Q360_JWT_SIGNING_KEY
+        fromService:
+          type: web
+          name: q360-health-api
+          envVarKey: Q360_JWT_SIGNING_KEY
+      - key: CUSTOMER_PORTAL_JWT_SECRET
+        fromService:
+          type: web
+          name: q360-health-api
+          envVarKey: CUSTOMER_PORTAL_JWT_SECRET
+      - key: PLATFORM_ADMIN_JWT_SIGNING_KEY
+        fromService:
+          type: web
+          name: q360-health-api
+          envVarKey: PLATFORM_ADMIN_JWT_SIGNING_KEY
+      - key: DATABASE_URL
+        fromDatabase:
+          name: q360-health-db
+          property: connectionString
 
 databases:
   - name: q360-health-db

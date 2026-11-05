@@ -170,23 +170,49 @@ Abra `https://api.seudominio.com/api/v1/health/ready`. Deve responder OK.
 
 ## Tarefas agendadas (cron)
 
-A API não tem fila de tarefas: os comandos desta tabela têm de ser agendados no servidor. São repetíveis sem efeitos secundários.
+A API não tem fila de tarefas. O comando `python manage.py run_daily_jobs` corre uma vez por dia, às 02:45 de Luanda, estas tarefas por ordem:
 
-| Comando | Para quê | Frequência |
-|---|---|---|
-| `python manage.py expire_quotes` | Marca como expiradas as cotações fora de validade. | 1 vez por dia |
-| `python manage.py close_renewed_policies` | Passa a `RENEWED` a apólice antiga quando a renovação já está em vigor. | 1 vez por dia |
-| `python manage.py premium_overdue_scan` | Marca prestações vencidas e resolve apólices elegíveis por falta de pagamento. | 1 vez por dia |
+| Tarefa | Para quê |
+|---|---|
+| `expire_quotes` | Marca como expiradas as cotações fora de validade. |
+| `expire_endorsement_offers` | Expira as propostas de endosso fora do prazo de aceitação. |
+| `premium_overdue_scan` | Marca prestações vencidas e resolve apólices elegíveis por falta de pagamento. |
+| `close_renewed_policies` | Passa a `RENEWED` a apólice antiga quando a renovação já está em vigor. |
+| `expire_policies` | Marca como `EXPIRED` as apólices cuja vigência terminou. |
 
-Exemplo (`sudo crontab -u www-data -e`; ajuste os caminhos):
+São repetíveis sem efeitos secundários. Se uma falhar, as seguintes correm na mesma e o comando termina com erro.
 
+**Atenção:** a partir da primeira execução, as apólices elegíveis passam a ser resolvidas sem intervenção humana. Antes de ativar, confirme os prazos legais configurados.
+
+**No Render:** o `render.yaml` já declara o serviço `q360-daily-jobs`. Os serviços cron do Render não têm plano gratuito.
+
+**Em servidor próprio (systemd):**
+
+```bash
+sudo cp deploy/q360-daily.service deploy/q360-daily.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now q360-daily.timer
+systemctl list-timers q360-daily.timer       # próxima execução
+sudo systemctl start q360-daily.service      # correr já, para testar
+journalctl -u q360-daily.service -n 50       # resultado
 ```
-15 2 * * * cd /opt/q360/backend && set -a && . /etc/q360.env && set +a && .venv/bin/python manage.py expire_quotes
-30 2 * * * cd /opt/q360/backend && set -a && . /etc/q360.env && set +a && .venv/bin/python manage.py close_renewed_policies
-45 2 * * * cd /opt/q360/backend && set -a && . /etc/q360.env && set +a && .venv/bin/python manage.py premium_overdue_scan
-```
+
+Ajuste `User` e os caminhos nos dois ficheiros, como no `q360.service`.
 
 O `dispatch_outbox` só é preciso se ligar um broker de mensagens real; por omissão não envia nada para fora.
+
+## Email (convites e códigos do Portal do Cliente)
+
+Preencha `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`, `CUSTOMER_PORTAL_EMAIL_FROM` e `CUSTOMER_PORTAL_URL`. Sem `CUSTOMER_PORTAL_URL`, o link do convite aponta para `localhost`. No Render, preencha estes valores no painel do serviço `q360-health-api`.
+
+```bash
+python manage.py check_email                         # valida a configuração e a autenticação, sem enviar
+python manage.py check_email --to voce@seudominio.com # envia uma mensagem real
+```
+
+Só a chegada da mensagem à caixa de entrada comprova a entrega. O comando apenas confirma que o servidor de email a aceitou. Use um remetente de um domínio próprio com SPF e DKIM configurados; uma caixa pessoal de Gmail serve para testes, não para produção.
+
+Na ficha do cliente, «Portal do Cliente» mostra se o último convite foi aceite ou falhou e permite reenviá-lo. As falhas ficam também na auditoria.
 
 ## Ficheiros gerados e carregados (pasta `media/`)
 

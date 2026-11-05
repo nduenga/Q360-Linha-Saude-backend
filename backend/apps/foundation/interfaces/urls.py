@@ -11,6 +11,13 @@ from apps.foundation.interfaces.system_parameter_views import (
 )
 from apps.foundation.interfaces.views import AuditEventListView, DashboardView, OperationalReportView, LiveHealthView, MeView, ReadyHealthView
 from apps.foundation.interfaces.import_template_views import ImportTemplateView
+from apps.foundation.interfaces.report_views import (
+    IssuanceReportView,
+    ReportExcelView,
+    ReportPdfView,
+    TopCoveragesReportView,
+    TopProductsReportView,
+)
 
 urlpatterns = [
     path("import-templates/<str:kind>", ImportTemplateView.as_view(), name="import-template"),
@@ -28,6 +35,11 @@ urlpatterns = [
     path("reference-tables/<str:code>", ReferenceTableDetailView.as_view(), name="reference-table-detail"),
     path("dashboard", DashboardView.as_view(), name="dashboard"),
     path("reports/operational", OperationalReportView.as_view(), name="operational-report"),
+    path("reports/top-products", TopProductsReportView.as_view(), name="report-top-products"),
+    path("reports/top-coverages", TopCoveragesReportView.as_view(), name="report-top-coverages"),
+    path("reports/issuance", IssuanceReportView.as_view(), name="report-issuance"),
+    path("reports/<slug:report>/pdf", ReportPdfView.as_view(), name="report-pdf"),
+    path("reports/<slug:report>/xlsx", ReportExcelView.as_view(), name="report-xlsx"),
     path("health/live", LiveHealthView.as_view(), name="health-live"),
     path("health/ready", ReadyHealthView.as_view(), name="health-ready"),
 ]

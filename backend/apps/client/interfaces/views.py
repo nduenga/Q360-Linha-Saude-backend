@@ -7,6 +7,7 @@ docs/08-integration-contract/BACKEND_FRONTEND_ALIGNMENT.md.
 """
 from __future__ import annotations
 
+from django.db import transaction
 from django.db.models import Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404
 from rest_framework.parsers import MultiPartParser
@@ -30,6 +31,7 @@ from apps.client.interfaces.serializers import (
     MemberSerializer,
     MemberUpdateRequestSerializer,
     PersonSerializer,
+    OrganisationTitularRequestSerializer,
     ProposerCreateRequestSerializer,
     ProposerDeleteRequestSerializer,
     ProposerSerializer,
@@ -113,14 +115,59 @@ class ProposerListCreateView(APIView):
     def post(self, request):
         body = ProposerCreateRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
-        proposer = proposer_service.create_proposer(**body.validated_data)
-        if proposer.proposer_type == "INDIVIDUAL":
-            # Para organizações, o convite só é enviado ao titular quando
-            # este é importado; o email do proponente é o contacto da empresa.
-            from apps.customer_portal.application.invitation_service import invite_proposer
+        data = dict(body.validated_data)
+        titular = data.pop("titular", None)
+        with transaction.atomic():
+            proposer = proposer_service.create_proposer(**data)
+            if titular:
+                member_service.create_organisation_titular(proposer=proposer, **titular)
 
+        from apps.customer_portal.application.invitation_service import invite_proposer
+
+        # Numa organização, o email do proponente é o contacto da empresa: o
+        # convite vai só para o titular, indicado aqui, na ficha ou no Excel.
+        if proposer.proposer_type == "INDIVIDUAL":
             invite_proposer(proposer)
+        elif titular:
+            invite_proposer(proposer, recipient_email=titular["email"])
         return Response(ProposerSerializer(proposer).data, status=201)
+
+
+@requires_idempotency
+class ProposerTitularView(APIView):
+    """Indica o titular de uma organização que ainda não o tem."""
+
+    def get_permissions(self):
+        return [require_scope(Scope.WRITE)()]
+
+    def post(self, request, proposer_id):
+        proposer = get_object_or_404(Proposer, id=proposer_id)
+        body = OrganisationTitularRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        member = member_service.create_organisation_titular(proposer=proposer, **body.validated_data)
+
+        from apps.customer_portal.application.invitation_service import invite_proposer
+
+        invite_proposer(proposer, recipient_email=body.validated_data["email"])
+        return Response(MemberSerializer(member).data, status=201)
+
+
+@requires_idempotency
+class ProposerPortalInvitationView(APIView):
+    """Se o convite do Portal do Cliente saiu e reenvio quando não saiu."""
+
+    def get_permissions(self):
+        return [require_scope(Scope.WRITE if self.request.method == "POST" else Scope.READ)()]
+
+    def get(self, request, proposer_id):
+        from apps.customer_portal.application.invitation_service import invitation_status
+
+        return Response(invitation_status(get_object_or_404(Proposer, id=proposer_id)))
+
+    def post(self, request, proposer_id):
+        from apps.customer_portal.application.invitation_service import resend_invitation
+
+        return Response(resend_invitation(get_object_or_404(Proposer, id=proposer_id)))
 
 
 @requires_idempotency

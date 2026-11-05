@@ -1,0 +1,13 @@
+# Copiar para /etc/systemd/system/q360-daily.service
+# Ajuste User e os caminhos /opt/q360/backend para o seu servidor.
+[Unit]
+Description=Q360 Saude - tarefas diarias
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/q360/backend
+EnvironmentFile=/etc/q360.env
+ExecStart=/opt/q360/backend/.venv/bin/python manage.py run_daily_jobs

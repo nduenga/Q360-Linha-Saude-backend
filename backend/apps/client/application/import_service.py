@@ -244,7 +244,7 @@ def _validate_organisation_household_rows(
             if holder_reference:
                 add_error(row, "holderReference", "Deixe esta coluna vazia na linha do titular do proponente.")
             if existing_titular or seen_titular:
-                add_error(row, "memberType", "A organização já tem um titular ativo; só pode existir um titular por organização.")
+                add_error(row, "memberType", "A organização já tem um titular ativo. Retire esta linha do ficheiro: só pode existir um titular por organização.")
             seen_titular = True
             email = (row.values.get("email") or "").strip()
             phone = (row.values.get("phone") or "").strip()
