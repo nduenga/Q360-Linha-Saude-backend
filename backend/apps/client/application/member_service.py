@@ -239,6 +239,36 @@ def create_member(
     return member
 
 
+def create_organisation_titular(
+    *,
+    proposer: Proposer,
+    first_name: str,
+    last_name: str | None,
+    date_of_birth: datetime.date,
+    sex_code: str | None,
+    email: str,
+    phone: str,
+) -> InsuredMember:
+    """Titular de uma organização indicado no ecrã, com as mesmas regras da
+    linha TITULAR do Excel: é único e o e-mail dele recebe o convite do portal,
+    por isso não pode ser o e-mail de contacto da empresa."""
+    if proposer.proposer_type != ProposerType.ORGANISATION.value:
+        raise HouseholdValidationError("Só uma organização tem titular indicado à parte.")
+    if proposer.email and email.strip().casefold() == proposer.email.strip().casefold():
+        raise HouseholdValidationError("O e-mail do titular deve ser diferente do e-mail de contacto da organização.")
+    return create_member(
+        proposer=proposer,
+        relationship_code="TITULAR",
+        first_name=first_name,
+        last_name=last_name,
+        date_of_birth=date_of_birth,
+        sex_code=sex_code,
+        external_reference=None,
+        attributes={"email": email.strip(), "phone": phone.strip()},
+        allow_organisation_titular=True,
+    )
+
+
 def update_member(
     *,
     member: InsuredMember,

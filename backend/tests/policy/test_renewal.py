@@ -93,9 +93,9 @@ def test_renewal_rechecks_and_prices_pending_policy_members(admin_client, tenant
         format="json",
     )
     assert dependent.status_code == 201, dependent.data
-    PolicyMember.objects.create(
+    PolicyMember.all_tenants.create(
         tenant_id=tenant.id,
-        policy=PolicyModel.objects.get(id=policy["id"]),
+        policy=PolicyModel.all_tenants.get(id=policy["id"]),
         member_id=dependent.data["id"],
         status="PENDING",
     )
@@ -119,7 +119,7 @@ def test_renewal_rechecks_and_prices_pending_policy_members(admin_client, tenant
         f"/api/v1/pricing/runs/{renewal.data['latestPricingRunId']}"
     )
     assert pricing.status_code == 200, pricing.data
-    assert set(pricing.data["memberIds"]) == {policy["memberId"], dependent.data["id"]}
+    assert {str(member_id) for member_id in pricing.data["memberIds"]} == {policy["memberId"], dependent.data["id"]}
 
 
 @pytest.mark.django_db

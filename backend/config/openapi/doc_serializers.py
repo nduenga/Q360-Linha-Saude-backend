@@ -10,6 +10,11 @@ from rest_framework import serializers as s
 
 from apps.product.interfaces.serializers import PlanBenefitSerializer
 from apps.quote.interfaces.serializers import QuoteAdjustmentSerializer, QuoteSerializer
+from apps.foundation.interfaces.report_serializers import (
+    IssuanceReportSerializer,
+    TopCoverageReportRowSerializer,
+    TopProductReportRowSerializer,
+)
 
 Money = lambda **kw: s.CharField(help_text="Valor monetário/decimal exato serializado como string (ex.: '1200.00').", **kw)  # noqa: E731
 
@@ -754,6 +759,33 @@ class MarketTemplatesResult(s.Serializer):
 class MemberImportRequest(s.Serializer):
     file = s.FileField(help_text="Excel .xlsx com cabeçalhos em português e a população a importar.")
     proposerId = s.UUIDField(required=False, help_text="Proponente a que os membros pertencem.")
+
+
+class OrganisationTitularRequest(s.Serializer):
+    firstName = s.CharField()
+    lastName = s.CharField(required=False, allow_null=True)
+    dateOfBirth = s.DateField()
+    sexCode = s.CharField(required=False, allow_null=True)
+    email = s.EmailField()
+    phone = s.CharField()
+
+
+class OrganisationTitularMember(s.Serializer):
+    id = s.UUIDField()
+    proposerId = s.UUIDField()
+    relationshipCode = s.CharField()
+    firstName = s.CharField()
+    lastName = s.CharField(allow_null=True)
+    dateOfBirth = s.DateField()
+    status = s.CharField()
+    attributes = s.JSONField()
+    rowVersion = s.IntegerField()
+
+
+class PortalInvitationStatus(s.Serializer):
+    status = s.ChoiceField(choices=["NONE", "SENT", "FAILED"], help_text="SENT: o servidor de email aceitou a mensagem.")
+    email = s.CharField(allow_null=True)
+    occurredAt = s.DateTimeField(allow_null=True)
 
 
 class EmptyRequest(s.Serializer):

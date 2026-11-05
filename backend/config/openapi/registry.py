@@ -240,6 +240,42 @@ REGISTRY: dict[str, dict] = {
                     "proposerId": ("string", False, "Filtra cotações por cliente."),
                     "trendPeriod": ("string", False, "week ou month (por omissão month).")},
     },
+    "TopProductsReportView.get": {
+        "response": d.TopProductReportRowSerializer, "many": True,
+        "queries": {"from": ("string", False, "Data inicial inclusiva (AAAA-MM-DD), pela data de criação da cotação."),
+                    "to": ("string", False, "Data final inclusiva (AAAA-MM-DD), pela data de criação da cotação.")},
+    },
+    "TopCoveragesReportView.get": {
+        "response": d.TopCoverageReportRowSerializer, "many": True,
+        "queries": {"from": ("string", False, "Data inicial inclusiva (AAAA-MM-DD), pela data de criação da cotação."),
+                    "to": ("string", False, "Data final inclusiva (AAAA-MM-DD), pela data de criação da cotação.")},
+    },
+    "IssuanceReportView.get": {
+        "response": d.IssuanceReportSerializer,
+        "queries": {"from": ("string", False, "Data inicial inclusiva (AAAA-MM-DD); cotações usam criação e apólices usam início."),
+                    "to": ("string", False, "Data final inclusiva (AAAA-MM-DD); cotações usam criação e apólices usam início.")},
+    },
+    "ReportPdfView.get": {
+        "media": "application/pdf",
+        "queries": {"from": ("string", False, "Data inicial inclusiva (AAAA-MM-DD)."),
+                    "to": ("string", False, "Data final inclusiva (AAAA-MM-DD).")},
+        "notes": "O mesmo relatório do ecrã em PDF: report é top-products, top-coverages ou issuance.",
+    },
+    "ReportExcelView.get": {
+        "media": XLSX,
+        "queries": {"from": ("string", False, "Data inicial inclusiva (AAAA-MM-DD)."),
+                    "to": ("string", False, "Data final inclusiva (AAAA-MM-DD).")},
+        "notes": "O mesmo relatório do ecrã em Excel: report é top-products, top-coverages ou issuance.",
+    },
+    "ProposerTitularView.post": {
+        "request": d.OrganisationTitularRequest, "response": {201: d.OrganisationTitularMember}, "status": 201,
+        "notes": "Só para organizações sem titular ativo. O convite do portal vai para o e-mail do titular.",
+    },
+    "ProposerPortalInvitationView.get": {"response": d.PortalInvitationStatus},
+    "ProposerPortalInvitationView.post": {
+        "request": d.EmptyRequest, "response": d.PortalInvitationStatus,
+        "notes": "Reenvia o convite. SENT significa que o servidor de email aceitou a mensagem, não que chegou à caixa de entrada.",
+    },
     # ------------------------------------------------------------------ portal
     "CustomerPortalPlanBenefitsView.get": {
         "response": d.PortalPlanBenefits, "queries": {"policyNumber": ("string", True, "Número da apólice do cliente.")},

@@ -108,6 +108,30 @@ class _ProposerNifRequestSerializer(serializers.Serializer):
         return nif, nif
 
 
+class OrganisationTitularRequestSerializer(_RejectUnknownFields, serializers.Serializer):
+    """Titular de uma organização: quem recebe o convite do Portal do Cliente."""
+
+    firstName = serializers.CharField(max_length=120)
+    lastName = serializers.CharField(allow_null=True, allow_blank=True, required=False, default=None)
+    dateOfBirth = serializers.DateField()
+    sexCode = serializers.CharField(allow_null=True, allow_blank=True, required=False, default=None)
+    email = serializers.EmailField(max_length=254)
+    phone = serializers.CharField(min_length=1, max_length=30)
+
+    def validate_firstName(self, value):
+        return _required_name(value)
+
+    def validate(self, attrs: dict) -> dict:
+        return {
+            "first_name": attrs["firstName"],
+            "last_name": (attrs.get("lastName") or "").strip() or None,
+            "date_of_birth": attrs["dateOfBirth"],
+            "sex_code": attrs.get("sexCode") or None,
+            "email": attrs["email"],
+            "phone": attrs["phone"],
+        }
+
+
 class ProposerCreateRequestSerializer(_ProposerNifRequestSerializer):
     """Product Owner decision (2026-09-26): registrationNumber (NIF), email
     and phone are mandatory when creating a Proposer — no longer optional
@@ -129,10 +153,20 @@ class ProposerCreateRequestSerializer(_ProposerNifRequestSerializer):
     province = serializers.CharField(max_length=100, required=False, allow_null=True, allow_blank=True, default=None)
     municipality = serializers.CharField(max_length=100, required=False, allow_null=True, allow_blank=True, default=None)
     attributes = serializers.JSONField(required=False, default=dict)
+    # Só em organizações e opcional: o titular também pode vir no Excel ou ser indicado depois na ficha.
+    titular = OrganisationTitularRequestSerializer(required=False, allow_null=True, default=None)
 
     def validate(self, attrs: dict) -> dict:
         nif, registration_number = self._validated_nif(attrs)
+        titular = attrs.get("titular")
+        if titular and attrs["proposerType"] != "ORGANISATION":
+            raise serializers.ValidationError({"titular": "Só uma organização tem titular indicado à parte."})
+        if titular and titular["email"].strip().casefold() == attrs["email"].strip().casefold():
+            raise serializers.ValidationError(
+                {"titular": "O e-mail do titular deve ser diferente do e-mail de contacto da organização."}
+            )
         return {
+            "titular": titular,
             "proposer_type": attrs["proposerType"],
             "external_reference": attrs["externalReference"],
             "display_name": attrs["displayName"],

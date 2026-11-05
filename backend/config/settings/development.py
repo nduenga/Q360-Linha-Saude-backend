@@ -32,6 +32,15 @@ CORS_ALLOWED_ORIGIN_REGEXES = [r"^http://localhost:\d+$", r"^http://127\.0\.0\.1
 # Dev-only fallback, same pattern as SECRET_KEY above — never set in
 # production (config/settings/production.py raises if this is empty).
 CUSTOMER_PORTAL_JWT_SECRET = CUSTOMER_PORTAL_JWT_SECRET or "s01-development-only-portal-secret-change-me"
+# O Python do python.org no macOS não traz certificados de CA: sem isto, a
+# ligação TLS ao servidor de email falha e nenhum convite ou código sai.
+try:
+    import certifi
+
+    os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+except ImportError:
+    pass
+
 # No real SMTP configured locally — print emails to the console instead of
 # sending them (Django's own, real console backend, not a fake one).
 EMAIL_BACKEND = os.environ.get(

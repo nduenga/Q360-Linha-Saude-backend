@@ -314,7 +314,7 @@ class InstallmentListView(APIView):
                     "canRegisterPayment": (
                         effective in ("DUE", "OVERDUE")
                         and installment.due_date >= today
-                        and installment.policy.status == "ACTIVE"
+                        and installment.policy.status in ("ACTIVE", "PENDING_FIRST_PREMIUM")
                     ),
                 }
             )

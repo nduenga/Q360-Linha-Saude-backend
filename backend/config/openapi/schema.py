@@ -57,6 +57,7 @@ _TAGS = [
     ("/api/v1/claims", "Claims"),
     ("/api/v1/audit-events", "Audit"),
     ("/api/v1/dashboard", "Audit"),
+    ("/api/v1/reports", "Reports"),
     ("/api/v1/eligibility", "Eligibility"),
     ("/api/v1/proposers", "Clients"),
     ("/api/v1/members", "Population"),

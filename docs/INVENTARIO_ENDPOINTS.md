@@ -129,6 +129,11 @@ As operações abaixo foram implementadas depois do inventário inicial. Todas u
 | POST | `/policies/{policy_id}/dependents` | `q360.write`, `quote:create` | Regista um familiar de um titular ativo e abre o endosso de inclusão, já com cálculo anual e pró-rata. |
 | POST | `/households/{household_id}/members/{membership_id}/remove` | `q360.write` | Regista a saída lógica de um dependente, preservando o histórico. |
 | GET | `/reports/operational` | `q360.audit` | Entrega indicadores operacionais de população, carteira, cotações, cobranças e auditoria recente. |
+| GET | `/reports/top-products` | `q360.audit` | Devolve produtos agrupados pelo número de cotações e apólices emitidas. |
+| GET | `/reports/top-coverages` | `q360.audit` | Devolve coberturas presentes nos planos cotados, contando cada plano uma vez. |
+| GET | `/reports/issuance` | `q360.audit` | Devolve totais e distribuição por estado de cotações e apólices. |
+| GET | `/reports/{report}/pdf` | `q360.audit` | Exporta para PDF o relatório `top-products`, `top-coverages` ou `issuance`, com os mesmos filtros `from` e `to`. |
+| GET | `/reports/{report}/xlsx` | `q360.audit` | Exporta para Excel (`.xlsx`) os mesmos relatórios, com os mesmos filtros. |
 | POST | `/policies/{policy_id}/installments/{installment_no}/default-notice` | `q360.approve` + permissão de aprovação | Regista a notificação formal de falta de pagamento e o novo prazo. |
 | POST | `/policies/{policy_id}/installments/{installment_no}/suspend` | `q360.approve` + permissão de aprovação | Suspende a apólice por incumprimento, quando as pré-condições do ciclo de vida são cumpridas. |
 | POST | `/policies/{policy_id}/installments/{installment_no}/terminate` | `q360.approve` + permissão de aprovação | Termina a apólice por incumprimento, guardando a transição para auditoria. |
@@ -183,6 +188,14 @@ Depois de uma apólice estar ativa, `POST /policies/{policy_id}/dependents` rece
 - `commercial`: cotações por estado;
 - `collections`: quantidade e montante de prestações pagas e vencidas;
 - `audit`: número de eventos nos últimos 30 dias e os 10 eventos mais recentes.
+
+### Relatórios comerciais dedicados
+
+Os três endpoints aceitam os filtros opcionais `from` e `to` no formato `AAAA-MM-DD`, ambos inclusivos. Se forem enviados os dois, `from` não pode ser posterior a `to`. Os filtros são aplicados à data de criação das cotações; no relatório de emissão, as apólices são filtradas pela data de início.
+
+- `GET /reports/top-products`: lista `productId`, `productName`, `quoteCount` e `issuedCount` (cotações em estado `BOUND`).
+- `GET /reports/top-coverages`: lista `benefitId`, `benefitName`, `category` e `planCount`; a mesma cobertura conta no máximo uma vez por plano.
+- `GET /reports/issuance`: devolve `totalQuotes`, `totalPolicies`, `quotesByStatus` e `policiesByStatus`, com cada distribuição composta por `status` e `count`.
 
 ## 1. Endpoints novos
 
@@ -2104,3 +2117,10 @@ O modelo e a pré-validação Excel das tabelas de referência da plataforma usa
 | `GET /quotes/{quote_id}/adjustments` · `POST /quotes/{quote_id}/adjustments` · `DELETE /quotes/{quote_id}/adjustments/{adjustment_id}` | Contrato (resposta) | Novos campos `appliedByName`/`removedByName: string \| null` em cada `QuoteAdjustment` — nome resolvido de quem aplicou/removeu o ajuste (antes só vinha o UUID em `appliedBy`/`removedBy`); `null` quando o ator não é uma conta de staff. |
 | `GET /quotes/{quote_id}/versions` · `POST /quotes/{quote_id}/versions` · `GET /quotes/{quote_id}/versions/{version_no}` | Contrato (resposta) | Novo campo `createdByName: string \| null` em cada `QuoteVersion` — nome resolvido de quem criou a versão; `null` para atores técnicos (ex.: `"system-scheduler"`). O snapshot de cada versão passa também a incluir `proposerId`, `proposerName`, `proposerTaxId`, `productId` e `productName` (antes só tinha `planId`/`planName`), para a versão ficar autónoma de alterações posteriores ao proponente ou ao produto. |
 | `GET /platform/audit` | Contrato (resposta) | Novo campo `actorName: string \| null` em cada evento — nome resolvido do super administrador que fez a ação; `null` para `"ANONYMOUS"` (login falhado antes de autenticar) ou para uma conta de super administrador já removida. |
+| `POST /proposers` | Contrato (pedido) | Novo `titular?` para organizações (`firstName`, `lastName?`, `dateOfBirth`, `sexCode?`, `email`, `phone`). O e-mail tem de ser diferente do da organização. Proponente e titular são criados na mesma transação e o convite do portal segue para o titular. Num proponente individual → 400. |
+| `POST /proposers/{proposer_id}/titular` | **Novo** | Indica o titular de uma organização que ainda não o tem, com as mesmas regras do Excel. Devolve o membro (201). Segundo titular ativo → 400. |
+| `GET /proposers/{proposer_id}/portal-invitation` | **Novo** | Resultado do último convite: `status` (`NONE`, `SENT`, `FAILED`), `email`, `occurredAt`. `SENT` significa que o servidor de email aceitou a mensagem. |
+| `POST /proposers/{proposer_id}/portal-invitation` | **Novo** | Reenvia o convite ao cliente individual ou ao titular da organização. Sem titular ou sem e-mail → 400. |
+| `GET /reports/{report}/pdf` | **Novo** | PDF dos relatórios `top-products`, `top-coverages` e `issuance`, com a identidade visual publicada. Relatório desconhecido → 404. |
+| `GET /reports/{report}/xlsx` | **Novo** | Excel dos relatórios `top-products`, `top-coverages` e `issuance`, com as quantidades como números. Relatório desconhecido → 404. |
+| Auditoria | Comportamento | `customer_portal.invitation_sent` só é registado depois de o servidor de email aceitar a mensagem. Novo `customer_portal.invitation_failed` quando o envio falha. |

@@ -1,0 +1,11 @@
+# Copiar para /etc/systemd/system/q360-daily.timer
+[Unit]
+Description=Q360 Saude - tarefas diarias as 02:45 de Luanda
+
+[Timer]
+OnCalendar=*-*-* 02:45:00 Africa/Luanda
+# Se o servidor estiver desligado à hora marcada, corre quando voltar.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
