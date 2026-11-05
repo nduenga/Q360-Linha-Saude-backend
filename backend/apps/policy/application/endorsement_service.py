@@ -449,6 +449,8 @@ def _coverage_credit_balance(policy: Policy) -> Decimal:
     latest = policy.endorsements.filter(
         endorsement_type=EndorsementType.CHANGE_COVERAGES.value,
     ).order_by("-endorsement_number").first()
+    if latest is None:  # primeira alteração de coberturas desta apólice: ainda não há crédito
+        return Decimal("0.00")
     return round_amount(Decimal(str((latest.payload_json or {}).get("creditBalanceAfter") or "0")))
 
 
