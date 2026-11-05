@@ -1153,6 +1153,15 @@ def decide_quote(
     if quote.status != QuoteStatus.IN_REVIEW.value:
         raise QuoteStateError(f"Esta cotação está em {quote_status_label(quote.status)}; só uma cotação em revisão (IN_REVIEW) pode ser decidida")
 
+    # A transição automática para EXPIRED só corre quando o scheduler de
+    # expiração é invocado (ver `expire_quote_if_due` acima) — nada garante
+    # que já tenha corrido antes desta decisão. Sem este bloqueio, uma
+    # cotação cuja validade já passou podia ser aprovada na mesma.
+    if decision == QuoteDecisionType.APPROVE.value and quote.valid_until is not None and quote.valid_until < timezone_localdate():
+        raise QuoteStateError(
+            f"Esta cotação caducou em {quote.valid_until.isoformat()}; não pode ser aprovada. Devolva-a para reabrir a validade."
+        )
+
     review_task = get_active_review_task(quote=quote)
     if review_task is None or review_task.status not in (ReviewTaskStatus.OPEN.value, ReviewTaskStatus.IN_PROGRESS.value):
         raise QuoteStateError("Esta cotação não tem nenhuma tarefa de revisão ativa")
