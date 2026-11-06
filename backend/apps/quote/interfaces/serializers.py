@@ -37,6 +37,8 @@ class QuoteSerializer(serializers.Serializer):
 
     id = serializers.UUIDField()
     quoteNumber = serializers.CharField(source="quote_number", allow_null=True)
+    createdBy = serializers.CharField(source="created_by")
+    createdByName = serializers.SerializerMethodField()
     proposerId = serializers.UUIDField(source="proposer_id")
     sourceChannel = serializers.CharField(source="source_channel", allow_null=True, allow_blank=True)
     planId = serializers.UUIDField(source="plan_id")
@@ -70,6 +72,7 @@ class QuoteSerializer(serializers.Serializer):
     productName = serializers.SerializerMethodField(method_name="get_product_name")
     proposerName = serializers.SerializerMethodField(method_name="get_proposer_name")
 
+<<<<<<< HEAD
     def get_display_status(self, obj) -> str:
         from apps.quote.application.quote_presentation import display_status
 
@@ -77,6 +80,10 @@ class QuoteSerializer(serializers.Serializer):
 
     def get_status_label(self, obj) -> str | None:
         return status_label("quote", self.get_display_status(obj))
+=======
+    def get_createdByName(self, obj) -> str | None:
+        return self.context.get("responsible_names", {}).get(str(obj.created_by))
+>>>>>>> 08c19f227449a192f8d5084ecda27235cc609735
 
     def get_proposer_name(self, obj) -> str | None:
         proposer = getattr(obj, "proposer", None)
@@ -421,10 +428,14 @@ class ReviewTaskSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=[s.value for s in ReviewTaskStatus])
     statusLabel = serializers.SerializerMethodField(method_name="get_status_label")
     assignedTo = serializers.CharField(source="assigned_to", allow_null=True)
+<<<<<<< HEAD
     assignedToName = serializers.SerializerMethodField(method_name="get_assigned_to_name")
     validUntil = serializers.DateField(source="quote.valid_until", allow_null=True)
     canDecide = serializers.SerializerMethodField(method_name="get_can_decide")
     cannotDecideReason = serializers.SerializerMethodField(method_name="get_cannot_decide_reason")
+=======
+    assignedToName = serializers.SerializerMethodField()
+>>>>>>> 08c19f227449a192f8d5084ecda27235cc609735
     createdAt = serializers.DateTimeField(source="created_at")
     rowVersion = serializers.IntegerField(source="row_version")
 
@@ -446,6 +457,11 @@ class ReviewTaskSerializer(serializers.Serializer):
 
     def get_can_decide(self, obj) -> bool:
         return self.get_cannot_decide_reason(obj) is None
+
+    def get_assignedToName(self, obj) -> str | None:
+        if not obj.assigned_to:
+            return None
+        return self.context.get("responsible_names", {}).get(str(obj.assigned_to))
 
     def get_quote_name(self, obj) -> str:
         """Quote has no standalone name; compose a readable queue label."""

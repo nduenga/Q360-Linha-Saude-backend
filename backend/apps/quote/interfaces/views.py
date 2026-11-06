@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
 
 from apps.foundation.application.permission_evaluator import PermissionEvaluator
+from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.domain.permissions import Permission
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
@@ -202,7 +203,8 @@ class QuoteDetailView(APIView):
         quote = get_object_or_404(
             Quote.objects.select_related("latest_pricing_run", "proposer", "plan__product"), id=quote_id
         )
-        return Response(QuoteSerializer(quote).data)
+        responsible_names = _responsible_names(quote.tenant_id, [quote.created_by])
+        return Response(QuoteSerializer(quote, context={"responsible_names": responsible_names}).data)
 
     def delete(self, request, quote_id):
         quote = get_object_or_404(Quote, id=quote_id)
@@ -284,6 +286,25 @@ class QuoteSubmitView(APIView):
         return Response({**QuoteSerializer(updated).data, "undoUntil": quote_service.submit_undo_deadline(updated)})
 
 
+@requires_idempotency
+class QuoteWithdrawView(APIView):
+    """`/api/v1/quotes/{quoteId}/withdraw` (POST) — "Anular" o próprio envio
+    (manual UX v2, cap. 08). Mesma permissão de quem submete; a regra dos
+    quatro olhos e a verificação de que é o próprio submissor ficam dentro
+    de `withdraw_submission`."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_SUBMIT)]
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        body = QuoteSubmitRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        updated = quote_service.withdraw_submission(
+            quote=quote, row_version=body.validated_data["rowVersion"], correlation_id=get_correlation_id()
+        )
+        return Response(QuoteSerializer(updated).data)
+
+
 class QuoteReviewView(APIView):
     """ART-006 `/api/v1/quotes/{quoteId}/review`: `getQuoteReview` (GET)."""
 
@@ -294,7 +315,23 @@ class QuoteReviewView(APIView):
         review_task = quote_service.get_active_review_task(quote=quote)
         if review_task is None:
             raise Http404
-        return Response(ReviewTaskSerializer(review_task).data)
+        responsible_names = _responsible_names(quote.tenant_id, [review_task.assigned_to] if review_task.assigned_to else [])
+        return Response(ReviewTaskSerializer(review_task, context={"responsible_names": responsible_names}).data)
+
+
+@requires_idempotency
+class QuoteReviewAssignView(APIView):
+    """`/api/v1/quotes/{quoteId}/review/assign` (POST) — "Atribuir a mim"
+    (manual UX v2, cap. 09): `assigned_to` existia no modelo mas nenhum
+    endpoint o escrevia."""
+
+    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_REVIEW)]
+
+    def post(self, request, quote_id):
+        quote = get_object_or_404(Quote, id=quote_id)
+        review_task = quote_service.assign_review_task_to_self(quote=quote)
+        responsible_names = _responsible_names(quote.tenant_id, [review_task.assigned_to] if review_task.assigned_to else [])
+        return Response(ReviewTaskSerializer(review_task, context={"responsible_names": responsible_names}).data)
 
 
 @requires_idempotency
@@ -535,8 +572,16 @@ class ReviewQueueView(APIView):
             raise ValidationError({"assignment": "Use mine ou unassigned."})
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
+<<<<<<< HEAD
         data = ReviewTaskSerializer(page, many=True, context=review_task_context(page)).data
         return paginator.get_paginated_response(data)
+=======
+        tenant_id = CurrentTenantProvider.get()
+        responsible_names = _responsible_names(tenant_id.value, (t.assigned_to for t in page if t.assigned_to)) if tenant_id else {}
+        return paginator.get_paginated_response(
+            ReviewTaskSerializer(page, many=True, context={"responsible_names": responsible_names}).data
+        )
+>>>>>>> 08c19f227449a192f8d5084ecda27235cc609735
 
 
 @requires_idempotency
