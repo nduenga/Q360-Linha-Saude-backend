@@ -300,6 +300,9 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
     from apps.policy.application import endorsement_service
 
     newborns = endorsement_service.newborn_members(quote)
+    from apps.quote.application import questionnaire_service
+
+    questionnaire_statuses = questionnaire_service.statuses_for_quote(quote)
 
     for qm in quote_members:
         member = qm.member
@@ -353,8 +356,12 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
             member_items.append(_item("INFO", "NEWBORN_AUTO_INCLUSION", "Recém-nascido: inclusão automática, sem questionário clínico nem exames.", member_id=member_id, member_name=member_name))
         if exam_reasons:
             member_items.append(_item("WARNING", "MEDICAL_EXAM_REQUIRED", "Exames médicos exigidos: " + "; ".join(exam_reasons) + ".", member_id=member_id, member_name=member_name))
+        questionnaire_status = questionnaire_statuses.get(member_id, "NOT_STARTED")
         if questionnaire_required and member_id not in newborns:
-            member_items.append(_item("WARNING", "CLINICAL_QUESTIONNAIRE_REQUIRED", "Questionário clínico obrigatório.", member_id=member_id, member_name=member_name))
+            if questionnaire_status == "COMPLETED":
+                member_items.append(_item("INFO", "CLINICAL_QUESTIONNAIRE_COMPLETED", "Questionário clínico concluído.", member_id=member_id, member_name=member_name, questionnaireStatus=questionnaire_status))
+            else:
+                member_items.append(_item("WARNING", "CLINICAL_QUESTIONNAIRE_REQUIRED", "Questionário clínico obrigatório.", member_id=member_id, member_name=member_name, questionnaireStatus=questionnaire_status, action="FILL_QUESTIONNAIRE"))
         if qm.pre_existing_json:
             member_items.append(
                 _item("INFO", "PRE_EXISTING_DECISION", f"Preexistência: {qm.pre_existing_json.get('mode')}.", member_id=member_id, member_name=member_name, decision=qm.pre_existing_json)
@@ -396,6 +403,7 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
         "ageAtQuoteDate": age,  # idade na data de referência (criação) da cotação
         "relationshipCategory": category,
         "clinicalQuestionnaireRequired": bool(questionnaire_required) and member_id not in newborns,
+        "clinicalQuestionnaireStatus": questionnaire_status,
         "medicalExamRequired": bool(exam_reasons),
         "blocking": any(
             i["severity"] == "ERROR"

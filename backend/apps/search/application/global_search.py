@@ -41,6 +41,14 @@ def global_search(q: str) -> dict:
             items=[SearchItem(**p) for p in policies],
         ))
 
+    requests = repo.search_requests(q)
+    if requests:
+        groups.append(SearchGroup(
+            kind='request',
+            label='Pedidos',
+            items=[SearchItem(**r) for r in requests],
+        ))
+
     total = sum(len(g.items) for g in groups)
 
     return {

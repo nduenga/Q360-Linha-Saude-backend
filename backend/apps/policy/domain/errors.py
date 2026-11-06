@@ -46,3 +46,17 @@ class InvalidStartDateError(DomainProblem):
 
     http_status = 400
     problem_code = "VALIDATION-400"
+
+
+class PaymentAmountMismatchError(DomainProblem):
+    """O valor recebido não é a soma das prestações escolhidas."""
+
+    http_status = 400
+    problem_code = "VALIDATION-400"
+
+
+class DuplicatePaymentReferenceError(DomainProblem):
+    """A referência de pagamento já foi usada noutra prestação paga."""
+
+    http_status = 409
+    problem_code = "PAYMENT-REFERENCE-DUPLICATE"

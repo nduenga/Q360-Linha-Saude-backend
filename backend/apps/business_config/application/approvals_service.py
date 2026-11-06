@@ -40,6 +40,41 @@ def _can_approve(row: BusinessConfiguration, actor, rules: dict) -> tuple[bool, 
     return True, None
 
 
+def eligible_approvers(row: BusinessConfiguration, rules: dict) -> list[dict[str, str]]:
+    """Contas ativas que podem aprovar: sem isto, uma alteração fica parada sem
+    que ninguém perceba porquê."""
+    from apps.foundation.domain.permissions import Permission, Role, effective_role_permissions
+    from apps.staff_accounts.infrastructure.models import StaffAccount, StaffAccountRole
+
+    configured = set(rules.get("approval_roles") or [])
+    managers = {Permission.PRODUCT_MANAGE, Permission.PRICING_CONFIG_MANAGE}
+    allowed = (configured | {Role.ADMIN.value}) if configured else {
+        role.value for role, permissions in effective_role_permissions(row.tenant_id).items()
+        if managers & set(permissions) and role is not Role.PLATFORM_ADMIN
+    }
+    account_ids = StaffAccountRole.objects.filter(role__in=allowed).values_list("staff_account_id", flat=True)
+    excluded = {row.created_by} if rules.get("four_eyes_required") is not False else set()
+    accounts = StaffAccount.objects.filter(id__in=account_ids, status=StaffAccount.ACTIVE).order_by("name")
+    return [{"id": str(a.id), "name": a.name} for a in accounts if str(a.id) not in excluded]
+
+
+def _impact(row: BusinessConfiguration) -> dict[str, int]:
+    """Quantas cotações em curso e apólices a renovar esta alteração pode afetar."""
+    import datetime
+
+    from apps.policy.infrastructure.models import Policy
+    from apps.quote.infrastructure.models import Quote
+
+    product_id = product_id_of(row.config_key) if is_product_setup_key(row.config_key) else split_key(row.config_key)[1]
+    quotes = Quote.objects.filter(status__in=("DRAFT", "READY", "IN_REVIEW", "APPROVED"))
+    today = timezone.localdate()
+    policies = Policy.objects.filter(status="ACTIVE", end_date__range=(today, today + datetime.timedelta(days=90)))
+    if product_id:
+        quotes = quotes.filter(plan__product_id=product_id)
+        policies = policies.filter(plan__product_id=product_id)
+    return {"quotesInProgress": quotes.count(), "policiesToRenew": policies.count()}
+
+
 def pending_queue(*, area: str | None = None) -> dict[str, Any]:
     from apps.product.infrastructure.models import Product
 
@@ -62,6 +97,7 @@ def pending_queue(*, area: str | None = None) -> dict[str, Any]:
         )
         changes = diff_values(published.value_json, row.value_json) if published else None
         can, why = _can_approve(row, actor, rules)
+        approvers = eligible_approvers(row, rules)
         items.append({
             "configurationId": str(row.id),
             "configKey": row.config_key,
@@ -79,6 +115,10 @@ def pending_queue(*, area: str | None = None) -> dict[str, Any]:
             "isNew": published is None,
             "canApprove": can,
             "cannotApproveReason": why,
+            "eligibleApprovers": approvers,
+            "noEligibleApprover": not approvers,
+            "approverAlert": None if approvers else "Falta um segundo aprovador elegível. Ative outra conta com este perfil para esta alteração poder avançar.",
+            "impact": _impact(row),
         })
     by_area: dict[str, int] = {}
     for item in items:

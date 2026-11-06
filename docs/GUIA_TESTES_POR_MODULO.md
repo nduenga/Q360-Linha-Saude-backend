@@ -346,6 +346,7 @@ Menu **Clientes** (Subscritor ou Administrador).
 1. **Novo proponente → Individual:** nome `QA Maria Teste`, data de nascimento, sexo, NIF `000000011LA011` (formato 9 dígitos + 2 letras + 3 dígitos), email `maria.qa@demo.q360.local`, telefone, morada, província, município → **Guardar**. **Esperado:** proponente criado com o titular.
 2. Negativo: NIF com tamanho errado. **Esperado:** «O Nif deve ter 14 caracteres…». Repita o mesmo NIF noutro proponente. **Esperado:** «Número de registo já existe».
 3. Abra o cliente → **Membros**: acrescente cônjuge, filho de 10 anos, filho de 23 anos e ascendente de 72 anos.
+   **Ocorrência corrigida nesta sessão:** o dropdown podia mostrar a primeira relação familiar enquanto o formulário enviava `TITULAR`. Confirme agora a relação no formulário e escolha-a explicitamente antes de guardar. O estado do proponente testado tinha 1 titular ativo e 2 filhos ativos; o pedido com erro não gravou outro membro.
 4. **Editar** um membro e **Inativar** outro. **Esperado:** atualizado / estado Inativo.
 
 ### 11.2 Proponente organização

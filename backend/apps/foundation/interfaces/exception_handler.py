@@ -59,6 +59,9 @@ _TITLES: dict[str, str] = {
     # apps.business_config — configuração de tarifação por produto (grupos de
     # opções, campos e fórmulas): dados da cotação em falta ou que não batem.
     "PRODUCT-SETUP-INPUT": "Dados do produto em falta ou inválidos",
+    "PAYMENT-REFERENCE-DUPLICATE": "Referência de pagamento já registada",
+    "QUESTIONNAIRE-INCOMPLETE": "Questionário incompleto",
+    "QUOTE-DELETE-BLOCKED": "Esta cotação não pode ser apagada",
 }
 
 _CODE_BY_EXCEPTION: dict[type[Exception], str] = {

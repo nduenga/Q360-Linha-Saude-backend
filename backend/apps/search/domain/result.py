@@ -1,4 +1,4 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 
 @dataclass(frozen=True)
@@ -7,6 +7,11 @@ class SearchItem:
     title: str
     subtitle: str
     href: str
+    maskedNif: str | None = None
+    city: str | None = None
+    status: str | None = None
+    statusLabel: str | None = None
+    actions: list[dict] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

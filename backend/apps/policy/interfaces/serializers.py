@@ -8,6 +8,7 @@ from datetime import date
 
 from rest_framework import serializers
 
+from shared.status_labels import status_label
 from apps.pricing.domain.money import round_amount
 from apps.policy.application.lifecycle_service import calculate_resolution_refund
 from apps.policy.domain.enums import (
@@ -75,8 +76,12 @@ class EmitPolicyRequestSerializer(IssuePolicyRequestSerializer):
 
 
 class PolicySerializer(serializers.Serializer):
+    def get_status_label(self, obj) -> str | None:
+        return status_label("policy", obj.status)
+
     id = serializers.UUIDField()
     policyNumber = serializers.CharField(source="policy_number", allow_null=True)
+    statusLabel = serializers.SerializerMethodField(method_name="get_status_label")
     sourceQuoteId = serializers.UUIDField(source="source_quote_id")
     proposerId = serializers.UUIDField(source="proposer_id")
     planId = serializers.UUIDField(source="plan_id")
@@ -160,6 +165,7 @@ class PremiumInstallmentSerializer(serializers.Serializer):
     status = serializers.CharField()
     paidAt = serializers.DateTimeField(source="paid_at", allow_null=True)
     paymentReference = serializers.CharField(source="payment_reference", allow_null=True)
+    paymentBatchId = serializers.UUIDField(source="payment_batch_id", allow_null=True)
     paymentMethod = serializers.CharField(source="payment_method", allow_null=True)
 
     def get_amount(self, obj) -> str:

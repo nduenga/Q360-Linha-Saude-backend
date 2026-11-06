@@ -30,7 +30,7 @@ class QuoteStatus(str, Enum):
 QUOTE_STATUS_LABEL: dict[str, str] = {
     QuoteStatus.DRAFT.value: "Rascunho",
     QuoteStatus.READY.value: "Calculada",
-    QuoteStatus.IN_REVIEW.value: "Em Revisão",
+    QuoteStatus.IN_REVIEW.value: "Em revisão",
     QuoteStatus.APPROVED.value: "Aprovada",
     QuoteStatus.REJECTED.value: "Rejeitada",
     QuoteStatus.EXPIRED.value: "Expirada",

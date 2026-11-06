@@ -35,7 +35,20 @@ from apps.policy.interfaces.views import (
     PolicyMemberExcludeView,
 )
 
+from apps.policy.interfaces.reconciliation_views import (
+    BankStatementCommitView,
+    BankStatementPreviewView,
+    PolicyInclusionPreviewView,
+    PolicyPaymentAllocationView,
+    PolicyPaymentOptionsView,
+)
+
 urlpatterns = [
+    path("payment-reconciliations/preview", BankStatementPreviewView.as_view(), name="payment-reconciliation-preview"),
+    path("payment-reconciliations/commit", BankStatementCommitView.as_view(), name="payment-reconciliation-commit"),
+    path("policies/<uuid:policy_id>/payment-options", PolicyPaymentOptionsView.as_view(), name="policy-payment-options"),
+    path("policies/<uuid:policy_id>/payments", PolicyPaymentAllocationView.as_view(), name="policy-payment-allocation"),
+    path("policies/<uuid:policy_id>/endorsements/inclusions/preview", PolicyInclusionPreviewView.as_view(), name="policy-inclusion-preview"),
     path("quotes/<uuid:quote_id>/policy", IssuePolicyView.as_view(), name="policy-issue"),
     path("quotes/<uuid:quote_id>/policy-draft", PolicyDraftView.as_view(), name="policy-draft"),
     path("quotes/<uuid:quote_id>/policy/emit", EmitPolicyView.as_view(), name="policy-emit"),

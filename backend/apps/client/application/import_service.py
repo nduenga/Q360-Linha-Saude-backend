@@ -73,6 +73,7 @@ _HEADERS_PT = {
 # Common ETL "looks like a null but isn't really empty" placeholders that
 # spreadsheet exports/manual entry tend to leave behind - OD-004 asks that
 # these be caught explicitly, not silently treated as valid text values.
+DUPLICATE_ROW_CODE = "IMPORT-DUPLICATE"
 _NULL_LOOKALIKES = {"null", "n/a", "na", "nan", "none", "-", "--"}
 
 
@@ -87,9 +88,11 @@ class _ParsedRow:
     values: dict[str, str]
     errors: list[tuple[str | None, str, str]] = field(default_factory=list)  # (field, code, message)
 
+    duplicate: bool = False
+
     @property
     def is_valid(self) -> bool:
-        return not self.errors
+        return not self.errors and not self.duplicate
 
 
 def _storage_path(tenant_id, import_job_id, filename: str) -> str:
@@ -139,13 +142,53 @@ def _parse_uploaded_rows(*, filename: str, content: bytes) -> list[dict[str, str
     raise ImportFileParseError("Formato não suportado. Carregue o modelo Excel .xlsx.")
 
 
+def _person_key(first_name: str | None, last_name: str | None, date_of_birth) -> tuple:
+    return (
+        " ".join((first_name or "").split()).casefold(),
+        " ".join((last_name or "").split()).casefold(),
+        date_of_birth,
+    )
+
+
+def _mark_duplicates(*, proposer: Proposer | None, rows: list[_ParsedRow]) -> None:
+    """Pessoas já existentes (referência, ou nome e data de nascimento) e linhas
+    repetidas no ficheiro não entram de novo; ficam só assinaladas."""
+    references: set[str] = set()
+    people: set[tuple] = set()
+    if proposer is not None:
+        for member in InsuredMember.objects.filter(proposer=proposer):
+            if member.external_reference:
+                references.add(member.external_reference.strip().casefold())
+            people.add(_person_key(member.first_name, member.last_name, member.date_of_birth))
+    for row in rows:
+        if not row.is_valid:
+            continue
+        reference = (row.values.get("externalReference") or "").strip().casefold()
+        date_of_birth, _ = _parse_date((row.values.get("dateOfBirth") or "").strip())
+        person = _person_key(row.values.get("firstName"), row.values.get("lastName"), date_of_birth)
+        if (reference and reference in references) or person in people:
+            row.duplicate = True
+            continue
+        if reference:
+            references.add(reference)
+        people.add(person)
+
+
+def _rows_to_deduplicate(rows: list[_ParsedRow], *, household_import: bool) -> list[_ParsedRow]:
+    """No modelo de colaboradores, uma referência repetida já é erro da linha;
+    falta impedir que voltar a carregar o ficheiro duplique os dependentes."""
+    if not household_import:
+        return rows
+    return [row for row in rows if row.values.get("memberType") == "DEPENDENTE"]
+
+
 def _parse_date(raw: str) -> tuple[object | None, str | None]:
     if not raw:
         return None, None
     try:
         return timezone.datetime.strptime(raw, "%Y-%m-%d").date(), None
     except ValueError:
-        return None, f"'{raw}' is not a valid YYYY-MM-DD date"
+        return None, f"«{raw}» não é uma data válida; use o formato AAAA-MM-DD."
 
 
 def _validate_row(row_number: int, raw: dict[str, str], *, tenant_id) -> _ParsedRow:
@@ -158,18 +201,18 @@ def _validate_row(row_number: int, raw: dict[str, str], *, tenant_id) -> _Parsed
         value = (raw.get(column) or "").strip()
         if value.lower() in _NULL_LOOKALIKES:
             parsed.errors.append(
-                (column, "VALIDATION-400", f"{column} contains '{value}', which looks like a placeholder for empty — leave the cell blank instead")
+                (column, "VALIDATION-400", f"A coluna {column} contém «{value}»; deixe a célula vazia se não tiver este dado.")
             )
 
     relationship_code = (raw.get("relationshipCode") or "").strip()
     if not relationship_code or len(relationship_code) > 40:
-        parsed.errors.append(("relationshipCode", "VALIDATION-400", "relationshipCode is required (max 40 chars)"))
+        parsed.errors.append(("relationshipCode", "VALIDATION-400", "Indique a relação com o titular (até 40 caracteres)."))
     elif relationship_code.lower() not in _NULL_LOOKALIKES:
         try:
             validate_relationship_code(tenant_id=tenant_id, code=relationship_code)
         except UnknownRelationshipCodeError:
             parsed.errors.append(
-                ("relationshipCode", "VALIDATION-400", f"'{relationship_code}' is not a valid relationshipCode")
+                ("relationshipCode", "VALIDATION-400", f"«{relationship_code}» não é uma relação válida.")
             )
 
     raw_dob = (raw.get("dateOfBirth") or "").strip()
@@ -177,14 +220,14 @@ def _validate_row(row_number: int, raw: dict[str, str], *, tenant_id) -> _Parsed
         parsed.errors.append(("firstName", "VALIDATION-400", "Indique o nome próprio da pessoa."))
     if not raw_dob:
         # Regra de negócio: data de nascimento obrigatória para toda a pessoa segura.
-        parsed.errors.append(("dateOfBirth", "VALIDATION-400", "dateOfBirth is required"))
+        parsed.errors.append(("dateOfBirth", "VALIDATION-400", "Indique a data de nascimento."))
     date_of_birth, date_error = _parse_date(raw_dob)
     if date_error:
         parsed.errors.append(("dateOfBirth", "VALIDATION-400", date_error))
     elif date_of_birth is not None:
         try:
             if date_of_birth > timezone.now().date():
-                parsed.errors.append(("dateOfBirth", "VALIDATION-400", "dateOfBirth is in the future"))
+                parsed.errors.append(("dateOfBirth", "VALIDATION-400", "A data de nascimento não pode estar no futuro."))
         except TypeError:  # pragma: no cover - defensive
             pass
     return parsed
@@ -425,6 +468,10 @@ def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFi
                     "os familiares associam-se depois ao agregado do colaborador.",
                 ))
 
+    _mark_duplicates(
+        proposer=proposer, rows=_rows_to_deduplicate(rows, household_import=organisation_household_import),
+    )
+
     ImportRowError.objects.bulk_create(
         [
             ImportRowError(
@@ -437,6 +484,18 @@ def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFi
             )
             for row in rows
             for field_name, code, message in row.errors
+        ]
+        + [
+            ImportRowError(
+                tenant_id=tenant_id.value,
+                import_job=import_job,
+                row_number=row.row_number,
+                field_name=None,
+                error_code=DUPLICATE_ROW_CODE,
+                error_message="Esta pessoa já existe; a linha é ignorada.",
+            )
+            for row in rows
+            if row.duplicate
         ]
     )
     population_problem = _population_problem(proposer=proposer, rows=rows)
@@ -465,6 +524,38 @@ def upload_member_import(*, proposer: Proposer | None, uploaded_file: UploadedFi
         metadata={"totalRows": import_job.total_rows, "validRows": import_job.valid_rows},
     )
     return import_job
+
+
+def row_problems(import_job: ImportJob) -> list[dict]:
+    """Erros e duplicados por linha. `sheetRow` é a linha que se vê no Excel: o
+    cabeçalho ocupa a primeira."""
+    return [
+        {
+            "rowNumber": row.row_number,
+            "sheetRow": row.row_number + 1,
+            "field": row.field_name,
+            "code": row.error_code,
+            "message": row.error_message,
+            "duplicate": row.error_code == DUPLICATE_ROW_CODE,
+        }
+        for row in import_job.row_errors.order_by("row_number", "field_name")
+    ]
+
+
+def error_report(import_job: ImportJob) -> bytes:
+    import openpyxl
+
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Erros"
+    sheet.append(["Linha", "Campo", "Tipo", "Mensagem"])
+    for problem in row_problems(import_job):
+        sheet.append([
+            problem["sheetRow"], problem["field"] or "", "Duplicado" if problem["duplicate"] else "Erro", problem["message"],
+        ])
+    output = io.BytesIO()
+    workbook.save(output)
+    return output.getvalue()
 
 
 def commit_member_import(*, import_job: ImportJob, actor_id: str) -> ImportJob:
@@ -496,11 +587,15 @@ def commit_member_import(*, import_job: ImportJob, actor_id: str) -> ImportJob:
 
     organisation_household_import = _is_organisation_household_import(raw_rows)
     if organisation_household_import:
-        household_problem = _validate_organisation_household_rows(
-            proposer=import_job.proposer, rows=rows, tenant_id=tenant_id.value,
-        )
-        if household_problem:
-            raise ImportPopulationInvalidError(household_problem)
+        # Tal como no modelo simples, as linhas com erro ficam de fora e as
+        # válidas entram; um dependente de um titular com erro também fica de fora.
+        _validate_organisation_household_rows(proposer=import_job.proposer, rows=rows, tenant_id=tenant_id.value)
+
+    _mark_duplicates(
+        proposer=import_job.proposer, rows=_rows_to_deduplicate(rows, household_import=organisation_household_import),
+    )
+    if not any(row.is_valid for row in rows):
+        raise ImportPopulationInvalidError("Não há linhas válidas para importar. Corrija o ficheiro e carregue-o de novo.")
 
     population_problem = _population_problem(proposer=import_job.proposer, rows=rows)
     if population_problem:

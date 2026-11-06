@@ -4,6 +4,7 @@ from apps.client.interfaces.views import (
     MemberDetailView,
     MemberImportCommitView,
     MemberImportDetailView,
+    MemberImportErrorReportView,
     MemberImportUploadView,
     MemberListCreateView,
     PersonListView,
@@ -37,6 +38,7 @@ urlpatterns = [
     path("households/<uuid:household_id>/members/<uuid:membership_id>/remove", HouseholdMemberRemoveView.as_view(), name="household-member-remove"),
     path("member-imports", MemberImportUploadView.as_view(), name="member-import-upload"),
     path("member-imports/<uuid:import_id>", MemberImportDetailView.as_view(), name="member-import-detail"),
+    path("member-imports/<uuid:import_id>/error-report", MemberImportErrorReportView.as_view(), name="member-import-error-report"),
     path(
         "member-imports/<uuid:import_id>/commit",
         MemberImportCommitView.as_view(),

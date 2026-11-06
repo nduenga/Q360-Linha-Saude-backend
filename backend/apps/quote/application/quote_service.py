@@ -98,6 +98,12 @@ _ELIGIBILITY_TO_MEMBER_STATUS = {
 _PRICEABLE_MEMBER_STATUSES = [QuoteMemberStatus.INCLUDED.value, QuoteMemberStatus.REFERRAL.value]
 
 
+# Janela do «Anular» depois de enviar para revisão; a folga cobre o tempo de rede.
+SUBMIT_UNDO_WINDOW_SECONDS = 10
+SUBMIT_UNDO_GRACE_SECONDS = 5
+SUBMIT_UNDONE_REASON = "SUBMIT_UNDONE"
+
+
 def _plan_content_snapshot(plan: Plan, selection: dict | None = None, effective_date: datetime.date | None = None) -> dict:
     """DECISIONS_TAKEN.md#S09-POLICY-001 (ROADMAP_APOLICES.md Fase 1,
     pré-requisito de PO-APO-6): with ProductVersion retired, a Plan is no
@@ -1113,6 +1119,50 @@ def submit_quote(*, quote: Quote, row_version: int, correlation_id: str | None) 
     return quote
 
 
+def submit_undo_deadline(quote: Quote) -> datetime.datetime | None:
+    """Até quando o aviso mostra «Anular», ou None se a cotação não admite anulação."""
+    if quote.status != QuoteStatus.IN_REVIEW.value or quote.quote_type == "ENDORSEMENT" or quote.submitted_at is None:
+        return None
+    return quote.submitted_at + datetime.timedelta(seconds=SUBMIT_UNDO_WINDOW_SECONDS)
+
+
+def undo_submit(*, quote: Quote, row_version: int, correlation_id: str | None) -> Quote:
+    """Anula um envio para revisão feito há instantes, enquanto ninguém lhe pegou."""
+    actor = CurrentActorProvider.get()
+    actor_id = actor.actor_id if actor else "unknown"
+    deadline = submit_undo_deadline(quote)
+    if deadline is None:
+        raise QuoteStateError("Esta cotação já não pode ser retirada da revisão")
+    if quote.submitted_by != actor_id:
+        raise SegregationOfDutiesError("Só quem enviou a cotação pode anular o envio")
+    if timezone_now() > deadline + datetime.timedelta(seconds=SUBMIT_UNDO_GRACE_SECONDS):
+        raise QuoteStateError("O prazo para anular o envio terminou")
+    task = get_active_review_task(quote=quote)
+    if task is None or task.status != ReviewTaskStatus.OPEN.value or task.assigned_to:
+        raise QuoteStateError("Esta revisão já foi atribuída; peça a devolução da cotação ao revisor")
+
+    with transaction.atomic():
+        updated = Quote.objects.filter(id=quote.id, status=QuoteStatus.IN_REVIEW.value, row_version=row_version).update(
+            status=QuoteStatus.READY.value, submitted_by=None, submitted_at=None, row_version=row_version + 1
+        )
+        if updated == 0:
+            raise RowVersionMismatchError(f"A versão desta cotação ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
+        ReviewTask.objects.filter(id=task.id, status=ReviewTaskStatus.OPEN.value).update(
+            status=ReviewTaskStatus.RETURNED.value, decided_at=timezone_now()
+        )
+    quote.refresh_from_db()
+    _record_transition(
+        quote, from_status=QuoteStatus.IN_REVIEW.value, to_status=QuoteStatus.READY.value,
+        reason_code=SUBMIT_UNDONE_REASON, correlation_id=correlation_id,
+    )
+    _audit.record(action="quote.submit_undone", entity_type="Quote", entity_id=str(quote.id))
+    _outbox.append(
+        aggregate_type="Quote", aggregate_id=str(quote.id), event_type="QUOTE.SUBMISSION.UNDONE",
+        correlation_id=correlation_id, payload={"quoteId": str(quote.id), "undoneBy": actor_id},
+    )
+    return quote
+
+
 def get_active_review_task(*, quote: Quote) -> ReviewTask | None:
     return quote.review_tasks.order_by("-created_at").first()
 
@@ -1164,10 +1214,11 @@ def decide_quote(
     # V019 `ck_quote_four_eyes` / V023 `ck_decision_four_eyes` enforce this
     # at the DB level for every decision type, not just APPROVE - checked
     # here first for a clean SEC-403 instead of a raw IntegrityError.
-    if quote.submitted_by and quote.submitted_by == actor_id:
-        raise SegregationOfDutiesError(
-            "Foi você que submeteu esta cotação; pela regra dos quatro olhos, a decisão tem de ser de outra pessoa"
-        )
+    from apps.quote.application.review_service import decision_block_reason
+
+    block_reason = decision_block_reason(quote, actor_id)
+    if block_reason:
+        raise SegregationOfDutiesError(block_reason)
 
     authority_policy = None
     if decision == QuoteDecisionType.APPROVE.value:
@@ -1258,7 +1309,11 @@ def decide_quote(
         action=f"quote.decision.{decision.lower()}",
         entity_type="Quote",
         entity_id=str(quote.id),
-        metadata={"reasonCode": reason_code, "decidedBy": actor_id},
+        metadata={
+            "reasonCode": reason_code,
+            "decidedBy": actor_id,
+            "decidedByCreator": actor_id == quote.created_by,
+        },
     )
     event_type_map = {
         QuoteDecisionType.APPROVE.value: "QUOTE.APPROVED",

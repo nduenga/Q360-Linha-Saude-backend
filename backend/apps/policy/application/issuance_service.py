@@ -22,8 +22,10 @@ import calendar
 import datetime
 import uuid
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils.timezone import now as timezone_now
 
 from apps.business_config.application.resolver import BusinessConfigurationResolver
@@ -40,6 +42,8 @@ from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositor
 from apps.pricing.infrastructure.models import PricingComponent
 from apps.policy.domain.enums import PolicyMemberStatus, PolicyStatus, PolicyType, SignatureMethod
 from apps.policy.domain.errors import (
+    DuplicatePaymentReferenceError,
+    PaymentAmountMismatchError,
     DuplicatePolicyError,
     InvalidStartDateError,
     PolicyStateError,
@@ -50,6 +54,7 @@ from apps.policy.infrastructure.models import Policy, PolicyMember, PolicySignat
 from apps.quote.application.numbering_service import next_continuous_value
 from apps.quote.domain.enums import QuoteMemberStatus, QuoteStatus
 from apps.quote.infrastructure.models import Quote, QuoteSnapshot
+from shared import formatting as fmt
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
@@ -442,6 +447,64 @@ def _not_pending_message(policy: Policy) -> str:
     return f"A apólice {number} está {state}; só se regista o 1.º prémio de uma apólice a aguardar esse pagamento."
 
 
+def payment_reference_key(reference: str | None) -> str | None:
+    """Forma canónica da referência: «rf 12» e «RF  12» são o mesmo pagamento."""
+    normalised = " ".join((reference or "").split()).upper()
+    return normalised or None
+
+
+def payment_reference_owner(reference: str | None) -> PremiumInstallment | None:
+    """Prestação paga que já usa esta referência, incluindo o histórico anterior à chave."""
+    key = payment_reference_key(reference)
+    if key is None:
+        return None
+    return (
+        PremiumInstallment.objects.select_related("policy")
+        .filter(status="PAID")
+        .filter(Q(payment_reference_key=key) | Q(payment_reference__iexact=key))
+        .first()
+    )
+
+
+def _duplicate_reference_error(reference: str | None, owner: PremiumInstallment | None) -> DuplicatePaymentReferenceError:
+    where = f" na prestação {owner.installment_no} da apólice {owner.policy.policy_number}" if owner else ""
+    return DuplicatePaymentReferenceError(f"A referência {reference} já foi registada{where}.")
+
+
+def _require_unused_reference(reference: str | None) -> None:
+    owner = payment_reference_owner(reference)
+    if owner is not None:
+        raise _duplicate_reference_error(reference, owner)
+
+
+def _is_reference_clash(exc: IntegrityError) -> bool:
+    return "uq_premium_installment_payment_reference" in str(exc)
+
+
+def payment_availability(
+    installment: PremiumInstallment, *, today: datetime.date, first_unpaid_no: int | None = None
+) -> tuple[bool, str | None, str | None]:
+    """Pode registar-se o pagamento? Devolve (sim/não, motivo se não, efeito se sim)."""
+    policy = installment.policy
+    status = effective_installment_status(installment, today)
+    if status not in ("DUE", "OVERDUE"):
+        return False, "Esta prestação já não está por pagar.", None
+    if installment.installment_no == 1:
+        if policy.status != PolicyStatus.PENDING_FIRST_PREMIUM.value:
+            return False, _not_pending_message(policy), None
+        if installment.due_date < today:
+            return False, "O prazo da 1.ª prestação terminou; a apólice fica resolvida e o pagamento não a reativa.", None
+        return True, None, f"A apólice {policy.policy_number} passa a Ativa."
+    if policy.status not in (PolicyStatus.ACTIVE.value, PolicyStatus.SUSPENDED.value):
+        state = _POLICY_STATUS_TEXT.get(policy.status, policy.status)
+        return False, f"A apólice {policy.policy_number} está {state}; só se registam pagamentos em apólices ativas ou suspensas.", None
+    if first_unpaid_no is not None and first_unpaid_no < installment.installment_no:
+        return False, f"Registe primeiro o pagamento da prestação {first_unpaid_no}.", None
+    if policy.status == PolicyStatus.SUSPENDED.value:
+        return True, None, "A cobertura volta a valer daqui em diante, se esta prestação regularizar os atrasos."
+    return True, None, "A prestação fica paga; a apólice mantém-se Ativa."
+
+
 def register_first_premium_payment(
     *,
     policy: Policy,
@@ -450,6 +513,7 @@ def register_first_premium_payment(
     payment_method: str | None,
     row_version: int,
     correlation_id: str | None,
+    payment_batch_id: uuid.UUID | None = None,
 ) -> Policy:
     from apps.policy.application.lifecycle_service import resolve_policy_for_overdue_premium
 
@@ -457,6 +521,9 @@ def register_first_premium_payment(
     policy.refresh_from_db()
     if policy.status != PolicyStatus.PENDING_FIRST_PREMIUM.value:
         raise PolicyStateError(_not_pending_message(policy))
+    if paid_at.date() > timezone_now().date():
+        raise InvalidStartDateError("A data de pagamento não pode estar no futuro")
+    _require_unused_reference(payment_reference)
 
     installment = PremiumInstallment.objects.filter(
         policy=policy, installment_no=1, status="DUE", due_date__gte=timezone_now().date()
@@ -476,42 +543,49 @@ def register_first_premium_payment(
     start_date = max(default_start, policy.requested_start_date) if policy.requested_start_date else default_start
     end_date = _add_months(start_date, policy.term_months) - datetime.timedelta(days=1)
 
-    with transaction.atomic():
-        updated = Policy.objects.filter(
-            id=policy.id, status=PolicyStatus.PENDING_FIRST_PREMIUM.value, row_version=row_version
-        ).update(
-            status=PolicyStatus.ACTIVE.value,
-            start_date=start_date,
-            end_date=end_date,
-            row_version=row_version + 1,
-        )
-        if updated == 0:
-            policy.refresh_from_db()
-            if policy.status != PolicyStatus.PENDING_FIRST_PREMIUM.value:
-                raise PolicyStateError(_not_pending_message(policy))
-            raise RowVersionMismatchError(
-                f"A versão da apólice {policy.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
+    try:
+        with transaction.atomic():
+            updated = Policy.objects.filter(
+                id=policy.id, status=PolicyStatus.PENDING_FIRST_PREMIUM.value, row_version=row_version
+            ).update(
+                status=PolicyStatus.ACTIVE.value,
+                start_date=start_date,
+                end_date=end_date,
+                row_version=row_version + 1,
             )
+            if updated == 0:
+                policy.refresh_from_db()
+                if policy.status != PolicyStatus.PENDING_FIRST_PREMIUM.value:
+                    raise PolicyStateError(_not_pending_message(policy))
+                raise RowVersionMismatchError(
+                    f"A versão da apólice {policy.id} ({row_version}) não coincide com a versão atual; recarregue e tente de novo"
+                )
 
-        PremiumInstallment.objects.filter(id=installment.id).update(
-            status="PAID",
-            paid_at=paid_at,
-            payment_reference=payment_reference,
-            payment_method=payment_method,
-            registered_by=actor_id,
-            period_from=start_date,
-            period_to=_period_end_for(start_date, policy.payment_frequency),
-            due_date=start_date,
-        )
-        _create_remaining_installments(policy=policy, start_date=start_date, tenant_id=tenant_id.value)
-
-        for policy_member in PolicyMember.objects.filter(policy_id=policy.id, status=PolicyMemberStatus.ACTIVE.value):
-            waiting_period_ends = _waiting_period_ends(policy=policy, policy_member=policy_member, inclusion_date=start_date)
-            PolicyMember.objects.filter(id=policy_member.id).update(
-                inclusion_date=start_date,
-                waiting_period_ends_json=waiting_period_ends,
-                row_version=policy_member.row_version + 1,
+            PremiumInstallment.objects.filter(id=installment.id).update(
+                status="PAID",
+                paid_at=paid_at,
+                payment_reference=payment_reference,
+                payment_reference_key=payment_reference_key(payment_reference),
+                payment_batch_id=payment_batch_id,
+                payment_method=payment_method,
+                registered_by=actor_id,
+                period_from=start_date,
+                period_to=_period_end_for(start_date, policy.payment_frequency),
+                due_date=start_date,
             )
+            _create_remaining_installments(policy=policy, start_date=start_date, tenant_id=tenant_id.value)
+
+            for policy_member in PolicyMember.objects.filter(policy_id=policy.id, status=PolicyMemberStatus.ACTIVE.value):
+                waiting_period_ends = _waiting_period_ends(policy=policy, policy_member=policy_member, inclusion_date=start_date)
+                PolicyMember.objects.filter(id=policy_member.id).update(
+                    inclusion_date=start_date,
+                    waiting_period_ends_json=waiting_period_ends,
+                    row_version=policy_member.row_version + 1,
+                )
+    except IntegrityError as exc:
+        if _is_reference_clash(exc):
+            raise _duplicate_reference_error(payment_reference, None) from exc
+        raise
 
     policy.refresh_from_db()
     close_source_policy_if_due(policy=policy, moment="ACTIVATION")
@@ -593,6 +667,8 @@ def register_installment_payment(
     payment_reference: str | None,
     payment_method: str | None,
     correlation_id: str | None,
+    payment_batch_id: uuid.UUID | None = None,
+    reference_claimed: bool = False,
 ) -> PremiumInstallment:
     """Regista o pagamento de uma prestação **posterior à 1.ª** de uma apólice em
     vigor. As prestações pagam-se por ordem: a anterior tem de estar paga."""
@@ -623,18 +699,29 @@ def register_installment_payment(
     if unpaid_before is not None:
         raise PolicyStateError(f"Registe primeiro o pagamento da prestação {unpaid_before.installment_no}")
 
+    # `reference_claimed`: a primeira prestação da mesma transferência já ficou com a referência.
+    if not reference_claimed:
+        _require_unused_reference(payment_reference)
+
     actor = CurrentActorProvider.get()
     actor_id = actor.actor_id if actor else "unknown"
-    with transaction.atomic():
-        updated = PremiumInstallment.objects.filter(id=installment.id).exclude(status="PAID").update(
-            status="PAID",
-            paid_at=paid_at,
-            payment_reference=payment_reference,
-            payment_method=payment_method,
-            registered_by=actor_id,
-        )
-        if updated == 0:
-            raise PolicyStateError(f"A prestação {installment_no} da apólice {policy.policy_number} já está paga")
+    try:
+        with transaction.atomic():
+            updated = PremiumInstallment.objects.filter(id=installment.id).exclude(status="PAID").update(
+                status="PAID",
+                paid_at=paid_at,
+                payment_reference=payment_reference,
+                payment_reference_key=None if reference_claimed else payment_reference_key(payment_reference),
+                payment_batch_id=payment_batch_id,
+                payment_method=payment_method,
+                registered_by=actor_id,
+            )
+            if updated == 0:
+                raise PolicyStateError(f"A prestação {installment_no} da apólice {policy.policy_number} já está paga")
+    except IntegrityError as exc:
+        if _is_reference_clash(exc):
+            raise _duplicate_reference_error(payment_reference, None) from exc
+        raise
     installment.refresh_from_db()
     # Se a prestação regulariza todos os atrasos, a cobertura volta a valer
     # apenas daqui em diante; o período de suspensão nunca é retroativo.
@@ -656,3 +743,86 @@ def register_installment_payment(
         payload={"policyId": str(policy.id), "policyNumber": policy.policy_number, "installmentNo": installment_no},
     )
     return installment
+
+
+def payment_options(policy: Policy, *, today: datetime.date | None = None) -> dict[str, Any]:
+    """Conjuntos de prestações que uma transferência pode pagar: sempre seguidas,
+    a começar pela mais antiga por pagar. Numa apólice pendente só a 1.ª existe,
+    mas as seguintes têm o mesmo valor e nascem ao ativar."""
+    today = today or timezone_now().date()
+    open_rows = list(
+        PremiumInstallment.objects.select_related("policy").filter(policy=policy)
+        .exclude(status__in=("PAID", "VOID")).order_by("installment_no")
+    )
+    if not open_rows:
+        return {"blockedReason": "Esta apólice não tem prestações por pagar.", "currencyCode": policy.currency_code, "options": []}
+    can_pay, reason, effect = payment_availability(open_rows[0], today=today)
+    if not can_pay:
+        return {"blockedReason": reason, "currencyCode": policy.currency_code, "options": []}
+    if policy.status == PolicyStatus.PENDING_FIRST_PREMIUM.value:
+        count = _INSTALLMENT_COUNT[policy.payment_frequency]
+        planned = [(number, open_rows[0].amount) for number in range(1, count + 1)]
+    else:
+        planned = [(row.installment_no, row.amount) for row in open_rows]
+    options = []
+    total = Decimal("0")
+    for index, (number, amount) in enumerate(planned, start=1):
+        total += amount
+        options.append({
+            "installmentNos": [no for no, _ in planned[:index]],
+            "count": index,
+            "total": str(_round2(total)),
+        })
+    return {"blockedReason": None, "currencyCode": policy.currency_code, "effect": effect, "options": options}
+
+
+def allocate_payment(
+    *,
+    policy: Policy,
+    installment_nos: list[int],
+    amount: Decimal,
+    paid_at: datetime.datetime,
+    payment_reference: str | None,
+    payment_method: str | None,
+    row_version: int | None,
+    correlation_id: str | None,
+) -> tuple[Policy, list[PremiumInstallment]]:
+    """Uma transferência, uma ou mais prestações: ou ficam todas pagas, ou
+    nenhuma. O valor tem de ser a soma exata das prestações escolhidas."""
+    numbers = sorted(set(installment_nos))
+    options = payment_options(policy)
+    if options["blockedReason"]:
+        raise PolicyStateError(options["blockedReason"])
+    chosen = next((o for o in options["options"] if o["installmentNos"] == numbers), None)
+    if chosen is None:
+        first = options["options"][0]["installmentNos"][0]
+        raise PolicyStateError(f"As prestações têm de ser seguidas, a começar pela prestação {first}.")
+    if _round2(amount) != Decimal(chosen["total"]):
+        raise PaymentAmountMismatchError(
+            f"O valor recebido tem de ser igual à soma das prestações escolhidas ({fmt.money(chosen['total'], options['currencyCode'])})."
+        )
+    if len(numbers) > 1 and payment_reference_key(payment_reference) is None:
+        raise PaymentAmountMismatchError("Indique a referência da transferência que paga estas prestações.")
+    if numbers[0] == 1 and row_version is None:
+        raise PaymentAmountMismatchError("A versão (rowVersion) é obrigatória ao registar a 1.ª prestação.")
+    _require_unused_reference(payment_reference)
+
+    batch_id = uuid.uuid4() if len(numbers) > 1 else None
+    with transaction.atomic():
+        for index, number in enumerate(numbers):
+            if number == 1:
+                policy = register_first_premium_payment(
+                    policy=policy, paid_at=paid_at, payment_reference=payment_reference, payment_method=payment_method,
+                    row_version=row_version, correlation_id=correlation_id, payment_batch_id=batch_id,
+                )
+                continue
+            register_installment_payment(
+                policy=policy, installment_no=number, paid_at=paid_at, payment_reference=payment_reference,
+                payment_method=payment_method, correlation_id=correlation_id, payment_batch_id=batch_id,
+                reference_claimed=index > 0,
+            )
+            policy.refresh_from_db()
+    policy.refresh_from_db()
+    return policy, list(
+        PremiumInstallment.objects.filter(policy=policy, installment_no__in=numbers).order_by("installment_no")
+    )

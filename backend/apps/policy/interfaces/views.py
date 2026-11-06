@@ -258,9 +258,11 @@ class InstallmentListView(APIView):
     """`GET /api/v1/installments` — cobranças: as prestações de todas as
     apólices, para o GTE ver o que está por pagar e registar pagamentos.
 
-    Filtros: `status` (DUE, OVERDUE, PAID), `dueBefore` (AAAA-MM-DD),
-    `policyNumber`, `q` (nome do tomador). Atrasadas = por pagar e com
-    vencimento já passado."""
+    Filtros: `status` (DUE, OVERDUE, PAID), `kind` (FIRST_PREMIUM, só as 1.ªs
+    prestações ainda por receber), `dueBefore` (AAAA-MM-DD), `policyNumber`,
+    `q` (nome do tomador). Atrasadas = por pagar e com vencimento já passado.
+    Cada linha diz se o pagamento pode ser registado, porquê (se não pode) e
+    que efeito terá no contrato."""
 
     permission_classes = [require_scope(Scope.READ)]
 
@@ -268,7 +270,10 @@ class InstallmentListView(APIView):
         import datetime
 
         from apps.client.infrastructure.models import Proposer
-        from apps.policy.application.issuance_service import effective_installment_status
+        from django.db.models import Min
+
+        from apps.policy.application.issuance_service import effective_installment_status, payment_availability
+        from shared.status_labels import status_label
 
         today = datetime.date.today()
         queryset = PremiumInstallment.objects.select_related("policy").exclude(status="VOID").order_by("due_date", "installment_no")
@@ -281,6 +286,11 @@ class InstallmentListView(APIView):
             queryset = queryset.filter(status="PAID")
         elif status_filter:
             raise ValidationError({"status": "O estado tem de ser DUE, OVERDUE ou PAID."})
+        kind = request.query_params.get("kind")
+        if kind == "FIRST_PREMIUM":
+            queryset = queryset.filter(installment_no=1, policy__status="PENDING_FIRST_PREMIUM", status__in=("DUE", "OVERDUE"))
+        elif kind:
+            raise ValidationError({"kind": "O tipo tem de ser FIRST_PREMIUM."})
         due_before = request.query_params.get("dueBefore")
         if due_before:
             try:
@@ -299,9 +309,17 @@ class InstallmentListView(APIView):
         holders = dict(
             Proposer.objects.filter(id__in={i.policy.proposer_id for i in page}).values_list("id", "display_name")
         )
+        first_unpaid = dict(
+            PremiumInstallment.objects.filter(policy_id__in={i.policy_id for i in page})
+            .exclude(status__in=("PAID", "VOID")).values("policy_id")
+            .annotate(first=Min("installment_no")).values_list("policy_id", "first")
+        )
         items = []
         for installment in page:
             effective = effective_installment_status(installment, today)
+            can_pay, blocked_reason, effect = payment_availability(
+                installment, today=today, first_unpaid_no=first_unpaid.get(installment.policy_id)
+            )
             items.append(
                 {
                     **PremiumInstallmentSerializer(installment).data,
@@ -311,11 +329,11 @@ class InstallmentListView(APIView):
                     "policyStatus": installment.policy.status,
                     "holderName": holders.get(installment.policy.proposer_id),
                     "daysOverdue": (today - installment.due_date).days if effective == "OVERDUE" else 0,
-                    "canRegisterPayment": (
-                        effective in ("DUE", "OVERDUE")
-                        and installment.due_date >= today
-                        and installment.policy.status in ("ACTIVE", "PENDING_FIRST_PREMIUM")
-                    ),
+                    "canRegisterPayment": can_pay,
+                    "paymentBlockedReason": None if effective == "PAID" else blocked_reason,
+                    "paymentEffect": effect,
+                    "statusLabel": status_label("installment", effective),
+                    "policyStatusLabel": status_label("policy", installment.policy.status),
                 }
             )
         return paginator.get_paginated_response(items)

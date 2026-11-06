@@ -41,6 +41,18 @@ def _blocking_reason(quote: Quote) -> str | None:
     return None
 
 
+def _acceptance(quote: Quote) -> dict[str, Any] | None:
+    from apps.customer_portal.infrastructure.models import PortalRequest
+
+    request = (
+        PortalRequest.objects.filter(quote_id=quote.id, request_type="ACCEPT_QUOTE").exclude(status="REJECTED")
+        .order_by("-created_at").first()
+    )
+    if request is None:
+        return None
+    return {"requestNumber": request.request_number, "acceptedAt": request.created_at}
+
+
 def _installment_preview(quote: Quote, total: Decimal | None, currency: str) -> dict[str, list[dict[str, str]]]:
     if total is None:
         return {}
@@ -76,6 +88,8 @@ def build_draft(quote: Quote) -> dict[str, Any]:
         ),
         "policyId": str(existing.id) if existing else None,
         "policyNumber": existing.policy_number if existing else None,
+        "approval": {"approvedBy": quote.approved_by, "approvedAt": quote.approved_at},
+        "acceptance": _acceptance(quote),
         "holder": {
             "id": str(proposer.id), "name": proposer.display_name, "type": proposer.proposer_type,
             "document": proposer.nif or proposer.registration_number, "email": proposer.email, "phone": proposer.phone,

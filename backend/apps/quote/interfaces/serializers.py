@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
+from shared.status_labels import status_label
 from apps.client.domain.nif import NifFormatError, validate_agt_nif
 from apps.pricing.domain.money import round_amount
 
@@ -23,6 +24,13 @@ from apps.quote.domain.enums import (
 )
 
 
+def review_task_context(tasks) -> dict:
+    """Nomes dos responsáveis de uma página de revisões, numa só consulta."""
+    from apps.quote.application.review_service import staff_names
+
+    return {"staffNames": staff_names(task.assigned_to for task in tasks)}
+
+
 class QuoteSerializer(serializers.Serializer):
     """DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): `productVersionId`
     dropped — `planId` alone resolves the product via `Plan.productId`."""
@@ -33,6 +41,9 @@ class QuoteSerializer(serializers.Serializer):
     sourceChannel = serializers.CharField(source="source_channel", allow_null=True, allow_blank=True)
     planId = serializers.UUIDField(source="plan_id")
     status = serializers.ChoiceField(choices=[s.value for s in QuoteStatus])
+    # Estado como o utilizador o conhece: acrescenta Devolvida e Aceite aos de `status`.
+    displayStatus = serializers.SerializerMethodField(method_name="get_display_status")
+    statusLabel = serializers.SerializerMethodField(method_name="get_status_label")
     # Sem data de efeito (decisão de 2026-10-15): data de criação e validade.
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
@@ -58,6 +69,14 @@ class QuoteSerializer(serializers.Serializer):
     planName = serializers.SerializerMethodField(method_name="get_plan_name")
     productName = serializers.SerializerMethodField(method_name="get_product_name")
     proposerName = serializers.SerializerMethodField(method_name="get_proposer_name")
+
+    def get_display_status(self, obj) -> str:
+        from apps.quote.application.quote_presentation import display_status
+
+        return display_status(obj)
+
+    def get_status_label(self, obj) -> str | None:
+        return status_label("quote", self.get_display_status(obj))
 
     def get_proposer_name(self, obj) -> str | None:
         proposer = getattr(obj, "proposer", None)
@@ -400,8 +419,33 @@ class ReviewTaskSerializer(serializers.Serializer):
     planName = serializers.CharField(source="quote.plan.name")
     productName = serializers.CharField(source="quote.plan.product.name")
     status = serializers.ChoiceField(choices=[s.value for s in ReviewTaskStatus])
+    statusLabel = serializers.SerializerMethodField(method_name="get_status_label")
     assignedTo = serializers.CharField(source="assigned_to", allow_null=True)
+    assignedToName = serializers.SerializerMethodField(method_name="get_assigned_to_name")
+    validUntil = serializers.DateField(source="quote.valid_until", allow_null=True)
+    canDecide = serializers.SerializerMethodField(method_name="get_can_decide")
+    cannotDecideReason = serializers.SerializerMethodField(method_name="get_cannot_decide_reason")
     createdAt = serializers.DateTimeField(source="created_at")
+    rowVersion = serializers.IntegerField(source="row_version")
+
+    def get_status_label(self, obj) -> str | None:
+        return status_label("reviewTask", obj.status)
+
+    def get_assigned_to_name(self, obj) -> str | None:
+        names = self.context.get("staffNames")
+        if names is None:
+            names = review_task_context([obj])["staffNames"]
+        return names.get(obj.assigned_to)
+
+    def get_cannot_decide_reason(self, obj) -> str | None:
+        from apps.foundation.application.context import CurrentActorProvider
+        from apps.quote.application.review_service import decision_block_reason
+
+        actor = CurrentActorProvider.get()
+        return decision_block_reason(obj.quote, actor.actor_id if actor else None)
+
+    def get_can_decide(self, obj) -> bool:
+        return self.get_cannot_decide_reason(obj) is None
 
     def get_quote_name(self, obj) -> str:
         """Quote has no standalone name; compose a readable queue label."""

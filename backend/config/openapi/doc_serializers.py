@@ -533,6 +533,16 @@ class TariffSimulationResult(s.Serializer):
 
 
 # ------------------------------------------------------------- aprovações
+class PendingApproverRef(s.Serializer):
+    id = s.UUIDField()
+    name = s.CharField()
+
+
+class PendingApprovalImpact(s.Serializer):
+    quotesInProgress = s.IntegerField()
+    policiesToRenew = s.IntegerField()
+
+
 class PendingApprovalItem(s.Serializer):
     configurationId = s.UUIDField()
     configKey = s.CharField()
@@ -550,6 +560,10 @@ class PendingApprovalItem(s.Serializer):
     isNew = s.BooleanField()
     canApprove = s.BooleanField()
     cannotApproveReason = s.CharField(allow_null=True)
+    eligibleApprovers = PendingApproverRef(many=True)
+    noEligibleApprover = s.BooleanField()
+    approverAlert = s.CharField(allow_null=True)
+    impact = PendingApprovalImpact()
 
 
 class PendingApprovals(s.Serializer):
@@ -1577,7 +1591,11 @@ class CollectionInstallment(s.Serializer):
     policyStatus = s.CharField()
     holderName = s.CharField(allow_null=True)
     daysOverdue = s.IntegerField()
-    canRegisterPayment = s.BooleanField(help_text="A apólice está ativa e a prestação por pagar.")
+    canRegisterPayment = s.BooleanField(help_text="O pagamento desta prestação pode ser registado agora.")
+    paymentBlockedReason = s.CharField(allow_null=True, help_text="Porque não pode ser registado.")
+    paymentEffect = s.CharField(allow_null=True, help_text="Efeito do pagamento no contrato.")
+    statusLabel = s.CharField()
+    policyStatusLabel = s.CharField()
 
 
 class PaymentRegistered(s.Serializer):
@@ -1643,15 +1661,26 @@ class MemberDocumentReviewResult(s.Serializer):
     )
 
 
+class GlobalSearchAction(s.Serializer):
+    code = s.CharField()
+    label = s.CharField()
+    href = s.CharField()
+
+
 class GlobalSearchItem(s.Serializer):
     id = s.CharField()
     title = s.CharField()
     subtitle = s.CharField()
     href = s.CharField(help_text="Rota do back-office (ex.: /clientes/{id}, /cotacoes/{id}/resumo).")
+    maskedNif = s.CharField(allow_null=True, help_text="NIF com só os últimos caracteres visíveis.")
+    city = s.CharField(allow_null=True)
+    status = s.CharField(allow_null=True)
+    statusLabel = s.CharField(allow_null=True)
+    actions = GlobalSearchAction(many=True)
 
 
 class GlobalSearchGroup(s.Serializer):
-    kind = s.ChoiceField(choices=["proposer", "quote", "product", "policy"])
+    kind = s.ChoiceField(choices=["proposer", "quote", "product", "policy", "request"])
     label = s.CharField()
     items = GlobalSearchItem(many=True)
 
@@ -1659,3 +1688,260 @@ class GlobalSearchGroup(s.Serializer):
 class GlobalSearchResult(s.Serializer):
     total = s.IntegerField()
     groups = GlobalSearchGroup(many=True, help_text="Só os grupos com resultados.")
+
+
+# ------------------------------------------------------- manual visual v2
+class WorkQueueAction(s.Serializer):
+    code = s.CharField()
+    label = s.CharField()
+    href = s.CharField()
+
+
+class WorkQueueItem(s.Serializer):
+    kind = s.CharField()
+    kindLabel = s.CharField()
+    reference = s.CharField(allow_null=True)
+    entityId = s.CharField()
+    client = s.CharField(allow_null=True)
+    status = s.CharField(allow_null=True)
+    statusLabel = s.CharField(allow_null=True)
+    dueDate = s.DateField(allow_null=True)
+    assignedTo = s.CharField(allow_null=True)
+    assignedToName = s.CharField(allow_null=True)
+    detail = s.CharField(allow_null=True)
+    action = WorkQueueAction()
+
+
+class WorkQueueCount(s.Serializer):
+    kind = s.CharField()
+    label = s.CharField()
+    count = s.IntegerField()
+
+
+class WorkQueue(s.Serializer):
+    total = s.IntegerField()
+    dueToday = s.IntegerField()
+    counts = WorkQueueCount(many=True)
+    items = WorkQueueItem(many=True, help_text="Até 50 tarefas por tipo; `counts` tem sempre o total real.")
+
+
+class StatusEntry(s.Serializer):
+    status = s.CharField()
+    label = s.CharField()
+
+
+class StatusDictionary(s.Serializer):
+    quote = StatusEntry(many=True)
+    policy = StatusEntry(many=True)
+    installment = StatusEntry(many=True)
+    portalRequest = StatusEntry(many=True)
+    configuration = StatusEntry(many=True)
+    reviewTask = StatusEntry(many=True)
+    questionnaire = StatusEntry(many=True)
+
+
+class QuestionnaireProgress(s.Serializer):
+    answered = s.IntegerField()
+    required = s.IntegerField()
+
+
+class QuestionnaireSummary(s.Serializer):
+    questionnaireId = s.UUIDField(allow_null=True)
+    quoteId = s.UUIDField()
+    memberId = s.UUIDField()
+    memberName = s.CharField()
+    status = s.ChoiceField(choices=["NOT_STARTED", "IN_PROGRESS", "COMPLETED"])
+    statusLabel = s.CharField()
+    progress = QuestionnaireProgress()
+    currentSection = s.CharField(allow_null=True)
+    hasDeclarations = s.BooleanField()
+    requestedFromCustomerAt = s.DateTimeField(allow_null=True)
+    updatedAt = s.DateTimeField(allow_null=True)
+    updatedChannel = s.CharField(allow_null=True)
+    completedAt = s.DateTimeField(allow_null=True)
+    rowVersion = s.IntegerField(allow_null=True)
+
+
+class QuestionnaireList(s.Serializer):
+    items = QuestionnaireSummary(many=True)
+
+
+class QuestionnaireAnswers(QuestionnaireSummary):
+    answers = s.JSONField()
+
+
+class QuestionnaireDetail(QuestionnaireAnswers):
+    schema = s.JSONField(help_text="Secções e perguntas, com a versão do questionário.")
+
+
+class PortalQuestionnaireItem(s.Serializer):
+    quoteNumber = s.CharField()
+    memberId = s.UUIDField()
+    memberName = s.CharField()
+    progress = QuestionnaireProgress()
+    requestedAt = s.DateTimeField()
+
+
+class PortalQuestionnaireList(s.Serializer):
+    items = PortalQuestionnaireItem(many=True)
+
+
+class PersonRef(s.Serializer):
+    id = s.UUIDField()
+    name = s.CharField()
+
+
+class EligibleReviewers(s.Serializer):
+    eligibleReviewers = PersonRef(many=True)
+    noEligibleReviewer = s.BooleanField()
+    alert = s.CharField(allow_null=True)
+
+
+class BatchFailure(s.Serializer):
+    taskId = s.CharField()
+    reason = s.CharField()
+
+
+class ReviewBatchAssignment(s.Serializer):
+    assigned = s.JSONField(help_text="Revisões atribuídas (ReviewTask).")
+    failed = BatchFailure(many=True)
+
+
+class ReadinessCheck(s.Serializer):
+    code = s.CharField()
+    label = s.CharField()
+    passed = s.BooleanField()
+    blocking = s.BooleanField()
+    detail = s.CharField(allow_null=True)
+
+
+class Readiness(s.Serializer):
+    ready = s.BooleanField()
+    checks = ReadinessCheck(many=True)
+
+
+class WorkspaceMember(s.Serializer):
+    memberId = s.UUIDField()
+    name = s.CharField(allow_null=True)
+    relationshipCode = s.CharField()
+    dateOfBirth = s.DateField(allow_null=True)
+    status = s.CharField()
+    eligibilityDecision = s.CharField(allow_null=True)
+
+
+class QuoteWorkspace(s.Serializer):
+    quoteId = s.UUIDField()
+    quoteNumber = s.CharField(allow_null=True)
+    status = s.CharField()
+    statusLabel = s.CharField()
+    rowVersion = s.IntegerField()
+    savedAt = s.DateTimeField()
+    selection = s.JSONField()
+    members = WorkspaceMember(many=True)
+    premium = s.JSONField(allow_null=True, help_text="Cálculo completo, com a decomposição do prémio.")
+    pricingError = s.CharField(allow_null=True, help_text="Motivo da falha; as alterações ficaram guardadas.")
+    requirements = s.JSONField()
+    readiness = Readiness()
+
+
+class RenewalDueRow(s.Serializer):
+    policyId = s.UUIDField()
+    policyNumber = s.CharField(allow_null=True)
+    holderName = s.CharField()
+    endDate = s.DateField()
+    daysToEnd = s.IntegerField()
+    activeMembers = s.IntegerField()
+    lossRatioPct = s.CharField(allow_null=True)
+    currencyCode = s.CharField()
+    currentPremium = s.CharField(allow_null=True)
+    proposedPremium = s.CharField(allow_null=True)
+    changePct = s.CharField(allow_null=True)
+    renewalQuoteId = s.UUIDField(allow_null=True)
+    renewalQuoteStatus = s.CharField(allow_null=True)
+
+
+class RenewalBatchCreated(s.Serializer):
+    policyId = s.UUIDField()
+    policyNumber = s.CharField(allow_null=True)
+    quoteId = s.UUIDField()
+    quoteNumber = s.CharField(allow_null=True)
+    status = s.CharField()
+
+
+class RenewalBatchFailed(s.Serializer):
+    policyId = s.UUIDField()
+    policyNumber = s.CharField(allow_null=True)
+    reason = s.CharField()
+
+
+class RenewalBatchResult(s.Serializer):
+    created = RenewalBatchCreated(many=True)
+    failed = RenewalBatchFailed(many=True)
+
+
+class ReconciliationLine(s.Serializer):
+    line = s.IntegerField()
+    reference = s.CharField(allow_null=True)
+    description = s.CharField(allow_null=True)
+    amount = s.CharField(allow_null=True)
+    paidOn = s.DateField(allow_null=True)
+    policyId = s.UUIDField(allow_null=True)
+    policyNumber = s.CharField(allow_null=True)
+    installmentNos = s.ListField(child=s.IntegerField())
+    expectedAmount = s.CharField(allow_null=True)
+    rowVersion = s.IntegerField(allow_null=True)
+    status = s.ChoiceField(choices=["MATCHED", "MATCHED_MULTIPLE", "ALREADY_REGISTERED", "DUPLICATE_IN_FILE", "NO_POLICY", "AMOUNT_MISMATCH", "BLOCKED", "INVALID"])
+    message = s.CharField()
+
+
+class ReconciliationPreview(s.Serializer):
+    totalLines = s.IntegerField()
+    matchedLines = s.IntegerField()
+    matchedAmount = s.CharField()
+    counts = s.JSONField()
+    lines = ReconciliationLine(many=True)
+
+
+class ReconciliationRegistered(s.Serializer):
+    line = s.IntegerField()
+    reference = s.CharField()
+    policyNumber = s.CharField()
+    installmentNos = s.ListField(child=s.IntegerField())
+
+
+class ReconciliationFailed(s.Serializer):
+    line = s.IntegerField()
+    reference = s.CharField()
+    reason = s.CharField()
+
+
+class ReconciliationResult(s.Serializer):
+    registered = ReconciliationRegistered(many=True)
+    failed = ReconciliationFailed(many=True)
+
+
+class InclusionPreview(s.Serializer):
+    inclusionDate = s.DateField()
+    calculated = s.BooleanField()
+    calculation = s.JSONField(allow_null=True, help_text="Pro rata, prestações e pessoas; igual ao cálculo do endosso.")
+
+
+class BankStatementUploadRequest(s.Serializer):
+    file = s.FileField(help_text="Extrato em .xlsx ou .csv, até 5 MB.")
+
+
+class PaymentOption(s.Serializer):
+    installmentNos = s.ListField(child=s.IntegerField())
+    count = s.IntegerField()
+    total = Money()
+
+
+class PaymentOptions(s.Serializer):
+    blockedReason = s.CharField(allow_null=True)
+    currencyCode = s.CharField(allow_null=True)
+    effect = s.CharField(required=False, allow_null=True, help_text="Efeito do pagamento no contrato.")
+    options = PaymentOption(many=True)
+
+
+class PaymentAllocationResult(s.Serializer):
+    installments = s.JSONField(help_text="As prestações pagas por esta transferência.")

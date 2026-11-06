@@ -172,6 +172,56 @@ def assert_member_can_join(quote: Quote, member: InsuredMember) -> None:
         raise EndorsementError(f"A pessoa {member.id} já está na apólice; o endosso é só para pessoas novas")
 
 
+class _DiscardPreview(Exception):
+    """Desfaz a transação da prévia depois de calculado o resultado."""
+
+
+def _require_new_person(policy: Policy, dependent: dict[str, Any]) -> None:
+    """Uma pessoa já registada no tomador inclui-se pelo registo existente."""
+    name_matches = InsuredMember.objects.filter(
+        proposer_id=policy.proposer_id, first_name__iexact=dependent["firstName"].strip(),
+        date_of_birth=dependent["dateOfBirth"],
+    )
+    last_name = (dependent.get("lastName") or "").strip()
+    if any((m.last_name or "").strip().casefold() == last_name.casefold() for m in name_matches):
+        raise EndorsementError("Já existe uma pessoa registada com este nome e data de nascimento; use esse registo.")
+
+
+def preview_inclusion(
+    *, policy_id, inclusion_date: datetime.date, member_ids: list | None = None,
+    holder_member_id=None, dependent: dict[str, Any] | None = None, correlation_id: str | None = None,
+) -> dict[str, Any]:
+    """Pro rata e verificações de uma inclusão, sem gravar nada: percorre o
+    fluxo real numa transação que é sempre desfeita, para a prévia nunca
+    divergir do que a confirmação vai calcular."""
+    result: dict[str, Any] = {}
+    try:
+        with transaction.atomic():
+            if dependent is not None:
+                quote, _, _ = create_dependent_inclusion(
+                    policy_id=policy_id, holder_member_id=holder_member_id, inclusion_date=inclusion_date,
+                    dependent=dependent, correlation_id=correlation_id,
+                )
+            else:
+                quote = create_inclusion(
+                    policy_id=policy_id, inclusion_date=inclusion_date, member_ids=member_ids or [],
+                    correlation_id=correlation_id,
+                )
+            quote.refresh_from_db()
+            result.update(
+                inclusionDate=inclusion_date.isoformat(),
+                calculated=quote.latest_pricing_run_id is not None,
+                calculation=calculate(quote) if quote.latest_pricing_run_id else None,
+            )
+            raise _DiscardPreview
+    except _DiscardPreview:
+        pass
+    if result["calculation"] is not None:
+        result["calculation"].pop("quoteId", None)
+        result["calculation"].pop("pricingRunId", None)
+    return result
+
+
 # ------------------------------------------------------------------ criação
 def create_coverage_change(
     *, policy_id, effective_date: datetime.date, correlation_id: str | None,
@@ -292,6 +342,8 @@ def create_dependent_inclusion(
         policy=policy, member=holder, status=PolicyMemberStatus.ACTIVE.value, exclusion_date__isnull=True
     ).exists():
         raise EndorsementError("O titular indicado não está ativo nesta apólice.")
+
+    _require_new_person(policy, dependent)
 
     with transaction.atomic():
         household = FamilyHousehold.objects.filter(primary_member=holder, status="ACTIVE").first()

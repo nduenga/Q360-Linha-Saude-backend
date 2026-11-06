@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from django.db import transaction
 from django.db.models import Exists, OuterRef, Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.parsers import MultiPartParser
 from rest_framework.exceptions import ValidationError
@@ -359,6 +360,21 @@ class MemberImportDetailView(APIView):
     def get(self, request, import_id):
         import_job = get_object_or_404(ImportJob, id=import_id)
         return Response(ImportJobSerializer(import_job).data)
+
+
+class MemberImportErrorReportView(APIView):
+    """`GET /member-imports/{id}/error-report` — erros e duplicados em Excel."""
+
+    permission_classes = [require_scope(Scope.READ)]
+
+    def get(self, request, import_id):
+        import_job = get_object_or_404(ImportJob, id=import_id)
+        response = HttpResponse(
+            import_service.error_report(import_job),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = f'attachment; filename="erros-importacao-{import_job.id}.xlsx"'
+        return response
 
 
 @requires_idempotency

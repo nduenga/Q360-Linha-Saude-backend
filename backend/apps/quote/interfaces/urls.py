@@ -56,6 +56,20 @@ from apps.quote.interfaces.views import (
     ScenarioSelectView,
 )
 
+from apps.quote.interfaces.workflow_views import (
+    QuoteMemberQuestionnaireCompleteView,
+    QuoteMemberQuestionnaireRequestView,
+    QuoteMemberQuestionnaireView,
+    QuoteQuestionnaireListView,
+    QuoteRenewalBatchView,
+    QuoteSubmitUndoView,
+    QuoteWorkspaceView,
+    RenewalDueListView,
+    ReviewAssignmentView,
+    ReviewBatchAssignmentView,
+    ReviewEligibleReviewersView,
+)
+
 urlpatterns = [
     path("corporate-quotations", CorporateQuotationOnboardingView.as_view(), name="corporate-quotation-onboarding"),
     path("quotes", QuoteListCreateView.as_view(), name="quote-list-create"),
@@ -75,6 +89,29 @@ urlpatterns = [
         name="configuration-impact-simulation",
     ),
     path("quotes/renewals", QuoteRenewalCreateView.as_view(), name="quote-renewal-create"),
+    path("quotes/renewals/batch", QuoteRenewalBatchView.as_view(), name="quote-renewal-batch"),
+    path("renewals/due", RenewalDueListView.as_view(), name="renewal-due-list"),
+    path("quotes/<uuid:quote_id>/workspace", QuoteWorkspaceView.as_view(), name="quote-workspace"),
+    path("quotes/<uuid:quote_id>/questionnaires", QuoteQuestionnaireListView.as_view(), name="quote-questionnaires"),
+    path(
+        "quotes/<uuid:quote_id>/members/<uuid:member_id>/questionnaire",
+        QuoteMemberQuestionnaireView.as_view(),
+        name="quote-member-questionnaire",
+    ),
+    path(
+        "quotes/<uuid:quote_id>/members/<uuid:member_id>/questionnaire/complete",
+        QuoteMemberQuestionnaireCompleteView.as_view(),
+        name="quote-member-questionnaire-complete",
+    ),
+    path(
+        "quotes/<uuid:quote_id>/members/<uuid:member_id>/questionnaire/customer-request",
+        QuoteMemberQuestionnaireRequestView.as_view(),
+        name="quote-member-questionnaire-request",
+    ),
+    path("quotes/<uuid:quote_id>/submit/undo", QuoteSubmitUndoView.as_view(), name="quote-submit-undo"),
+    path("reviews/assignments", ReviewBatchAssignmentView.as_view(), name="review-batch-assignment"),
+    path("reviews/<uuid:task_id>/assignment", ReviewAssignmentView.as_view(), name="review-assignment"),
+    path("reviews/<uuid:task_id>/eligible-reviewers", ReviewEligibleReviewersView.as_view(), name="review-eligible-reviewers"),
     path("quotes/<uuid:quote_id>/clone", QuoteCloneView.as_view(), name="quote-clone"),
     path("quotes/<uuid:quote_id>/reopen", QuoteReopenView.as_view(), name="quote-reopen"),
     path("quotes/<uuid:quote_id>/versions", QuoteVersionListCreateView.as_view(), name="quote-versions"),

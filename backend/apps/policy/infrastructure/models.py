@@ -155,6 +155,10 @@ class PremiumInstallment(TenantScopedModel):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="DUE")
     paid_at = models.DateTimeField(null=True, blank=True)
     payment_reference = models.CharField(max_length=200, null=True, blank=True)
+    # Referência normalizada: a base de dados recusa a mesma referência paga duas vezes.
+    # Numa transferência que paga várias prestações, só a primeira leva a chave.
+    payment_reference_key = models.CharField(max_length=200, null=True, blank=True)
+    payment_batch_id = models.UUIDField(null=True, blank=True)
     payment_method = models.CharField(max_length=50, null=True, blank=True)
     registered_by = models.CharField(max_length=200, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

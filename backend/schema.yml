@@ -4519,6 +4519,181 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/customer-portal/me/quotes/{quote_number}/members/{member_id}/questionnaire:
+    get:
+      operationId: getCustomerPortalQuestionnaire
+      summary: Obter customer portal questionnaire
+      parameters:
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: quote_number
+        schema:
+          type: string
+        required: true
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireDetail'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    put:
+      operationId: putCustomerPortalQuestionnaire
+      summary: Substituir customer portal questionnaire
+      parameters:
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: quote_number
+        schema:
+          type: string
+        required: true
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionnaireSaveRequest'
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireAnswers'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/customer-portal/me/quotes/{quote_number}/members/{member_id}/questionnaire/complete:
+    post:
+      operationId: postCustomerPortalQuestionnaireComplete
+      summary: Criar customer portal questionnaire complete
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: quote_number
+        schema:
+          type: string
+        required: true
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionnaireCompleteRequest'
+        required: true
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireAnswers'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/customer-portal/members/{member_id}/documents:
     get:
       operationId: getCustomerPortalMemberDocuments
@@ -5265,6 +5440,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PortalProfile'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/customer-portal/questionnaires:
+    get:
+      operationId: getCustomerPortalQuestionnaireList
+      summary: Listar customer portal questionnaire list
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalQuestionnaireList'
           description: Sucesso.
         '401':
           content:
@@ -7335,11 +7537,15 @@ paths:
         apólices, para o GTE ver o que está por pagar e registar pagamentos.
 
 
-        Filtros: `status` (DUE, OVERDUE, PAID), `dueBefore` (AAAA-MM-DD),
+        Filtros: `status` (DUE, OVERDUE, PAID), `kind` (FIRST_PREMIUM, só as 1.ªs
 
-        `policyNumber`, `q` (nome do tomador). Atrasadas = por pagar e com
+        prestações ainda por receber), `dueBefore` (AAAA-MM-DD), `policyNumber`,
 
-        vencimento já passado.
+        `q` (nome do tomador). Atrasadas = por pagar e com vencimento já passado.
+
+        Cada linha diz se o pagamento pode ser registado, porquê (se não pode) e
+
+        que efeito terá no contrato.
 
 
         Requer: scope q360.read.
@@ -7353,6 +7559,11 @@ paths:
         schema:
           type: string
         description: 'AAAA-MM-DD: vencimento até esta data.'
+      - in: query
+        name: kind
+        schema:
+          type: string
+        description: 'FIRST_PREMIUM: só as 1.ªs prestações por receber.'
       - in: query
         name: page
         schema:
@@ -7775,6 +7986,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/member-imports/{import_id}/error-report:
+    get:
+      operationId: getMemberImportErrorReport
+      description: '`GET /member-imports/{id}/error-report` — erros e duplicados em Excel.
+
+
+        Requer: scope q360.read.'
+      summary: Obter member import error report
+      parameters:
+      - in: path
+        name: import_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Identity
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/members:
     get:
       operationId: getMemberListCreate
@@ -8158,6 +8415,122 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/payment-reconciliations/commit:
+    post:
+      operationId: postBankStatementCommit
+      description: '`POST /payment-reconciliations/commit` — regista as linhas confirmadas.
+
+
+        Requer: scope q360.approve, permissão quote:approve.'
+      summary: Criar bank statement commit
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReconciliationCommitRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReconciliationResult'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/payment-reconciliations/preview:
+    post:
+      operationId: postBankStatementPreview
+      description: '`POST /payment-reconciliations/preview` — lê o extrato e classifica cada linha; nada é gravado.
+
+
+        Requer: scope q360.approve, permissão quote:approve.
+
+
+        Colunas Data, Valor, Referência e, opcionalmente, Descrição. Nada é gravado.'
+      summary: Criar bank statement preview
+      tags:
+      - Other
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BankStatementUploadRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReconciliationPreview'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+        '422':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Configuração/cálculo impossível (PRICING-CONFIG, PRICING-FAILED).
   /api/v1/people:
     get:
       operationId: getPersonList
@@ -11327,6 +11700,80 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/policies/{policy_id}/endorsements/inclusions/preview:
+    post:
+      operationId: postPolicyInclusionPreview
+      description: '`POST /policies/{id}/endorsements/inclusions/preview` — pro rata e
+
+        duplicados antes de confirmar; nada é gravado.
+
+
+        Requer: scope q360.write, permissão quote:create.
+
+
+        Nada é gravado.'
+      summary: Criar policy inclusion preview
+      parameters:
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InclusionPreviewRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InclusionPreview'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+        '422':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Configuração/cálculo impossível (PRICING-CONFIG, PRICING-FAILED).
   /api/v1/policies/{policy_id}/installments:
     get:
       operationId: getPolicyInstallmentList
@@ -11742,6 +12189,127 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PolicyMember'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/policies/{policy_id}/payment-options:
+    get:
+      operationId: getPolicyPaymentOptions
+      description: '`GET /policies/{id}/payment-options` — que prestações uma transferência
+
+        pode pagar: conjuntos seguidos, com o total de cada um.
+
+
+        Requer: scope q360.read.'
+      summary: Obter policy payment options
+      parameters:
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentOptions'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/policies/{policy_id}/payments:
+    post:
+      operationId: postPolicyPaymentAllocation
+      description: '`POST /policies/{id}/payments` — regista uma transferência numa ou mais
+
+        prestações seguidas; ou ficam todas pagas, ou nenhuma.
+
+
+        Requer: scope q360.approve, permissão quote:approve.
+
+
+        Devolve a apólice atualizada e as prestações pagas.'
+      summary: Criar policy payment allocation
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: policy_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Policies
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentAllocationRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentAllocationResult'
           description: Sucesso.
         '400':
           content:
@@ -15620,6 +16188,272 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/quotes/{quote_id}/members/{member_id}/questionnaire:
+    get:
+      operationId: getQuoteMemberQuestionnaire
+      description: '`GET`/`PUT /quotes/{id}/members/{memberId}/questionnaire` — lê ou guarda o
+
+        progresso. As respostas são dados de saúde: só perfis que revêem cotações.
+
+
+        Requer: scope q360.read, permissão quote:review.
+
+
+        Dados de saúde: cada consulta fica auditada.'
+      summary: Obter quote member questionnaire
+      parameters:
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireDetail'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    put:
+      operationId: putQuoteMemberQuestionnaire
+      description: '`GET`/`PUT /quotes/{id}/members/{memberId}/questionnaire` — lê ou guarda o
+
+        progresso. As respostas são dados de saúde: só perfis que revêem cotações.
+
+
+        Requer: scope q360.write, permissão quote:review.'
+      summary: Substituir quote member questionnaire
+      parameters:
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionnaireSaveRequest'
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireAnswers'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/quotes/{quote_id}/members/{member_id}/questionnaire/complete:
+    post:
+      operationId: postQuoteMemberQuestionnaireComplete
+      description: 'Requer: scope q360.write, permissão quote:review.'
+      summary: Criar quote member questionnaire complete
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionnaireCompleteRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireAnswers'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/quotes/{quote_id}/members/{member_id}/questionnaire/customer-request:
+    post:
+      operationId: postQuoteMemberQuestionnaireRequest
+      description: '`POST .../questionnaire/customer-request` — pede o preenchimento ao cliente no Portal.
+
+
+        Requer: scope q360.write, permissão quote:edit.'
+      summary: Criar quote member questionnaire request
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: member_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireSummary'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/quotes/{quote_id}/policy:
     post:
       operationId: postIssuePolicy
@@ -16262,6 +17096,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Configuração/cálculo impossível (PRICING-CONFIG, PRICING-FAILED).
+  /api/v1/quotes/{quote_id}/questionnaires:
+    get:
+      operationId: getQuoteQuestionnaireList
+      description: '`GET /quotes/{id}/questionnaires` — estado do questionário de cada pessoa,
+
+        sem as respostas.
+
+
+        Requer: scope q360.read.'
+      summary: Listar quote questionnaire list
+      parameters:
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionnaireList'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/quotes/{quote_id}/renewal/indexation:
     post:
       operationId: postQuoteIndexation
@@ -16940,6 +17821,75 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/quotes/{quote_id}/submit/undo:
+    post:
+      operationId: postQuoteSubmitUndo
+      description: '`POST /quotes/{id}/submit/undo` — o «Anular» do aviso depois de enviar.
+
+
+        Requer: scope q360.write, permissão quote:submit.'
+      summary: Criar quote submit undo
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteSubmitUndoRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/quotes/{quote_id}/versions:
     get:
       operationId: getQuoteVersionListCreate
@@ -17238,6 +18188,124 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/quotes/{quote_id}/workspace:
+    get:
+      operationId: getQuoteWorkspace
+      description: '`GET`/`PUT /quotes/{id}/workspace` — a cotação numa só página. O `PUT` é a
+
+        gravação automática: guarda pessoas e opções, verifica a elegibilidade e
+
+        recalcula; uma falha de cálculo vem em `pricingError` e nada se perde.
+
+
+        Requer: scope q360.read.'
+      summary: Obter quote workspace
+      parameters:
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteWorkspace'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    put:
+      operationId: putQuoteWorkspace
+      description: '`GET`/`PUT /quotes/{id}/workspace` — a cotação numa só página. O `PUT` é a
+
+        gravação automática: guarda pessoas e opções, verifica a elegibilidade e
+
+        recalcula; uma falha de cálculo vem em `pricingError` e nada se perde.
+
+
+        Requer: scope q360.write, permissão quote:edit, permissão quote:calculate.
+
+
+        Gravação automática da cotação numa só página.'
+      summary: Substituir quote workspace
+      parameters:
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteWorkspaceRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteWorkspace'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/quotes/renewals:
     post:
       operationId: postQuoteRenewalCreate
@@ -17277,6 +18345,63 @@ paths:
               schema:
                 $ref: '#/components/schemas/Quote'
           description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/quotes/renewals/batch:
+    post:
+      operationId: postQuoteRenewalBatch
+      description: '`POST /quotes/renewals/batch` — cria os rascunhos; cada apólice é independente.
+
+
+        Requer: scope q360.write, permissão quote:create.'
+      summary: Criar quote renewal batch
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Quotes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenewalBatchRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenewalBatchResult'
+          description: Sucesso.
         '400':
           content:
             application/problem+json:
@@ -17711,6 +18836,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/renewals/due:
+    get:
+      operationId: getRenewalDueList
+      description: '`GET /renewals/due?days=30` — apólices a vencer, com sinistralidade e prémio proposto.
+
+
+        Requer: scope q360.read.'
+      summary: Listar renewal due list
+      parameters:
+      - in: query
+        name: days
+        schema:
+          type: integer
+        description: Horizonte em dias, de 1 a 365 (por omissão 30).
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Página (começa em 0).
+      - in: query
+        name: size
+        schema:
+          type: integer
+        description: Itens por página (máx. 200).
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenewalDueRow'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/reports/{report}/pdf:
     get:
       operationId: getReportPdf
@@ -18006,6 +19185,11 @@ paths:
       summary: Listar review queue
       parameters:
       - in: query
+        name: assignment
+        schema:
+          type: string
+        description: Filtro.
+      - in: query
         name: page
         schema:
           type: integer
@@ -18050,6 +19234,173 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/reviews/{task_id}/assignment:
+    post:
+      operationId: postReviewAssignment
+      description: '`POST /reviews/{id}/assignment` — sem `assigneeId`, atribui a quem pede.
+
+
+        Requer: scope q360.approve, permissão quote:review.'
+      summary: Criar review assignment
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Underwriting
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewAssignRequest'
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewTask'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/reviews/{task_id}/eligible-reviewers:
+    get:
+      operationId: getReviewEligibleReviewers
+      description: 'Requer: scope q360.approve, permissão quote:review.'
+      summary: Obter review eligible reviewers
+      parameters:
+      - in: path
+        name: task_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Underwriting
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EligibleReviewers'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/reviews/assignments:
+    post:
+      operationId: postReviewBatchAssignment
+      description: '`POST /reviews/assignments` — atribuição em lote; cada tarefa é independente.
+
+
+        Requer: scope q360.approve, permissão quote:review.'
+      summary: Criar review batch assignment
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Underwriting
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewAssignBatchRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewBatchAssignment'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/rule-versions:
     get:
       operationId: getRuleVersionCreate
@@ -18751,6 +20102,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/status-dictionary:
+    get:
+      operationId: getStatusDictionary
+      description: '`GET /status-dictionary` — o nome de cada estado, por entidade e pela ordem do ciclo.
+
+
+        Requer: scope q360.read.'
+      summary: Obter status dictionary
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusDictionary'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/system-parameters:
     get:
       operationId: getSystemParameterList
@@ -19147,6 +20530,55 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/work-queue:
+    get:
+      operationId: getWorkQueue
+      description: '`GET /work-queue` — a fila «Por tratar». Filtros: `kind` e `assignment` (mine, unassigned).
+
+
+        Requer: scope q360.read.'
+      summary: Obter work queue
+      parameters:
+      - in: query
+        name: assignment
+        schema:
+          type: string
+        description: 'Revisões: mine ou unassigned.'
+      - in: query
+        name: kind
+        schema:
+          type: string
+        description: Só um tipo de tarefa.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkQueue'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
 components:
   schemas:
     AccountTypeEnum:
@@ -19471,6 +20903,25 @@ components:
       required:
       - items
       - page
+    BankStatementUploadRequest:
+      type: object
+      properties:
+        file:
+          type: string
+          format: uri
+          description: Extrato em .xlsx ou .csv, até 5 MB.
+      required:
+      - file
+    BatchFailure:
+      type: object
+      properties:
+        taskId:
+          type: string
+        reason:
+          type: string
+      required:
+      - reason
+      - taskId
     Benefit:
       type: object
       description: 'Biblioteca de coberturas (PDF "Coberturas e Capitais") — ver
@@ -20315,7 +21766,21 @@ components:
           type: integer
         canRegisterPayment:
           type: boolean
-          description: A apólice está ativa e a prestação por pagar.
+          description: O pagamento desta prestação pode ser registado agora.
+        paymentBlockedReason:
+          type:
+          - string
+          - 'null'
+          description: Porque não pode ser registado.
+        paymentEffect:
+          type:
+          - string
+          - 'null'
+          description: Efeito do pagamento no contrato.
+        statusLabel:
+          type: string
+        policyStatusLabel:
+          type: string
       required:
       - amount
       - canRegisterPayment
@@ -20326,6 +21791,8 @@ components:
       - id
       - installmentNo
       - paidAt
+      - paymentBlockedReason
+      - paymentEffect
       - paymentMethod
       - paymentReference
       - periodFrom
@@ -20333,7 +21800,9 @@ components:
       - policyId
       - policyNumber
       - policyStatus
+      - policyStatusLabel
       - status
+      - statusLabel
     CollectionInstallmentStatusEnum:
       enum:
       - DUE
@@ -21600,6 +23069,23 @@ components:
       - evaluationId
       - messages
       - ruleVersionId
+    EligibleReviewers:
+      type: object
+      properties:
+        eligibleReviewers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonRef'
+        noEligibleReviewer:
+          type: boolean
+        alert:
+          type:
+          - string
+          - 'null'
+      required:
+      - alert
+      - eligibleReviewers
+      - noEligibleReviewer
     EmitPayment:
       type: object
       properties:
@@ -22404,6 +23890,19 @@ components:
           type: string
       required:
       - temporaryPassword
+    GlobalSearchAction:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        href:
+          type: string
+      required:
+      - code
+      - href
+      - label
     GlobalSearchGroup:
       type: object
       properties:
@@ -22425,6 +23924,7 @@ components:
       - quote
       - product
       - policy
+      - request
       type: string
       description: '* `proposer` - proposer
 
@@ -22432,7 +23932,9 @@ components:
 
         * `product` - product
 
-        * `policy` - policy'
+        * `policy` - policy
+
+        * `request` - request'
     GlobalSearchItem:
       type: object
       properties:
@@ -22445,9 +23947,35 @@ components:
         href:
           type: string
           description: 'Rota do back-office (ex.: /clientes/{id}, /cotacoes/{id}/resumo).'
+        maskedNif:
+          type:
+          - string
+          - 'null'
+          description: NIF com só os últimos caracteres visíveis.
+        city:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+        statusLabel:
+          type:
+          - string
+          - 'null'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlobalSearchAction'
       required:
+      - actions
+      - city
       - href
       - id
+      - maskedNif
+      - status
+      - statusLabel
       - subtitle
       - title
     GlobalSearchResult:
@@ -22848,14 +24376,29 @@ components:
           type: integer
         invalidRows:
           type: integer
+        duplicateRows:
+          type: integer
+          readOnly: true
+        errorRows:
+          type: integer
+          readOnly: true
+        rowProblems:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
         createdAt:
           type: string
           format: date-time
       required:
       - createdAt
+      - duplicateRows
+      - errorRows
       - id
       - invalidRows
       - proposerId
+      - rowProblems
       - status
       - totalRows
       - validRows
@@ -22900,6 +24443,45 @@ components:
       description: '* `INCLUDED` - INCLUDED
 
         * `OPTIONAL` - OPTIONAL'
+    InclusionPreview:
+      type: object
+      properties:
+        inclusionDate:
+          type: string
+          format: date
+        calculated:
+          type: boolean
+        calculation:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Pro rata, prestações e pessoas; igual ao cálculo do endosso.
+      required:
+      - calculated
+      - calculation
+      - inclusionDate
+    InclusionPreviewRequest:
+      type: object
+      properties:
+        inclusionDate:
+          type: string
+          format: date
+        memberIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        holderMemberId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        dependent:
+          oneOf:
+          - $ref: '#/components/schemas/_Dependent'
+          - type: 'null'
+      required:
+      - inclusionDate
     IndexationRequest:
       type: object
       properties:
@@ -23822,6 +25404,49 @@ components:
           $ref: '#/components/schemas/TenantProfile'
         status:
           $ref: '#/components/schemas/TenantStatusEnum'
+    PaymentAllocationRequest:
+      type: object
+      properties:
+        installmentNos:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+          maxItems: 12
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,28}(?:\.\d{0,2})?$
+        paidAt:
+          type: string
+          format: date-time
+        paymentReference:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        paymentMethod:
+          type:
+          - string
+          - 'null'
+          maxLength: 50
+        rowVersion:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+          description: Obrigatório quando inclui a 1.ª prestação (ativa a apólice).
+      required:
+      - amount
+      - installmentNos
+      - paidAt
+    PaymentAllocationResult:
+      type: object
+      properties:
+        installments:
+          description: As prestações pagas por esta transferência.
+      required:
+      - installments
     PaymentFrequencyEnum:
       enum:
       - ANUAL
@@ -23850,6 +25475,46 @@ components:
         * `MULTICAIXA` - MULTICAIXA
 
         * `TPA` - TPA'
+    PaymentOption:
+      type: object
+      properties:
+        installmentNos:
+          type: array
+          items:
+            type: integer
+        count:
+          type: integer
+        total:
+          type: string
+          description: 'Valor monetário/decimal exato serializado como string (ex.: ''1200.00'').'
+      required:
+      - count
+      - installmentNos
+      - total
+    PaymentOptions:
+      type: object
+      properties:
+        blockedReason:
+          type:
+          - string
+          - 'null'
+        currencyCode:
+          type:
+          - string
+          - 'null'
+        effect:
+          type:
+          - string
+          - 'null'
+          description: Efeito do pagamento no contrato.
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentOption'
+      required:
+      - blockedReason
+      - currencyCode
+      - options
     PaymentRegistered:
       type: object
       description: 'Resposta do registo de pagamento: a apólice e a prestação paga.'
@@ -23888,6 +25553,16 @@ components:
       - rowVersion
       - startDate
       - status
+    PendingApprovalImpact:
+      type: object
+      properties:
+        quotesInProgress:
+          type: integer
+        policiesToRenew:
+          type: integer
+      required:
+      - policiesToRenew
+      - quotesInProgress
     PendingApprovalItem:
       type: object
       properties:
@@ -23946,8 +25621,21 @@ components:
           type:
           - string
           - 'null'
+        eligibleApprovers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingApproverRef'
+        noEligibleApprover:
+          type: boolean
+        approverAlert:
+          type:
+          - string
+          - 'null'
+        impact:
+          $ref: '#/components/schemas/PendingApprovalImpact'
       required:
       - againstVersionNo
+      - approverAlert
       - area
       - areaLabel
       - canApprove
@@ -23959,8 +25647,11 @@ components:
       - createdBy
       - createdByName
       - effectiveFrom
+      - eligibleApprovers
+      - impact
       - isNew
       - label
+      - noEligibleApprover
       - submittedAt
       - versionNo
     PendingApprovals:
@@ -23995,6 +25686,17 @@ components:
       - byArea
       - canApprove
       - total
+    PendingApproverRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+      - id
+      - name
     Person:
       type: object
       properties:
@@ -24027,6 +25729,17 @@ components:
       - lastName
       - nif
       - sexCode
+    PersonRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+      - id
+      - name
     Plan:
       type: object
       description: 'DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): `productId` replaces
@@ -24600,6 +26313,11 @@ components:
           type:
           - string
           - 'null'
+        statusLabel:
+          type:
+          - string
+          - 'null'
+          readOnly: true
         sourceQuoteId:
           type: string
           format: uuid
@@ -24712,6 +26430,7 @@ components:
       - sourceQuoteId
       - startDate
       - status
+      - statusLabel
       - termMonths
     PolicyCoverage:
       type: object
@@ -25645,6 +27364,36 @@ components:
       - province
       - registrationNumber
       - type
+    PortalQuestionnaireItem:
+      type: object
+      properties:
+        quoteNumber:
+          type: string
+        memberId:
+          type: string
+          format: uuid
+        memberName:
+          type: string
+        progress:
+          $ref: '#/components/schemas/QuestionnaireProgress'
+        requestedAt:
+          type: string
+          format: date-time
+      required:
+      - memberId
+      - memberName
+      - progress
+      - quoteNumber
+      - requestedAt
+    PortalQuestionnaireList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalQuestionnaireItem'
+      required:
+      - items
     PortalQuote:
       type: object
       properties:
@@ -26148,6 +27897,11 @@ components:
           type:
           - string
           - 'null'
+        paymentBatchId:
+          type:
+          - string
+          - 'null'
+          format: uuid
         paymentMethod:
           type:
           - string
@@ -26159,6 +27913,7 @@ components:
       - id
       - installmentNo
       - paidAt
+      - paymentBatchId
       - paymentMethod
       - paymentReference
       - periodFrom
@@ -27485,6 +29240,257 @@ components:
       - email
       - phone
       - rowVersion
+    QuestionnaireAnswers:
+      type: object
+      properties:
+        questionnaireId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        quoteId:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+        memberName:
+          type: string
+        status:
+          $ref: '#/components/schemas/StatusEf3Enum'
+        statusLabel:
+          type: string
+        progress:
+          $ref: '#/components/schemas/QuestionnaireProgress'
+        currentSection:
+          type:
+          - string
+          - 'null'
+        hasDeclarations:
+          type: boolean
+        requestedFromCustomerAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        updatedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        updatedChannel:
+          type:
+          - string
+          - 'null'
+        completedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        rowVersion:
+          type:
+          - integer
+          - 'null'
+        answers: {}
+      required:
+      - answers
+      - completedAt
+      - currentSection
+      - hasDeclarations
+      - memberId
+      - memberName
+      - progress
+      - questionnaireId
+      - quoteId
+      - requestedFromCustomerAt
+      - rowVersion
+      - status
+      - statusLabel
+      - updatedAt
+      - updatedChannel
+    QuestionnaireCompleteRequest:
+      type: object
+      properties:
+        rowVersion:
+          type: integer
+          minimum: 0
+      required:
+      - rowVersion
+    QuestionnaireDetail:
+      type: object
+      properties:
+        questionnaireId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        quoteId:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+        memberName:
+          type: string
+        status:
+          $ref: '#/components/schemas/StatusEf3Enum'
+        statusLabel:
+          type: string
+        progress:
+          $ref: '#/components/schemas/QuestionnaireProgress'
+        currentSection:
+          type:
+          - string
+          - 'null'
+        hasDeclarations:
+          type: boolean
+        requestedFromCustomerAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        updatedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        updatedChannel:
+          type:
+          - string
+          - 'null'
+        completedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        rowVersion:
+          type:
+          - integer
+          - 'null'
+        answers: {}
+        schema:
+          description: Secções e perguntas, com a versão do questionário.
+      required:
+      - answers
+      - completedAt
+      - currentSection
+      - hasDeclarations
+      - memberId
+      - memberName
+      - progress
+      - questionnaireId
+      - quoteId
+      - requestedFromCustomerAt
+      - rowVersion
+      - schema
+      - status
+      - statusLabel
+      - updatedAt
+      - updatedChannel
+    QuestionnaireList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionnaireSummary'
+      required:
+      - items
+    QuestionnaireProgress:
+      type: object
+      properties:
+        answered:
+          type: integer
+        required:
+          type: integer
+      required:
+      - answered
+      - required
+    QuestionnaireSaveRequest:
+      type: object
+      properties:
+        answers:
+          type: object
+          additionalProperties:
+            oneOf:
+            - {}
+            - type: 'null'
+        currentSection:
+          type:
+          - string
+          - 'null'
+          maxLength: 40
+        rowVersion:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+    QuestionnaireSummary:
+      type: object
+      properties:
+        questionnaireId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        quoteId:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+        memberName:
+          type: string
+        status:
+          $ref: '#/components/schemas/StatusEf3Enum'
+        statusLabel:
+          type: string
+        progress:
+          $ref: '#/components/schemas/QuestionnaireProgress'
+        currentSection:
+          type:
+          - string
+          - 'null'
+        hasDeclarations:
+          type: boolean
+        requestedFromCustomerAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        updatedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        updatedChannel:
+          type:
+          - string
+          - 'null'
+        completedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        rowVersion:
+          type:
+          - integer
+          - 'null'
+      required:
+      - completedAt
+      - currentSection
+      - hasDeclarations
+      - memberId
+      - memberName
+      - progress
+      - questionnaireId
+      - quoteId
+      - requestedFromCustomerAt
+      - rowVersion
+      - status
+      - statusLabel
+      - updatedAt
+      - updatedChannel
     Quote:
       type: object
       description: 'DECISIONS_TAKEN.md#S09-POLICY-001 (PO-APO-6): `productVersionId`
@@ -27510,6 +29516,14 @@ components:
           format: uuid
         status:
           $ref: '#/components/schemas/QuoteStatusEnum'
+        displayStatus:
+          type: string
+          readOnly: true
+        statusLabel:
+          type:
+          - string
+          - 'null'
+          readOnly: true
         createdAt:
           type: string
           format: date-time
@@ -27590,6 +29604,7 @@ components:
       - approvedAt
       - createdAt
       - currencyCode
+      - displayStatus
       - id
       - latestPricingRun
       - latestPricingRunId
@@ -27608,6 +29623,7 @@ components:
       - sourceChannel
       - sourcePolicyId
       - status
+      - statusLabel
       - submittedAt
       - updatedAt
       - validUntil
@@ -28050,6 +30066,14 @@ components:
           minimum: 0
       required:
       - rowVersion
+    QuoteSubmitUndoRequest:
+      type: object
+      properties:
+        rowVersion:
+          type: integer
+          minimum: 0
+      required:
+      - rowVersion
     QuoteVersion:
       type: object
       properties:
@@ -28165,6 +30189,14 @@ components:
           format: uuid
         status:
           $ref: '#/components/schemas/QuoteStatusEnum'
+        displayStatus:
+          type: string
+          readOnly: true
+        statusLabel:
+          type:
+          - string
+          - 'null'
+          readOnly: true
         createdAt:
           type: string
           format: date-time
@@ -28249,6 +30281,7 @@ components:
       - approvedAt
       - createdAt
       - currencyCode
+      - displayStatus
       - id
       - latestPricingRun
       - latestPricingRunId
@@ -28267,10 +30300,79 @@ components:
       - sourceChannel
       - sourcePolicyId
       - status
+      - statusLabel
       - submittedAt
       - updatedAt
       - validUntil
       - warnings
+    QuoteWorkspace:
+      type: object
+      properties:
+        quoteId:
+          type: string
+          format: uuid
+        quoteNumber:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+        statusLabel:
+          type: string
+        rowVersion:
+          type: integer
+        savedAt:
+          type: string
+          format: date-time
+        selection: {}
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceMember'
+        premium:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Cálculo completo, com a decomposição do prémio.
+        pricingError:
+          type:
+          - string
+          - 'null'
+          description: Motivo da falha; as alterações ficaram guardadas.
+        requirements: {}
+        readiness:
+          $ref: '#/components/schemas/Readiness'
+      required:
+      - members
+      - premium
+      - pricingError
+      - quoteId
+      - quoteNumber
+      - readiness
+      - requirements
+      - rowVersion
+      - savedAt
+      - selection
+      - status
+      - statusLabel
+    QuoteWorkspaceRequest:
+      type: object
+      properties:
+        memberIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        selection:
+          oneOf:
+          - {}
+          - type: 'null'
+        rowVersion:
+          type: integer
+          minimum: 0
+      required:
+      - memberIds
+      - rowVersion
     RatingFactor:
       type: object
       properties:
@@ -28363,6 +30465,144 @@ components:
       - effectiveFrom
       - factors
       - name
+    Readiness:
+      type: object
+      properties:
+        ready:
+          type: boolean
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadinessCheck'
+      required:
+      - checks
+      - ready
+    ReadinessCheck:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        passed:
+          type: boolean
+        blocking:
+          type: boolean
+        detail:
+          type:
+          - string
+          - 'null'
+      required:
+      - blocking
+      - code
+      - detail
+      - label
+      - passed
+    ReconciliationCommitRequest:
+      type: object
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReconciliationLine'
+      required:
+      - lines
+    ReconciliationFailed:
+      type: object
+      properties:
+        line:
+          type: integer
+        reference:
+          type: string
+        reason:
+          type: string
+      required:
+      - line
+      - reason
+      - reference
+    ReconciliationLine:
+      type: object
+      properties:
+        line:
+          type: integer
+          minimum: 1
+        policyId:
+          type: string
+          format: uuid
+        installmentNos:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,28}(?:\.\d{0,2})?$
+        paidOn:
+          type: string
+          format: date
+        paymentReference:
+          type: string
+          maxLength: 200
+      required:
+      - amount
+      - installmentNos
+      - line
+      - paidOn
+      - paymentReference
+      - policyId
+    ReconciliationPreview:
+      type: object
+      properties:
+        totalLines:
+          type: integer
+        matchedLines:
+          type: integer
+        matchedAmount:
+          type: string
+        counts: {}
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReconciliationLine'
+      required:
+      - counts
+      - lines
+      - matchedAmount
+      - matchedLines
+      - totalLines
+    ReconciliationRegistered:
+      type: object
+      properties:
+        line:
+          type: integer
+        reference:
+          type: string
+        policyNumber:
+          type: string
+        installmentNos:
+          type: array
+          items:
+            type: integer
+      required:
+      - installmentNos
+      - line
+      - policyNumber
+      - reference
+    ReconciliationResult:
+      type: object
+      properties:
+        registered:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReconciliationRegistered'
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReconciliationFailed'
+      required:
+      - failed
+      - registered
     ReferenceTableColumn:
       type: object
       properties:
@@ -28611,6 +30851,132 @@ components:
       required:
       - items
       - page
+    RenewalBatchCreated:
+      type: object
+      properties:
+        policyId:
+          type: string
+          format: uuid
+        policyNumber:
+          type:
+          - string
+          - 'null'
+        quoteId:
+          type: string
+          format: uuid
+        quoteNumber:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+      required:
+      - policyId
+      - policyNumber
+      - quoteId
+      - quoteNumber
+      - status
+    RenewalBatchFailed:
+      type: object
+      properties:
+        policyId:
+          type: string
+          format: uuid
+        policyNumber:
+          type:
+          - string
+          - 'null'
+        reason:
+          type: string
+      required:
+      - policyId
+      - policyNumber
+      - reason
+    RenewalBatchRequest:
+      type: object
+      properties:
+        policyIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 100
+      required:
+      - policyIds
+    RenewalBatchResult:
+      type: object
+      properties:
+        created:
+          type: array
+          items:
+            $ref: '#/components/schemas/RenewalBatchCreated'
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/RenewalBatchFailed'
+      required:
+      - created
+      - failed
+    RenewalDueRow:
+      type: object
+      properties:
+        policyId:
+          type: string
+          format: uuid
+        policyNumber:
+          type:
+          - string
+          - 'null'
+        holderName:
+          type: string
+        endDate:
+          type: string
+          format: date
+        daysToEnd:
+          type: integer
+        activeMembers:
+          type: integer
+        lossRatioPct:
+          type:
+          - string
+          - 'null'
+        currencyCode:
+          type: string
+        currentPremium:
+          type:
+          - string
+          - 'null'
+        proposedPremium:
+          type:
+          - string
+          - 'null'
+        changePct:
+          type:
+          - string
+          - 'null'
+        renewalQuoteId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        renewalQuoteStatus:
+          type:
+          - string
+          - 'null'
+      required:
+      - activeMembers
+      - changePct
+      - currencyCode
+      - currentPremium
+      - daysToEnd
+      - endDate
+      - holderName
+      - lossRatioPct
+      - policyId
+      - policyNumber
+      - proposedPremium
+      - renewalQuoteId
+      - renewalQuoteStatus
     ReportStatusCount:
       type: object
       properties:
@@ -28768,6 +31134,42 @@ components:
       - memberId
       - memberName
       - relationshipCategory
+    ReviewAssignBatchRequest:
+      type: object
+      properties:
+        assigneeId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        taskIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 100
+      required:
+      - taskIds
+    ReviewAssignRequest:
+      type: object
+      properties:
+        assigneeId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+    ReviewBatchAssignment:
+      type: object
+      properties:
+        assigned:
+          description: Revisões atribuídas (ReviewTask).
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchFailure'
+      required:
+      - assigned
+      - failed
     ReviewTask:
       type: object
       properties:
@@ -28793,15 +31195,43 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/ReviewTaskStatusEnum'
+        statusLabel:
+          type:
+          - string
+          - 'null'
+          readOnly: true
         assignedTo:
           type:
           - string
           - 'null'
+        assignedToName:
+          type:
+          - string
+          - 'null'
+          readOnly: true
+        validUntil:
+          type:
+          - string
+          - 'null'
+          format: date
+        canDecide:
+          type: boolean
+          readOnly: true
+        cannotDecideReason:
+          type:
+          - string
+          - 'null'
+          readOnly: true
         createdAt:
           type: string
           format: date-time
+        rowVersion:
+          type: integer
       required:
       - assignedTo
+      - assignedToName
+      - canDecide
+      - cannotDecideReason
       - createdAt
       - id
       - planName
@@ -28810,7 +31240,10 @@ components:
       - quoteId
       - quoteName
       - quoteNumber
+      - rowVersion
       - status
+      - statusLabel
+      - validUntil
     ReviewTaskPage:
       type: object
       description: Página de ReviewTaskSerializer.
@@ -29551,6 +31984,66 @@ components:
         * `APPROVED` - APPROVED
 
         * `REJECTED` - REJECTED'
+    StatusDictionary:
+      type: object
+      properties:
+        quote:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusEntry'
+        policy:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusEntry'
+        installment:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusEntry'
+        portalRequest:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusEntry'
+        configuration:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusEntry'
+        reviewTask:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusEntry'
+        questionnaire:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusEntry'
+      required:
+      - configuration
+      - installment
+      - policy
+      - portalRequest
+      - questionnaire
+      - quote
+      - reviewTask
+    StatusEf3Enum:
+      enum:
+      - NOT_STARTED
+      - IN_PROGRESS
+      - COMPLETED
+      type: string
+      description: '* `NOT_STARTED` - NOT_STARTED
+
+        * `IN_PROGRESS` - IN_PROGRESS
+
+        * `COMPLETED` - COMPLETED'
+    StatusEntry:
+      type: object
+      properties:
+        status:
+          type: string
+        label:
+          type: string
+      required:
+      - label
+      - status
     StatusOk:
       type: object
       properties:
@@ -30728,6 +33221,140 @@ components:
       required:
       - code
       - message
+    WorkQueue:
+      type: object
+      properties:
+        total:
+          type: integer
+        dueToday:
+          type: integer
+        counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkQueueCount'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkQueueItem'
+          description: Até 50 tarefas por tipo; `counts` tem sempre o total real.
+      required:
+      - counts
+      - dueToday
+      - items
+      - total
+    WorkQueueAction:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        href:
+          type: string
+      required:
+      - code
+      - href
+      - label
+    WorkQueueCount:
+      type: object
+      properties:
+        kind:
+          type: string
+        label:
+          type: string
+        count:
+          type: integer
+      required:
+      - count
+      - kind
+      - label
+    WorkQueueItem:
+      type: object
+      properties:
+        kind:
+          type: string
+        kindLabel:
+          type: string
+        reference:
+          type:
+          - string
+          - 'null'
+        entityId:
+          type: string
+        client:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+        statusLabel:
+          type:
+          - string
+          - 'null'
+        dueDate:
+          type:
+          - string
+          - 'null'
+          format: date
+        assignedTo:
+          type:
+          - string
+          - 'null'
+        assignedToName:
+          type:
+          - string
+          - 'null'
+        detail:
+          type:
+          - string
+          - 'null'
+        action:
+          $ref: '#/components/schemas/WorkQueueAction'
+      required:
+      - action
+      - assignedTo
+      - assignedToName
+      - client
+      - detail
+      - dueDate
+      - entityId
+      - kind
+      - kindLabel
+      - reference
+      - status
+      - statusLabel
+    WorkspaceMember:
+      type: object
+      properties:
+        memberId:
+          type: string
+          format: uuid
+        name:
+          type:
+          - string
+          - 'null'
+        relationshipCode:
+          type: string
+        dateOfBirth:
+          type:
+          - string
+          - 'null'
+          format: date
+        status:
+          type: string
+        eligibilityDecision:
+          type:
+          - string
+          - 'null'
+      required:
+      - dateOfBirth
+      - eligibilityDecision
+      - memberId
+      - name
+      - relationshipCode
+      - status
     _CorporateProposerInput:
       type: object
       description: 'Campos necessários para criar um Proposer no mesmo request que a
@@ -30795,6 +33422,46 @@ components:
       - displayName
       - nif
       - registrationNumber
+    _Dependent:
+      type: object
+      properties:
+        relationshipCode:
+          type: string
+          maxLength: 40
+        firstName:
+          type: string
+          maxLength: 120
+        lastName:
+          type:
+          - string
+          - 'null'
+          maxLength: 120
+        dateOfBirth:
+          type: string
+          format: date
+        sexCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 20
+        externalReference:
+          type:
+          - string
+          - 'null'
+          maxLength: 100
+        nif:
+          type:
+          - string
+          - 'null'
+          maxLength: 14
+        attributes:
+          oneOf:
+          - {}
+          - type: 'null'
+      required:
+      - dateOfBirth
+      - firstName
+      - relationshipCode
     _ProposerInput:
       type: object
       description: 'Campos necessários para criar um Proposer no mesmo request que a

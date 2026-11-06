@@ -61,7 +61,24 @@ from apps.customer_portal.interfaces.views import (
     VerifyOtpView,
 )
 
+from apps.customer_portal.interfaces.questionnaire_views import (
+    CustomerPortalQuestionnaireCompleteView,
+    CustomerPortalQuestionnaireListView,
+    CustomerPortalQuestionnaireView,
+)
+
 urlpatterns = [
+    path("customer-portal/questionnaires", CustomerPortalQuestionnaireListView.as_view(), name="customer-portal-questionnaires"),
+    path(
+        "customer-portal/me/quotes/<str:quote_number>/members/<uuid:member_id>/questionnaire",
+        CustomerPortalQuestionnaireView.as_view(),
+        name="customer-portal-questionnaire",
+    ),
+    path(
+        "customer-portal/me/quotes/<str:quote_number>/members/<uuid:member_id>/questionnaire/complete",
+        CustomerPortalQuestionnaireCompleteView.as_view(),
+        name="customer-portal-questionnaire-complete",
+    ),
     path(
         "customer-portal/<uuid:tenant_id>/auth/request-access",
         RequestAccessView.as_view(),

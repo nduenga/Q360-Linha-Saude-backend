@@ -485,3 +485,30 @@ class QuoteVersion(TenantScopedModel):
     class Meta:
         managed = False
         db_table = "quote_version"
+
+
+class ClinicalQuestionnaire(TenantScopedModel):
+    """Respostas clínicas de uma pessoa segura numa cotação. Guarda dados de
+    saúde: o conteúdo nunca vai para a auditoria nem para eventos."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    quote = models.ForeignKey(Quote, on_delete=models.CASCADE, db_column="quote_id", related_name="clinical_questionnaires")
+    member = models.ForeignKey(InsuredMember, on_delete=models.DO_NOTHING, db_column="member_id", related_name="clinical_questionnaires")
+    schema_version = models.CharField(max_length=30)
+    status = models.CharField(max_length=20, default="IN_PROGRESS")
+    answers_json = models.JSONField(default=dict)
+    current_section = models.CharField(max_length=40, null=True, blank=True)
+    requested_from_customer_at = models.DateTimeField(null=True, blank=True)
+    requested_by = models.CharField(max_length=200, null=True, blank=True)
+    updated_by = models.CharField(max_length=200)
+    updated_channel = models.CharField(max_length=20, default="STAFF")
+    completed_at = models.DateTimeField(null=True, blank=True)
+    completed_by = models.CharField(max_length=200, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    row_version = models.BigIntegerField(default=0)
+
+    class Meta:
+        managed = False
+        db_table = "clinical_questionnaire"

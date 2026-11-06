@@ -28,6 +28,7 @@ from apps.customer_portal.infrastructure.models import (
     PortalMessage,
 )
 from apps.foundation.application.audit_service import AuditService
+from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.policy.infrastructure.models import Policy, PolicyMember
@@ -35,6 +36,7 @@ from apps.quote.application.numbering_service import next_continuous_value
 from apps.quote.domain.enums import QuoteStatus
 from apps.quote.infrastructure.models import Quote
 
+_outbox = get_outbox_service()
 _audit = AuditService(DjangoAuditRepositoryAdapter())
 
 # A renewal can be requested this many days before the policy ends.
@@ -160,11 +162,39 @@ def create_request(
             tenant_id=_tenant_id(), request=request, from_status=None, to_status=rules.OPEN,
             note=None, actor_type="CUSTOMER", actor_ref=str(account_id),
         )
+        if request_type == "ACCEPT_QUOTE":
+            _route_acceptance_to_emission(request, quote)
     _audit.record(
         action="customer_portal.request_created", entity_type="PortalRequest", entity_id=str(request.id),
         metadata={"type": request_type, "number": request.request_number},
     )
     return request
+
+
+def _route_acceptance_to_emission(request: PortalRequest, quote: Quote) -> None:
+    """A aceitação entra na fila de trabalho como tarefa de emissão: a fila lê
+    estes pedidos, por isso não há um segundo registo que possa divergir."""
+    PortalRequestEvent.objects.create(
+        tenant_id=_tenant_id(), request=request, from_status=rules.OPEN, to_status=rules.OPEN,
+        note="Aceitação registada. Tarefa de emissão criada para a equipa de Apólices.",
+        actor_type="STAFF", actor_ref="system:acceptance",
+    )
+    _audit.record(
+        action="quote.accepted", entity_type="Quote", entity_id=str(quote.id),
+        metadata={"requestNumber": request.request_number},
+    )
+    _outbox.append(
+        aggregate_type="Quote", aggregate_id=str(quote.id), event_type="QUOTE.ACCEPTED",
+        payload={"quoteId": str(quote.id), "requestNumber": request.request_number},
+    )
+
+
+def accepted_quote_ids(quote_ids=None) -> set:
+    """Cotações cujo cliente aceitou a proposta (um pedido recusado não conta)."""
+    queryset = PortalRequest.objects.filter(request_type="ACCEPT_QUOTE").exclude(status=rules.REJECTED)
+    if quote_ids is not None:
+        queryset = queryset.filter(quote_id__in=list(quote_ids))
+    return set(queryset.values_list("quote_id", flat=True))
 
 
 def _item(request: PortalRequest, *, policy_number: str | None, quote_number: str | None) -> dict:

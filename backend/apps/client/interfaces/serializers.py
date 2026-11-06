@@ -315,7 +315,27 @@ class ImportJobSerializer(serializers.Serializer):
     totalRows = serializers.IntegerField(source="total_rows")
     validRows = serializers.IntegerField(source="valid_rows")
     invalidRows = serializers.IntegerField(source="invalid_rows")
+    # Resumo da validação: prontas (`validRows`), já existentes e com erro.
+    duplicateRows = serializers.SerializerMethodField(method_name="get_duplicate_rows")
+    errorRows = serializers.SerializerMethodField(method_name="get_error_rows")
+    rowProblems = serializers.SerializerMethodField(method_name="get_row_problems")
     createdAt = serializers.DateTimeField(source="created_at")
+
+    def _problems(self, obj) -> list[dict]:
+        from apps.client.application.import_service import row_problems
+
+        if not hasattr(obj, "_row_problems"):
+            obj._row_problems = row_problems(obj)
+        return obj._row_problems
+
+    def get_duplicate_rows(self, obj) -> int:
+        return len({p["rowNumber"] for p in self._problems(obj) if p["duplicate"]})
+
+    def get_error_rows(self, obj) -> int:
+        return obj.invalid_rows - self.get_duplicate_rows(obj)
+
+    def get_row_problems(self, obj) -> list[dict]:
+        return self._problems(obj)
 
 
 class ImportCommitRequestSerializer(serializers.Serializer):

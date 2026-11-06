@@ -182,7 +182,7 @@ A API não tem fila de tarefas. O comando `python manage.py run_daily_jobs` corr
 
 São repetíveis sem efeitos secundários. Se uma falhar, as seguintes correm na mesma e o comando termina com erro.
 
-**Atenção:** a partir da primeira execução, as apólices elegíveis passam a ser resolvidas sem intervenção humana. Antes de ativar, confirme os prazos legais configurados.
+**Atenção:** não ative antes da confirmação jurídica. A partir da primeira execução, uma apólice com prestação vencida é resolvida sem intervenção humana, sem tolerância e sem esperar pela carta registada do art. 18.º do Decreto n.º 2/02. Estes prazos não são configuráveis.
 
 **No Render:** o `render.yaml` já declara o serviço `q360-daily-jobs`. Os serviços cron do Render não têm plano gratuito.
 

@@ -14,6 +14,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema
@@ -82,6 +83,7 @@ from apps.quote.interfaces.serializers import (
     ScenarioUpdateRequestSerializer,
     QuoteSubmitRequestSerializer,
     ReviewTaskSerializer,
+    review_task_context,
     StateHistoryItemSerializer,
 )
 from apps.quote.domain import proposal_template
@@ -279,7 +281,7 @@ class QuoteSubmitView(APIView):
         updated = quote_service.submit_quote(
             quote=quote, row_version=body.validated_data["rowVersion"], correlation_id=get_correlation_id()
         )
-        return Response(QuoteSerializer(updated).data)
+        return Response({**QuoteSerializer(updated).data, "undoUntil": quote_service.submit_undo_deadline(updated)})
 
 
 class QuoteReviewView(APIView):
@@ -524,9 +526,17 @@ class ReviewQueueView(APIView):
         status_filter = request.query_params.get("status")
         if status_filter:
             queryset = queryset.filter(status=status_filter)
+        assignment = request.query_params.get("assignment")
+        if assignment == "mine":
+            queryset = queryset.filter(assigned_to=request.user.actor.actor_id)
+        elif assignment == "unassigned":
+            queryset = queryset.filter(assigned_to__isnull=True)
+        elif assignment:
+            raise ValidationError({"assignment": "Use mine ou unassigned."})
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
-        return paginator.get_paginated_response(ReviewTaskSerializer(page, many=True).data)
+        data = ReviewTaskSerializer(page, many=True, context=review_task_context(page)).data
+        return paginator.get_paginated_response(data)
 
 
 @requires_idempotency
