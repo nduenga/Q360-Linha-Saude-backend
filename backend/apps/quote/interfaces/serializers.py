@@ -29,6 +29,8 @@ class QuoteSerializer(serializers.Serializer):
 
     id = serializers.UUIDField()
     quoteNumber = serializers.CharField(source="quote_number", allow_null=True)
+    createdBy = serializers.CharField(source="created_by")
+    createdByName = serializers.SerializerMethodField()
     proposerId = serializers.UUIDField(source="proposer_id")
     sourceChannel = serializers.CharField(source="source_channel", allow_null=True, allow_blank=True)
     planId = serializers.UUIDField(source="plan_id")
@@ -58,6 +60,9 @@ class QuoteSerializer(serializers.Serializer):
     planName = serializers.SerializerMethodField(method_name="get_plan_name")
     productName = serializers.SerializerMethodField(method_name="get_product_name")
     proposerName = serializers.SerializerMethodField(method_name="get_proposer_name")
+
+    def get_createdByName(self, obj) -> str | None:
+        return self.context.get("responsible_names", {}).get(str(obj.created_by))
 
     def get_proposer_name(self, obj) -> str | None:
         proposer = getattr(obj, "proposer", None)
@@ -401,7 +406,13 @@ class ReviewTaskSerializer(serializers.Serializer):
     productName = serializers.CharField(source="quote.plan.product.name")
     status = serializers.ChoiceField(choices=[s.value for s in ReviewTaskStatus])
     assignedTo = serializers.CharField(source="assigned_to", allow_null=True)
+    assignedToName = serializers.SerializerMethodField()
     createdAt = serializers.DateTimeField(source="created_at")
+
+    def get_assignedToName(self, obj) -> str | None:
+        if not obj.assigned_to:
+            return None
+        return self.context.get("responsible_names", {}).get(str(obj.assigned_to))
 
     def get_quote_name(self, obj) -> str:
         """Quote has no standalone name; compose a readable queue label."""

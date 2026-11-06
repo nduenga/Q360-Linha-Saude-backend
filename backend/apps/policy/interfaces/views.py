@@ -312,8 +312,13 @@ class InstallmentListView(APIView):
                     "holderName": holders.get(installment.policy.proposer_id),
                     "daysOverdue": (today - installment.due_date).days if effective == "OVERDUE" else 0,
                     "canRegisterPayment": (
+                        # `effective` já distingue DUE de OVERDUE pela data (ver
+                        # effective_installment_status) — uma condição extra a
+                        # exigir due_date >= today bloqueava sempre o registo
+                        # de pagamento de QUALQUER prestação em atraso (regressão
+                        # real: due_date < today é exatamente o que torna uma
+                        # prestação OVERDUE).
                         effective in ("DUE", "OVERDUE")
-                        and installment.due_date >= today
                         and installment.policy.status in ("ACTIVE", "PENDING_FIRST_PREMIUM")
                     ),
                 }

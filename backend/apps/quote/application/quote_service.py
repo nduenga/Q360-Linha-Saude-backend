@@ -1113,8 +1113,91 @@ def submit_quote(*, quote: Quote, row_version: int, correlation_id: str | None) 
     return quote
 
 
+def withdraw_submission(*, quote: Quote, row_version: int, correlation_id: str | None) -> Quote:
+    """"Anular" (manual UX v2, cap. 08) — desfaz o próprio envio enquanto
+    ninguém ainda decidiu nada (IN_REVIEW -> READY), sem exigir motivo nem
+    passar pela regra dos quatro olhos: é a mesma pessoa a desfazer a sua
+    própria ação, não uma decisão de outra pessoa sobre o trabalho dela.
+    Só o próprio submissor pode anular, e só enquanto a tarefa de revisão
+    ainda não foi decidida (OPEN/IN_PROGRESS)."""
+    if quote.status != QuoteStatus.IN_REVIEW.value:
+        raise QuoteStateError(f"Esta cotação está em {quote_status_label(quote.status)}; só uma cotação em revisão (IN_REVIEW) pode ser anulada")
+
+    actor = CurrentActorProvider.get()
+    actor_id = actor.actor_id if actor else "unknown"
+    if quote.submitted_by != actor_id:
+        raise SegregationOfDutiesError("Só quem submeteu esta cotação pode anular o envio")
+
+    review_task = get_active_review_task(quote=quote)
+    if review_task is None or review_task.status not in (ReviewTaskStatus.OPEN.value, ReviewTaskStatus.IN_PROGRESS.value):
+        raise QuoteStateError("Esta cotação já foi decidida; já não pode ser anulada")
+
+    with transaction.atomic():
+        updated = Quote.objects.filter(id=quote.id, status=QuoteStatus.IN_REVIEW.value, row_version=row_version).update(
+            status=QuoteStatus.READY.value, submitted_by=None, submitted_at=None, row_version=row_version + 1,
+        )
+        if updated == 0:
+            quote.refresh_from_db()
+            if quote.status != QuoteStatus.IN_REVIEW.value:
+                raise QuoteStateError(f"Esta cotação está em {quote_status_label(quote.status)}; só uma cotação em revisão (IN_REVIEW) pode ser anulada")
+            raise RowVersionMismatchError(f"A versão desta cotação ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
+        ReviewTask.objects.filter(id=review_task.id).update(status=ReviewTaskStatus.RETURNED.value, decided_at=timezone_now())
+        quote.refresh_from_db()
+
+    _record_transition(
+        quote, from_status=QuoteStatus.IN_REVIEW.value, to_status=QuoteStatus.READY.value,
+        reason_code="WITHDRAWN_BY_SUBMITTER", correlation_id=correlation_id,
+    )
+    _audit.record(action="quote.submission.withdrawn", entity_type="Quote", entity_id=str(quote.id))
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.SUBMISSION_WITHDRAWN",
+        correlation_id=correlation_id,
+        payload={"quoteId": str(quote.id), "withdrawnBy": actor_id},
+    )
+    return quote
+
+
 def get_active_review_task(*, quote: Quote) -> ReviewTask | None:
     return quote.review_tasks.order_by("-created_at").first()
+
+
+def assign_review_task_to_self(*, quote: Quote) -> ReviewTask:
+    """"Atribuir a mim" (manual UX v2, cap. 09) — hoje `assigned_to` nunca é
+    escrito por nenhum endpoint, por isso a fila mostra sempre "Ninguém
+    (fila geral)" mesmo quando alguém já está a tratar o caso. Atribuir a
+    si próprio é idempotente; atribuir a outra pessoa não é possível por
+    este endpoint (seria preciso um fluxo de reatribuição à parte)."""
+    actor = CurrentActorProvider.get()
+    actor_id = actor.actor_id if actor else "unknown"
+
+    review_task = get_active_review_task(quote=quote)
+    if review_task is None or review_task.status not in (ReviewTaskStatus.OPEN.value, ReviewTaskStatus.IN_PROGRESS.value):
+        raise QuoteStateError("Esta cotação não tem nenhuma tarefa de revisão ativa")
+    if review_task.assigned_to and review_task.assigned_to != actor_id:
+        raise QuoteStateError("Esta tarefa já está atribuída a outra pessoa")
+
+    ReviewTask.objects.filter(id=review_task.id).update(
+        assigned_to=actor_id,
+        status=ReviewTaskStatus.IN_PROGRESS.value,
+        started_at=timezone_now(),
+    )
+    review_task.refresh_from_db()
+
+    _audit.record(
+        action="quote.review.assigned",
+        entity_type="Quote",
+        entity_id=str(quote.id),
+        metadata={"assignedTo": actor_id},
+    )
+    _outbox.append(
+        aggregate_type="Quote",
+        aggregate_id=str(quote.id),
+        event_type="QUOTE.REVIEW_ASSIGNED",
+        payload={"quoteId": str(quote.id), "reviewTaskId": str(review_task.id), "assignedTo": actor_id},
+    )
+    return review_task
 
 
 def get_quote_history(*, quote: Quote):
