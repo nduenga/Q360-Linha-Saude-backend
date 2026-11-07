@@ -572,16 +572,10 @@ class ReviewQueueView(APIView):
             raise ValidationError({"assignment": "Use mine ou unassigned."})
         paginator = Q360PageNumberPagination()
         page = paginator.paginate_queryset(queryset, request)
-<<<<<<< HEAD
-        data = ReviewTaskSerializer(page, many=True, context=review_task_context(page)).data
+        context = review_task_context(page)
+        context["responsible_names"] = context["staffNames"]
+        data = ReviewTaskSerializer(page, many=True, context=context).data
         return paginator.get_paginated_response(data)
-=======
-        tenant_id = CurrentTenantProvider.get()
-        responsible_names = _responsible_names(tenant_id.value, (t.assigned_to for t in page if t.assigned_to)) if tenant_id else {}
-        return paginator.get_paginated_response(
-            ReviewTaskSerializer(page, many=True, context={"responsible_names": responsible_names}).data
-        )
->>>>>>> 08c19f227449a192f8d5084ecda27235cc609735
 
 
 @requires_idempotency

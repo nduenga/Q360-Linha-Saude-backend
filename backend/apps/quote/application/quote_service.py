@@ -102,6 +102,8 @@ _PRICEABLE_MEMBER_STATUSES = [QuoteMemberStatus.INCLUDED.value, QuoteMemberStatu
 SUBMIT_UNDO_WINDOW_SECONDS = 10
 SUBMIT_UNDO_GRACE_SECONDS = 5
 SUBMIT_UNDONE_REASON = "SUBMIT_UNDONE"
+# «Anular» sem prazo, do endpoint `/submission/withdraw`: também não é uma devolução.
+WITHDRAWN_REASON = "WITHDRAWN_BY_SUBMITTER"
 
 
 def _plan_content_snapshot(plan: Plan, selection: dict | None = None, effective_date: datetime.date | None = None) -> dict:
@@ -1119,7 +1121,6 @@ def submit_quote(*, quote: Quote, row_version: int, correlation_id: str | None) 
     return quote
 
 
-<<<<<<< HEAD
 def submit_undo_deadline(quote: Quote) -> datetime.datetime | None:
     """Até quando o aviso mostra «Anular», ou None se a cotação não admite anulação."""
     if quote.status != QuoteStatus.IN_REVIEW.value or quote.quote_type == "ENDORSEMENT" or quote.submitted_at is None:
@@ -1160,7 +1161,10 @@ def undo_submit(*, quote: Quote, row_version: int, correlation_id: str | None) -
     _outbox.append(
         aggregate_type="Quote", aggregate_id=str(quote.id), event_type="QUOTE.SUBMISSION.UNDONE",
         correlation_id=correlation_id, payload={"quoteId": str(quote.id), "undoneBy": actor_id},
-=======
+    )
+    return quote
+
+
 def withdraw_submission(*, quote: Quote, row_version: int, correlation_id: str | None) -> Quote:
     """"Anular" (manual UX v2, cap. 08) — desfaz o próprio envio enquanto
     ninguém ainda decidiu nada (IN_REVIEW -> READY), sem exigir motivo nem
@@ -1194,7 +1198,7 @@ def withdraw_submission(*, quote: Quote, row_version: int, correlation_id: str |
 
     _record_transition(
         quote, from_status=QuoteStatus.IN_REVIEW.value, to_status=QuoteStatus.READY.value,
-        reason_code="WITHDRAWN_BY_SUBMITTER", correlation_id=correlation_id,
+        reason_code=WITHDRAWN_REASON, correlation_id=correlation_id,
     )
     _audit.record(action="quote.submission.withdrawn", entity_type="Quote", entity_id=str(quote.id))
     _outbox.append(
@@ -1203,7 +1207,6 @@ def withdraw_submission(*, quote: Quote, row_version: int, correlation_id: str |
         event_type="QUOTE.SUBMISSION_WITHDRAWN",
         correlation_id=correlation_id,
         payload={"quoteId": str(quote.id), "withdrawnBy": actor_id},
->>>>>>> 08c19f227449a192f8d5084ecda27235cc609735
     )
     return quote
 
@@ -1226,6 +1229,12 @@ def assign_review_task_to_self(*, quote: Quote) -> ReviewTask:
         raise QuoteStateError("Esta cotação não tem nenhuma tarefa de revisão ativa")
     if review_task.assigned_to and review_task.assigned_to != actor_id:
         raise QuoteStateError("Esta tarefa já está atribuída a outra pessoa")
+    from apps.quote.application.review_service import decision_block_reason
+
+    block_reason = decision_block_reason(quote, actor_id)
+    if block_reason:
+        # Quem não pode decidir também não fica com a tarefa (mesma regra de `/reviews/{id}/assignment`).
+        raise SegregationOfDutiesError(block_reason)
 
     ReviewTask.objects.filter(id=review_task.id).update(
         assigned_to=actor_id,

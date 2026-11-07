@@ -17,7 +17,7 @@ from apps.customer_portal.infrastructure.models import PortalRequest
 from apps.foundation.domain.actor import Actor
 from apps.foundation.domain.permissions import Permission
 from apps.policy.infrastructure.models import Policy, PremiumInstallment
-from apps.quote.application.quote_service import SUBMIT_UNDONE_REASON
+from apps.quote.application.quote_service import SUBMIT_UNDONE_REASON, WITHDRAWN_REASON
 from apps.quote.application.review_service import staff_names
 from apps.quote.infrastructure.models import Quote, QuoteDiscountApproval, QuoteStateHistory, ReviewTask
 from shared.status_labels import status_label
@@ -71,7 +71,7 @@ def returned_quotes():
             last_from=Subquery(latest.values("from_status")[:1]),
             last_reason=Subquery(latest.values("reason_code")[:1]),
         )
-        .filter(last_from="IN_REVIEW").exclude(last_reason=SUBMIT_UNDONE_REASON)
+        .filter(last_from="IN_REVIEW").exclude(last_reason__in=(SUBMIT_UNDONE_REASON, WITHDRAWN_REASON))
     )
 
 

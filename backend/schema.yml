@@ -17388,6 +17388,73 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/quotes/{quote_id}/review/assign:
+    post:
+      operationId: postQuoteReviewAssign
+      description: '`/api/v1/quotes/{quoteId}/review/assign` (POST) — "Atribuir a mim"
+
+        (manual UX v2, cap. 09): `assigned_to` existia no modelo mas nenhum
+
+        endpoint o escrevia.
+
+
+        Requer: scope q360.write, permissão quote:review.'
+      summary: Criar quote review assign
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Underwriting
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewTask'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/quotes/{quote_id}/scenarios:
     get:
       operationId: getQuoteScenarioListCreate
@@ -18157,6 +18224,81 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VersionRestoreResult'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/quotes/{quote_id}/withdraw:
+    post:
+      operationId: postQuoteWithdraw
+      description: '`/api/v1/quotes/{quoteId}/withdraw` (POST) — "Anular" o próprio envio
+
+        (manual UX v2, cap. 08). Mesma permissão de quem submete; a regra dos
+
+        quatro olhos e a verificação de que é o próprio submissor ficam dentro
+
+        de `withdraw_submission`.
+
+
+        Requer: scope q360.write, permissão quote:submit.'
+      summary: Criar quote withdraw
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: quote_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Quotes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteSubmitRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quote'
           description: Sucesso.
         '400':
           content:
@@ -29504,6 +29646,13 @@ components:
           type:
           - string
           - 'null'
+        createdBy:
+          type: string
+        createdByName:
+          type:
+          - string
+          - 'null'
+          readOnly: true
         proposerId:
           type: string
           format: uuid
@@ -29603,6 +29752,8 @@ components:
       required:
       - approvedAt
       - createdAt
+      - createdBy
+      - createdByName
       - currencyCode
       - displayStatus
       - id
@@ -30177,6 +30328,13 @@ components:
           type:
           - string
           - 'null'
+        createdBy:
+          type: string
+        createdByName:
+          type:
+          - string
+          - 'null'
+          readOnly: true
         proposerId:
           type: string
           format: uuid
@@ -30280,6 +30438,8 @@ components:
       required:
       - approvedAt
       - createdAt
+      - createdBy
+      - createdByName
       - currencyCode
       - displayStatus
       - id

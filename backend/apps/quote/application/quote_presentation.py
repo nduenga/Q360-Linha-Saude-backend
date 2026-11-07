@@ -5,7 +5,7 @@ e dos pedidos de aceitação, sem alterar a máquina de estados.
 """
 from __future__ import annotations
 
-from apps.quote.application.quote_service import SUBMIT_UNDONE_REASON
+from apps.quote.application.quote_service import SUBMIT_UNDONE_REASON, WITHDRAWN_REASON
 from apps.quote.domain.enums import QuoteStatus
 from apps.quote.infrastructure.models import Quote
 
@@ -16,7 +16,7 @@ def was_returned(quote: Quote) -> bool:
         latest is not None
         and latest.from_status == QuoteStatus.IN_REVIEW.value
         and latest.to_status == QuoteStatus.READY.value
-        and latest.reason_code != SUBMIT_UNDONE_REASON
+        and latest.reason_code not in (SUBMIT_UNDONE_REASON, WITHDRAWN_REASON)
     )
 
 
