@@ -128,6 +128,8 @@ class PortalRequestEvent(TenantScopedModel):
     note = models.TextField(null=True, blank=True)
     actor_type = models.CharField(max_length=10)
     actor_ref = models.CharField(max_length=200)
+    # INTERNAL = nota da equipa, nunca devolvida ao cliente.
+    visibility = models.CharField(max_length=10, default="CUSTOMER")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

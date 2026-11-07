@@ -41,6 +41,7 @@ from apps.customer_portal.interfaces.staff_views import (
     PortalRequestDetailView,
     PortalRequestListView,
     PortalRequestMetricsView,
+    PortalRequestInternalNoteView,
     PortalRequestTransitionView,
     PortalStaffMessagesView,
 )
@@ -148,6 +149,7 @@ urlpatterns = [
     path("portal-requests/metrics", PortalRequestMetricsView.as_view(), name="portal-request-metrics"),
     path("portal-requests/<str:request_number>", PortalRequestDetailView.as_view(), name="portal-request-detail"),
     path("portal-requests/<str:request_number>/transition", PortalRequestTransitionView.as_view(), name="portal-request-transition"),
+    path("portal-requests/<str:request_number>/notes", PortalRequestInternalNoteView.as_view(), name="portal-request-notes"),
     path("portal-conversations", PortalConversationListView.as_view(), name="portal-conversations"),
     path("portal-messages", PortalStaffMessagesView.as_view(), name="portal-messages"),
 ]

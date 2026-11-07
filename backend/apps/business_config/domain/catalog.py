@@ -31,6 +31,7 @@ CONFIG_CATALOG=[
 {"key":"quote.discount_approval","category":"APPROVALS","label":"Aprovação de descontos","priority":"HIGH","value_type":"object"},
 {"key":"service.sla","category":"SERVICE","label":"Metas de atendimento (SLA)","priority":"HIGH","value_type":"object"},
 {"key":"service.satisfaction","category":"SERVICE","label":"Avaliação de satisfação","priority":"MEDIUM","value_type":"object"},
+{"key":"portal.payment_instructions","category":"SERVICE","label":"Instruções de pagamento no Portal do Cliente","priority":"MEDIUM","value_type":"object"},
 {"key":"pricing.experience_rating","category":"PRICING","label":"Tarifação pela experiência de sinistralidade","priority":"HIGH","value_type":"object"},
 {"key":"quote.scenario_comparison","category":"PRICING","label":"Comparação de cenários","priority":"MEDIUM","value_type":"object"},
 {"key":"claims.projections","category":"CLAIMS","label":"Projeções de sinistralidade","priority":"MEDIUM","value_type":"object"},

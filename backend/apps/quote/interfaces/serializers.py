@@ -28,7 +28,7 @@ def review_task_context(tasks) -> dict:
     """Nomes dos responsáveis de uma página de revisões, numa só consulta."""
     from apps.quote.application.review_service import staff_names
 
-    return {"staffNames": staff_names(task.assigned_to for task in tasks)}
+    return {"responsible_names": staff_names(task.assigned_to for task in tasks)}
 
 
 class QuoteSerializer(serializers.Serializer):
@@ -440,9 +440,9 @@ class ReviewTaskSerializer(serializers.Serializer):
     def get_assigned_to_name(self, obj) -> str | None:
         if not obj.assigned_to:
             return None
-        names = self.context.get("staffNames") or self.context.get("responsible_names")
+        names = self.context.get("responsible_names")
         if names is None:
-            names = review_task_context([obj])["staffNames"]
+            names = review_task_context([obj])["responsible_names"]
         return names.get(str(obj.assigned_to))
 
     def get_cannot_decide_reason(self, obj) -> str | None:

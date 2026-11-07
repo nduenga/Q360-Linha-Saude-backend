@@ -306,13 +306,40 @@ def _events(request: PortalRequest, *, viewer: str, customer_name: str | None = 
             return "Você" if is_customer else "Seguradora"
         return (customer_name or "Cliente") if is_customer else "Você"
 
+    events = PortalRequestEvent.objects.filter(request=request).order_by("created_at")
+    if viewer == "CUSTOMER":
+        events = events.exclude(visibility=INTERNAL)
     return [
         {
             "status": e.to_status, "statusLabel": rules.STATUS_LABELS[e.to_status],
             "note": e.note, "by": by(e.actor_type), "at": e.created_at,
+            **({"internal": e.visibility == INTERNAL} if viewer == "STAFF" else {}),
         }
-        for e in PortalRequestEvent.objects.filter(request=request).order_by("created_at")
+        for e in events
     ]
+
+
+INTERNAL = "INTERNAL"
+
+
+def _staff_timeline(request: PortalRequest, history: list[dict]) -> list[dict]:
+    """Cronologia única da equipa: mudanças de estado, notas internas e mensagens."""
+    from apps.customer_portal.application import messages_service
+
+    items = []
+    for event in history:
+        is_note = event["internal"]
+        items.append({
+            "kind": "INTERNAL_NOTE" if is_note else "STATUS",
+            "at": event["at"], "by": event["by"], "text": event["note"],
+            "status": event["status"], "statusLabel": event["statusLabel"], "internal": is_note,
+        })
+    for message in messages_service.staff_thread(context_type="REQUEST", context_ref=request.request_number):
+        items.append({
+            "kind": "MESSAGE", "at": message["createdAt"], "by": message["fromLabel"], "text": message["body"],
+            "status": None, "statusLabel": None, "internal": False,
+        })
+    return sorted(items, key=lambda item: item["at"])
 
 
 def get_my_request(request_number: str) -> dict:
@@ -417,11 +444,13 @@ def staff_get(request_number: str) -> dict:
         raise PortalResourceNotFoundError("Não foi encontrado nenhum pedido com este número (requestNumber)")
     holder = Proposer.objects.filter(id=request.proposer_id).first()
     customer_name = holder.display_name if holder else None
+    history = _events(request, viewer="STAFF", customer_name=customer_name)
     return {
         **items_for([request])[0],
         "customerName": customer_name,
         "payload": request.payload_json,
-        "history": _events(request, viewer="STAFF", customer_name=customer_name),
+        "history": history,
+        "timeline": _staff_timeline(request, history),
     }
 
 
@@ -458,7 +487,29 @@ def submit_satisfaction(*, request_number: str, account_id: uuid.UUID, score: in
     return {"requestNumber": request_number, "score": entry.score, "comment": entry.comment, "createdAt": entry.created_at}
 
 
-def staff_transition(*, request_number: str, to_status: str, note: str | None, actor_ref: str) -> dict:
+def add_internal_note(*, request_number: str, note: str, actor_ref: str) -> dict:
+    """Nota só da equipa: fica na cronologia do pedido e nunca chega ao cliente."""
+    request = PortalRequest.objects.filter(request_number=request_number).first()
+    if request is None:
+        raise PortalResourceNotFoundError("Não foi encontrado nenhum pedido com este número (requestNumber)")
+    text = (note or "").strip()
+    if not text:
+        raise rules.PortalRequestInvalidError("Escreva a nota interna.")
+    PortalRequestEvent.objects.create(
+        tenant_id=_tenant_id(), request=request, from_status=request.status, to_status=request.status,
+        note=text, actor_type="STAFF", actor_ref=actor_ref, visibility=INTERNAL,
+    )
+    _audit.record(
+        action="customer_portal.request_internal_note", entity_type="PortalRequest", entity_id=str(request.id),
+        metadata={"actor": actor_ref},
+    )
+    return staff_get(request_number)
+
+
+def staff_transition(*, request_number: str, to_status: str, note: str | None, actor_ref: str,
+                     message: str | None = None) -> dict:
+    """Muda o estado e, com `message`, envia a resposta ao cliente na mesma
+    transação: ou acontecem as duas, ou nenhuma."""
     request = PortalRequest.objects.filter(request_number=request_number).first()
     if request is None:
         raise PortalResourceNotFoundError("Não foi encontrado nenhum pedido com este número (requestNumber)")
@@ -479,6 +530,12 @@ def staff_transition(*, request_number: str, to_status: str, note: str | None, a
             tenant_id=_tenant_id(), request=request, from_status=previous, to_status=to_status,
             note=(note or "").strip() or None, actor_type="STAFF", actor_ref=actor_ref,
         )
+        if (message or "").strip():
+            from apps.customer_portal.application import messages_service
+
+            messages_service.staff_send(
+                context_type="REQUEST", context_ref=request.request_number, body=message, actor_ref=actor_ref,
+            )
         notifications_service.notify_account(
             account_id=request.customer_account_id,
             dedupe_key=f"request:{request.id}:{to_status}",

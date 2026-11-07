@@ -445,6 +445,7 @@ class Command(BaseCommand):
             stats = self._bulk_customers(opts["customers"], plans)
             self.demo._bind(tenant, self.staff["admin"], Role.ADMIN)  # noqa: SLF001
             stats["historico"] = self._claims_history()
+            self._manual_v2_scenarios()
             self.report.append(
                 f"Tenant de teste: {code} ({tenant.id}) — clientes em massa: {stats['customers']}, "
                 f"apólices ativas: {stats['active']}, a aguardar 1.º pagamento: {stats['pending']}, "
@@ -461,6 +462,231 @@ class Command(BaseCommand):
         ))
         self.report.append(f"Clientes de portal em massa (palavra-passe {CUSTOMER_PASSWORD}): "
                            f"emails bulk.NNN@clientes.q360.local")
+
+    # -- cenários da nova interface (Manual visual v2) ------------------------
+    def _manual_v2_scenarios(self) -> None:
+        """Deixa a fila «Por tratar» com trabalho real de cada tipo: revisões
+        atribuídas e por atribuir, uma cotação devolvida, questionários clínicos
+        em curso, concluídos e pedidos ao cliente, uma aceitação à espera de
+        emissão, uma transferência que pagou várias prestações, uma importação
+        de membros com duplicados e erros, e um extrato bancário para reconciliar.
+        Cada cenário é independente: um que falhe não impede os outros."""
+        self.stdout.write(self.style.MIGRATE_HEADING("[TESTE] cenários da nova interface"))
+        done: list[str] = []
+        for label, step in (
+            ("revisões atribuídas", self._v2_assign_reviews),
+            ("cotação devolvida", self._v2_returned_quote),
+            ("questionários clínicos", self._v2_questionnaires),
+            ("aceitação à espera de emissão", self._v2_acceptance),
+            ("transferência com várias prestações", self._v2_multi_installment_payment),
+            ("importação com duplicados e erros", self._v2_member_import),
+            ("extrato bancário de teste", self._v2_bank_statement),
+        ):
+            try:
+                with transaction.atomic():
+                    result = step()
+                done.append(f"{label}: {result}")
+            except Exception as exc:  # noqa: BLE001 - um cenário falhado não deve parar os restantes
+                self.stderr.write(self.style.WARNING(f"  cenário «{label}» falhou: {type(exc).__name__}: {exc}"))
+            finally:
+                self.demo._bind(self.tenant, self.staff["admin"], Role.ADMIN)  # noqa: SLF001
+        self.report.append("Nova interface — " + "; ".join(done))
+
+    def _open_reviews(self):
+        from apps.quote.infrastructure.models import ReviewTask
+
+        return list(
+            ReviewTask.objects.select_related("quote__proposer")
+            .filter(status__in=("OPEN", "IN_PROGRESS"), quote__status=QuoteStatus.IN_REVIEW.value)
+            .order_by("created_at")
+        )
+
+    def _as(self, key: str, role: Role) -> StaffAccount:
+        account = self.staff[key]
+        self.demo._bind(self.tenant, account, role)  # noqa: SLF001
+        return account
+
+    def _v2_assign_reviews(self) -> str:
+        from apps.quote.application import review_service
+
+        assigned = 0
+        reviewers = (("manager2", Role.SUBSCRIPTION_MANAGER), ("subscriber2", Role.SUBSCRIBER))
+        for index, task in enumerate(self._open_reviews()):
+            if task.assigned_to or index % 2:
+                continue  # metade fica «Sem responsável», para testar «Atribuir a mim»
+            for key, role in reviewers:
+                if str(self.staff[key].id) != task.quote.submitted_by:
+                    self._as(key, role)
+                    review_service.assign(task=task, assignee_id=None)
+                    assigned += 1
+                    break
+        return f"{assigned} atribuídas"
+
+    def _v2_returned_quote(self) -> str:
+        from apps.quote.application.quote_presentation import was_returned
+
+        if any(was_returned(q) for q in Quote.objects.filter(status=QuoteStatus.READY.value)):
+            return "já existia"
+        task = next((t for t in self._open_reviews() if not t.assigned_to), None)
+        if task is None:
+            return "sem revisões abertas"
+        decider = next(k for k in ("manager", "manager2") if str(self.staff[k].id) != task.quote.submitted_by)
+        self._as(decider, Role.SUBSCRIPTION_MANAGER)
+        decide_quote(
+            quote=task.quote, decision=QuoteDecisionType.RETURN.value, reason_code="FALTA_QUESTIONARIO",
+            reason_text="Falta o questionário clínico do cônjuge.", row_version=task.quote.row_version,
+            correlation_id="v2-return",
+        )
+        return task.quote.quote_number or str(task.quote.id)
+
+    def _v2_questionnaires(self) -> str:
+        from apps.quote.application import questionnaire_service
+        from apps.quote.infrastructure.models import ClinicalQuestionnaire, QuoteMember
+
+        if ClinicalQuestionnaire.objects.exists():
+            return "já existiam"
+        self._as("subscriber", Role.SUBSCRIBER)
+        rows = list(
+            QuoteMember.objects.select_related("quote")
+            .filter(quote__status__in=(QuoteStatus.IN_REVIEW.value, QuoteStatus.READY.value, QuoteStatus.DRAFT.value))
+            .order_by("quote__created_at")[:6]
+        )
+        complete_answers = {
+            "heightCm": 168, "weightKg": 72, "smoker": False, "regularAlcohol": False, "chronicCondition": True,
+            "chronicConditionName": "Hipertensão arterial", "chronicConditionSince": "2019-03-01",
+            "chronicConditionTreated": True, "hospitalised": False, "regularMedication": True,
+            "medicationDetails": "Amlodipina 5 mg",
+        }
+        counts = {"concluídos": 0, "em curso": 0, "pedidos ao cliente": 0}
+        for index, row in enumerate(rows):
+            quote = row.quote
+            if index % 3 == 0:
+                saved = questionnaire_service.save(
+                    quote=quote, member_id=row.member_id, answers=complete_answers,
+                    current_section="medication", row_version=None,
+                )
+                questionnaire_service.complete(quote=quote, member_id=row.member_id, row_version=saved["rowVersion"])
+                counts["concluídos"] += 1
+            elif index % 3 == 1:
+                questionnaire_service.save(
+                    quote=quote, member_id=row.member_id, answers={"heightCm": 175, "weightKg": 80, "smoker": True},
+                    current_section="habits", row_version=None,
+                )
+                counts["em curso"] += 1
+            else:
+                try:
+                    questionnaire_service.request_from_customer(quote=quote, member_id=row.member_id)
+                    counts["pedidos ao cliente"] += 1
+                except Exception:  # noqa: BLE001 - cliente sem conta no Portal
+                    continue
+        return ", ".join(f"{n} {k}" for k, n in counts.items())
+
+    def _v2_acceptance(self) -> str:
+        approved = Quote.objects.filter(status=QuoteStatus.APPROVED.value).order_by("created_at")
+        for quote in approved:
+            account_id = (
+                CustomerAccountProposer.objects.filter(proposer_id=quote.proposer_id)
+                .values_list("customer_account_id", flat=True).first()
+            )
+            if account_id is None:
+                continue
+            if PortalRequest.objects.filter(quote_id=quote.id, request_type="ACCEPT_QUOTE").exists():
+                return f"{quote.quote_number} (já existia)"
+            from apps.quote.application.numbering_service import next_continuous_value
+
+            request = PortalRequest.objects.create(
+                tenant_id=self.tenant.id, request_number=next_continuous_value(sequence_code="PORTAL_REQUEST", prefix="PED-"),
+                customer_account_id=account_id, proposer_id=quote.proposer_id, quote_id=quote.id,
+                request_type="ACCEPT_QUOTE", subject="Aceitação da proposta", description="Aceito a proposta.",
+                payload_json={}, status="OPEN",
+            )
+            requests_service._route_acceptance_to_emission(request, quote)  # noqa: SLF001
+            return f"{quote.quote_number} ({request.request_number})"
+        return "nenhuma cotação aprovada com conta no Portal"
+
+    def _v2_multi_installment_payment(self) -> str:
+        from apps.policy.application.issuance_service import allocate_payment, payment_options
+
+        if PremiumInstallment.objects.filter(payment_batch_id__isnull=False).exists():
+            return "já existia"
+        candidates = Policy.objects.filter(status="PENDING_FIRST_PREMIUM").exclude(payment_frequency="ANUAL").order_by("created_at")
+        self._as("admin", Role.ADMIN)
+        for policy in candidates:
+            options = payment_options(policy)
+            if options["blockedReason"] or len(options["options"]) < 2:
+                continue
+            two = options["options"][1]
+            allocate_payment(
+                policy=policy, installment_nos=two["installmentNos"], amount=Decimal(two["total"]),
+                paid_at=timezone.now(), payment_reference=f"TRF-2P-{policy.policy_number}",
+                payment_method="TRANSFERENCIA", row_version=policy.row_version, correlation_id="v2-multi-pay",
+            )
+            return f"{policy.policy_number} (prestações {', '.join(map(str, two['installmentNos']))})"
+        return "nenhuma apólice pendente com pagamento fracionado"
+
+    def _v2_member_import(self) -> str:
+        import io
+
+        import openpyxl
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from apps.client.application import import_service
+        from apps.client.infrastructure.models import ImportJob
+
+        proposer = (
+            Proposer.objects.filter(proposer_type="ORGANISATION", external_reference__startswith="BULK-")
+            .order_by("external_reference").first()
+        )
+        if proposer is None:
+            return "sem empresa de teste"
+        if ImportJob.objects.filter(proposer=proposer, original_filename="membros_teste_v2.xlsx").exists():
+            return f"{proposer.display_name} (já existia)"
+        existing = InsuredMember.objects.filter(proposer=proposer, relationship_code="COLABORADOR").first()
+        book = openpyxl.Workbook()
+        sheet = book.active
+        sheet.append(["relationshipCode", "firstName", "lastName", "dateOfBirth", "sexCode", "externalReference"])
+        for n in range(1, 9):
+            first, last = self._person()
+            sheet.append(["COLABORADOR", first, last, self._dob(22, 58).isoformat(), "F" if n % 2 else "M", f"V2-IMP-{n:02d}"])
+        if existing is not None:
+            sheet.append(["COLABORADOR", existing.first_name, existing.last_name,
+                          existing.date_of_birth.isoformat() if existing.date_of_birth else "1980-01-01", "M", "V2-IMP-DUP"])
+        sheet.append(["COLABORADOR", "Sara", "Neto", "31/02/1990", "F", "V2-IMP-ERR"])
+        output = io.BytesIO()
+        book.save(output)
+        job = import_service.upload_member_import(
+            proposer=proposer, uploaded_file=SimpleUploadedFile("membros_teste_v2.xlsx", output.getvalue()),
+            actor_id=str(self.staff["admin"].id),
+        )
+        return f"{proposer.display_name}: {job.valid_rows} prontas, {job.invalid_rows} por rever (não confirmada)"
+
+    def _v2_bank_statement(self) -> str:
+        """Escreve um extrato com linhas para cada caso da reconciliação."""
+        import csv
+        from pathlib import Path
+
+        from apps.policy.application.issuance_service import payment_options
+
+        pending = [p for p in Policy.objects.filter(status="PENDING_FIRST_PREMIUM").order_by("created_at")
+                   if not payment_options(p)["blockedReason"]][:3]
+        if not pending:
+            return "sem apólices pendentes"
+        today = timezone.localdate().strftime("%d/%m/%Y")
+        rows = [["Data", "Valor", "Referência", "Descrição"]]
+        first = payment_options(pending[0])["options"]
+        rows.append([today, first[0]["total"].replace(".", ","), f"EXT-{pending[0].policy_number}-1", f"Pagamento {pending[0].policy_number}"])
+        rows.append([today, first[0]["total"].replace(".", ","), f"EXT-{pending[0].policy_number}-1", "Linha repetida"])
+        if len(pending) > 1:
+            options = payment_options(pending[1])["options"]
+            rows.append([today, options[-1]["total"].replace(".", ","), f"EXT-{pending[1].policy_number}-ALL", f"Ano inteiro {pending[1].policy_number}"])
+        if len(pending) > 2:
+            rows.append([today, "1,00", f"EXT-{pending[2].policy_number}-X", f"Valor errado {pending[2].policy_number}"])
+        rows.append([today, "5000,00", "EXT-SEM-APOLICE", "Transferência sem referência de apólice"])
+        path = Path(settings.MEDIA_ROOT) / "seed" / "extrato_bancario_teste.csv"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            csv.writer(handle, delimiter=";").writerows(rows)
+        return str(path)
 
     def _extra_staff(self, tenant: Tenant) -> dict[str, StaffAccount]:
         """Equipa maior que a do seed_demo_data, para testar listagens, filtros e
@@ -629,8 +855,12 @@ class Command(BaseCommand):
                 out.append((m, ctx))
             return out
         first, last = self._person()
-        out.append((self.demo._ensure_member(proposer, f"{ref}-TIT", "TITULAR", first, last,  # noqa: SLF001
-                                             self._dob(24, 60).isoformat()), {"angola": {}}))
+        holder = self.demo._ensure_member(proposer, f"{ref}-TIT", "TITULAR", first, last,  # noqa: SLF001
+                                          self._dob(24, 60).isoformat())
+        out.append((holder, {"angola": {}}))
+        # O titular pode já existir com outra data; os filhos têm de ser pelo menos 13 anos mais novos.
+        holder_age = (timezone.localdate() - holder.date_of_birth).days // 365 if holder.date_of_birth else 40
+        max_child_age = max(1, min(17, holder_age - 14))
         if r.random() < 0.7:
             sf, _ = self._person(female=r.random() < 0.5)
             union = r.random() < 0.3
@@ -640,7 +870,7 @@ class Command(BaseCommand):
         for n in range(1, r.choice([0, 1, 1, 2, 2, 3]) + 1):
             cf, _ = self._person()
             out.append((self.demo._ensure_member(proposer, f"{ref}-FIL{n}", "FILHO", cf, last,  # noqa: SLF001
-                                                 self._dob(0, 17).isoformat()), {"angola": {}}))
+                                                 self._dob(0, max_child_age).isoformat()), {"angola": {}}))
         if r.random() < 0.18:
             af, _ = self._person()
             ctx = {"angola": {"hasCohabitationOrFinancialDependencyProof": True,

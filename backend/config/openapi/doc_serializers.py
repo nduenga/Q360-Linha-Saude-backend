@@ -1275,9 +1275,17 @@ class PortalQuoteTimelineEvent(s.Serializer):
     at = s.DateTimeField()
 
 
+class PortalNextStep(s.Serializer):
+    code = s.ChoiceField(choices=["ACCEPT", "AWAITING_ISSUANCE", "PAY_FIRST_PREMIUM"])
+    label = s.CharField()
+
+
 class PortalQuoteDetail(PortalQuote):
     timeline = PortalQuoteTimelineEvent(many=True, help_text="Só eventos que o sistema regista.")
     currentStage = s.CharField()
+    accepted = s.BooleanField(help_text="O cliente já aceitou esta proposta no portal.")
+    nextStep = PortalNextStep(allow_null=True)
+    paymentInstructions = s.JSONField(allow_null=True, help_text="PortalPaymentInstructions, depois de aceitar.")
 
 
 class PortalPolicySummary(s.Serializer):
@@ -1329,9 +1337,18 @@ class PortalBeneficiaries(s.Serializer):
     beneficiaries = s.ListField(child=s.DictField())
 
 
+class PortalPaymentInstructions(s.Serializer):
+    bankName = s.CharField(allow_null=True)
+    accountHolder = s.CharField(allow_null=True)
+    iban = s.CharField(allow_null=True)
+    reference = s.CharField(help_text="O que indicar como referência do pagamento.")
+    notes = s.CharField(allow_null=True)
+
+
 class PortalPayments(s.Serializer):
     installments = s.ListField(child=s.DictField())
     totals = s.ListField(child=s.DictField(), help_text="Por moeda: paid, pending e overdue.")
+    paymentInstructions = PortalPaymentInstructions(allow_null=True, help_text="null quando a seguradora não as publicou.")
 
 
 class PortalDocuments(s.Serializer):
@@ -1484,8 +1501,27 @@ class StaffPortalRequestItem(PortalRequestItem):
     payload = s.DictField()
 
 
+class StaffPortalHistoryEvent(PortalRequestHistoryEvent):
+    internal = s.BooleanField(help_text="Nota interna da equipa: o cliente nunca a vê.")
+
+
+class StaffPortalTimelineItem(s.Serializer):
+    kind = s.ChoiceField(choices=["STATUS", "INTERNAL_NOTE", "MESSAGE"])
+    at = s.DateTimeField()
+    by = s.CharField()
+    text = s.CharField(allow_null=True)
+    status = s.CharField(allow_null=True)
+    statusLabel = s.CharField(allow_null=True)
+    internal = s.BooleanField()
+
+
 class StaffPortalRequestDetail(StaffPortalRequestItem):
-    history = PortalRequestHistoryEvent(many=True)
+    history = StaffPortalHistoryEvent(many=True)
+    timeline = StaffPortalTimelineItem(many=True, help_text="Mudanças de estado, notas internas e mensagens, por ordem.")
+
+
+class StaffPortalInternalNote(s.Serializer):
+    note = s.CharField(help_text="Só a equipa vê esta nota.")
 
 
 class StaffPortalRequestList(s.Serializer):
@@ -1496,6 +1532,8 @@ class StaffPortalTransition(s.Serializer):
     toStatus = s.CharField(help_text="IN_REVIEW, AWAITING_CUSTOMER, APPROVED, REJECTED ou COMPLETED, conforme o estado actual.")
     note = s.CharField(required=False, allow_null=True, allow_blank=True,
                        help_text="Obrigatória para REJECTED e AWAITING_CUSTOMER; o cliente vê-a.")
+    message = s.CharField(required=False, allow_null=True, allow_blank=True,
+                          help_text="Resposta enviada ao cliente na mesma operação que a mudança de estado.")
 
 
 class StaffPortalConversations(s.Serializer):
@@ -1800,6 +1838,25 @@ class EligibleReviewers(s.Serializer):
 class BatchFailure(s.Serializer):
     taskId = s.CharField()
     reason = s.CharField()
+
+
+class ReviewBatchDecisionRequest(s.Serializer):
+    taskIds = s.ListField(child=s.UUIDField(), help_text="Até 100 tarefas de revisão.")
+    decision = s.ChoiceField(choices=["APPROVE", "REJECT", "RETURN"])
+    reasonCode = s.CharField()
+    reasonText = s.CharField(required=False, allow_null=True)
+
+
+class ReviewBatchDecided(s.Serializer):
+    taskId = s.UUIDField()
+    quoteId = s.UUIDField()
+    quoteNumber = s.CharField(allow_null=True)
+    status = s.CharField()
+
+
+class ReviewBatchDecision(s.Serializer):
+    decided = ReviewBatchDecided(many=True)
+    failed = BatchFailure(many=True)
 
 
 class ReviewBatchAssignment(s.Serializer):

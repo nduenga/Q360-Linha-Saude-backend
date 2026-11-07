@@ -98,11 +98,10 @@ _ELIGIBILITY_TO_MEMBER_STATUS = {
 _PRICEABLE_MEMBER_STATUSES = [QuoteMemberStatus.INCLUDED.value, QuoteMemberStatus.REFERRAL.value]
 
 
-# Janela do «Anular» depois de enviar para revisão; a folga cobre o tempo de rede.
+# Quanto tempo o aviso depois de enviar mostra «Anular» (`undoUntil`).
 SUBMIT_UNDO_WINDOW_SECONDS = 10
-SUBMIT_UNDO_GRACE_SECONDS = 5
+# Histórico antigo de «Anular» (endpoint `/submit/undo`, já retirado): também não é uma devolução.
 SUBMIT_UNDONE_REASON = "SUBMIT_UNDONE"
-# «Anular» sem prazo, do endpoint `/submission/withdraw`: também não é uma devolução.
 WITHDRAWN_REASON = "WITHDRAWN_BY_SUBMITTER"
 
 
@@ -1128,52 +1127,18 @@ def submit_undo_deadline(quote: Quote) -> datetime.datetime | None:
     return quote.submitted_at + datetime.timedelta(seconds=SUBMIT_UNDO_WINDOW_SECONDS)
 
 
-def undo_submit(*, quote: Quote, row_version: int, correlation_id: str | None) -> Quote:
-    """Anula um envio para revisão feito há instantes, enquanto ninguém lhe pegou."""
-    actor = CurrentActorProvider.get()
-    actor_id = actor.actor_id if actor else "unknown"
-    deadline = submit_undo_deadline(quote)
-    if deadline is None:
-        raise QuoteStateError("Esta cotação já não pode ser retirada da revisão")
-    if quote.submitted_by != actor_id:
-        raise SegregationOfDutiesError("Só quem enviou a cotação pode anular o envio")
-    if timezone_now() > deadline + datetime.timedelta(seconds=SUBMIT_UNDO_GRACE_SECONDS):
-        raise QuoteStateError("O prazo para anular o envio terminou")
-    task = get_active_review_task(quote=quote)
-    if task is None or task.status != ReviewTaskStatus.OPEN.value or task.assigned_to:
-        raise QuoteStateError("Esta revisão já foi atribuída; peça a devolução da cotação ao revisor")
-
-    with transaction.atomic():
-        updated = Quote.objects.filter(id=quote.id, status=QuoteStatus.IN_REVIEW.value, row_version=row_version).update(
-            status=QuoteStatus.READY.value, submitted_by=None, submitted_at=None, row_version=row_version + 1
-        )
-        if updated == 0:
-            raise RowVersionMismatchError(f"A versão desta cotação ({row_version}) não coincide com a versão atual; recarregue e tente de novo")
-        ReviewTask.objects.filter(id=task.id, status=ReviewTaskStatus.OPEN.value).update(
-            status=ReviewTaskStatus.RETURNED.value, decided_at=timezone_now()
-        )
-    quote.refresh_from_db()
-    _record_transition(
-        quote, from_status=QuoteStatus.IN_REVIEW.value, to_status=QuoteStatus.READY.value,
-        reason_code=SUBMIT_UNDONE_REASON, correlation_id=correlation_id,
-    )
-    _audit.record(action="quote.submit_undone", entity_type="Quote", entity_id=str(quote.id))
-    _outbox.append(
-        aggregate_type="Quote", aggregate_id=str(quote.id), event_type="QUOTE.SUBMISSION.UNDONE",
-        correlation_id=correlation_id, payload={"quoteId": str(quote.id), "undoneBy": actor_id},
-    )
-    return quote
-
-
 def withdraw_submission(*, quote: Quote, row_version: int, correlation_id: str | None) -> Quote:
-    """"Anular" (manual UX v2, cap. 08) — desfaz o próprio envio enquanto
-    ninguém ainda decidiu nada (IN_REVIEW -> READY), sem exigir motivo nem
-    passar pela regra dos quatro olhos: é a mesma pessoa a desfazer a sua
-    própria ação, não uma decisão de outra pessoa sobre o trabalho dela.
-    Só o próprio submissor pode anular, e só enquanto a tarefa de revisão
-    ainda não foi decidida (OPEN/IN_PROGRESS)."""
+    """«Anular» o próprio envio (manual UX v2, cap. 08): IN_REVIEW -> READY.
+
+    Só quem submeteu, e só enquanto nenhum revisor pegou na tarefa: a partir daí
+    a cotação volta pela decisão «Devolver», para não tirar trabalho a quem já o
+    está a fazer. O aviso depois de enviar mostra o botão até `undoUntil`, mas a
+    regra é esta, não o relógio. Os endossos não se retiram: podem ter sido
+    aprovados automaticamente ao submeter."""
     if quote.status != QuoteStatus.IN_REVIEW.value:
         raise QuoteStateError(f"Esta cotação está em {quote_status_label(quote.status)}; só uma cotação em revisão (IN_REVIEW) pode ser anulada")
+    if quote.quote_type == "ENDORSEMENT":
+        raise QuoteStateError("Um endosso enviado para revisão não pode ser retirado")
 
     actor = CurrentActorProvider.get()
     actor_id = actor.actor_id if actor else "unknown"
@@ -1183,6 +1148,8 @@ def withdraw_submission(*, quote: Quote, row_version: int, correlation_id: str |
     review_task = get_active_review_task(quote=quote)
     if review_task is None or review_task.status not in (ReviewTaskStatus.OPEN.value, ReviewTaskStatus.IN_PROGRESS.value):
         raise QuoteStateError("Esta cotação já foi decidida; já não pode ser anulada")
+    if review_task.assigned_to:
+        raise QuoteStateError("Um revisor já está a tratar esta cotação; peça-lhe que a devolva")
 
     with transaction.atomic():
         updated = Quote.objects.filter(id=quote.id, status=QuoteStatus.IN_REVIEW.value, row_version=row_version).update(
@@ -1216,46 +1183,14 @@ def get_active_review_task(*, quote: Quote) -> ReviewTask | None:
 
 
 def assign_review_task_to_self(*, quote: Quote) -> ReviewTask:
-    """"Atribuir a mim" (manual UX v2, cap. 09) — hoje `assigned_to` nunca é
-    escrito por nenhum endpoint, por isso a fila mostra sempre "Ninguém
-    (fila geral)" mesmo quando alguém já está a tratar o caso. Atribuir a
-    si próprio é idempotente; atribuir a outra pessoa não é possível por
-    este endpoint (seria preciso um fluxo de reatribuição à parte)."""
-    actor = CurrentActorProvider.get()
-    actor_id = actor.actor_id if actor else "unknown"
+    """«Atribuir a mim» (manual UX v2, cap. 09). A regra vive em
+    `review_service.assign`, partilhada com `/reviews/{id}/assignment`."""
+    from apps.quote.application import review_service
 
     review_task = get_active_review_task(quote=quote)
-    if review_task is None or review_task.status not in (ReviewTaskStatus.OPEN.value, ReviewTaskStatus.IN_PROGRESS.value):
+    if review_task is None:
         raise QuoteStateError("Esta cotação não tem nenhuma tarefa de revisão ativa")
-    if review_task.assigned_to and review_task.assigned_to != actor_id:
-        raise QuoteStateError("Esta tarefa já está atribuída a outra pessoa")
-    from apps.quote.application.review_service import decision_block_reason
-
-    block_reason = decision_block_reason(quote, actor_id)
-    if block_reason:
-        # Quem não pode decidir também não fica com a tarefa (mesma regra de `/reviews/{id}/assignment`).
-        raise SegregationOfDutiesError(block_reason)
-
-    ReviewTask.objects.filter(id=review_task.id).update(
-        assigned_to=actor_id,
-        status=ReviewTaskStatus.IN_PROGRESS.value,
-        started_at=timezone_now(),
-    )
-    review_task.refresh_from_db()
-
-    _audit.record(
-        action="quote.review.assigned",
-        entity_type="Quote",
-        entity_id=str(quote.id),
-        metadata={"assignedTo": actor_id},
-    )
-    _outbox.append(
-        aggregate_type="Quote",
-        aggregate_id=str(quote.id),
-        event_type="QUOTE.REVIEW_ASSIGNED",
-        payload={"quoteId": str(quote.id), "reviewTaskId": str(review_task.id), "assignedTo": actor_id},
-    )
-    return review_task
+    return review_service.assign(task=review_task, assignee_id=None)
 
 
 def get_quote_history(*, quote: Quote):

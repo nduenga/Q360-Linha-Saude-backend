@@ -298,6 +298,10 @@ REGISTRY: dict[str, dict] = {
     "CustomerPortalQuestionnaireView.put": {"response": d.QuestionnaireAnswers},
     "CustomerPortalQuestionnaireCompleteView.post": {"response": d.QuestionnaireAnswers},
     "ReviewBatchAssignmentView.post": {"response": d.ReviewBatchAssignment},
+    "ReviewBatchDecisionView.post": {
+        "request": d.ReviewBatchDecisionRequest, "response": d.ReviewBatchDecision,
+        "notes": "Cada cotação segue as regras da decisão individual e falha sozinha.",
+    },
     "ReviewEligibleReviewersView.get": {"response": d.EligibleReviewers},
     "QuoteWorkspaceView.get": {"response": d.QuoteWorkspace},
     "QuoteWorkspaceView.put": {"response": d.QuoteWorkspace, "notes": "Gravação automática da cotação numa só página."},
@@ -384,6 +388,7 @@ REGISTRY: dict[str, dict] = {
     "PortalRequestMetricsView.get": {"response": d.PortalRequestMetrics},
     "PortalRequestDetailView.get": {"response": d.StaffPortalRequestDetail},
     "PortalRequestTransitionView.post": {"request": d.StaffPortalTransition, "response": d.StaffPortalRequestDetail},
+    "PortalRequestInternalNoteView.post": {"request": d.StaffPortalInternalNote, "response": d.StaffPortalRequestDetail},
     "PortalConversationListView.get": {
         "response": d.StaffPortalConversations,
         "queries": {"unread": ("boolean", False, "true devolve só conversas com mensagens do cliente por ler.")},

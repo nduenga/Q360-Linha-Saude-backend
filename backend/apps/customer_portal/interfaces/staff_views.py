@@ -14,7 +14,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from apps.customer_portal.application import messages_service, requests_service
 from apps.customer_portal.domain import requests as rules
 from apps.customer_portal.infrastructure.models import PortalRequestSatisfaction
-from apps.customer_portal.interfaces.comm_serializers import MessageSerializer, TransitionSerializer
+from apps.customer_portal.interfaces.comm_serializers import InternalNoteSerializer, MessageSerializer, TransitionSerializer
 from apps.foundation.domain.scopes import Scope
 from apps.foundation.interfaces.middleware import requires_idempotency
 from apps.foundation.interfaces.permissions import require_scope
@@ -131,9 +131,24 @@ class PortalRequestTransitionView(APIView):
         data = body.validated_data
         return Response(
             requests_service.staff_transition(
-                request_number=request_number, to_status=data["toStatus"], note=data["note"], actor_ref=_actor_ref(request)
+                request_number=request_number, to_status=data["toStatus"], note=data["note"], actor_ref=_actor_ref(request),
+                message=data["message"],
             )
         )
+
+
+@requires_idempotency
+class PortalRequestInternalNoteView(APIView):
+    """Nota interna da equipa num pedido: nunca aparece ao cliente."""
+
+    permission_classes = [require_scope(Scope.WRITE)]
+
+    def post(self, request, request_number: str):
+        body = InternalNoteSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        return Response(requests_service.add_internal_note(
+            request_number=request_number, note=body.validated_data["note"], actor_ref=_actor_ref(request),
+        ))
 
 
 class PortalConversationListView(APIView):

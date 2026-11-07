@@ -112,6 +112,41 @@ def _installment_item(
 
 
 # ---------------------------------------------------------------- quotes
+_REFERENCE_HINT = {
+    "POLICY_NUMBER": "Indique o número da apólice como referência do pagamento.",
+    "QUOTE_NUMBER": "Indique o número da cotação como referência do pagamento.",
+    "INSTALLMENT": "Indique o número da apólice e o número da prestação como referência do pagamento.",
+}
+
+
+def payment_instructions() -> dict | None:
+    """O que a seguradora publicou para o cliente pagar. O portal não processa
+    pagamentos: mostra como pagar, e a seguradora regista o pagamento."""
+    from apps.business_config.application.readers import BusinessSnapshot
+
+    config = BusinessSnapshot.load().get("portal.payment_instructions") or {}
+    if not config.get("enabled"):
+        return None
+    return {
+        "bankName": config.get("bank_name"),
+        "accountHolder": config.get("account_holder"),
+        "iban": config.get("iban"),
+        "reference": _REFERENCE_HINT.get(config.get("reference_rule") or "", ""),
+        "notes": config.get("notes") or None,
+    }
+
+
+def _next_step(status: str, *, accepted: bool, policy: Policy | None) -> dict | None:
+    """O próximo passo do cliente, dito em linguagem simples."""
+    if policy is not None and policy.status == "PENDING_FIRST_PREMIUM":
+        return {"code": "PAY_FIRST_PREMIUM", "label": "Pague a 1.ª prestação para a cobertura começar."}
+    if accepted and status == "AWAITING_SIGNATURE":
+        return {"code": "AWAITING_ISSUANCE", "label": "A seguradora está a emitir a apólice. Avisamos quando estiver pronta."}
+    if status == "AWAITING_SIGNATURE" and not accepted:
+        return {"code": "ACCEPT", "label": "Reveja o resumo e aceite a proposta dentro do prazo."}
+    return None
+
+
 def get_my_quote(quote_number: str, *, today: datetime.date | None = None) -> dict:
     """Quote detail with the journey timeline (PDF sections 4 and 17). Only
     events the system actually records are listed; a stage the platform does
@@ -146,8 +181,14 @@ def get_my_quote(quote_number: str, *, today: datetime.date | None = None) -> di
             events.append({"code": "PAYMENT_REGISTERED", "label": "Pagamento registado", "at": first_paid.paid_at})
     events.sort(key=lambda event: event["at"])
 
+    from apps.customer_portal.application.requests_service import accepted_quote_ids
+
+    accepted = quote.id in accepted_quote_ids([quote.id])
     item["timeline"] = events
     item["currentStage"] = item["status"]
+    item["accepted"] = accepted
+    item["nextStep"] = _next_step(item["status"], accepted=accepted, policy=policy)
+    item["paymentInstructions"] = payment_instructions() if (accepted or policy is not None) else None
     return item
 
 
@@ -290,7 +331,7 @@ def list_my_payments(*, status: str | None = None) -> dict:
     currency. Paid / pending (DUE) / overdue are the instalment statuses."""
     policies = {p.id: p for p in list_my_policies()}
     if not policies:
-        return {"installments": [], "totals": []}
+        return {"installments": [], "totals": [], "paymentInstructions": payment_instructions()}
     queryset = PremiumInstallment.objects.filter(policy_id__in=list(policies)).exclude(status="VOID")
     installments = list(queryset.order_by("due_date"))
     totals: dict[str, dict[str, Decimal]] = defaultdict(lambda: {"paid": Decimal("0"), "pending": Decimal("0"), "overdue": Decimal("0")})
@@ -315,6 +356,7 @@ def list_my_payments(*, status: str | None = None) -> dict:
             {"currencyCode": code, **{key: _money(value) for key, value in buckets.items()}}
             for code, buckets in sorted(totals.items())
         ],
+        "paymentInstructions": payment_instructions(),
     }
 
 

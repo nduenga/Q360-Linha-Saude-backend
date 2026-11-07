@@ -267,7 +267,7 @@ def test_the_same_person_creating_and_submitting_never_decides(admin_client, ten
 def test_submission_can_be_undone_while_nobody_took_it(admin_client, tenant):
     submitted, _, _ = _submitted(admin_client, suffix="U1")
     assert submitted["undoUntil"] is not None
-    undone = admin_client.post(f"/api/v1/quotes/{submitted['id']}/submit/undo", {"rowVersion": submitted["rowVersion"]}, format="json")
+    undone = admin_client.post(f"/api/v1/quotes/{submitted['id']}/withdraw", {"rowVersion": submitted["rowVersion"]}, format="json")
     assert undone.status_code == 200, undone.data
     assert undone.data["status"] == "READY" and undone.data["displayStatus"] == "READY"
     again = admin_client.post(f"/api/v1/quotes/{submitted['id']}/submit", {"rowVersion": undone.data["rowVersion"]}, format="json")
@@ -278,7 +278,7 @@ def test_submission_can_be_undone_while_nobody_took_it(admin_client, tenant):
 def test_submission_cannot_be_undone_after_assignment_or_by_others(admin_client, tenant):
     submitted, _, _ = _submitted(admin_client, suffix="U2")
     other = make_client(tenant_id=tenant.id, roles=["ADMIN"], scope=SCOPE, actor_id="actor-2")
-    url = f"/api/v1/quotes/{submitted['id']}/submit/undo"
+    url = f"/api/v1/quotes/{submitted['id']}/withdraw"
     assert other.post(url, {"rowVersion": submitted["rowVersion"]}, format="json").status_code == 403
     task = _task(admin_client, submitted["id"])
     _approver(tenant).post(f"/api/v1/reviews/{task['id']}/assignment", {}, format="json")
@@ -286,15 +286,16 @@ def test_submission_cannot_be_undone_after_assignment_or_by_others(admin_client,
 
 
 @pytest.mark.django_db
-def test_submission_cannot_be_undone_after_the_window(admin_client, tenant):
-    import datetime
-
+def test_assign_to_me_by_quote_uses_the_same_rules(admin_client, tenant):
     submitted, _, _ = _submitted(admin_client, suffix="U3")
-    Quote.all_tenants.filter(id=submitted["id"]).update(
-        submitted_at=datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
-    )
-    response = admin_client.post(f"/api/v1/quotes/{submitted['id']}/submit/undo", {"rowVersion": submitted["rowVersion"]}, format="json")
-    assert response.status_code == 409
+    url = f"/api/v1/quotes/{submitted['id']}/review/assign"
+    assert admin_client.post(url).status_code == 403, "quem submeteu não pode ficar com a revisão"
+    first = _approver(tenant).post(url)
+    assert first.status_code == 200, first.data
+    assert first.data["assignedTo"] == "approver-1"
+    assert _approver(tenant).post(url).status_code == 200, "repetir é idempotente"
+    other = _approver(tenant, actor_id="approver-2").post(url)
+    assert other.status_code == 409
 
 
 # ------------------------------------------------------ cotação numa página

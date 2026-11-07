@@ -2124,3 +2124,9 @@ O modelo e a pré-validação Excel das tabelas de referência da plataforma usa
 | `GET /reports/{report}/pdf` | **Novo** | PDF dos relatórios `top-products`, `top-coverages` e `issuance`, com a identidade visual publicada. Relatório desconhecido → 404. |
 | `GET /reports/{report}/xlsx` | **Novo** | Excel dos relatórios `top-products`, `top-coverages` e `issuance`, com as quantidades como números. Relatório desconhecido → 404. |
 | Auditoria | Comportamento | `customer_portal.invitation_sent` só é registado depois de o servidor de email aceitar a mensagem. Novo `customer_portal.invitation_failed` quando o envio falha. |
+| `POST /reviews/decisions` | **Novo** | Decisão em lote (`taskIds`, `decision`, `reasonCode`, `reasonText?`): cada cotação segue a regra individual e falha sozinha; devolve `decided[]` e `failed[]`. |
+| `POST /portal-requests/{request_number}/notes` | **Novo** | Nota interna da equipa (`note`). O cliente nunca a vê. |
+| `POST /portal-requests/{request_number}/transition` | Contrato (pedido) | Novo `message?`: resposta ao cliente enviada na mesma transação que a mudança de estado. |
+| `GET /portal-requests/{request_number}` | Contrato (resposta) | `history[].internal` e nova `timeline[]` (estados, notas internas e mensagens). |
+| `GET /customer-portal/me/quotes/{quote_number}` | Contrato (resposta) | `accepted`, `nextStep {code,label}` e `paymentInstructions` (depois de aceitar). |
+| `GET /customer-portal/payments` | Contrato (resposta) | `paymentInstructions`, da configuração `portal.payment_instructions` (null se não publicada). |

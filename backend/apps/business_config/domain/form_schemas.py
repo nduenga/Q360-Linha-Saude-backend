@@ -78,6 +78,14 @@ FORM_SCHEMAS["service.satisfaction"]={"sections":[{"key":"satisfaction","label":
     f("question","Pergunta apresentada","text",True),
     f("survey_trigger","Momento de envio","select",True,["ON_RESOLUTION","MANUAL"]),
 ]}]}
+FORM_SCHEMAS["portal.payment_instructions"]={"sections":[{"key":"payment_instructions","label":"Como o cliente paga","fields":[
+    f("enabled","Mostrar no portal","boolean",True),
+    f("bank_name","Banco","text",True),
+    f("account_holder","Titular da conta","text",True),
+    f("iban","IBAN","text",True),
+    f("reference_rule","Referência a indicar no pagamento","select",True,["POLICY_NUMBER","QUOTE_NUMBER","INSTALLMENT"]),
+    f("notes","Outras indicações","text"),
+]}]}
 FORM_SCHEMAS["pricing.experience_rating"]={"sections":[{"key":"experience_rating","label":"Tarifação pela experiência de sinistralidade","fields":[
     f("enabled","Ativo","boolean",True),
     f("lookback_months","Meses de histórico","integer",True),

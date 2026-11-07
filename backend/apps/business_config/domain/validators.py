@@ -208,6 +208,10 @@ def _check_rules(key: str, value: dict[str, Any]) -> None:
                     datetime.date.fromisoformat(holiday)
                 except ValueError:
                     raise InvalidConfiguration(f"calendar.holidays contém uma data inválida: {holiday}") from None
+    if key == "portal.payment_instructions" and value.get("enabled"):
+        iban = str(value.get("iban") or "").replace(" ", "").upper()
+        if not (iban.startswith("AO") and len(iban) == 25 and iban[2:].isdigit()):
+            raise InvalidConfiguration("iban: um IBAN angolano tem AO seguido de 23 dígitos")
     if key == "service.satisfaction":
         if value.get("maximum_score", 0) <= value.get("minimum_score", 0):
             raise InvalidConfiguration("maximum_score deve ser superior a minimum_score")

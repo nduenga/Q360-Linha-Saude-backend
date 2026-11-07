@@ -29,6 +29,11 @@ class MarkReadSerializer(serializers.Serializer):
 class TransitionSerializer(serializers.Serializer):
     toStatus = serializers.ChoiceField(choices=sorted(rules.STATUS_LABELS))
     note = serializers.CharField(max_length=2000, required=False, allow_blank=True, allow_null=True, default=None)
+    message = serializers.CharField(max_length=4000, required=False, allow_blank=True, allow_null=True, default=None)
+
+
+class InternalNoteSerializer(serializers.Serializer):
+    note = serializers.CharField(max_length=4000)
 
 
 class RequestSatisfactionSerializer(serializers.Serializer):

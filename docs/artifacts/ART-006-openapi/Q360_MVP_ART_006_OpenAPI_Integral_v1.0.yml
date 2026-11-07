@@ -12709,6 +12709,74 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/portal-requests/{request_number}/notes:
+    post:
+      operationId: postPortalRequestInternalNote
+      description: 'Nota interna da equipa num pedido: nunca aparece ao cliente.
+
+
+        Requer: scope q360.write.'
+      summary: Criar portal request internal note
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: request_number
+        schema:
+          type: string
+        required: true
+      tags:
+      - Customer Portal Support
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffPortalInternalNote'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffPortalRequestDetail'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/portal-requests/{request_number}/transition:
     post:
       operationId: postPortalRequestTransition
@@ -18056,75 +18124,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
-  /api/v1/quotes/{quote_id}/submit/undo:
-    post:
-      operationId: postQuoteSubmitUndo
-      description: '`POST /quotes/{id}/submit/undo` — o «Anular» do aviso depois de enviar.
-
-
-        Requer: scope q360.write, permissão quote:submit.'
-      summary: Criar quote submit undo
-      parameters:
-      - in: header
-        name: Idempotency-Key
-        schema:
-          type: string
-        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
-          devolve IDEMP-REPLAY.'
-      - in: path
-        name: quote_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Quotes
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/QuoteSubmitUndoRequest'
-        required: true
-      security:
-      - oauth2:
-        - q360.write
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Quote'
-          description: Sucesso.
-        '400':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Pedido inválido (VALIDATION-400).
-        '401':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Não autenticado (AUTH-401).
-        '403':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Sem autorização (AUTH-403 / SEC-403).
-        '404':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Recurso não encontrado (NOT-FOUND).
-        '409':
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ProblemDetail'
-          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/quotes/{quote_id}/versions:
     get:
       operationId: getQuoteVersionListCreate
@@ -19432,13 +19431,6 @@ paths:
 
         Requer: scope q360.approve, permissão quote:review.'
       summary: Criar review batch assignment
-      parameters:
-      - in: header
-        name: Idempotency-Key
-        schema:
-          type: string
-        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
-          devolve IDEMP-REPLAY.'
       tags:
       - Underwriting
       requestBody:
@@ -19456,6 +19448,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReviewBatchAssignment'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/reviews/decisions:
+    post:
+      operationId: postReviewBatchDecision
+      description: '`POST /reviews/decisions` — decisão em lote, com resultado por cotação.
+
+
+        Requer: scope q360.approve.
+
+
+        Cada cotação segue as regras da decisão individual e falha sozinha.'
+      summary: Criar review batch decision
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      tags:
+      - Underwriting
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewBatchDecisionRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.approve
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewBatchDecision'
           description: Sucesso.
         '400':
           content:
@@ -22259,7 +22311,7 @@ components:
       type: object
       properties:
         decision:
-          $ref: '#/components/schemas/DecisionRequestDecisionEnum'
+          $ref: '#/components/schemas/DecisionD42Enum'
         reasonCode:
           type: string
           maxLength: 100
@@ -29641,8 +29693,14 @@ components:
             type: object
             additionalProperties: {}
           description: 'Por moeda: paid, pending e overdue.'
+        paymentInstructions:
+          oneOf:
+          - $ref: '#/components/schemas/PortalPaymentInstructions'
+          - type: 'null'
+          description: null quando a seguradora não as publicou.
       required:
       - installments
+      - paymentInstructions
       - totals
     PortalPolicyDetail:
       type: object
@@ -29847,10 +29905,25 @@ components:
           description: Só eventos que o sistema regista.
         currentStage:
           type: string
+        accepted:
+          type: boolean
+          description: O cliente já aceitou esta proposta no portal.
+        nextStep:
+          oneOf:
+          - $ref: '#/components/schemas/PortalNextStep'
+          - type: 'null'
+        paymentInstructions:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: PortalPaymentInstructions, depois de aceitar.
       required:
+      - accepted
       - createdAt
       - currencyCode
       - currentStage
+      - nextStep
+      - paymentInstructions
       - plan
       - policyNumber
       - product
@@ -30315,7 +30388,12 @@ components:
         history:
           type: array
           items:
-            $ref: '#/components/schemas/PortalRequestHistoryEvent'
+            $ref: '#/components/schemas/StaffPortalHistoryEvent'
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffPortalTimelineItem'
+          description: Mudanças de estado, notas internas e mensagens, por ordem.
       required:
       - createdAt
       - customerName
@@ -30329,6 +30407,7 @@ components:
       - status
       - statusLabel
       - subject
+      - timeline
       - type
       - typeLabel
       - updatedAt
@@ -30415,6 +30494,11 @@ components:
           - string
           - 'null'
           description: Obrigatória para REJECTED e AWAITING_CUSTOMER; o cliente vê-a.
+        message:
+          type:
+          - string
+          - 'null'
+          description: Resposta enviada ao cliente na mesma operação que a mudança de estado.
       required:
       - toStatus
     FirstAccessConfirm:
@@ -33164,7 +33248,7 @@ components:
         order:
           type: integer
         code:
-          $ref: '#/components/schemas/CodeEnum'
+          $ref: '#/components/schemas/TariffStageCodeEnum'
         label:
           type: string
         owner:
@@ -36733,6 +36817,236 @@ components:
       - blockedReason
       - currencyCode
       - options
+    DecisionD42Enum:
+      enum:
+      - APPROVE
+      - REJECT
+      - RETURN
+      type: string
+      description: '* `APPROVE` - APPROVE
+
+        * `REJECT` - REJECT
+
+        * `RETURN` - RETURN'
+    PortalNextStep:
+      type: object
+      properties:
+        code:
+          $ref: '#/components/schemas/PortalNextStepCodeEnum'
+        label:
+          type: string
+      required:
+      - code
+      - label
+    PortalNextStepCodeEnum:
+      enum:
+      - ACCEPT
+      - AWAITING_ISSUANCE
+      - PAY_FIRST_PREMIUM
+      type: string
+      description: '* `ACCEPT` - ACCEPT
+
+        * `AWAITING_ISSUANCE` - AWAITING_ISSUANCE
+
+        * `PAY_FIRST_PREMIUM` - PAY_FIRST_PREMIUM'
+    PortalPaymentInstructions:
+      type: object
+      properties:
+        bankName:
+          type:
+          - string
+          - 'null'
+        accountHolder:
+          type:
+          - string
+          - 'null'
+        iban:
+          type:
+          - string
+          - 'null'
+        reference:
+          type: string
+          description: O que indicar como referência do pagamento.
+        notes:
+          type:
+          - string
+          - 'null'
+      required:
+      - accountHolder
+      - bankName
+      - iban
+      - notes
+      - reference
+    ReviewBatchDecided:
+      type: object
+      properties:
+        taskId:
+          type: string
+          format: uuid
+        quoteId:
+          type: string
+          format: uuid
+        quoteNumber:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+      required:
+      - quoteId
+      - quoteNumber
+      - status
+      - taskId
+    ReviewBatchDecision:
+      type: object
+      properties:
+        decided:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewBatchDecided'
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchFailure'
+      required:
+      - decided
+      - failed
+    ReviewBatchDecisionRequest:
+      type: object
+      properties:
+        taskIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Até 100 tarefas de revisão.
+        decision:
+          $ref: '#/components/schemas/DecisionD42Enum'
+        reasonCode:
+          type: string
+        reasonText:
+          type:
+          - string
+          - 'null'
+      required:
+      - decision
+      - reasonCode
+      - taskIds
+    StaffPortalHistoryEvent:
+      type: object
+      properties:
+        status:
+          type: string
+        statusLabel:
+          type: string
+        note:
+          type:
+          - string
+          - 'null'
+        by:
+          type: string
+        at:
+          type: string
+          format: date-time
+        internal:
+          type: boolean
+          description: 'Nota interna da equipa: o cliente nunca a vê.'
+      required:
+      - at
+      - by
+      - internal
+      - note
+      - status
+      - statusLabel
+    StaffPortalInternalNote:
+      type: object
+      properties:
+        note:
+          type: string
+          description: Só a equipa vê esta nota.
+      required:
+      - note
+    StaffPortalTimelineItem:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/StaffPortalTimelineItemKindEnum'
+        at:
+          type: string
+          format: date-time
+        by:
+          type: string
+        text:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+        statusLabel:
+          type:
+          - string
+          - 'null'
+        internal:
+          type: boolean
+      required:
+      - at
+      - by
+      - internal
+      - kind
+      - status
+      - statusLabel
+      - text
+    StaffPortalTimelineItemKindEnum:
+      enum:
+      - STATUS
+      - INTERNAL_NOTE
+      - MESSAGE
+      type: string
+      description: '* `STATUS` - STATUS
+
+        * `INTERNAL_NOTE` - INTERNAL_NOTE
+
+        * `MESSAGE` - MESSAGE'
+    TariffStageCodeEnum:
+      enum:
+      - PURE_PREMIUM
+      - RISK_FACTORS
+      - PERSON_RULES
+      - PERSON_FORMULAS
+      - LOADINGS
+      - ADJUSTMENTS
+      - LEGAL_TAXES
+      - CHARGES
+      - QUOTE_FORMULAS
+      - PRODUCT_SETUP
+      - MINIMUM_PREMIUM
+      - FRACTIONATION
+      type: string
+      description: '* `PURE_PREMIUM` - PURE_PREMIUM
+
+        * `RISK_FACTORS` - RISK_FACTORS
+
+        * `PERSON_RULES` - PERSON_RULES
+
+        * `PERSON_FORMULAS` - PERSON_FORMULAS
+
+        * `LOADINGS` - LOADINGS
+
+        * `ADJUSTMENTS` - ADJUSTMENTS
+
+        * `LEGAL_TAXES` - LEGAL_TAXES
+
+        * `CHARGES` - CHARGES
+
+        * `QUOTE_FORMULAS` - QUOTE_FORMULAS
+
+        * `PRODUCT_SETUP` - PRODUCT_SETUP
+
+        * `MINIMUM_PREMIUM` - MINIMUM_PREMIUM
+
+        * `FRACTIONATION` - FRACTIONATION'
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

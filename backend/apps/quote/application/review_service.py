@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.foundation.application.audit_service import AuditService
+from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.application.context import CurrentActorProvider, CurrentTenantProvider
 from apps.foundation.domain.permissions import Permission, Role, effective_role_permissions
 from apps.foundation.domain.problem import DomainProblem
@@ -17,6 +18,7 @@ from apps.quote.domain.errors import QuoteStateError, ReferencedEntityNotFoundEr
 from apps.quote.infrastructure.models import Quote, ReviewTask
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
+_outbox = get_outbox_service()
 _ACTIVE = (ReviewTaskStatus.OPEN.value, ReviewTaskStatus.IN_PROGRESS.value)
 MAX_BATCH = 100
 
@@ -62,6 +64,8 @@ def _assignee(task: ReviewTask, assignee_id: uuid.UUID | None) -> str:
     actor = CurrentActorProvider.get()
     actor_id = actor.actor_id if actor else "unknown"
     if assignee_id is None or str(assignee_id) == actor_id:
+        if task.assigned_to and task.assigned_to != actor_id:
+            raise QuoteStateError("Esta tarefa já está atribuída a outra pessoa")
         reason = decision_block_reason(task.quote, actor_id)
         if reason:
             raise SegregationOfDutiesError(reason)
@@ -75,6 +79,8 @@ def assign(*, task: ReviewTask, assignee_id: uuid.UUID | None) -> ReviewTask:
     if task.status not in _ACTIVE:
         raise QuoteStateError("Esta revisão já foi decidida")
     assignee = _assignee(task, assignee_id)
+    if task.assigned_to == assignee and task.status == ReviewTaskStatus.IN_PROGRESS.value:
+        return task  # já é de quem pede: repetir não muda nada
     updated = ReviewTask.objects.filter(id=task.id, status=task.status, row_version=task.row_version).update(
         assigned_to=assignee, status=ReviewTaskStatus.IN_PROGRESS.value,
         started_at=task.started_at or timezone.now(), row_version=task.row_version + 1,
@@ -83,8 +89,12 @@ def assign(*, task: ReviewTask, assignee_id: uuid.UUID | None) -> ReviewTask:
         raise QuoteStateError("Esta revisão foi alterada entretanto; recarregue e tente de novo")
     task.refresh_from_db()
     _audit.record(
-        action="quote.review_assigned", entity_type="Quote", entity_id=str(task.quote_id),
+        action="quote.review.assigned", entity_type="Quote", entity_id=str(task.quote_id),
         metadata={"reviewTaskId": str(task.id), "assignedTo": assignee},
+    )
+    _outbox.append(
+        aggregate_type="Quote", aggregate_id=str(task.quote_id), event_type="QUOTE.REVIEW_ASSIGNED",
+        payload={"quoteId": str(task.quote_id), "reviewTaskId": str(task.id), "assignedTo": assignee},
     )
     return task
 
@@ -106,6 +116,40 @@ def assign_many(*, task_ids: list[uuid.UUID], assignee_id: uuid.UUID | None) -> 
         except DomainProblem as exc:
             failed.append({"taskId": str(task_id), "reason": str(exc)})
     return {"assigned": assigned, "failed": failed}
+
+
+def decide_many(*, task_ids: list[uuid.UUID], decision: str, reason_code: str, reason_text: str | None,
+                correlation_id: str | None, can_decide) -> dict[str, list]:
+    """Decisão em lote: cada cotação passa pelas mesmas regras da decisão
+    individual (quatro olhos, estado, permissão) e falha sozinha."""
+    from apps.quote.application import quote_service
+
+    CurrentTenantProvider.require()
+    tasks = {t.id: t for t in ReviewTask.objects.select_related("quote").filter(id__in=task_ids)}
+    decided: list[dict[str, str]] = []
+    failed: list[dict[str, str]] = []
+    for task_id in dict.fromkeys(task_ids):
+        task = tasks.get(task_id)
+        if task is None:
+            failed.append({"taskId": str(task_id), "reason": "Esta revisão não existe."})
+            continue
+        quote = task.quote
+        if not can_decide(decision):
+            failed.append({"taskId": str(task_id), "reason": "Não tem permissão para esta decisão."})
+            continue
+        try:
+            with transaction.atomic():
+                updated = quote_service.decide_quote(
+                    quote=quote, decision=decision, reason_code=reason_code, reason_text=reason_text,
+                    row_version=quote.row_version, correlation_id=correlation_id,
+                )
+            decided.append({
+                "taskId": str(task_id), "quoteId": str(updated.id),
+                "quoteNumber": updated.quote_number, "status": updated.status,
+            })
+        except DomainProblem as exc:
+            failed.append({"taskId": str(task_id), "reason": str(exc)})
+    return {"decided": decided, "failed": failed}
 
 
 def staff_names(actor_ids) -> dict[str, str]:

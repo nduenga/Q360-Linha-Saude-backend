@@ -596,8 +596,15 @@ class Command(BaseCommand):
             # Seed-owned portal users keep the documented e-mail address on
             # every run, so changing a demo credential is immediately
             # reflected in the existing local database.
+            changes = {}
             if proposer.email != data["email"]:
-                Proposer.objects.filter(id=proposer.id).update(email=data["email"])
+                changes["email"] = data["email"]
+            # Bases criadas antes da regra de NIF por tipo têm a empresa de demo
+            # com um NIF de pessoa singular; qualquer escrita nessa linha falharia.
+            if proposer.nif != data["registration_number"]:
+                changes.update(nif=data["registration_number"], registration_number=data["registration_number"])
+            if changes:
+                Proposer.objects.filter(id=proposer.id).update(**changes)
                 proposer.refresh_from_db()
             return proposer
         # The canonical `nif` field was introduced after the legacy

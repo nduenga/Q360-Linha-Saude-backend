@@ -15,13 +15,12 @@ from apps.foundation.interfaces.permissions import require_permission, require_s
 from apps.pricing.interfaces.serializers import render_preview
 from apps.quote.application import (
     questionnaire_service,
-    quote_service,
     renewal_worklist_service,
     review_service,
     workspace_service,
 )
 from apps.quote.infrastructure.models import Quote, ReviewTask
-from apps.quote.interfaces.serializers import QuoteSerializer, ReviewTaskSerializer, review_task_context
+from apps.quote.interfaces.serializers import ReviewTaskSerializer, review_task_context
 from shared.pagination import Q360PageNumberPagination
 
 
@@ -45,13 +44,18 @@ class ReviewAssignBatchRequestSerializer(ReviewAssignRequestSerializer):
     )
 
 
+class ReviewDecisionBatchRequestSerializer(serializers.Serializer):
+    taskIds = serializers.ListField(
+        child=serializers.UUIDField(), allow_empty=False, max_length=review_service.MAX_BATCH,
+    )
+    decision = serializers.ChoiceField(choices=["APPROVE", "REJECT", "RETURN"])
+    reasonCode = serializers.CharField(min_length=1, max_length=100)
+    reasonText = serializers.CharField(allow_null=True, allow_blank=True, required=False, default=None)
+
+
 class QuoteWorkspaceRequestSerializer(serializers.Serializer):
     memberIds = serializers.ListField(child=serializers.UUIDField(), allow_empty=True)
     selection = serializers.JSONField(required=False, allow_null=True, default=None)
-    rowVersion = serializers.IntegerField(min_value=0)
-
-
-class QuoteSubmitUndoRequestSerializer(serializers.Serializer):
     rowVersion = serializers.IntegerField(min_value=0)
 
 
@@ -137,6 +141,27 @@ class ReviewAssignmentView(_ReviewPermissions, APIView):
 
 
 @requires_idempotency
+@requires_idempotency
+class ReviewBatchDecisionView(APIView):
+    """`POST /reviews/decisions` — decisão em lote, com resultado por cotação."""
+
+    permission_classes = [require_scope(Scope.APPROVE)]
+
+    def post(self, request):
+        from apps.foundation.application.permission_evaluator import PermissionEvaluator
+        from apps.quote.interfaces.views import _DECISION_PERMISSION
+
+        body = ReviewDecisionBatchRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        actor = getattr(getattr(request, "user", None), "actor", None)
+        return Response(review_service.decide_many(
+            task_ids=data["taskIds"], decision=data["decision"], reason_code=data["reasonCode"],
+            reason_text=data["reasonText"], correlation_id=get_correlation_id(),
+            can_decide=lambda decision: PermissionEvaluator.is_authorised(actor, _DECISION_PERMISSION[decision]),
+        ))
+
+
 class ReviewBatchAssignmentView(_ReviewPermissions, APIView):
     """`POST /reviews/assignments` — atribuição em lote; cada tarefa é independente."""
 
@@ -184,22 +209,6 @@ class QuoteWorkspaceView(APIView):
             quote=quote, member_ids=data["memberIds"], selection=data["selection"], row_version=data["rowVersion"],
             correlation_id=get_correlation_id(), render=render_preview,
         ))
-
-
-@requires_idempotency
-class QuoteSubmitUndoView(APIView):
-    """`POST /quotes/{id}/submit/undo` — o «Anular» do aviso depois de enviar."""
-
-    permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_SUBMIT)]
-
-    def post(self, request, quote_id):
-        quote = get_object_or_404(Quote, id=quote_id)
-        body = QuoteSubmitUndoRequestSerializer(data=request.data)
-        body.is_valid(raise_exception=True)
-        updated = quote_service.undo_submit(
-            quote=quote, row_version=body.validated_data["rowVersion"], correlation_id=get_correlation_id()
-        )
-        return Response(QuoteSerializer(updated).data)
 
 
 class RenewalDueListView(APIView):
