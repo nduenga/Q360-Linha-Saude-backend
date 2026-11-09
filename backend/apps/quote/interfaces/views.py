@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import uuid
 
+from django.db.models import CharField, Count, Q
+from django.db.models.functions import Cast
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
@@ -91,6 +93,9 @@ from apps.quote.domain import proposal_template
 from apps.quote.domain.proposal_template import default_body
 from shared.pagination import Q360PageNumberPagination
 
+# Cotações por página na lista (`GET /quotes`) quando o pedido não envia `size`.
+QUOTE_PAGE_SIZE = 12
+
 _DECISION_PERMISSION = {
     QuoteDecisionType.APPROVE.value: Permission.QUOTE_APPROVE,
     QuoteDecisionType.REJECT.value: Permission.QUOTE_REJECT,
@@ -109,9 +114,6 @@ class QuoteListCreateView(APIView):
 
     def get(self, request):
         queryset = Quote.objects.select_related("latest_pricing_run", "proposer", "plan__product").order_by("-created_at")
-        status_filter = request.query_params.get("status")
-        if status_filter:
-            queryset = queryset.filter(status=status_filter)
         proposer_id = request.query_params.get("proposerId")
         if proposer_id:
             # Database-level filtering avoids scanning every page in the frontend.
@@ -133,9 +135,28 @@ class QuoteListCreateView(APIView):
         source_policy_id = request.query_params.get("sourcePolicyId")
         if source_policy_id:
             queryset = queryset.filter(source_policy_id=source_policy_id)
-        paginator = Q360PageNumberPagination()
+        # Contagens por estado para os indicadores da lista: sobre todas as
+        # cotações que passam os filtros acima, sem o estado nem a pesquisa,
+        # para que mudar de separador ou pesquisar não mude os totais.
+        status_counts = {
+            row["status"]: row["n"]
+            for row in queryset.order_by().values("status").annotate(n=Count("id"))
+        }
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        search = (request.query_params.get("q") or "").strip()
+        if search:
+            queryset = queryset.annotate(_id_text=Cast("id", CharField())).filter(
+                Q(quote_number__icontains=search) | Q(_id_text__istartswith=search)
+            )
+        paginator = Q360PageNumberPagination(default_size=QUOTE_PAGE_SIZE)
         page = paginator.paginate_queryset(queryset, request)
-        return paginator.get_paginated_response(QuoteSerializer(page, many=True).data)
+        return paginator.get_paginated_response(
+            QuoteSerializer(page, many=True).data,
+            statusCounts=status_counts,
+            statusCountsTotal=sum(status_counts.values()),
+        )
 
     def post(self, request):
         body = QuoteCreateRequestSerializer(data=request.data)

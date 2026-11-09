@@ -754,6 +754,25 @@ class PlanValidation(s.Serializer):
     warnings = PlanValidationIssue(many=True)
 
 
+class QuoteListPageMeta(s.Serializer):
+    page = s.IntegerField()
+    size = s.IntegerField()
+    totalElements = s.IntegerField()
+    totalPages = s.IntegerField()
+
+
+class QuoteListPage(s.Serializer):
+    """Página de cotações (12 por omissão) com as contagens por estado."""
+
+    items = QuoteSerializer(many=True)
+    page = QuoteListPageMeta()
+    statusCounts = s.DictField(
+        child=s.IntegerField(),
+        help_text="Cotações por estado (DRAFT, READY, IN_REVIEW...) sobre os filtros proposerId/quoteNumber/quoteType/sourcePolicyId, sem status nem q.",
+    )
+    statusCountsTotal = s.IntegerField(help_text="Soma de statusCounts.")
+
+
 class PlanComparisonPlan(s.Serializer):
     planId = s.UUIDField()
     planCode = s.CharField()

@@ -93,6 +93,14 @@ REGISTRY: dict[str, dict] = {
     "MemberImportUploadView.post": {"request": d.MemberImportRequest, "status": 202},
     "ImportTemplateView.get": {"media": XLSX, "notes": "Modelo Excel .xlsx com cabeçalhos, exemplo e instruções em português. kind: MEMBERS, CLAIMS, PREMIUMS ou BENEFITS."},
     "PlanValidationView.get": {"response": d.PlanValidation},
+    "QuoteListCreateView.get": {
+        "response": d.QuoteListPage,
+        "queries": {
+            "size": ("integer", False, "Cotações por página (por omissão 12, máx. 200)."),
+            "status": ("string", False, "Só cotações neste estado (DRAFT, READY, IN_REVIEW, APPROVED, BOUND...)."),
+            "q": ("string", False, "Pesquisa pelo número da cotação ou pelo início do id."),
+        },
+    },
     "PlanCompareView.get": {
         "response": d.PlanComparison,
         "queries": {

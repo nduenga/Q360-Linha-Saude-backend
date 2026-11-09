@@ -15047,6 +15047,11 @@ paths:
           type: string
         description: Filtro.
       - in: query
+        name: q
+        schema:
+          type: string
+        description: Pesquisa pelo número da cotação ou pelo início do id.
+      - in: query
         name: quoteNumber
         schema:
           type: string
@@ -15060,7 +15065,7 @@ paths:
         name: size
         schema:
           type: integer
-        description: Itens por página (máx. 200).
+        description: Cotações por página (por omissão 12, máx. 200).
       - in: query
         name: sourcePolicyId
         schema:
@@ -15070,7 +15075,7 @@ paths:
         name: status
         schema:
           type: string
-        description: Filtro.
+        description: Só cotações neste estado (DRAFT, READY, IN_REVIEW, APPROVED, BOUND...).
       tags:
       - Quotes
       security:
@@ -15081,7 +15086,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuotePage'
+                $ref: '#/components/schemas/QuoteListPage'
           description: Sucesso.
         '400':
           content:
@@ -30511,6 +30516,46 @@ components:
             $ref: '#/components/schemas/QuoteDiscountApproval'
       required:
       - items
+    QuoteListPage:
+      type: object
+      description: Página de cotações (12 por omissão) com as contagens por estado.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Quote'
+        page:
+          $ref: '#/components/schemas/QuoteListPageMeta'
+        statusCounts:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Cotações por estado (DRAFT, READY, IN_REVIEW...) sobre os filtros proposerId/quoteNumber/quoteType/sourcePolicyId,
+            sem status nem q.
+        statusCountsTotal:
+          type: integer
+          description: Soma de statusCounts.
+      required:
+      - items
+      - page
+      - statusCounts
+      - statusCountsTotal
+    QuoteListPageMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+      required:
+      - page
+      - size
+      - totalElements
+      - totalPages
     QuoteMember:
       type: object
       description: 'Pragmatic V1 addition (`GET /quotes/{quoteId}/members`, not in
@@ -30579,19 +30624,6 @@ components:
         personId:
           type: string
           format: uuid
-    QuotePage:
-      type: object
-      description: Página de QuoteSerializer.
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Quote'
-        page:
-          $ref: '#/components/schemas/PageMeta'
-      required:
-      - items
-      - page
     QuotePreviewRequest:
       type: object
       properties:

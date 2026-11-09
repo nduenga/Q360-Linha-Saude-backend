@@ -2139,6 +2139,7 @@ O modelo e a pré-validação Excel das tabelas de referência da plataforma usa
 |---|---|---|
 | `GET /plans/compare` | **Novo** | Compara 2 a 4 planos lado a lado (capitais, coberturas, condições financeiras, elegibilidade, carências, preexistentes, rede), com resumo factual das diferenças e avisos. Só leitura (`q360.read`). |
 | `POST /plans/compare` | **Novo** | O mesmo e ainda o prémio de cada plano para uma composição (idades, sexo, parentesco), calculado pelo motor real numa cotação de exemplo. Nada é gravado. `q360.write` + `quote:calculate`. |
+| `GET /quotes` | Comportamento + contrato (parâmetro e resposta) | **12 cotações por página** quando o pedido não envia `size` (antes 20); um `size` explícito continua a mandar (máx. 200). Novo parâmetro `q`: pesquisa pelo número da cotação (contém) ou pelo início do id. A resposta (`QuoteListPage`) ganha `statusCounts` (cotações por estado, p.ex. `{"DRAFT": 11, "REJECTED": 4}`) e `statusCountsTotal`, calculados com os filtros `proposerId`, `quoteNumber`, `quoteType` e `sourcePolicyId`, mas **sem** `status` nem `q`, para os indicadores da lista não mudarem com o separador ou a pesquisa. |
 
 Não confundir com `GET /customer-portal/plans/compare?policyNumber=`, que compara as opções de renovação de uma apólice no Portal do Cliente.
 

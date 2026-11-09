@@ -19,16 +19,21 @@ _MAX_SIZE = 200
 
 
 class Q360PageNumberPagination(BasePagination):
+    def __init__(self, default_size: int = _DEFAULT_SIZE) -> None:
+        # Uma lista pode ter um tamanho de página por omissão próprio (p.ex.
+        # 12 cotações por página); um `size` explícito continua a mandar.
+        self.default_size = default_size
+
     def paginate_queryset(self, queryset, request, view=None):
         self.page = self._parse_int(request.query_params.get("page"), default=0, minimum=0)
         self.size = self._parse_int(
-            request.query_params.get("size"), default=_DEFAULT_SIZE, minimum=1, maximum=_MAX_SIZE
+            request.query_params.get("size"), default=self.default_size, minimum=1, maximum=_MAX_SIZE
         )
         self.total_elements = queryset.count()
         start = self.page * self.size
         return list(queryset[start : start + self.size])
 
-    def get_paginated_response(self, data) -> Response:
+    def get_paginated_response(self, data, **extra) -> Response:
         total_pages = (self.total_elements + self.size - 1) // self.size if self.size else 0
         return Response(
             {
@@ -39,6 +44,7 @@ class Q360PageNumberPagination(BasePagination):
                     "totalElements": self.total_elements,
                     "totalPages": total_pages,
                 },
+                **extra,
             }
         )
 
