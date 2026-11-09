@@ -153,7 +153,7 @@ def delete_product(*, product: Product) -> None:
 
 def _plan_signature(settings: dict | None) -> tuple:
     settings = settings or {}
-    return (settings.get("segment"), settings.get("tier"), settings.get("category"))
+    return (settings.get("segment"), settings.get("tier"), settings.get("category"), settings.get("level"))
 
 
 def create_plan(
@@ -191,7 +191,10 @@ def create_plan(
             # PDF "Coberturas e Capitais" (Saúde Grupo): the 2-3 professional
             # categories (Colaboradores/Quadros/Administração) share the same
             # coverages and differ only in capitals — so plans that declare a
-            # different segment/tier/category are *not* duplicates.
+            # different segment/tier/category are *not* duplicates. The same
+            # holds for the levels of an insurer's range (`level`: e.g.
+            # Protteja Premium vs Premium Plus share every coverage and differ
+            # in capitals, co-insurance and territory).
             candidate_signature = _plan_signature(plan_settings)
             for existing_plan in Plan.objects.filter(product=locked_product):
                 existing_ids = set(

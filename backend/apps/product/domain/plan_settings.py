@@ -40,7 +40,7 @@ PREMIUM_PAYERS = ("COMPANY", "EMPLOYEE_COPAYS_FAMILY")
 NETWORK_REGIONS = ("LUANDA", "PROVINCES")
 
 _ALLOWED_KEYS = {
-    "segment", "tier", "category", "accessSystem", "costSharingModel", "participationOption", "participationOptions",
+    "segment", "tier", "category", "level", "accessSystem", "costSharingModel", "participationOption", "participationOptions",
     "entryAge", "permanenceAge", "household", "clinicalQuestionnaire", "group", "preExistingTreatment",
     "waitingRules", "network", "priorAuthorization", "capitalIndexation", "currency", "noProRata", "notes",
     "indicative", "source",
@@ -114,6 +114,10 @@ def validate_plan_settings(raw: Any) -> tuple[dict[str, Any], list[dict[str, str
     segment = _choice(settings.get("segment"), "settings.segment", SEGMENTS)
     if "tier" in settings and settings["tier"] is not None:
         _choice(settings["tier"], "settings.tier", TIERS)
+    if "level" in settings:
+        # Nível do plano na gama da seguradora (1 = de entrada): distingue planos
+        # com as mesmas coberturas e capitais diferentes.
+        _int(settings["level"], "settings.level", minimum=1, maximum=20)
     if "accessSystem" in settings:
         _choice(settings["accessSystem"], "settings.accessSystem", ACCESS_SYSTEMS)
     if "costSharingModel" in settings:

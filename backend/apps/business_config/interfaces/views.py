@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from apps.business_config.domain.catalog import AREA_LABELS, CONFIG_CATALOG, area_of
-from apps.business_config.domain.form_schemas import get_form_schema
+from apps.business_config.application.product_configuration_service import tenant_form_schema
 from apps.business_config.infrastructure.models import BusinessConfiguration,BusinessConfigurationDocument
 from apps.business_config.application.service import *
 from apps.business_config.interfaces.serializers import *
@@ -36,7 +36,7 @@ class _ConfigPermissions:
 
 class CatalogView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="getBusinessConfigurationCatalog", summary="Consultar catálogo de configurações", tags=["Configuration"], responses=BusinessConfigurationCatalogSerializer)
-    def get(self,request): return Response({"items":[{**x,"area":area_of(x["key"]),"areaLabel":AREA_LABELS[area_of(x["key"])],"formSchema":get_form_schema(x["key"]),"requiresBusinessConfirmation":True} for x in CONFIG_CATALOG]})
+    def get(self,request): return Response({"items":[{**x,"area":area_of(x["key"]),"areaLabel":AREA_LABELS[area_of(x["key"])],"formSchema":tenant_form_schema(x["key"]),"requiresBusinessConfirmation":True} for x in CONFIG_CATALOG]})
 class ConfigurationListCreateView(_ConfigPermissions, APIView):
     @extend_schema(operation_id="listBusinessConfigurations", summary="Listar configurações de negócio", tags=["Configuration"], responses=BusinessConfigurationListSerializer)
     def get(self,request):

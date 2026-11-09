@@ -112,6 +112,8 @@ Para cada endpoint: quem pode chamar, o que **recebe** (parâmetros e corpo) e o
 | 86 | POST | `/quotes/{quote_id}/policy` | postIssuePolicy | Alterado (comportamento: endosso) |
 | 87 | GET | `/platform/templates/import-template` | getPlatformTemplateImportTemplate | Novo |
 | 88 | POST | `/platform/templates/import-preview` | postPlatformTemplateImportPreview | Novo |
+| 89 | GET | `/plans/compare` | getPlanCompare | Novo (09/11/2026) |
+| 90 | POST | `/plans/compare` | postPlanCompare | Novo (09/11/2026) |
 
 ## Atualização de 27/10/2026 — ciclo de vida, agregados familiares e controlo operacional
 
@@ -2130,3 +2132,77 @@ O modelo e a pré-validação Excel das tabelas de referência da plataforma usa
 | `GET /portal-requests/{request_number}` | Contrato (resposta) | `history[].internal` e nova `timeline[]` (estados, notas internas e mensagens). |
 | `GET /customer-portal/me/quotes/{quote_number}` | Contrato (resposta) | `accepted`, `nextStep {code,label}` e `paymentInstructions` (depois de aceitar). |
 | `GET /customer-portal/payments` | Contrato (resposta) | `paymentInstructions`, da configuração `portal.payment_instructions` (null se não publicada). |
+
+### Alterações de 09/11/2026 (comparador de planos)
+
+| Endpoint | Tipo | O que muda |
+|---|---|---|
+| `GET /plans/compare` | **Novo** | Compara 2 a 4 planos lado a lado (capitais, coberturas, condições financeiras, elegibilidade, carências, preexistentes, rede), com resumo factual das diferenças e avisos. Só leitura (`q360.read`). |
+| `POST /plans/compare` | **Novo** | O mesmo e ainda o prémio de cada plano para uma composição (idades, sexo, parentesco), calculado pelo motor real numa cotação de exemplo. Nada é gravado. `q360.write` + `quote:calculate`. |
+
+Não confundir com `GET /customer-portal/plans/compare?policyNumber=`, que compara as opções de renovação de uma apólice no Portal do Cliente.
+
+#### `GET /plans/compare`
+
+- **Quem pode:** `q360.read`.
+- **Recebe (query):**
+
+| Parâmetro | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `planIds` | texto | sim | 2 a 4 ids de planos, separados por vírgula (ou o parâmetro repetido). Ids repetidos contam uma vez. |
+| `onlyDifferences` | booleano | não | `true`: só as linhas em que os planos diferem; as secções sem diferenças desaparecem. |
+
+- **Envia (200):** `PlanComparison`.
+
+| Campo | Tipo | Descrição |
+|---|---|---|
+| `plans[]` | lista de objeto | Um por plano, pela ordem pedida: `planId`, `planCode`, `planName`, `planStatus`, `productId`, `productCode`, `productName`, `productStatus`, `segment`, `tier`, `level`, `currency`. |
+| `onlyDifferences` | booleano | Eco do filtro. |
+| `sections[]` | lista de objeto | `key`, `label`, `kind` (`PLAN` ou `COVERAGE`), `coverageCode?`, `coverageCategory?` (`BASE`/`COMPLEMENTARY`), `note?`, `different` e `rows[]`. |
+| `sections[].rows[]` | lista de objeto | `key`, `label`, `unit?` (`MONEY`, `PERCENT`, `DAYS`, `YEARS`, `PEOPLE`, `COUNT`), `different` e `cells[]` (uma por plano, pela ordem de `plans`). |
+| `sections[].rows[].cells[]` | objeto | `state`, `value` (em bruto; decimais como texto), `currency?` (`AOA`/`USD`), `optional?` (cobertura opcional, na secção de capitais), `reason?` (prémio não calculado). |
+| `summary[]` | lista de objeto | Diferenças factuais: `type`, `planIds`, `coverageCode?`, `setting?`, `amount?`, `difference?`, `currency?`, `message`. A `message` nunca leva valores: o frontend formata `amount`/`difference`. |
+| `warnings[]` | lista de objeto | `code`, `message`, `planId?`. |
+| `pricing` | objeto | No GET: `{available: false, message, results: []}`. |
+
+**Secções, por ordem:** `identification` · `premium` (só no POST) · `capitals` · `coverage.<CÓDIGO>` (uma por cobertura, BASE primeiro) · `participation` (opções A–E) · `eligibility` · `waitingAndRules` · `network`.
+
+**Estados da célula (`state`):**
+
+| Estado | Significado |
+|---|---|
+| `VALUE` | Há valor. |
+| `NOT_INCLUDED` | O plano não oferece a cobertura. |
+| `NOT_APPLICABLE` | O atributo não faz sentido neste plano (p.ex. regras de grupo num plano individual, bloco de reembolso num plano só de rede, opções A–E num plano `INTEGRAL`). |
+| `NOT_INFORMED` | O valor não foi configurado (ou o prémio não pôde ser calculado, com `reason`). |
+| `SUBJECT_TO_ASSESSMENT` | Depende de análise da seguradora (preexistentes com exclusão específica ou sobreprémio). |
+
+A inclusão `OPTIONAL` aparece como valor da linha `inclusion` de cada cobertura e como `optional: true` na secção de capitais.
+
+**Linhas de cada cobertura** (as que nenhum plano informa ficam de fora, exceto `inclusion`): `inclusion`, `capital` (`{kind, kindLabel, amount, label?}`), `sublimits`, `quantityLimits`, `coinsurancePct`, `participationNetwork`, `participationReimbursement`, `waitingIndividual`, `waitingGroup`, `waitingScheduledSurgery`, `accidentWaived`, `requiresPriorApproval`, `maxDaysPerYear`, `timeDeductibleDays`, `destinations`, `closedDiseaseList`, `exclusions`.
+
+**Tipos do resumo (`summary[].type`):** `PREMIUM_LOWEST`, `PREMIUM_DIFFERENCE`, `PREMIUM_UNAVAILABLE`, `PREMIUM_NOT_COMPARABLE` (só no POST), `COVERAGE_NOT_IN_ALL`, `COVERAGE_OPTIONAL_IN_SOME`, `CAPITAL_HIGHER` (só com a mesma forma de garantia e a mesma moeda), `CAPITAL_NOT_COMPARABLE`, `PLAN_SETTING_DIFFERS` (sistema de acesso ou modelo de participação).
+
+**Avisos (`warnings[].code`):** `SEGMENT_MISMATCH` (individual/familiar com grupo), `CURRENCY_MISMATCH`, `PLAN_INACTIVE`, `PRODUCT_NOT_ACTIVE`, `PLAN_CONFIGURATION_INVALID`. Planos inativos ou de produtos não ativos não são recusados: só geram aviso.
+
+- **Erros:** 400 `VALIDATION-400` (menos de 2 ou mais de 4 planos, id inválido); 404 `NOT-FOUND` (plano inexistente ou de outro tenant); 401; 403.
+
+#### `POST /plans/compare`
+
+- **Quem pode:** `q360.write` + `quote:calculate`.
+- **Recebe (JSON):**
+
+| Campo | Tipo | Obrigatório | Descrição |
+|---|---|---|---|
+| `planIds` | lista de uuid | sim | 2 a 4 planos. |
+| `onlyDifferences` | booleano | não | Igual ao GET. |
+| `composition.members[]` | lista de objeto | sim (≥ 1) | `age` (0–120), `sex?` (`M`/`F`, por omissão `M`), `relationship?` (código de parentesco; por omissão a 1.ª pessoa é `TITULAR` e as outras `FILHO`). |
+| `composition.paymentFrequency` | texto | não | `ANUAL`, `SEMESTRAL`, `TRIMESTRAL` ou `MENSAL`; por omissão devolve todas. |
+| `composition.selections` | objeto | não | Seleção por `planId` (opção A–E, coberturas opcionais), no mesmo formato de `selection` da cotação. |
+
+- **Envia (200):** o mesmo `PlanComparison`, com:
+  - secção `premium`: linhas `totalAmount` (prémio total anual da composição) e `installment.<FREQUÊNCIA>`;
+  - `pricing = {available, message, persisted: false, members, paymentFrequency, results[]}`, com `results[] = {planId, available, currencyCode?, totalAmount?, installments?, referenceDate?, reason?}`;
+  - factos `PREMIUM_*` no início do `summary`.
+- **Comportamento:** cada plano é tarifado com `simulate_tariff` (o mesmo cálculo de `POST /products/{product_id}/tariff/simulate`). O tipo de tomador segue o segmento do plano (`INDIVIDUAL_FAMILY` → `INDIVIDUAL`, `GROUP` → `ORGANISATION`). O proponente, as pessoas, a cotação e o cálculo temporários são revertidos. Um plano que não se consegue tarifar (tarifa por publicar, idade fora dos escalões...) não falha o pedido: fica com `available: false` e `reason`.
+- **Erros:** os do GET e ainda 400 `VALIDATION-400` para uma `composition` inválida (sem pessoas, idade fora de 0–120, sexo ou frequência desconhecidos).

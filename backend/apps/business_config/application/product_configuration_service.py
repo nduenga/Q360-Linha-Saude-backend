@@ -42,6 +42,25 @@ def _plan_choices(product) -> tuple[list[str], dict[str, str]]:
     return [p.code for p in plans], {p.code: f"{p.name} ({p.code})" for p in plans}
 
 
+def tenant_form_schema(base: str) -> dict[str, Any]:
+    """Formulário da configuração geral: o campo «Plano» lista os planos reais
+    de todos os produtos da seguradora. Os nomes antigos da lista fixa
+    continuam disponíveis para não deixar sem valor as linhas que os usam."""
+    from apps.business_config.domain.form_schemas import PLANS
+    from apps.product.infrastructure.models import Plan
+
+    schema = copy.deepcopy(get_form_schema(base))
+    plans = list(Plan.objects.select_related("product").order_by("product__name", "code"))
+    options = [p.code for p in plans] + [legacy for legacy in PLANS if legacy not in {p.code for p in plans}]
+    labels = {p.code: f"{p.name} ({p.code}) · {p.product.name}" for p in plans}
+    for section in schema.get("sections", []):
+        for field in section.get("fields", []):
+            if field.get("name") in _PLAN_FIELDS and field.get("options") is not None:
+                field["options"] = options
+                field["optionLabels"] = {**field.get("optionLabels", {}), **labels}
+    return schema
+
+
 def product_form_schema(base: str, product) -> dict[str, Any]:
     schema = copy.deepcopy(get_form_schema(base))
     options, labels = _plan_choices(product)

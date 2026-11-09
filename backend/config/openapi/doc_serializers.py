@@ -754,6 +754,117 @@ class PlanValidation(s.Serializer):
     warnings = PlanValidationIssue(many=True)
 
 
+class PlanComparisonPlan(s.Serializer):
+    planId = s.UUIDField()
+    planCode = s.CharField()
+    planName = s.CharField()
+    planStatus = s.CharField()
+    productId = s.UUIDField()
+    productCode = s.CharField()
+    productName = s.CharField()
+    productStatus = s.CharField()
+    segment = s.CharField(allow_null=True)
+    tier = s.CharField(allow_null=True)
+    level = s.IntegerField(allow_null=True)
+    currency = s.CharField()
+
+
+class PlanComparisonCell(s.Serializer):
+    state = s.ChoiceField(choices=["VALUE", "NOT_INCLUDED", "NOT_APPLICABLE", "NOT_INFORMED", "SUBJECT_TO_ASSESSMENT"])
+    value = s.JSONField(allow_null=True, help_text="Valor em bruto (decimais como texto); null quando state != VALUE.")
+    currency = s.CharField(required=False, help_text="AOA ou USD, quando o valor é monetário.")
+    optional = s.BooleanField(required=False, help_text="Cobertura opcional neste plano (só na secção de capitais).")
+    reason = s.CharField(required=False, help_text="Motivo quando o prémio não pôde ser calculado.")
+
+
+class PlanComparisonRow(s.Serializer):
+    key = s.CharField()
+    label = s.CharField()
+    unit = s.CharField(required=False, help_text="MONEY, PERCENT, DAYS, YEARS, PEOPLE ou COUNT.")
+    different = s.BooleanField()
+    cells = PlanComparisonCell(many=True, help_text="Uma célula por plano, pela ordem de `plans`.")
+
+
+class PlanComparisonSection(s.Serializer):
+    key = s.CharField()
+    label = s.CharField()
+    kind = s.ChoiceField(choices=["PLAN", "COVERAGE"])
+    coverageCode = s.CharField(required=False)
+    coverageCategory = s.CharField(required=False, allow_null=True)
+    note = s.CharField(required=False)
+    different = s.BooleanField()
+    rows = PlanComparisonRow(many=True)
+
+
+class PlanComparisonFact(s.Serializer):
+    type = s.CharField(help_text=(
+        "PREMIUM_LOWEST, PREMIUM_DIFFERENCE, PREMIUM_UNAVAILABLE, PREMIUM_NOT_COMPARABLE, COVERAGE_NOT_IN_ALL, "
+        "COVERAGE_OPTIONAL_IN_SOME, CAPITAL_HIGHER, CAPITAL_NOT_COMPARABLE ou PLAN_SETTING_DIFFERS."
+    ))
+    planIds = s.ListField(child=s.UUIDField())
+    coverageCode = s.CharField(required=False)
+    setting = s.CharField(required=False)
+    amount = s.CharField(required=False)
+    difference = s.CharField(required=False)
+    currency = s.CharField(required=False)
+    message = s.CharField()
+
+
+class PlanComparisonWarning(s.Serializer):
+    code = s.CharField()
+    message = s.CharField()
+    planId = s.UUIDField(required=False)
+
+
+class PlanComparisonMember(s.Serializer):
+    age = s.IntegerField(min_value=0, max_value=120)
+    sex = s.ChoiceField(choices=["M", "F"], required=False, help_text="Por omissão M.")
+    relationship = s.CharField(required=False, allow_null=True,
+                               help_text="Código de parentesco (TITULAR, CONJUGE, FILHO, COLABORADOR...). Por omissão a 1.ª pessoa é TITULAR e as outras FILHO.")
+
+
+class PlanComparisonComposition(s.Serializer):
+    members = PlanComparisonMember(many=True)
+    paymentFrequency = s.ChoiceField(choices=["ANUAL", "SEMESTRAL", "TRIMESTRAL", "MENSAL"], required=False, allow_null=True,
+                                     help_text="Por omissão todas as frequências.")
+    selections = s.DictField(child=s.JSONField(), required=False,
+                             help_text="Seleção (opção A–E, coberturas opcionais) por planId.")
+
+
+class PlanComparisonRequest(s.Serializer):
+    planIds = s.ListField(child=s.UUIDField(), min_length=2, max_length=4)
+    onlyDifferences = s.BooleanField(required=False)
+    composition = PlanComparisonComposition()
+
+
+class PlanComparisonPremium(s.Serializer):
+    planId = s.UUIDField()
+    available = s.BooleanField()
+    reason = s.CharField(required=False, help_text="Porque não foi possível calcular (só quando available=false).")
+    currencyCode = s.CharField(required=False)
+    totalAmount = s.CharField(required=False)
+    installments = s.DictField(child=s.CharField(), required=False)
+    referenceDate = s.DateField(required=False)
+
+
+class PlanComparisonPricing(s.Serializer):
+    available = s.BooleanField()
+    message = s.CharField()
+    persisted = s.BooleanField(required=False)
+    members = PlanComparisonMember(many=True, required=False)
+    paymentFrequency = s.CharField(required=False, allow_null=True)
+    results = PlanComparisonPremium(many=True)
+
+
+class PlanComparison(s.Serializer):
+    plans = PlanComparisonPlan(many=True)
+    onlyDifferences = s.BooleanField()
+    sections = PlanComparisonSection(many=True)
+    summary = PlanComparisonFact(many=True)
+    warnings = PlanComparisonWarning(many=True)
+    pricing = PlanComparisonPricing()
+
+
 class MarketTemplatePlanReport(s.Serializer):
     planCode = s.CharField()
     valid = s.BooleanField()

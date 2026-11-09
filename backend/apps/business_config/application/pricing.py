@@ -134,13 +134,25 @@ def resolve_published_business_pricing(*, effective_date: date, product_id=None)
 
 
 
-def resolve_reference_premium(*, pricing: PublishedBusinessPricing, plan, age: int) -> Decimal:
+# Categorias de relação aceites numa linha de tarifa. O colaborador de uma
+# empresa é o titular da sua família, por isso uma linha TITULAR também o abrange.
+PREMIUM_RELATIONSHIPS = ("TITULAR", "SPOUSE", "CHILD")
+_RELATIONSHIP_ALIASES = {"COLLABORATOR": "TITULAR"}
+
+
+def resolve_reference_premium(
+    *, pricing: PublishedBusinessPricing, plan, age: int, relationship: str | None = None,
+) -> Decimal:
+    """Prémio anual de referência da pessoa. Uma linha com `relationship`
+    (p. ex. CHILD 0–24) prevalece sobre a linha só por idade do mesmo plano."""
     rows = pricing.reference_premiums.get("premiums")
     if not isinstance(rows, list) or not rows:
         raise PricingConfigError("'pricing.reference_premiums.premiums' deve conter pelo menos uma tarifa.")
 
     plan_keys = {str(plan.code).strip().casefold(), str(plan.name).strip().casefold()}
-    matches: list[dict[str, Any]] = []
+    person_relationship = _RELATIONSHIP_ALIASES.get(relationship or "", relationship or "")
+    specific: list[dict[str, Any]] = []
+    general: list[dict[str, Any]] = []
 
     for row in rows:
         if not isinstance(row, dict):
@@ -160,8 +172,13 @@ def resolve_reference_premium(*, pricing: PublishedBusinessPricing, plan, age: i
             continue
         if premium < 0:
             raise PricingConfigError(f"A tarifa anual não pode ser negativa: {row!r}")
-        matches.append(row)
+        row_relationship = str(row.get("relationship") or "").strip().upper()
+        if not row_relationship:
+            general.append(row)
+        elif row_relationship == person_relationship:
+            specific.append(row)
 
+    matches = specific or general
     if len(matches) != 1:
         raise PricingConfigError(
             f"Não foi encontrada uma única tarifa para o plano '{plan.code}' e idade {age}; "

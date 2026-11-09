@@ -93,6 +93,17 @@ REGISTRY: dict[str, dict] = {
     "MemberImportUploadView.post": {"request": d.MemberImportRequest, "status": 202},
     "ImportTemplateView.get": {"media": XLSX, "notes": "Modelo Excel .xlsx com cabeçalhos, exemplo e instruções em português. kind: MEMBERS, CLAIMS, PREMIUMS ou BENEFITS."},
     "PlanValidationView.get": {"response": d.PlanValidation},
+    "PlanCompareView.get": {
+        "response": d.PlanComparison,
+        "queries": {
+            "planIds": ("string", True, "2 a 4 ids de planos separados por vírgula."),
+            "onlyDifferences": ("boolean", False, "true: só as linhas em que os planos diferem."),
+        },
+    },
+    "PlanCompareView.post": {
+        "request": d.PlanComparisonRequest, "response": d.PlanComparison,
+        "notes": "Inclui o prémio de cada plano para a composição indicada (cálculo real, nada é gravado).",
+    },
     "MarketTemplatesView.post": {"request": d.EmptyRequest, "response": d.MarketTemplatesResult},
     # -------------------------------------------------------- configuration
     "ConfigurationPublishView.post": {"request": d.EmptyRequest, "response": d.ConfigurationHeader},

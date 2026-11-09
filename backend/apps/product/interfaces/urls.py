@@ -18,6 +18,7 @@ from apps.product.interfaces.views import (
     MarketTemplatesView,
     PlanBenefitDetailView,
     PlanBenefitListCreateView,
+    PlanCompareView,
     PlanValidationView,
     PlanDetailView,
     PlanListCreateView,
@@ -68,6 +69,7 @@ urlpatterns = [
     path("products/<uuid:product_id>/history", ProductHistoryView.as_view(), name="product-history"),
     path("products/<uuid:product_id>", ProductDetailView.as_view(), name="product-detail"),
     path("plans", PlanListCreateView.as_view(), name="plan-list-create"),
+    path("plans/compare", PlanCompareView.as_view(), name="plan-compare"),
     path("plans/<uuid:plan_id>", PlanDetailView.as_view(), name="plan-detail"),
     path("plans/<uuid:plan_id>/validation", PlanValidationView.as_view(), name="plan-validation"),
     path(

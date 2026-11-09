@@ -356,6 +356,27 @@ CATALOG: list[dict[str, Any]] = [
         guarantee_form="ANNUAL_PER_PERSON",
         extra={"acceptanceModes": "ver preExistingTreatment em plan.settings_json"},
     ),
+    # Coberturas da gama Protteja (propostas Saúde 2026) sem equivalente no PDF de mercado.
+    _entry(
+        "CHRONIC_CONDITION",
+        "Condição médica crónica",
+        COMPLEMENTARY,
+        "SPECIALTY",
+        "Acompanhamento de doença crónica declarada e aceite: consultas, exames e tratamentos de controlo.",
+        guarantee_form="ANNUAL_PER_PERSON",
+        participation={"network": "0% a 20%", "reimbursement": "80% a 100%"},
+        waiting_days={"individual": [30, 30], "group": [30, 30]},
+    ),
+    _entry(
+        "FUNERAL_EXPENSES",
+        "Despesas de funeral",
+        COMPLEMENTARY,
+        "SUPPORT",
+        "Reembolso das despesas de funeral da pessoa segura, até ao capital contratado.",
+        guarantee_form="FIXED_AMOUNT",
+        participation={"reimbursement": "100%"},
+        waiting_days={"individual": [30, 30], "group": [30, 30]},
+    ),
     _entry(
         "TRAVEL_ASSISTANCE",
         "Assistência em Viagem",

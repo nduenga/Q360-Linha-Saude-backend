@@ -254,3 +254,10 @@ def validate_for_publication(key: str, value: dict[str, Any]) -> None:
             raise InvalidConfiguration("pricing.reference_premiums: a moeda (currency_code) é obrigatória")
         if not (value.get("premiums") or []):
             raise InvalidConfiguration("pricing.reference_premiums: defina pelo menos uma tarifa")
+        allowed_relationships = ("TITULAR", "SPOUSE", "CHILD")
+        for index, row in enumerate(value.get("premiums") or [], start=1):
+            relationship = (row or {}).get("relationship") if isinstance(row, dict) else None
+            if relationship not in (None, "") and str(relationship).upper() not in allowed_relationships:
+                raise InvalidConfiguration(
+                    f"pricing.reference_premiums: linha {index} — a relação tem de ser titular, cônjuge ou filho (ou ficar vazia)"
+                )

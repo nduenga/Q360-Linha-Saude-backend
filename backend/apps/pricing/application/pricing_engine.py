@@ -515,6 +515,13 @@ def _run_calculation(
         },
     )
     actuarial_model = business_pricing.actuarial_model if business_pricing is not None else None
+    if actuarial_model is not None and str(plan.code) not in (actuarial_model.get("plan_code_mapping") or {}):
+        # Um plano que o modelo atuarial não mapeia (p. ex. a gama de uma
+        # seguradora com tarifa própria) é tarifado pela tabela de prémios de
+        # referência do produto, em vez de falhar por falta de tarifa atuarial.
+        trace("ACTUARIAL_MODEL_NOT_MAPPED", input_data={"planCode": str(plan.code)},
+              output_data={"source": "pricing.reference_premiums"})
+        actuarial_model = None
     actuarial_group_adjustment = None
     if actuarial_model is not None:
         supplied_profile = context.get("actuarialProfile") or {}
@@ -593,7 +600,11 @@ def _run_calculation(
     rule_version_no = str(custom_rules.version["versionNo"]) if custom_rules.version else None
     product_fact = (plan.product.code, plan.product.name) if (person_rules or quote_rules) else ()
     relationship_categories: dict[str, str] = {}
-    if any(c.field == "relationship" for r in person_rules for c in r.conditions):
+    premiums_by_relationship = business_pricing is not None and any(
+        isinstance(row, dict) and row.get("relationship")
+        for row in business_pricing.reference_premiums.get("premiums") or []
+    )
+    if premiums_by_relationship or any(c.field == "relationship" for r in person_rules for c in r.conditions):
         relationship_categories = {rc.code: rc.category for rc in RelationshipCode.objects.all()}
 
     # Preserve the caller's requested memberIds order for determinism
@@ -718,6 +729,7 @@ def _run_calculation(
                     pricing=business_pricing,
                     plan=plan,
                     age=member_context["age"],
+                    relationship=relationship_categories.get(member.relationship_code),
                 )
             )
         else:

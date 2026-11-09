@@ -9255,6 +9255,142 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/plans/compare:
+    get:
+      operationId: getPlanCompare
+      description: '`GET /plans/compare?planIds=a,b[,c,d]&onlyDifferences=true` — 2 a 4
+
+        planos lado a lado: identificação, capitais, cada cobertura (capital,
+
+        sublimites, participação, carências, aprovação prévia, exclusões),
+
+        condições financeiras, elegibilidade, preexistentes, rede, um resumo
+
+        factual das diferenças e avisos (segmentos ou moedas diferentes, planos
+
+        inativos ou mal configurados). Cada célula traz o seu estado explícito.
+
+
+        `POST /plans/compare` — o mesmo, mais o prémio de cada plano para uma
+
+        composição (`composition.members[]` com idade, sexo e parentesco),
+
+        calculado pelo motor real numa cotação de exemplo que não é gravada.
+
+
+        Requer: scope q360.read.'
+      summary: Obter plan compare
+      parameters:
+      - in: query
+        name: onlyDifferences
+        schema:
+          type: boolean
+        description: 'true: só as linhas em que os planos diferem.'
+      - in: query
+        name: planIds
+        schema:
+          type: string
+        description: 2 a 4 ids de planos separados por vírgula.
+        required: true
+      tags:
+      - Plans
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanComparison'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    post:
+      operationId: postPlanCompare
+      description: '`GET /plans/compare?planIds=a,b[,c,d]&onlyDifferences=true` — 2 a 4
+
+        planos lado a lado: identificação, capitais, cada cobertura (capital,
+
+        sublimites, participação, carências, aprovação prévia, exclusões),
+
+        condições financeiras, elegibilidade, preexistentes, rede, um resumo
+
+        factual das diferenças e avisos (segmentos ou moedas diferentes, planos
+
+        inativos ou mal configurados). Cada célula traz o seu estado explícito.
+
+
+        `POST /plans/compare` — o mesmo, mais o prémio de cada plano para uma
+
+        composição (`composition.members[]` com idade, sexo e parentesco),
+
+        calculado pelo motor real numa cotação de exemplo que não é gravada.
+
+
+        Requer: scope q360.write, permissão quote:calculate.
+
+
+        Inclui o prémio de cada plano para a composição indicada (cálculo real, nada é gravado).'
+      summary: Criar plan compare
+      tags:
+      - Plans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanComparisonRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanComparison'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/platform/admins:
     get:
       operationId: getPlatformAdminListCreate
@@ -25980,6 +26116,324 @@ components:
       - id
       - planId
       - warnings
+    PlanComparison:
+      type: object
+      properties:
+        plans:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanComparisonPlan'
+        onlyDifferences:
+          type: boolean
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanComparisonSection'
+        summary:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanComparisonFact'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanComparisonWarning'
+        pricing:
+          $ref: '#/components/schemas/PlanComparisonPricing'
+      required:
+      - onlyDifferences
+      - plans
+      - pricing
+      - sections
+      - summary
+      - warnings
+    PlanComparisonCell:
+      type: object
+      properties:
+        state:
+          $ref: '#/components/schemas/StateEnum'
+        value:
+          oneOf:
+          - {}
+          - type: 'null'
+          description: Valor em bruto (decimais como texto); null quando state != VALUE.
+        currency:
+          type: string
+          description: AOA ou USD, quando o valor é monetário.
+        optional:
+          type: boolean
+          description: Cobertura opcional neste plano (só na secção de capitais).
+        reason:
+          type: string
+          description: Motivo quando o prémio não pôde ser calculado.
+      required:
+      - state
+      - value
+    PlanComparisonComposition:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanComparisonMember'
+        paymentFrequency:
+          description: 'Por omissão todas as frequências.
+
+
+            * `ANUAL` - ANUAL
+
+            * `SEMESTRAL` - SEMESTRAL
+
+            * `TRIMESTRAL` - TRIMESTRAL
+
+            * `MENSAL` - MENSAL'
+          oneOf:
+          - $ref: '#/components/schemas/PaymentFrequencyEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        selections:
+          type: object
+          additionalProperties: {}
+          description: Seleção (opção A–E, coberturas opcionais) por planId.
+      required:
+      - members
+    PlanComparisonFact:
+      type: object
+      properties:
+        type:
+          type: string
+          description: PREMIUM_LOWEST, PREMIUM_DIFFERENCE, PREMIUM_UNAVAILABLE, PREMIUM_NOT_COMPARABLE, COVERAGE_NOT_IN_ALL,
+            COVERAGE_OPTIONAL_IN_SOME, CAPITAL_HIGHER, CAPITAL_NOT_COMPARABLE ou PLAN_SETTING_DIFFERS.
+        planIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        coverageCode:
+          type: string
+        setting:
+          type: string
+        amount:
+          type: string
+        difference:
+          type: string
+        currency:
+          type: string
+        message:
+          type: string
+      required:
+      - message
+      - planIds
+      - type
+    PlanComparisonMember:
+      type: object
+      properties:
+        age:
+          type: integer
+          maximum: 120
+          minimum: 0
+        sex:
+          allOf:
+          - $ref: '#/components/schemas/SexEnum'
+          description: 'Por omissão M.
+
+
+            * `M` - M
+
+            * `F` - F'
+        relationship:
+          type:
+          - string
+          - 'null'
+          description: Código de parentesco (TITULAR, CONJUGE, FILHO, COLABORADOR...). Por omissão a 1.ª pessoa
+            é TITULAR e as outras FILHO.
+      required:
+      - age
+    PlanComparisonPlan:
+      type: object
+      properties:
+        planId:
+          type: string
+          format: uuid
+        planCode:
+          type: string
+        planName:
+          type: string
+        planStatus:
+          type: string
+        productId:
+          type: string
+          format: uuid
+        productCode:
+          type: string
+        productName:
+          type: string
+        productStatus:
+          type: string
+        segment:
+          type:
+          - string
+          - 'null'
+        tier:
+          type:
+          - string
+          - 'null'
+        level:
+          type:
+          - integer
+          - 'null'
+        currency:
+          type: string
+      required:
+      - currency
+      - level
+      - planCode
+      - planId
+      - planName
+      - planStatus
+      - productCode
+      - productId
+      - productName
+      - productStatus
+      - segment
+      - tier
+    PlanComparisonPremium:
+      type: object
+      properties:
+        planId:
+          type: string
+          format: uuid
+        available:
+          type: boolean
+        reason:
+          type: string
+          description: Porque não foi possível calcular (só quando available=false).
+        currencyCode:
+          type: string
+        totalAmount:
+          type: string
+        installments:
+          type: object
+          additionalProperties:
+            type: string
+        referenceDate:
+          type: string
+          format: date
+      required:
+      - available
+      - planId
+    PlanComparisonPricing:
+      type: object
+      properties:
+        available:
+          type: boolean
+        message:
+          type: string
+        persisted:
+          type: boolean
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanComparisonMember'
+        paymentFrequency:
+          type:
+          - string
+          - 'null'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanComparisonPremium'
+      required:
+      - available
+      - message
+      - results
+    PlanComparisonRequest:
+      type: object
+      properties:
+        planIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 4
+          minItems: 2
+        onlyDifferences:
+          type: boolean
+        composition:
+          $ref: '#/components/schemas/PlanComparisonComposition'
+      required:
+      - composition
+      - planIds
+    PlanComparisonRow:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        unit:
+          type: string
+          description: MONEY, PERCENT, DAYS, YEARS, PEOPLE ou COUNT.
+        different:
+          type: boolean
+        cells:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanComparisonCell'
+          description: Uma célula por plano, pela ordem de `plans`.
+      required:
+      - cells
+      - different
+      - key
+      - label
+    PlanComparisonSection:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        kind:
+          $ref: '#/components/schemas/PlanComparisonSectionKindEnum'
+        coverageCode:
+          type: string
+        coverageCategory:
+          type:
+          - string
+          - 'null'
+        note:
+          type: string
+        different:
+          type: boolean
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanComparisonRow'
+      required:
+      - different
+      - key
+      - kind
+      - label
+      - rows
+    PlanComparisonSectionKindEnum:
+      enum:
+      - PLAN
+      - COVERAGE
+      type: string
+      description: '* `PLAN` - PLAN
+
+        * `COVERAGE` - COVERAGE'
+    PlanComparisonWarning:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        planId:
+          type: string
+          format: uuid
+      required:
+      - code
+      - message
     PlanCreateRequest:
       type: object
       properties:
@@ -32317,6 +32771,23 @@ components:
       description: '* `QUOTE` - QUOTE
 
         * `PERSON` - PERSON'
+    StateEnum:
+      enum:
+      - VALUE
+      - NOT_INCLUDED
+      - NOT_APPLICABLE
+      - NOT_INFORMED
+      - SUBJECT_TO_ASSESSMENT
+      type: string
+      description: '* `VALUE` - VALUE
+
+        * `NOT_INCLUDED` - NOT_INCLUDED
+
+        * `NOT_APPLICABLE` - NOT_APPLICABLE
+
+        * `NOT_INFORMED` - NOT_INFORMED
+
+        * `SUBJECT_TO_ASSESSMENT` - SUBJECT_TO_ASSESSMENT'
     StateHistoryItem:
       type: object
       properties:

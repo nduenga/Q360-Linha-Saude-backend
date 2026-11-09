@@ -22,7 +22,7 @@ from apps.product.application import product_service
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.product.application import benefit_library_service as library
 from apps.product.application import configuration_lifecycle
-from apps.product.application import market_template_service, plan_configuration_service
+from apps.product.application import market_template_service, plan_comparison_service, plan_configuration_service
 from apps.product.application.benefit_service import (
     add_plan_benefit,
     ensure_market_catalog,
@@ -529,6 +529,47 @@ class PlanValidationView(APIView):
     def get(self, request, plan_id):
         plan = get_object_or_404(Plan, id=plan_id)
         return Response(plan_configuration_service.validate_plan(plan=plan))
+
+
+class PlanCompareView(APIView):
+    """`GET /plans/compare?planIds=a,b[,c,d]&onlyDifferences=true` — 2 a 4
+    planos lado a lado: identificação, capitais, cada cobertura (capital,
+    sublimites, participação, carências, aprovação prévia, exclusões),
+    condições financeiras, elegibilidade, preexistentes, rede, um resumo
+    factual das diferenças e avisos (segmentos ou moedas diferentes, planos
+    inativos ou mal configurados). Cada célula traz o seu estado explícito.
+
+    `POST /plans/compare` — o mesmo, mais o prémio de cada plano para uma
+    composição (`composition.members[]` com idade, sexo e parentesco),
+    calculado pelo motor real numa cotação de exemplo que não é gravada."""
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [require_scope(Scope.WRITE)(), require_permission(Permission.QUOTE_CALCULATE)()]
+        return [require_scope(Scope.READ)()]
+
+    def get(self, request):
+        only = (request.query_params.get("onlyDifferences") or "").lower() in ("1", "true", "yes")
+        return Response(
+            plan_comparison_service.compare_plans(
+                plan_ids=request.query_params.getlist("planIds"), only_differences=only
+            )
+        )
+
+    def post(self, request):
+        body = request.data if isinstance(request.data, dict) else {}
+        raw_ids = body.get("planIds")
+        if isinstance(raw_ids, str):
+            raw_ids = [raw_ids]
+        if not isinstance(raw_ids, list) or not all(isinstance(i, str) for i in raw_ids):
+            raw_ids = []
+        return Response(
+            plan_comparison_service.compare_plans(
+                plan_ids=raw_ids,
+                only_differences=body.get("onlyDifferences") is True,
+                composition=body.get("composition"),
+            )
+        )
 
 
 @requires_idempotency
