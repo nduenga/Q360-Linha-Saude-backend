@@ -22038,6 +22038,16 @@ components:
           type:
           - string
           - 'null'
+        ageBand:
+          type:
+          - string
+          - 'null'
+          description: Faixa etaria exata gravada pelo motor de tarifacao, quando aplicavel.
+        installmentAmounts:
+          type: object
+          additionalProperties:
+            type: string
+          description: Valores por periodicidade gravados pela formula de produto neste calculo.
         dimension:
           type:
           - string
