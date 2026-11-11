@@ -36,6 +36,16 @@ SEGMENT_TEXT = {"INDIVIDUAL_FAMILY": "Individual e Familiar", "GROUP": "Grupo (E
 TIER_TEXT = {"BASE": "Base", "MEDIUM": "Médio", "SUPERIOR": "Superior", "CUSTOM": "À medida"}
 BLOCK_TEXT = {"NETWORK": "Rede convencionada", "REIMBURSEMENT": "Reembolso"}
 QUOTE_TYPE_TEXT = {"NEW": "Novo negócio", "RENEWAL": "Renovação"}
+ELIGIBILITY_DECISION_TEXT = {
+    "ELIGIBLE": "Elegível",
+    "WARNING": "Elegível com aviso",
+    "REFERRAL": "Encaminhada para análise",
+    "HARD_STOP": "Não elegível",
+    "CONFIG_ERROR": "Não foi possível avaliar",
+    "ELIGIBLE_WITH_LOADING": "Elegível com agravamento",
+    "PENDING_DOCUMENT": "Pendente de documento",
+    "PENDING_MEDICAL_BOARD": "Pendente de avaliação clínica",
+}
 KIND_TEXT = {
     "ANNUAL_PER_PERSON": "Capital anual por pessoa",
     "HOUSEHOLD_SHARED": "Capital por agregado (partilhado)",
@@ -143,6 +153,8 @@ def _adjustment_text(spec: dict[str, Any], currency: str, members: dict[str, str
     }[kind]
     if spec.get("scope") == "MEMBER" and spec.get("memberId") in members:
         base += f" ({members[spec['memberId']]})"
+    if spec.get("reason"):
+        base += f" — {spec['reason']}"
     return base
 
 
@@ -175,6 +187,7 @@ def build_content(
         member = qm.member
         info = requirements["members"].get(str(member.id), {})
         decision = qm.pre_existing_json or {}
+        eligibility = qm.eligibility_evaluation
         population.append(
             {
                 "memberId": str(member.id),
@@ -184,6 +197,9 @@ def build_content(
                 "status": qm.status,
                 "clinicalQuestionnaireRequired": info.get("clinicalQuestionnaireRequired", False),
                 "medicalExamRequired": info.get("medicalExamRequired", False),
+                "eligibilityDecision": eligibility.decision if eligibility else None,
+                "eligibilityDecisionText": ELIGIBILITY_DECISION_TEXT.get(eligibility.decision, eligibility.decision) if eligibility else None,
+                "eligibilityEvidence": eligibility.evidence_json if eligibility else [],
                 "preExisting": (
                     {
                         "mode": decision.get("mode"),
@@ -204,6 +220,15 @@ def build_content(
     for coverage in plan_context.coverages:
         config = coverage["configuration"]
         cov_currency = config.get("currency", "AOA")
+        participation = config.get("participation") or {}
+
+        def _participation_detail(block: str, key: str) -> str | None:
+            spec = participation.get(block) or {}
+            value = spec.get(key)
+            if value in (None, ""):
+                return None
+            return money(value, cov_currency) if key in ("copayAmount", "annualDeductible", "perEventDeductible", "insuredAnnualCap") else str(value)
+
         coverages.append(
             {
                 "code": coverage["code"],
@@ -213,8 +238,19 @@ def build_content(
                 "contracted": coverage["contracted"],
                 "limits": [_limit_text(limit, cov_currency) for limit in config.get("limits", [])],
                 "participation": _participation_lines(config.get("participation") or {}, cov_currency),
+                "networkCopay": _participation_detail("NETWORK", "copayAmount"),
+                "reimbursementCopay": _participation_detail("REIMBURSEMENT", "copayAmount"),
+                "networkCoinsurancePct": _participation_detail("NETWORK", "insurerPct"),
+                "reimbursementCoinsurancePct": _participation_detail("REIMBURSEMENT", "insurerPct"),
+                "networkAnnualDeductible": _participation_detail("NETWORK", "annualDeductible"),
+                "reimbursementAnnualDeductible": _participation_detail("REIMBURSEMENT", "annualDeductible"),
                 "waiting": _waiting_text(config, segment),
                 "requiresPriorApproval": bool(config.get("requiresPriorApproval")),
+                "participationRegime": ", ".join(
+                    BLOCK_TEXT[block]
+                    for block in ("NETWORK", "REIMBURSEMENT")
+                    if (config.get("participation") or {}).get(block)
+                ),
                 "destinations": config.get("destinations") or [],
                 "closedDiseaseList": config.get("closedDiseaseList") or [],
                 "currency": cov_currency,
@@ -249,11 +285,27 @@ def build_content(
                         "factor": c.get("factorValue"),
                         "adjustment": c.get("adjustmentAmount"),
                         "result": c["resultAmount"],
+                        "base": c.get("baseAmount"),
+                        "source": c.get("sourceCode"),
+                        "sourceVersion": c.get("sourceVersion"),
+                        "ageBand": c.get("ageBand"),
                     }
                     for c in lines
                 ],
             }
         )
+    premium_by_relationship: dict[str, dict[str, Any]] = {}
+    relationship_by_id = {str(qm.member_id): categories.get(qm.member.relationship_code, qm.member.relationship_code) for qm in quote_members}
+    for item in premium_members:
+        relationship = relationship_by_id.get(item["memberId"])
+        if not relationship:
+            continue
+        bucket = premium_by_relationship.setdefault(relationship, {"relationship": relationship, "count": 0, "total": Decimal("0")})
+        bucket["count"] += 1
+        bucket["total"] += Decimal(str(item["total"]))
+    premium_by_relationship = [
+        {**item, "total": str(item["total"])} for item in premium_by_relationship.values()
+    ]
     option = plan_context.participation_option
     option_detail = None
     if option is not None:
@@ -324,6 +376,47 @@ def build_content(
     default_treatment = settings.get("preExistingTreatment") or {}
     indicative = bool(settings.get("indicative")) or any(c["indicative"] for c in coverages if c["contracted"])
 
+    # Payment frequencies are alternatives until the customer chooses one.
+    # Use the same issuance service and effective-dated fractionation rules
+    # used when a policy is issued; never present one as the selected option.
+    from apps.policy.application import issuance_service
+
+    installment_counts = {"ANUAL": 1, "SEMESTRAL": 2, "TRIMESTRAL": 4, "MENSAL": 12}
+    payment_options = []
+    total_decimal = Decimal(str(calculation["totalAmount"]))
+    pricing_versions = (calculation.get("versions") or {}).get("businessConfigurationVersions")
+    formula_amounts = next(
+        (c.get("installmentAmounts") for c in calculation.get("components", [])
+         if c.get("code") == "PRODUCT_FORMULAS" and c.get("installmentAmounts")),
+        {},
+    )
+    # Older saved scenarios may not contain the pricing version snapshot or
+    # product formula outputs. Do not pair them with a possibly newer run.
+    payment_frequencies = installment_counts.items() if scenario is None or pricing_versions is not None else ()
+    for frequency, count in payment_frequencies:
+        formula_amount = formula_amounts.get(frequency)
+        amount = issuance_service.installment_amount(
+            quote,
+            total_decimal,
+            frequency,
+            formula_amount=Decimal(str(formula_amount)) if formula_amount not in (None, "") else None,
+            use_pricing_run_formula=False,
+            business_configuration_versions=pricing_versions,
+        )
+        loading = issuance_service.fractionation_loading(
+            quote, frequency, business_configuration_versions=pricing_versions
+        )
+        payment_options.append(
+            {
+                "frequency": frequency,
+                "count": count,
+                "installmentAmount": str(amount),
+                "totalAmount": str(amount * count),
+                "loadingPct": None if formula_amount not in (None, "") else str(loading * Decimal("100")),
+                "indicative": True,
+            }
+        )
+
     return {
         "meta": {
             "quoteId": str(quote.id),
@@ -348,6 +441,11 @@ def build_content(
             "tier": TIER_TEXT.get(settings.get("tier")),
             "category": settings.get("category"),
             "accessSystem": ACCESS_SYSTEM_TEXT.get(settings.get("accessSystem")),
+            "networkRegions": ", ".join(
+                {"LUANDA": "Luanda", "PROVINCES": "Províncias"}[region]
+                for region in (settings.get("network") or {}).get("regions", [])
+                if region in {"LUANDA", "PROVINCES"}
+            ) or None,
         },
         "population": population,
         "coverages": coverages,
@@ -357,12 +455,17 @@ def build_content(
             "totalText": money(calculation["totalAmount"], currency),
             "currency": currency,
             "members": premium_members,
+            "byRelationship": premium_by_relationship,
             "quoteLevel": [
-                {"code": c["code"], "type": c["type"], "adjustment": c.get("adjustmentAmount"), "result": c["resultAmount"]}
+                {"code": c["code"], "type": c["type"], "base": c.get("baseAmount"),
+                 "factor": c.get("factorValue"), "adjustment": c.get("adjustmentAmount"),
+                 "result": c["resultAmount"], "source": c.get("sourceCode"),
+                 "sourceVersion": c.get("sourceVersion")}
                 for c in quote_level
                 if c["type"] != "TOTAL"
             ],
             "adjustments": [_adjustment_text(spec, currency, names) for spec in adjustments],
+            "paymentOptions": payment_options,
             "warnings": [w.get("message") for w in calculation.get("warnings", []) if w.get("message")],
         },
         "waiting": waiting,

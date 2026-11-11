@@ -17,19 +17,28 @@ Block = tuple  # ("title"|"heading"|"subheading"|"paragraph"|"note"|"bullets"|"k
 
 def variables_for(content: dict[str, Any], *, document_number: str | None, generated_on: str) -> dict[str, Any]:
     meta, client, plan, premium = content["meta"], content["client"], content["plan"], content["premium"]
+    from shared.formatting import date as format_date
+
     return {
         "quote.number": meta["quoteNumber"],
-        "quote.date": meta["quoteDate"],
-        "quote.validUntil": meta["validUntil"],
+        "quote.date": format_date(meta["quoteDate"]),
+        "quote.validUntil": format_date(meta["validUntil"]),
         "quote.type": meta["quoteType"],
         "document.number": document_number or "(a atribuir)",
-        "document.date": generated_on,
+        "document.date": format_date(generated_on),
         "client.name": client["name"],
         "client.nif": client["nif"],
+        "client.email": client.get("email"),
+        "client.phone": client.get("phone"),
         "plan.name": plan["name"],
         "plan.product": plan["product"],
         "plan.segment": plan["segment"],
+        "plan.accessSystem": plan.get("accessSystem"),
+        "plan.networkRegions": plan.get("networkRegions"),
+        "plan.tier": plan.get("tier"),
+        "plan.category": plan.get("category"),
         "premium.total": premium["totalText"],
+        "premium.totalText": premium["totalText"],
         "premium.currency": premium["currency"],
         "scenario.name": (meta["scenario"] or {}).get("name"),
         "insured.count": len(content["population"]),

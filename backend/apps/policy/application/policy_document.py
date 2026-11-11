@@ -22,7 +22,7 @@ from apps.business_config.application.branding import load_logo
 from apps.client.infrastructure.models import InsuredMember
 from apps.policy.domain.errors import PolicyStateError, ReferencedEntityNotFoundError
 from apps.policy.infrastructure.models import Policy, PolicyMember, PolicySignature, PremiumInstallment
-from apps.quote.application import document_service, letterhead, proposal_content, proposal_layout, template_files, word_template
+from apps.quote.application import document_service, letterhead, office_converter, proposal_content, proposal_layout, template_files, word_template
 
 STATUS_TEXT = {
     "PENDING_FIRST_PREMIUM": "A aguardar o pagamento da 1.ª prestação",
@@ -343,8 +343,15 @@ def _word_pdf(policy: Policy, template, content: dict | None = None) -> bytes | 
 def store_policy_document(policy: Policy) -> Path:
     """Grava o PDF da apólice (chamado ao emitir e ao ativar)."""
     template = _policy_template(policy)
-    data = _word_pdf(policy, template)
-    if data is None:
+    if template is not None and template.word_key:
+        content = _policy_content(policy)
+        scalars, groups = _word_data(policy, content)
+        docx_data = word_template.fill(template_files.read_word(template), scalars=scalars, groups=groups)
+        data = office_converter.docx_to_pdf(docx_data)
+        paper = template_files.read_letterhead(template)
+        if paper:
+            data = letterhead.apply(data, paper)
+    else:
         blocks, title = policy_blocks(policy)
         data, _, _ = _render(blocks, title, "PDF", template)
     path = _stored_path(policy)
@@ -364,10 +371,14 @@ def policy_document(policy: Policy, fmt: str = "PDF") -> tuple[bytes, str, str]:
         scalars, groups = _word_data(policy, content)
         data = word_template.fill(template_files.read_word(template), scalars=scalars, groups=groups)
         return data, word_template.DOCX_CONTENT_TYPE, f"apolice-{_safe(policy.policy_number)}.docx"
-    if fmt.upper() == "PDF":
-        pdf = _word_pdf(policy, template, content)
-        if pdf is not None:
-            return pdf, "application/pdf", f"apolice-{_safe(policy.policy_number)}.pdf"
+    if fmt.upper() == "PDF" and template is not None and template.word_key:
+        scalars, groups = _word_data(policy, content)
+        docx_data = word_template.fill(template_files.read_word(template), scalars=scalars, groups=groups)
+        data = office_converter.docx_to_pdf(docx_data)
+        paper = template_files.read_letterhead(template)
+        if paper:
+            data = letterhead.apply(data, paper)
+        return data, "application/pdf", f"apolice-{_safe(policy.policy_number)}.pdf"
     blocks, title = policy_blocks(policy, content)
     data, content_type, ext = _render(blocks, title, fmt, template)
     return data, content_type, f"apolice-{_safe(policy.policy_number)}.{ext}"

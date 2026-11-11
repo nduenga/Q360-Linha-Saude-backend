@@ -38,6 +38,10 @@ COMMON_SCALARS = {
     "premium.currency": "Moeda",
     "document.number": "Número do documento",
     "document.date": "Data de emissão do documento",
+    "premium.totalText": "Pr\u00e9mio total formatado",
+    "plan.tier": "N\u00edvel do plano",
+    "plan.category": "Categoria do plano",
+    "plan.networkRegions": "Regiões cobertas pela rede configurada",
     "insured.count": "Número de pessoas seguras",
 }
 PROPOSAL_SCALARS = {
@@ -67,11 +71,20 @@ POLICY_SCALARS = {
 SCALARS_BY_TYPE = {"QUOTE_PROPOSAL": PROPOSAL_SCALARS, "POLICY": POLICY_SCALARS}
 
 GROUPS: dict[str, dict[str, Any]] = {
-    "insured": {"label": "Pessoas seguras", "fields": {"name": "Nome", "relationship": "Relação", "age": "Idade", "status": "Estado"}},
+    "insured": {"label": "Pessoas seguras", "fields": {"name": "Nome", "relationship": "Relação", "age": "Idade", "status": "Estado", "eligibility": "Decisão de elegibilidade", "eligibilityDecisionText": "Resultado de elegibilidade", "eligibilityEvidence": "Evidência da elegibilidade", "clinicalQuestionnaireRequired": "Questionário clínico necessário", "medicalExamRequired": "Exame médico necessário", "preExistingMode": "Tratamento da condição preexistente", "preExistingText": "Texto da decisão", "preExistingCondition": "Condição declarada", "preExistingWaitingMonths": "Meses de carência", "preExistingLoadingPct": "Agravamento aplicado", "preExistingSublimit": "Sublimite aplicado"}},
     "coverage": {
         "label": "Coberturas contratadas",
-        "fields": {"name": "Cobertura", "limits": "Capitais e limites", "participation": "Participação/franquia", "waiting": "Carência", "priorApproval": "Aprovação prévia (Sim/Não)"},
+        "fields": {"name": "Cobertura", "limits": "Capitais e limites", "participation": "Participação/franquia", "waiting": "Carência", "priorApproval": "Aprovação prévia (Sim/Não)", "category": "Categoria", "inclusion": "Tipo de inclusão", "regime": "Regime", "networkCopay": "Copagamento na rede", "reimbursementCopay": "Copagamento em reembolso", "networkCoinsurancePct": "Comparticipação da seguradora na rede (%)", "reimbursementCoinsurancePct": "Comparticipação da seguradora em reembolso (%)", "networkAnnualDeductible": "Franquia anual na rede", "reimbursementAnnualDeductible": "Franquia anual em reembolso", "destinations": "Destinos", "closedDiseaseList": "Lista de doenças cobertas", "maxDaysPerYear": "Dias máximos por ano", "timeDeductibleDays": "Franquia temporal em dias", "currency": "Moeda", "notes": "Notas", "excludedItems": "Itens exclu\u00eddos da cobertura", "indicative": "Valor indicativo"},
     },
+    "coverageOption": {"label": "Disponibilidade das coberturas", "fields": {"name": "Cobertura", "category": "Categoria", "inclusion": "Tipo de inclusão", "contracted": "Contratada"}},
+    "premiumMember": {"label": "Pr\u00e9mio por pessoa", "fields": {"name": "Pessoa", "relationship": "Categoria de parentesco", "total": "Pr\u00e9mio calculado para a pessoa"}},
+    "premiumCategory": {"label": "Pr\u00e9mio por categoria", "fields": {"relationship": "Categoria de parentesco", "count": "Quantidade de pessoas", "total": "Pr\u00e9mio agregado da categoria"}},
+    "pricingLine": {"label": "Linhas do c\u00e1lculo do pr\u00e9mio", "fields": {"member": "Pessoa", "code": "C\u00f3digo do componente", "type": "Tipo", "base": "Base", "factor": "Fator", "adjustment": "Ajuste", "result": "Resultado acumulado", "ageBand": "Faixa et\u00e1ria efetivamente usada", "source": "Origem", "sourceVersion": "Vers\u00e3o da origem"}},
+    "paymentOption": {"label": "Op\u00e7\u00f5es indicativas de pagamento", "fields": {"frequency": "Periodicidade", "count": "N\u00famero de presta\u00e7\u00f5es", "amount": "Valor por presta\u00e7\u00e3o", "total": "Total nesta periodicidade", "loadingPct": "Acr\u00e9scimo por fracionamento", "indicative": "Simula\u00e7\u00e3o indicativa"}},
+    "adjustment": {"label": "Ajustes do pr\u00e9mio", "fields": {"text": "Ajuste aplicado"}},
+    "participationOption": {"label": "Op\u00e7\u00e3o de participa\u00e7\u00e3o", "fields": {"code": "C\u00f3digo", "name": "Nome", "annualDeductible": "Franquia anual", "copayPerConsultation": "Copagamento por consulta", "reimbursementPct": "Percentagem de reembolso", "premiumAdjustmentPct": "Ajuste no pr\u00e9mio (%)", "hospitalOnly": "Aplic\u00e1vel apenas a hospitaliza\u00e7\u00e3o"}},
+    "requiredDocument": {"label": "Documentos necess\u00e1rios", "fields": {"documentType": "Tipo de documento", "description": "Descri\u00e7\u00e3o"}},
+    "businessText": {"label": "Informa\u00e7\u00f5es do produto", "fields": {"title": "T\u00edtulo", "text": "Texto"}},
     "installment": {
         "label": "Prestações do prémio (só na apólice)",
         "fields": {"no": "Número", "period": "Período", "dueDate": "Vencimento", "amount": "Valor", "status": "Estado"},
@@ -169,26 +182,62 @@ def _replace_in_paragraph(paragraph, resolve) -> None:
     full = _paragraph_text(paragraph)
     if "{{" not in full:
         return
-    runs = paragraph.runs
-    if runs and sum(len(PLACEHOLDER.findall(r.text)) for r in runs) == len(PLACEHOLDER.findall(full)):
-        # Cada marca está inteira num só bloco de texto: preserva o formato de cada um.
-        for run in runs:
-            if "{{" in run.text:
-                run.text = PLACEHOLDER.sub(lambda m: resolve(m.group(1), m.group(0)), run.text)
+    # Write only into Word's text nodes. Assigning ``Run.text`` clears every
+    # child in that run, including drawings/anchors used for logos and page
+    # backgrounds when a template placed text and artwork together.
+    from docx.oxml.ns import qn
+
+    text_tag = qn("w:t")
+    control_tags = {qn("w:tab"): "\t", qn("w:br"): "\n", qn("w:cr"): "\n"}
+    tokens = []
+    # Match python-docx's Run.text semantics: inspect direct run children so
+    # tabs or text inside an anchored drawing/text box do not shift offsets.
+    for run in paragraph.runs:
+        for element in run._r:
+            if element.tag == text_tag:
+                tokens.append((element, element.text or ""))
+            elif element.tag in control_tags:
+                tokens.append((element, control_tags[element.tag]))
+    if not tokens:
+        paragraph.add_run(PLACEHOLDER.sub(lambda m: resolve(m.group(1), m.group(0)), full))
         return
-    new = PLACEHOLDER.sub(lambda m: resolve(m.group(1), m.group(0)), full)
-    if runs:
-        runs[0].text = new
-        for run in runs[1:]:
-            run.text = ""
-    else:
-        paragraph.add_run(new)
+
+    # Replace from right to left so earlier offsets stay valid. Rebuild the
+    # affected text nodes only; all non-text XML (drawings, field codes, etc.)
+    # remains untouched.
+    for match in reversed(list(PLACEHOLDER.finditer(full))):
+        current = "".join(value if element.tag != text_tag else element.text or "" for element, value in tokens)
+        start, end = match.span()
+        replacement = resolve(match.group(1), match.group(0))
+        offset = 0
+        first = None
+        for node, token in tokens:
+            value = node.text or "" if node.tag == text_tag else token
+            node_start, node_end = offset, offset + len(value)
+            offset = node_end
+            if node_end <= start or node_start >= end:
+                continue
+            if node.tag != text_tag:
+                continue
+            if first is None:
+                first = node
+                prefix = value[: max(0, start - node_start)]
+                suffix = value[max(0, end - node_start) :] if end <= node_end else ""
+                node.text = prefix + replacement + suffix
+            else:
+                suffix = value[max(0, end - node_start) :] if end <= node_end else ""
+                node.text = suffix
+        # Empty/adjacent text nodes are valid; preserve them to avoid changing
+        # run formatting and relationships around the placeholder.
 
 
 def _group_of(text: str) -> str | None:
     for name in PLACEHOLDER.findall(text):
-        head = name.split(".", 1)[0]
-        if head in GROUPS and "." in name:
+        head, separator, field = name.partition(".")
+        # Scalar placeholders can share a prefix with a repeating group
+        # (for example ``insured.count`` and ``insured.name``). Only fields
+        # declared on the group may cause a row/paragraph to be expanded.
+        if separator and head in GROUPS and field in GROUPS[head]["fields"]:
             return head
     return None
 
@@ -266,14 +315,41 @@ def fill(data: bytes, *, scalars: dict[str, Any], groups: dict[str, list[dict[st
 # --------------------------------------------------------------- dados
 def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, str] | None = None) -> dict[str, list[dict[str, Any]]]:
     """Listas a partir do conteúdo estruturado da proposta/apólice."""
+    import json
+
+    def display(value: Any) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return "Sim" if value else "Não"
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, ensure_ascii=False, sort_keys=True)
+        return str(value)
+
+    status_labels = {
+        "INCLUDED": "Incluída",
+        "EXCLUDED": "Excluída",
+        "REFERRAL": "Encaminhada para análise",
+    }
     insured = []
     for person in content.get("population", []):
         status = person.get("status")
+        pre_existing = person.get("preExisting") or {}
         if policy_members is not None:
             status = policy_members.get(person.get("memberId"), status)
         insured.append(
             {"name": person.get("name"), "relationship": person.get("relationship"),
-             "age": person.get("age"), "status": status}
+             "age": person.get("age"), "status": status_labels.get(status, status),
+             "eligibility": person.get("eligibilityDecision"),
+             "eligibilityDecisionText": person.get("eligibilityDecisionText"),
+             "eligibilityEvidence": display(person.get("eligibilityEvidence")),
+             "clinicalQuestionnaireRequired": display(person.get("clinicalQuestionnaireRequired")),
+             "medicalExamRequired": display(person.get("medicalExamRequired")),
+             "preExistingMode": pre_existing.get("mode"), "preExistingText": pre_existing.get("text"),
+             "preExistingCondition": pre_existing.get("condition"),
+             "preExistingWaitingMonths": pre_existing.get("waitingMonths"),
+             "preExistingLoadingPct": pre_existing.get("loadingPct"),
+             "preExistingSublimit": pre_existing.get("sublimitAmount")}
         )
     coverage = [
         {
@@ -282,13 +358,91 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
             "participation": "; ".join(c.get("participation") or []),
             "waiting": c.get("waiting"),
             "priorApproval": "Sim" if c.get("requiresPriorApproval") else "Não",
+            "networkCopay": c.get("networkCopay"), "reimbursementCopay": c.get("reimbursementCopay"),
+            "networkCoinsurancePct": c.get("networkCoinsurancePct"),
+            "reimbursementCoinsurancePct": c.get("reimbursementCoinsurancePct"),
+            "networkAnnualDeductible": c.get("networkAnnualDeductible"),
+            "reimbursementAnnualDeductible": c.get("reimbursementAnnualDeductible"),
+            "category": c.get("category"), "inclusion": c.get("inclusion"),
+            "regime": c.get("participationRegime"), "destinations": display(c.get("destinations")),
+            "closedDiseaseList": display(c.get("closedDiseaseList")),
+            "maxDaysPerYear": c.get("maxDaysPerYear"),
+            "timeDeductibleDays": c.get("timeDeductibleDays"), "currency": c.get("currency"),
+            "notes": c.get("notes"), "excludedItems": display(c.get("excludedItems")), "indicative": display(c.get("indicative")),
         }
         for c in content.get("coverages", [])
         if c.get("contracted")
     ]
+    coverage_options = [
+        {"name": c.get("name"), "category": c.get("category"), "inclusion": c.get("inclusion"),
+         "contracted": display(c.get("contracted"))}
+        for c in content.get("coverages", [])
+    ]
+    population_by_id = {p.get("memberId"): p for p in content.get("population", [])}
+    premium_members = content.get("premium", {}).get("members", [])
+    premium_by_member = [
+        {"name": item.get("name"), "relationship": population_by_id.get(item.get("memberId"), {}).get("relationship"),
+         "total": item.get("total")}
+        for item in premium_members
+    ]
+    pricing_lines = []
+    for line in content.get("premium", {}).get("quoteLevel", []):
+        pricing_lines.append({"member": None, "code": line.get("code"), "type": line.get("type"),
+                              "base": line.get("base"), "factor": line.get("factor"),
+                              "adjustment": line.get("adjustment"), "result": line.get("result"),
+                              "ageBand": None, "source": line.get("source"),
+                              "sourceVersion": line.get("sourceVersion")})
+    for item in premium_members:
+        for line in item.get("lines", []):
+            pricing_lines.append({"member": item.get("name"), "code": line.get("code"), "type": line.get("type"),
+                                  "base": line.get("base"), "factor": line.get("factor"),
+                                  "adjustment": line.get("adjustment"), "result": line.get("result"),
+                                  "ageBand": line.get("ageBand"), "source": line.get("source"),
+                                  "sourceVersion": line.get("sourceVersion")})
+    participation_option = content.get("participationOption")
+    participation_options = []
+    if participation_option:
+        participation_options.append({key: display(value) for key, value in participation_option.items()})
+    required_documents = [
+        {"documentType": row.get("documentType"), "description": row.get("description")}
+        for row in content.get("requiredDocuments", [])
+    ]
+    business_texts = [
+        {"title": row.get("title"), "text": row.get("text")}
+        for row in content.get("businessTexts", [])
+    ]
+    from shared.formatting import money
+
+    currency = content.get("premium", {}).get("currency") or "AOA"
+    payment_frequency_labels = {
+        "ANUAL": "Anual",
+        "SEMESTRAL": "Semestral",
+        "TRIMESTRAL": "Trimestral",
+        "MENSAL": "Mensal",
+    }
+    payment_options = [
+        {
+            "frequency": payment_frequency_labels.get(row.get("frequency"), row.get("frequency")),
+            "count": row.get("count"),
+            "amount": money(row.get("installmentAmount"), currency),
+            "total": money(row.get("totalAmount"), currency),
+            "loadingPct": row.get("loadingPct"),
+            "indicative": "Indicativo" if row.get("indicative") else "Não indicativo",
+        }
+        for row in content.get("premium", {}).get("paymentOptions", [])
+    ]
     return {
         "insured": insured,
         "coverage": coverage,
+        "coverageOption": coverage_options,
+        "premiumMember": premium_by_member,
+        "premiumCategory": [{"relationship": row.get("relationship"), "count": row.get("count"), "total": row.get("total")} for row in content.get("premium", {}).get("byRelationship", [])],
+        "pricingLine": pricing_lines,
+        "paymentOption": payment_options,
+        "participationOption": participation_options,
+        "requiredDocument": required_documents,
+        "businessText": business_texts,
+        "adjustment": [{"text": text} for text in content.get("premium", {}).get("adjustments", [])],
         "exclusion": [{"text": t} for t in content.get("exclusions", [])],
         "condition": [{"text": t} for t in content.get("conditions", [])],
         "waiting": [{"coverage": w.get("coverage"), "text": w.get("text")} for w in content.get("waiting", [])],

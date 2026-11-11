@@ -111,6 +111,19 @@ class PricingComponentSerializer(serializers.Serializer):
     resultAmount = serializers.SerializerMethodField()
     sourceCode = serializers.CharField(source="source_code", allow_null=True)
     sourceVersion = serializers.CharField(source="source_version", allow_null=True)
+    # Expose only the user-facing tariff fact needed by proposals, not the
+    # component's internal metadata/configuration payload.
+    ageBand = serializers.SerializerMethodField()
+    installmentAmounts = serializers.SerializerMethodField()
+
+    def get_ageBand(self, obj) -> str | None:
+        value = (obj.metadata_json or {}).get("ageBand")
+        return str(value) if value not in (None, "") else None
+
+    def get_installmentAmounts(self, obj) -> dict:
+        """Exact periodic amounts emitted by the product formula in this run."""
+        values = (obj.metadata_json or {}).get("installments")
+        return values if isinstance(values, dict) else {}
 
     def get_baseAmount(self, obj) -> str | None:
         return _money_str(obj.base_amount)
@@ -123,7 +136,8 @@ class PricingComponentSerializer(serializers.Serializer):
 
 
 class PricingResponseSerializer(serializers.Serializer):
-    """DTO matching ART-006 `PricingResponse` verbatim. `status` is
+    """DTO matching ART-006 `PricingResponse`, with additive calculation
+    provenance fields on each component. `status` is
     hardcoded to `CALCULATED`: the schema's own enum only allows that one
     value here — a FAILED run never reaches this serializer, it surfaces
     as a `PRICING-FAILED` ProblemDetail instead (see interfaces/views.py)."""

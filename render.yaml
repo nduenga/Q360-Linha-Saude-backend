@@ -3,15 +3,12 @@
 services:
   - type: web
     name: q360-health-api
-    # O runtime python do Render não instala pacotes do sistema: sem LibreOffice, os
-    # PDFs dos modelos Word (proposta Protteja, apólice) usam o layout da plataforma.
-    # Para PDF igual ao Word, mude para `runtime: docker` com `dockerfilePath: ./Dockerfile.prod`.
-    runtime: python
+    runtime: docker
     region: frankfurt
     plan: free
     rootDir: backend
-    buildCommand: pip install --no-cache-dir -r requirements.render.txt && python manage.py migrate --noinput
-    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers $WEB_CONCURRENCY --access-logfile -
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /api/v1/health/ready
     envVars:
       - key: DJANGO_SETTINGS_MODULE

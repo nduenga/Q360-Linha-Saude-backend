@@ -32,6 +32,7 @@ from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositor
 from apps.quote.application import (
     document_service,
     letterhead,
+    office_converter,
     proposal_content,
     proposal_layout,
     scenario_service,
@@ -124,19 +125,19 @@ def _render(content: dict[str, Any], template: DocumentTemplateVersion, fmt: str
             "client.email": client.get("email"),
             "client.phone": client.get("phone"),
             "plan.accessSystem": content["plan"].get("accessSystem"),
+            "plan.tier": content["plan"].get("tier"),
+            "plan.category": content["plan"].get("category"),
+            "premium.totalText": content["premium"].get("totalText"),
         }
-        data = word_template.fill(
+        docx_data = word_template.fill(
             template_files.read_word(template), scalars=scalars, groups=word_template.groups_from_content(content)
         )
         if fmt == "DOCX":
-            return data, word_template.DOCX_CONTENT_TYPE
-        # PDF de um modelo Word: o próprio Word convertido, para sair igual ao modelo.
-        # Sem LibreOffice no servidor, segue para o layout da plataforma (abaixo).
-        from apps.quote.application import docx_to_pdf
-
-        pdf = docx_to_pdf.convert(data)
-        if pdf is not None:
-            return pdf, proposal_layout.RENDERERS["PDF"][1]
+            return docx_data, word_template.DOCX_CONTENT_TYPE
+            return docx_data, word_template.DOCX_CONTENT_TYPE
+        pdf_data = office_converter.docx_to_pdf(docx_data)
+        letter = template_files.read_letterhead(template)
+        return (letterhead.apply(pdf_data, letter) if letter else pdf_data), "application/pdf"
     blocks = proposal_layout.build_blocks(content, spec, variables)
     renderer, content_type, _ext = proposal_layout.RENDERERS[fmt]
     from apps.quote.domain.proposal_template import render_text
@@ -298,7 +299,27 @@ def _sample_policy_word_data(content: dict[str, Any]) -> tuple[dict[str, Any], d
 
 def preview_template(*, template: DocumentTemplateVersion, fmt: str = "HTML") -> tuple[bytes, str]:
     content = sample_content()
-    if template.document_type == "POLICY" and fmt == "DOCX" and template.word_key:
-        scalars, groups = _sample_policy_word_data(content)
-        return word_template.fill(template_files.read_word(template), scalars=scalars, groups=groups), word_template.DOCX_CONTENT_TYPE
+    if template.word_key and fmt in ("DOCX", "PDF"):
+        if template.document_type == "POLICY":
+            scalars, groups = _sample_policy_word_data(content)
+        else:
+            variables = proposal_layout.variables_for(
+                content, document_number="DOC-EXEMPLO", generated_on=content["meta"]["generatedOn"]
+            )
+            scalars = {
+                **variables,
+                "client.email": content["client"].get("email"),
+                "client.phone": content["client"].get("phone"),
+                "plan.accessSystem": content["plan"].get("accessSystem"),
+                "plan.tier": content["plan"].get("tier"),
+                "plan.category": content["plan"].get("category"),
+                "premium.totalText": content["premium"].get("totalText"),
+            }
+            groups = word_template.groups_from_content(content)
+        docx_data = word_template.fill(template_files.read_word(template), scalars=scalars, groups=groups)
+        if fmt == "DOCX":
+            return docx_data, word_template.DOCX_CONTENT_TYPE
+        pdf_data = office_converter.docx_to_pdf(docx_data)
+        letter = template_files.read_letterhead(template)
+        return (letterhead.apply(pdf_data, letter) if letter else pdf_data), "application/pdf"
     return _render(content, template, fmt, document_number="DOC-EXEMPLO")

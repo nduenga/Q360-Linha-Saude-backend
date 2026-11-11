@@ -78,7 +78,9 @@ def _round2(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def fractionation_loading(quote: Quote, payment_frequency: str) -> Decimal:
+def fractionation_loading(
+    quote: Quote, payment_frequency: str, *, business_configuration_versions: dict | None = None
+) -> Decimal:
     """Encargo de fracionamento (Dashboard_Premissas!D61:D64 / Calculador!E91:E94).
 
     Decisão A8 (2026-10-14): aplica-se a todas as apólices.
@@ -93,7 +95,10 @@ def fractionation_loading(quote: Quote, payment_frequency: str) -> Decimal:
         rows = flatten("pricing.fractionation", config.value_json).get("installments") or []
         return _loading_for(rows, payment_frequency)
     run = quote.latest_pricing_run
-    used = (run.business_configuration_snapshot_json or {}).get("pricing.actuarial_model") if run else None
+    versions = business_configuration_versions
+    if versions is None:
+        versions = (run.business_configuration_snapshot_json or {}) if run else {}
+    used = versions.get("pricing.actuarial_model")
     if not used:
         return Decimal("0")
     model = BusinessConfiguration.objects.filter(id=used.get("configurationId")).values_list("value_json", flat=True).first()
@@ -116,12 +121,28 @@ def product_formula_installment(quote: Quote, payment_frequency: str) -> Decimal
     return Decimal(str(value)) if value not in (None, "") else None
 
 
-def installment_amount(quote: Quote, total_amount: Decimal, payment_frequency: str) -> Decimal:
-    from_formula = product_formula_installment(quote, payment_frequency)
+def installment_amount(
+    quote: Quote,
+    total_amount: Decimal,
+    payment_frequency: str,
+    *,
+    formula_amount: Decimal | None = None,
+    use_pricing_run_formula: bool = True,
+    business_configuration_versions: dict | None = None,
+) -> Decimal:
+    from_formula = formula_amount
+    if from_formula is None and use_pricing_run_formula:
+        from_formula = product_formula_installment(quote, payment_frequency)
     if from_formula is not None:
         return _round2(from_formula)
     count = _INSTALLMENT_COUNT[payment_frequency]
-    return _round2(total_amount * (Decimal("1") + fractionation_loading(quote, payment_frequency)) / count)
+    return _round2(
+        total_amount
+        * (Decimal("1") + fractionation_loading(
+            quote, payment_frequency, business_configuration_versions=business_configuration_versions
+        ))
+        / count
+    )
 
 
 def issue_policy(
