@@ -116,7 +116,7 @@ def _render(content: dict[str, Any], template: DocumentTemplateVersion, fmt: str
     spec = parse_template(template.storage_ref)
     generated_on = content["meta"]["generatedOn"]
     variables = proposal_layout.variables_for(content, document_number=document_number, generated_on=generated_on)
-    if fmt == "DOCX" and template.word_key:
+    if fmt in ("DOCX", "PDF") and template.word_key:
         # Opção B: o Word do GTE com as marcas {{variável}} substituídas.
         client = content["client"]
         scalars = {
@@ -128,7 +128,15 @@ def _render(content: dict[str, Any], template: DocumentTemplateVersion, fmt: str
         data = word_template.fill(
             template_files.read_word(template), scalars=scalars, groups=word_template.groups_from_content(content)
         )
-        return data, word_template.DOCX_CONTENT_TYPE
+        if fmt == "DOCX":
+            return data, word_template.DOCX_CONTENT_TYPE
+        # PDF de um modelo Word: o próprio Word convertido, para sair igual ao modelo.
+        # Sem LibreOffice no servidor, segue para o layout da plataforma (abaixo).
+        from apps.quote.application import docx_to_pdf
+
+        pdf = docx_to_pdf.convert(data)
+        if pdf is not None:
+            return pdf, proposal_layout.RENDERERS["PDF"][1]
     blocks = proposal_layout.build_blocks(content, spec, variables)
     renderer, content_type, _ext = proposal_layout.RENDERERS[fmt]
     from apps.quote.domain.proposal_template import render_text

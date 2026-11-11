@@ -18,6 +18,7 @@ Guia para hospedar a API Django num servidor Linux (Ubuntu) com PostgreSQL, guni
 | `nginx-q360.conf` | Configuração do Nginx (proxy + cabeçalho HTTPS). |
 | `bootstrap.sh` | Executa os passos 6 e 7 de uma vez (migrate + dados iniciais). |
 | `../Dockerfile.prod` | Alternativa com Docker (gunicorn). O `Dockerfile` original usa `runserver` e é só para desenvolvimento. |
+| `LIBREOFFICE_PDF.md` | Como instalar e verificar o LibreOffice e as fontes, para o PDF dos modelos Word sair igual ao Word. |
 
 Os caminhos `/opt/q360/backend` e o domínio `api.seudominio.com` são exemplos. Ajuste-os ao seu servidor.
 
@@ -28,6 +29,29 @@ Os caminhos `/opt/q360/backend` e o domínio `api.seudominio.com` são exemplos.
 ```bash
 sudo apt update && sudo apt install -y python3.12 python3.12-venv postgresql nginx git
 ```
+
+### LibreOffice e fontes (PDF dos modelos Word)
+
+Guia completo, incluindo Docker, Render, verificação e resolução de problemas: [`LIBREOFFICE_PDF.md`](LIBREOFFICE_PDF.md).
+
+Para o PDF de uma proposta ou apólice com modelo Word sair igual ao Word (por exemplo o modelo Protteja), o servidor precisa do LibreOffice e das fontes usadas no modelo. Sem o LibreOffice, a plataforma continua a gerar o PDF, mas com o seu próprio layout, e regista um aviso no log.
+
+```bash
+# 1. LibreOffice só com o processador de texto e sem interface gráfica (~250 MB)
+sudo apt install -y --no-install-recommends libreoffice-writer-nogui fonts-dejavu-core fontconfig unzip
+
+# 2. Fontes Inter e Inter Display, versão oficial (o pacote fonts-inter não traz a Inter Display)
+curl -fsSL -o /tmp/inter.zip https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
+sudo mkdir -p /usr/local/share/fonts/inter
+sudo unzip -j -o /tmp/inter.zip 'extras/ttf/*.ttf' -d /usr/local/share/fonts/inter
+sudo fc-cache -f && rm /tmp/inter.zip
+
+# 3. Confirmar
+soffice --version
+fc-list | grep -c "Inter Display"     # deve ser maior que 0
+```
+
+Se o modelo de outra seguradora usar outras fontes, instale-as da mesma forma em `/usr/local/share/fonts` e corra `sudo fc-cache -f`. Se o executável não estiver no PATH, indique-o na variável `Q360_SOFFICE_PATH`. Depois de instalar, reinicie a API: `sudo systemctl restart q360`.
 
 ## 2. Criar a base de dados vazia
 

@@ -329,10 +329,24 @@ def _stored_path(policy: Policy) -> Path:
     return Path(settings.MEDIA_ROOT) / "policies" / f"{policy.id}.pdf"
 
 
+def _word_pdf(policy: Policy, template, content: dict | None = None) -> bytes | None:
+    """PDF do modelo Word da apólice (igual ao Word), ou None sem modelo Word ou
+    sem LibreOffice no servidor — aí vale o layout da plataforma."""
+    if template is None or not template.word_key:
+        return None
+    from apps.quote.application import docx_to_pdf
+
+    scalars, groups = _word_data(policy, content if content is not None else _policy_content(policy))
+    return docx_to_pdf.convert(word_template.fill(template_files.read_word(template), scalars=scalars, groups=groups))
+
+
 def store_policy_document(policy: Policy) -> Path:
     """Grava o PDF da apólice (chamado ao emitir e ao ativar)."""
-    blocks, title = policy_blocks(policy)
-    data, _, _ = _render(blocks, title, "PDF", _policy_template(policy))
+    template = _policy_template(policy)
+    data = _word_pdf(policy, template)
+    if data is None:
+        blocks, title = policy_blocks(policy)
+        data, _, _ = _render(blocks, title, "PDF", template)
     path = _stored_path(policy)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
@@ -350,6 +364,10 @@ def policy_document(policy: Policy, fmt: str = "PDF") -> tuple[bytes, str, str]:
         scalars, groups = _word_data(policy, content)
         data = word_template.fill(template_files.read_word(template), scalars=scalars, groups=groups)
         return data, word_template.DOCX_CONTENT_TYPE, f"apolice-{_safe(policy.policy_number)}.docx"
+    if fmt.upper() == "PDF":
+        pdf = _word_pdf(policy, template, content)
+        if pdf is not None:
+            return pdf, "application/pdf", f"apolice-{_safe(policy.policy_number)}.pdf"
     blocks, title = policy_blocks(policy, content)
     data, content_type, ext = _render(blocks, title, fmt, template)
     return data, content_type, f"apolice-{_safe(policy.policy_number)}.{ext}"
