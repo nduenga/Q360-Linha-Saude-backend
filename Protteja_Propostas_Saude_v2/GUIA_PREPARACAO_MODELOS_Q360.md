@@ -69,7 +69,7 @@ Os documentos atuais são simulações preenchidas. Antes de os usar como modelo
 5. Remova ou atualize nomes, números, datas, NIFs, assinaturas, referências, condições particulares e qualquer outra informação específica da simulação original.
 6. Guarde em formato `.docx` (não `.doc`) e faça uma revisão visual após a geração.
 
-O Q360 preenche marcadores em parágrafos, cabeçalhos, rodapés e tabelas. Marcadores em caixas de texto/formas não são suportados. Um marcador dividido por estilos diferentes também pode não ser reconhecido. Não deixe `{{marcadores}}` que não estejam nesta lista: o sistema recusa marcas desconhecidas.
+O Q360 preenche marcadores em parágrafos, cabeçalhos, rodapés, tabelas, caixas de texto, notas e comentários. As linhas repetíveis devem permanecer numa tabela normal: uma caixa de texto tem posição fixa e não deve ser usada para repetir linhas. Um marcador dividido por estilos diferentes também pode não ser reconhecido. Não deixe `{{marcadores}}` que não estejam nesta lista: o sistema recusa marcas desconhecidas.
 
 ## Como escolher e carregar os oito modelos
 

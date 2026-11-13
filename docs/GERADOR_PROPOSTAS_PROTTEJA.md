@@ -4,6 +4,8 @@ O gerador usa diretamente os modelos Word preparados: não reconstrói o documen
 
 O preenchimento é feito diretamente no XML dos marcadores. O Q360 copia todas as outras partes internas do ficheiro sem as regravar: fontes, tamanhos, cores, estilos, imagens, marcas, temas, posicionamento e texto fixo aprovado da Protteja ficam exatamente como no modelo. Apenas os valores em `{{marcadores}}` e as linhas repetíveis já previstas no modelo podem mudar.
 
+Os marcadores também podem estar em cabeçalhos, rodapés, caixas de texto, notas de rodapé/fim e comentários. Para listas repetíveis, mantenha a linha-modelo numa tabela normal do documento; uma caixa de texto tem posição fixa e não deve ser usada para repetir linhas.
+
 Os oito modelos de origem ficam em `Protteja_Propostas_Saude_v2/Q360_PREPARADOS_FORMATADOS`. A pasta `Q360_PREPARADOS_FINAL_FORMATADOS` também é aceite automaticamente caso seja criada com esse nome.
 
 ## Instalação por tenant

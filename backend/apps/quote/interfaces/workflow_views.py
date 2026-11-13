@@ -72,6 +72,7 @@ class QuoteQuestionnaireListView(APIView):
     permission_classes = [require_scope(Scope.READ)]
 
     def get(self, request, quote_id):
+        """Devolve o estado e o progresso dos questionários, sem respostas clínicas."""
         quote = get_object_or_404(Quote, id=quote_id)
         return Response({"items": questionnaire_service.list_for_quote(quote)})
 
@@ -86,10 +87,12 @@ class QuoteMemberQuestionnaireView(APIView):
         return [require_scope(Scope.WRITE)(), require_permission(Permission.QUOTE_REVIEW)()]
 
     def get(self, request, quote_id, member_id):
+        """Devolve o questionário e a definição versionada usada neste preenchimento."""
         quote = get_object_or_404(Quote, id=quote_id)
         return Response(questionnaire_service.detail(quote, member_id))
 
     def put(self, request, quote_id, member_id):
+        """Guarda respostas parciais com controlo de concorrência por rowVersion."""
         quote = get_object_or_404(Quote, id=quote_id)
         body = QuestionnaireSaveRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
@@ -105,6 +108,7 @@ class QuoteMemberQuestionnaireCompleteView(APIView):
     permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_REVIEW)]
 
     def post(self, request, quote_id, member_id):
+        """Conclui o questionário se todas as respostas obrigatórias estiverem preenchidas."""
         quote = get_object_or_404(Quote, id=quote_id)
         body = QuestionnaireCompleteRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
@@ -120,6 +124,7 @@ class QuoteMemberQuestionnaireRequestView(APIView):
     permission_classes = [require_scope(Scope.WRITE), require_permission(Permission.QUOTE_EDIT)]
 
     def post(self, request, quote_id, member_id):
+        """Pede ao cliente que preencha este questionário no Portal."""
         quote = get_object_or_404(Quote, id=quote_id)
         return Response(questionnaire_service.request_from_customer(quote=quote, member_id=member_id))
 

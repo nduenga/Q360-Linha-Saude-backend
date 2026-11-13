@@ -35,7 +35,8 @@ CHANGELOG = (
     "(pedido, resposta, parâmetros, cabeçalho Idempotency-Key, scopes/permissões e erros application/problem+json) e "
     "acrescenta biblioteca de coberturas versionada, configuração de planos e participação A–E, ajustes, cenários e "
     "comparação, versões/renovação/indexação, requisitos de subscrição, sinistralidade, rollback/diff/simulação de impacto "
-    "de configurações, parâmetros globais, propostas PDF/DOCX/HTML, apólices, portal do cliente e contas de staff. "
+    "de configurações, parâmetros globais, propostas PDF/DOCX/HTML, apólices, portal do cliente e contas de staff, "
+    "incluindo questionários clínicos versionados para a equipa e o Portal. "
     "Os caminhos que o contrato v1.3.0 previa mas que não foram construídos foram removidos."
 )
 

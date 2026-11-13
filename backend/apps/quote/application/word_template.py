@@ -158,11 +158,23 @@ def _containers(document) -> list:
 
 
 def placeholders_in(data: bytes) -> set[str]:
-    document = _open(data)
+    """Return markers from every Word story in the DOCX package.
+
+    A prepared insurer model can place a marker in a text box, footnote or
+    comment. Those parts are not all exposed by python-docx, so validation
+    must read the same XML parts that the renderer updates.
+    """
     found: set[str] = set()
-    for container in _containers(document):
-        for paragraph in _iter_paragraphs(container):
-            found.update(PLACEHOLDER.findall(_paragraph_text(paragraph)))
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as package:
+            for entry in package.infolist():
+                if not _is_word_text_part(entry.filename):
+                    continue
+                root = etree.fromstring(package.read(entry.filename))
+                text = "".join(node.text or "" for node in root.xpath(".//w:t", namespaces=_W))
+                found.update(PLACEHOLDER.findall(text))
+    except (zipfile.BadZipFile, etree.XMLSyntaxError) as exc:
+        raise InvalidTemplateError("O ficheiro nao e um documento Word (.docx) valido") from exc
     return found
 
 
@@ -323,7 +335,16 @@ _W = {"w": _WORD_NS}
 
 
 def _is_word_text_part(name: str) -> bool:
-    return bool(re.fullmatch(r"word/(?:document|header\d+|footer\d+)\.xml", name))
+    # Do not touch styles, themes, numbering or relationships. Copying those
+    # bytes verbatim is what preserves the insurer's exact visual layout.
+    # Text boxes are stored inside document/header/footer XML; the remaining
+    # entries below are the Word stories that can also contain paragraphs.
+    return bool(
+        re.fullmatch(
+            r"word/(?:document|header\d+|footer\d+|footnotes|endnotes|comments|commentsExtended)\.xml",
+            name,
+        )
+    )
 
 
 def _set_xml_text(node, value: str) -> None:
@@ -382,6 +403,10 @@ def _xml_group_of(element) -> str | None:
 
 def _fill_word_xml(data: bytes, scalar_resolve, groups: dict[str, list[dict[str, str]]]) -> bytes:
     root = etree.fromstring(data)
+    # Avoid serialising a story that contains no marker at all. Besides being
+    # faster, this keeps unrelated notes/comments byte-for-byte identical.
+    if "{{" not in "".join(node.text or "" for node in root.xpath(".//w:t", namespaces=_W)):
+        return data
     # Deep-copy each original row. Its Word formatting XML is retained as-is.
     for row in reversed(list(root.xpath(".//w:tr", namespaces=_W))):
         group = _xml_group_of(row)
@@ -431,6 +456,7 @@ def _fill_without_rewriting_template(data: bytes, scalars: dict[str, Any], group
 
 
 def fill(data: bytes, *, scalars: dict[str, Any], groups: dict[str, list[dict[str, Any]]]) -> bytes:
+    """Replace markers without rebuilding the insurer's DOCX package."""
     return _fill_without_rewriting_template(data, scalars, groups)
 
     """Devolve o `.docx` com as marcas substituídas."""
