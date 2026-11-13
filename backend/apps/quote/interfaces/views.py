@@ -1139,8 +1139,12 @@ class QuoteProposalListCreateView(APIView):
 
 
 class QuoteProposalPreviewView(APIView):
-    """GET /quotes/{id}/proposals/preview?scenarioId=&templateCode= - the
-    proposal as HTML, nothing saved."""
+    """Preview a proposal without saving it.
+
+    ``fileType`` accepts ``html`` (the legacy default), ``docx`` and ``pdf``.
+    A DOCX preview is the faithful way to inspect an insurer Word template;
+    PDF needs LibreOffice on the server.
+    """
 
     permission_classes = [require_scope(Scope.READ)]
 
@@ -1149,7 +1153,8 @@ class QuoteProposalPreviewView(APIView):
         scenario_id = request.query_params.get("scenarioId")
         data, content_type = proposal_service.preview(
             quote=quote, scenario_id=uuid.UUID(scenario_id) if scenario_id else None,
-            template_code=request.query_params.get("templateCode"), fmt="HTML", render=render_preview,
+            template_code=request.query_params.get("templateCode"),
+            fmt=request.query_params.get("fileType", "HTML").upper(), render=render_preview,
         )
         return _file_response(data, content_type)
 
@@ -1202,7 +1207,11 @@ class DocumentTemplatePreviewView(APIView):
 
     def get(self, request, template_id):
         template = get_object_or_404(DocumentTemplateVersion, id=template_id)
-        fmt = request.query_params.get("fileType", "html").upper()
+        # A Word model must be inspected as Word by default. The former HTML
+        # default is still retained for JSON/HTML templates and remains
+        # explicitly available through ?fileType=html.
+        default_format = "docx" if template.word_key else "html"
+        fmt = request.query_params.get("fileType", default_format).upper()
         data, content_type = proposal_service.preview_template(template=template, fmt=fmt)
         return _file_response(data, content_type)
 

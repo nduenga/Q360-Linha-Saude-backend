@@ -12,8 +12,8 @@ info:
     scopes/permissões e erros application/problem+json) e acrescenta biblioteca de coberturas versionada, configuração
     de planos e participação A–E, ajustes, cenários e comparação, versões/renovação/indexação, requisitos de subscrição,
     sinistralidade, rollback/diff/simulação de impacto de configurações, parâmetros globais, propostas PDF/DOCX/HTML,
-    apólices, portal do cliente e contas de staff. Os caminhos que o contrato v1.3.0 previa mas que não foram construídos
-    foram removidos.'
+    apólices, portal do cliente e contas de staff, incluindo questionários clínicos versionados para a equipa e
+    o Portal. Os caminhos que o contrato v1.3.0 previa mas que não foram construídos foram removidos.'
 servers:
 - url: https://api.example.invalid/q360
   description: Placeholder; substituir por endpoint aprovado por ambiente
@@ -4267,7 +4267,12 @@ paths:
   /api/v1/customer-portal/me/quotes/{quote_number}/members/{member_id}/questionnaire:
     get:
       operationId: getCustomerPortalQuestionnaire
-      summary: Obter customer portal questionnaire
+      description: 'Devolve o questionário pedido para uma pessoa numa cotação visível à conta.
+
+
+        Disponível apenas para o cliente autenticado, em cotações visíveis à sua conta e com pedido de preenchimento
+        ativo.'
+      summary: Devolve o questionário pedido para uma pessoa numa cotação visível à conta.
       parameters:
       - in: path
         name: member_id
@@ -4311,7 +4316,11 @@ paths:
           description: Recurso não encontrado (NOT-FOUND).
     put:
       operationId: putCustomerPortalQuestionnaire
-      summary: Substituir customer portal questionnaire
+      description: 'Guarda respostas parciais do cliente para um pedido ativo.
+
+
+        Grava respostas parciais do cliente no Portal; requer pedido ativo da seguradora.'
+      summary: Guarda respostas parciais do cliente para um pedido ativo.
       parameters:
       - in: path
         name: member_id
@@ -4373,7 +4382,11 @@ paths:
   /api/v1/customer-portal/me/quotes/{quote_number}/members/{member_id}/questionnaire/complete:
     post:
       operationId: postCustomerPortalQuestionnaireComplete
-      summary: Criar customer portal questionnaire complete
+      description: 'Conclui o preenchimento do cliente após validar as respostas obrigatórias.
+
+
+        Conclui o questionário do cliente apenas quando todas as perguntas obrigatórias e visíveis tiverem resposta.'
+      summary: Conclui o preenchimento do cliente após validar as respostas obrigatórias.
       parameters:
       - in: header
         name: Idempotency-Key
@@ -5201,7 +5214,11 @@ paths:
   /api/v1/customer-portal/questionnaires:
     get:
       operationId: getCustomerPortalQuestionnaireList
-      summary: Listar customer portal questionnaire list
+      description: 'Lista questionários pendentes pedidos pela seguradora ao cliente.
+
+
+        Lista apenas questionários pendentes que a seguradora pediu ao cliente.'
+      summary: Lista questionários pendentes pedidos pela seguradora ao cliente.
       tags:
       - Customer Portal
       security:
@@ -16573,11 +16590,14 @@ paths:
         progresso. As respostas são dados de saúde: só perfis que revêem cotações.
 
 
+        Devolve o questionário e a definição versionada usada neste preenchimento.
+
+
         Requer: scope q360.read, permissão quote:review.
 
 
-        Dados de saúde: cada consulta fica auditada.'
-      summary: Obter quote member questionnaire
+        Dados de saúde: cada consulta fica auditada. Devolve a definição de perguntas guardada com o preenchimento.'
+      summary: Devolve o questionário e a definição versionada usada neste preenchimento.
       parameters:
       - in: path
         name: member_id
@@ -16628,8 +16648,15 @@ paths:
         progresso. As respostas são dados de saúde: só perfis que revêem cotações.
 
 
-        Requer: scope q360.write, permissão quote:review.'
-      summary: Substituir quote member questionnaire
+        Guarda respostas parciais com controlo de concorrência por rowVersion.
+
+
+        Requer: scope q360.write, permissão quote:review.
+
+
+        Grava respostas parciais. Na primeira gravação, rowVersion pode ser omitido; nas seguintes é obrigatório
+        e aplica controlo de concorrência.'
+      summary: Guarda respostas parciais com controlo de concorrência por rowVersion.
       parameters:
       - in: path
         name: member_id
@@ -16693,8 +16720,14 @@ paths:
   /api/v1/quotes/{quote_id}/members/{member_id}/questionnaire/complete:
     post:
       operationId: postQuoteMemberQuestionnaireComplete
-      description: 'Requer: scope q360.write, permissão quote:review.'
-      summary: Criar quote member questionnaire complete
+      description: 'Conclui o questionário se todas as respostas obrigatórias estiverem preenchidas.
+
+
+        Requer: scope q360.write, permissão quote:review.
+
+
+        Conclui apenas quando todas as perguntas obrigatórias e visíveis tiverem resposta.'
+      summary: Conclui o questionário se todas as respostas obrigatórias estiverem preenchidas.
       parameters:
       - in: header
         name: Idempotency-Key
@@ -16768,8 +16801,14 @@ paths:
       description: '`POST .../questionnaire/customer-request` — pede o preenchimento ao cliente no Portal.
 
 
-        Requer: scope q360.write, permissão quote:edit.'
-      summary: Criar quote member questionnaire request
+        Pede ao cliente que preencha este questionário no Portal.
+
+
+        Requer: scope q360.write, permissão quote:edit.
+
+
+        Pede o preenchimento ao cliente no Portal e envia uma notificação às contas ligadas ao tomador.'
+      summary: Pede ao cliente que preencha este questionário no Portal.
       parameters:
       - in: header
         name: Idempotency-Key
@@ -17406,14 +17445,24 @@ paths:
   /api/v1/quotes/{quote_id}/proposals/preview:
     get:
       operationId: getQuoteProposalPreview
-      description: 'GET /quotes/{id}/proposals/preview?scenarioId=&templateCode= - the
+      description: 'Preview a proposal without saving it.
 
-        proposal as HTML, nothing saved.
+
+        ``fileType`` accepts ``html`` (the legacy default), ``docx`` and ``pdf``.
+
+        A DOCX preview is the faithful way to inspect an insurer Word template;
+
+        PDF needs LibreOffice on the server.
 
 
         Requer: scope q360.read.'
       summary: Obter quote proposal preview
       parameters:
+      - in: query
+        name: fileType
+        schema:
+          type: string
+        description: Filtro.
       - in: path
         name: quote_id
         schema:
@@ -17481,8 +17530,14 @@ paths:
         sem as respostas.
 
 
-        Requer: scope q360.read.'
-      summary: Listar quote questionnaire list
+        Devolve o estado e o progresso dos questionários, sem respostas clínicas.
+
+
+        Requer: scope q360.read.
+
+
+        Mostra o estado e progresso por pessoa segura; as respostas clínicas não são incluídas.'
+      summary: Devolve o estado e o progresso dos questionários, sem respostas clínicas.
       parameters:
       - in: path
         name: quote_id
@@ -22066,7 +22121,9 @@ components:
       - resultAmount
     PricingResponse:
       type: object
-      description: 'DTO matching ART-006 `PricingResponse` verbatim. `status` is
+      description: 'DTO matching ART-006 `PricingResponse`, with additive calculation
+
+        provenance fields on each component. `status` is
 
         hardcoded to `CALCULATED`: the schema''s own enum only allows that one
 
@@ -32387,7 +32444,7 @@ components:
         label:
           type: string
         type:
-          $ref: '#/components/schemas/TypeEnum'
+          $ref: '#/components/schemas/ReferenceTableColumnTypeEnum'
       required:
       - code
       - type
@@ -36070,7 +36127,10 @@ components:
           type:
           - integer
           - 'null'
-        answers: {}
+        answers:
+          type: object
+          additionalProperties: {}
+          description: Respostas por chave de pergunta; os valores dependem do tipo.
       required:
       - answers
       - completedAt
@@ -36146,9 +36206,14 @@ components:
           type:
           - integer
           - 'null'
-        answers: {}
+        answers:
+          type: object
+          additionalProperties: {}
+          description: Respostas por chave de pergunta; os valores dependem do tipo.
         schema:
-          description: Secções e perguntas, com a versão do questionário.
+          allOf:
+          - $ref: '#/components/schemas/QuestionnaireDefinition'
+          description: Definição versionada usada para validar este preenchimento.
       required:
       - answers
       - completedAt
@@ -37577,6 +37642,93 @@ components:
       - size
       - totalElements
       - totalPages
+    QuestionnaireDefinition:
+      type: object
+      properties:
+        version:
+          type: string
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionnaireSection'
+      required:
+      - sections
+      - version
+    QuestionnaireQuestion:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        type:
+          $ref: '#/components/schemas/QuestionnaireQuestionTypeEnum'
+        required:
+          type: boolean
+        showIf:
+          $ref: '#/components/schemas/QuestionnaireVisibilityCondition'
+        options:
+          type: array
+          items:
+            type: string
+      required:
+      - key
+      - label
+      - required
+      - type
+    QuestionnaireQuestionTypeEnum:
+      enum:
+      - YES_NO
+      - TEXT
+      - NUMBER
+      - DATE
+      - SELECT
+      - MULTI_SELECT
+      type: string
+      description: '* `YES_NO` - YES_NO
+
+        * `TEXT` - TEXT
+
+        * `NUMBER` - NUMBER
+
+        * `DATE` - DATE
+
+        * `SELECT` - SELECT
+
+        * `MULTI_SELECT` - MULTI_SELECT'
+    QuestionnaireSection:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionnaireQuestion'
+      required:
+      - key
+      - label
+      - questions
+    QuestionnaireVisibilityCondition:
+      type: object
+      properties:
+        question:
+          type: string
+        equals:
+          description: Valor que torna a pergunta visível.
+      required:
+      - equals
+      - question
+    ReferenceTableColumnTypeEnum:
+      enum:
+      - NUMBER
+      - TEXT
+      type: string
+      description: '* `NUMBER` - NUMBER
+
+        * `TEXT` - TEXT'
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

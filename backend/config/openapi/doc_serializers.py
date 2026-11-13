@@ -1913,6 +1913,31 @@ class QuestionnaireProgress(s.Serializer):
     required = s.IntegerField()
 
 
+class QuestionnaireVisibilityCondition(s.Serializer):
+    question = s.CharField()
+    equals = s.JSONField(help_text="Valor que torna a pergunta visível.")
+
+
+class QuestionnaireQuestion(s.Serializer):
+    key = s.CharField()
+    label = s.CharField()
+    type = s.ChoiceField(choices=["YES_NO", "TEXT", "NUMBER", "DATE", "SELECT", "MULTI_SELECT"])
+    required = s.BooleanField()
+    showIf = QuestionnaireVisibilityCondition(required=False)
+    options = s.ListField(child=s.CharField(), required=False)
+
+
+class QuestionnaireSection(s.Serializer):
+    key = s.CharField()
+    label = s.CharField()
+    questions = QuestionnaireQuestion(many=True)
+
+
+class QuestionnaireDefinition(s.Serializer):
+    version = s.CharField()
+    sections = QuestionnaireSection(many=True)
+
+
 class QuestionnaireSummary(s.Serializer):
     questionnaireId = s.UUIDField(allow_null=True)
     quoteId = s.UUIDField()
@@ -1935,11 +1960,11 @@ class QuestionnaireList(s.Serializer):
 
 
 class QuestionnaireAnswers(QuestionnaireSummary):
-    answers = s.JSONField()
+    answers = s.DictField(child=s.JSONField(), help_text="Respostas por chave de pergunta; os valores dependem do tipo.")
 
 
 class QuestionnaireDetail(QuestionnaireAnswers):
-    schema = s.JSONField(help_text="Secções e perguntas, com a versão do questionário.")
+    schema = QuestionnaireDefinition(help_text="Definição versionada usada para validar este preenchimento.")
 
 
 class PortalQuestionnaireItem(s.Serializer):

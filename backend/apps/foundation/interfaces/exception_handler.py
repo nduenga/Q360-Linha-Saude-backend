@@ -62,6 +62,10 @@ _TITLES: dict[str, str] = {
     "PAYMENT-REFERENCE-DUPLICATE": "Referência de pagamento já registada",
     "QUESTIONNAIRE-INCOMPLETE": "Questionário incompleto",
     "QUOTE-DELETE-BLOCKED": "Esta cotação não pode ser apagada",
+    # apps.quote.office_converter — PDF previews of Word templates require
+    # LibreOffice on the application host. This is an expected 503, never an
+    # unhandled KeyError/500.
+    "DOCUMENT-CONVERSION-UNAVAILABLE": "Conversão de documentos indisponível",
 }
 
 _CODE_BY_EXCEPTION: dict[type[Exception], str] = {

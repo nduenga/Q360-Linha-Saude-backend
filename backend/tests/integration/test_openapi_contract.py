@@ -131,6 +131,29 @@ def test_key_operations_document_their_bodies_and_rules(contract):
     assert {"memberId", "date", "benefitCategory", "eventType"} <= coverage
 
 
+def test_clinical_questionnaire_paths_and_dynamic_schema_are_documented(contract):
+    paths = contract["paths"]
+    staff_questionnaire = "/api/v1/quotes/{quote_id}/members/{member_id}/questionnaire"
+    portal_questionnaire = "/api/v1/customer-portal/me/quotes/{quote_number}/members/{member_id}/questionnaire"
+
+    assert "get" in paths["/api/v1/quotes/{quote_id}/questionnaires"]
+    assert {"get", "put"} <= set(paths[staff_questionnaire])
+    assert "post" in paths[f"{staff_questionnaire}/complete"]
+    assert "post" in paths[f"{staff_questionnaire}/customer-request"]
+    assert "get" in paths["/api/v1/customer-portal/questionnaires"]
+    assert {"get", "put"} <= set(paths[portal_questionnaire])
+    assert "post" in paths[f"{portal_questionnaire}/complete"]
+
+    schemas = contract["components"]["schemas"]
+    detail = schemas["QuestionnaireDetail"]["properties"]
+    assert {"$ref": "#/components/schemas/QuestionnaireDefinition"} in detail["schema"]["allOf"]
+    question = schemas["QuestionnaireQuestion"]["properties"]
+    question_type = schemas[question["type"]["$ref"].rsplit("/", 1)[1]]
+    assert question_type["enum"] == ["YES_NO", "TEXT", "NUMBER", "DATE", "SELECT", "MULTI_SELECT"]
+    assert schemas["QuestionnaireSaveRequest"]["properties"]["answers"]["type"] == "object"
+    assert paths[portal_questionnaire]["get"]["security"] == [{"customerPortalBearer": []}]
+
+
 def test_contract_files_are_up_to_date_with_the_code():
     generated, merged = build.build(write=False)
     assert build.GENERATED.read_text(encoding="utf-8") == generated, "run `manage.py build_openapi`"

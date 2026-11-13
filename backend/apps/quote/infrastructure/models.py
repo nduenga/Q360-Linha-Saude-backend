@@ -496,6 +496,7 @@ class ClinicalQuestionnaire(TenantScopedModel):
     quote = models.ForeignKey(Quote, on_delete=models.CASCADE, db_column="quote_id", related_name="clinical_questionnaires")
     member = models.ForeignKey(InsuredMember, on_delete=models.DO_NOTHING, db_column="member_id", related_name="clinical_questionnaires")
     schema_version = models.CharField(max_length=30)
+    schema_json = models.JSONField(default=dict)
     status = models.CharField(max_length=20, default="IN_PROGRESS")
     answers_json = models.JSONField(default=dict)
     current_section = models.CharField(max_length=40, null=True, blank=True)

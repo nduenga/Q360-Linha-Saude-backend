@@ -35,14 +35,17 @@ def _requested_quote(quote_number: str, member_id):
 
 class CustomerPortalQuestionnaireListView(_PortalView):
     def get(self, request):
+        """Lista questionários pendentes pedidos pela seguradora ao cliente."""
         return Response({"items": questionnaire_service.pending_for_customer(my_visible_quotes())})
 
 
 class CustomerPortalQuestionnaireView(_PortalView):
     def get(self, request, quote_number, member_id):
+        """Devolve o questionário pedido para uma pessoa numa cotação visível à conta."""
         return Response(questionnaire_service.detail(_requested_quote(quote_number, member_id), member_id))
 
     def put(self, request, quote_number, member_id):
+        """Guarda respostas parciais do cliente para um pedido ativo."""
         quote = _requested_quote(quote_number, member_id)
         body = QuestionnaireSaveRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
@@ -56,6 +59,7 @@ class CustomerPortalQuestionnaireView(_PortalView):
 @requires_idempotency
 class CustomerPortalQuestionnaireCompleteView(_PortalView):
     def post(self, request, quote_number, member_id):
+        """Conclui o preenchimento do cliente após validar as respostas obrigatórias."""
         quote = _requested_quote(quote_number, member_id)
         body = QuestionnaireCompleteRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)

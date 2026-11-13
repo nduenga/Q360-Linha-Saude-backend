@@ -17,7 +17,10 @@ from __future__ import annotations
 import copy
 import io
 import re
+import zipfile
 from typing import Any, Iterable
+
+from lxml import etree
 
 from apps.quote.domain.proposal_template import VARIABLES as PROPOSAL_VARIABLES
 from apps.quote.domain.proposal_template import InvalidTemplateError
@@ -155,11 +158,23 @@ def _containers(document) -> list:
 
 
 def placeholders_in(data: bytes) -> set[str]:
-    document = _open(data)
+    """Return markers from every Word story in the DOCX package.
+
+    A prepared insurer model can place a marker in a text box, footnote or
+    comment. Those parts are not all exposed by python-docx, so validation
+    must read the same XML parts that the renderer updates.
+    """
     found: set[str] = set()
-    for container in _containers(document):
-        for paragraph in _iter_paragraphs(container):
-            found.update(PLACEHOLDER.findall(_paragraph_text(paragraph)))
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as package:
+            for entry in package.infolist():
+                if not _is_word_text_part(entry.filename):
+                    continue
+                root = etree.fromstring(package.read(entry.filename))
+                text = "".join(node.text or "" for node in root.xpath(".//w:t", namespaces=_W))
+                found.update(PLACEHOLDER.findall(text))
+    except (zipfile.BadZipFile, etree.XMLSyntaxError) as exc:
+        raise InvalidTemplateError("O ficheiro nao e um documento Word (.docx) valido") from exc
     return found
 
 
@@ -200,6 +215,7 @@ def _replace_in_paragraph(paragraph, resolve) -> None:
                 tokens.append((element, control_tags[element.tag]))
     if not tokens:
         paragraph.add_run(PLACEHOLDER.sub(lambda m: resolve(m.group(1), m.group(0)), full))
+        _disable_proofing(paragraph)
         return
 
     # Replace from right to left so earlier offsets stay valid. Rebuild the
@@ -229,6 +245,27 @@ def _replace_in_paragraph(paragraph, resolve) -> None:
                 node.text = suffix
         # Empty/adjacent text nodes are valid; preserve them to avoid changing
         # run formatting and relationships around the placeholder.
+    _disable_proofing(paragraph)
+
+
+def _disable_proofing(paragraph) -> None:
+    """Avoid editor spell-check marks becoming part of the visual review.
+
+    A DOCX has no reliable ``pt-AO`` proofing dictionary across Word and
+    LibreOffice. Dynamic names, NIFs, product terms and generated monetary
+    values were consequently shown with red wavy underlines in some viewers.
+    This function is used only on paragraphs with a marker. ``w:noProof``
+    only controls proofing; it leaves styles, colours, drawings and page
+    layout exactly as supplied by the insurer's template.
+    """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    no_proof_tag = qn("w:noProof")
+    for run in paragraph.runs:
+        properties = run._r.get_or_add_rPr()
+        if properties.find(no_proof_tag) is None:
+            properties.append(OxmlElement("w:noProof"))
 
 
 def _group_of(text: str) -> str | None:
@@ -292,7 +329,136 @@ def _expand_lists(document, groups: dict[str, list[dict[str, str]]]) -> None:
         parent.remove(element)
 
 
+_WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+_XML_NS = "http://www.w3.org/XML/1998/namespace"
+_W = {"w": _WORD_NS}
+
+
+def _is_word_text_part(name: str) -> bool:
+    # Do not touch styles, themes, numbering or relationships. Copying those
+    # bytes verbatim is what preserves the insurer's exact visual layout.
+    # Text boxes are stored inside document/header/footer XML; the remaining
+    # entries below are the Word stories that can also contain paragraphs.
+    return bool(
+        re.fullmatch(
+            r"word/(?:document|header\d+|footer\d+|footnotes|endnotes|comments|commentsExtended)\.xml",
+            name,
+        )
+    )
+
+
+def _set_xml_text(node, value: str) -> None:
+    node.text = value
+    space = f"{{{_XML_NS}}}space"
+    if value[:1].isspace() or value[-1:].isspace():
+        node.set(space, "preserve")
+    elif space in node.attrib:
+        del node.attrib[space]
+
+
+def _mark_generated_runs(text_nodes) -> None:
+    """Suppress spell-check only in runs that held a dynamic marker."""
+    for node in text_nodes:
+        runs = node.xpath("ancestor::w:r[1]", namespaces=_W)
+        if not runs:
+            continue
+        run = runs[0]
+        properties = run.find(f"{{{_WORD_NS}}}rPr")
+        if properties is None:
+            properties = etree.Element(f"{{{_WORD_NS}}}rPr")
+            run.insert(0, properties)
+        if properties.find(f"{{{_WORD_NS}}}noProof") is None:
+            properties.append(etree.Element(f"{{{_WORD_NS}}}noProof"))
+
+
+def _replace_xml_paragraph(paragraph, resolve) -> None:
+    """Replace markers without creating or restyling a Word run."""
+    nodes = paragraph.xpath(".//w:t", namespaces=_W)
+    full = "".join(node.text or "" for node in nodes)
+    matches = list(PLACEHOLDER.finditer(full))
+    if not matches:
+        return
+    for match in reversed(matches):
+        start, end = match.span()
+        replacement = resolve(match.group(1), match.group(0))
+        offset, placed, touched = 0, False, []
+        for node in nodes:
+            value = node.text or ""
+            node_start, node_end = offset, offset + len(value)
+            offset = node_end
+            if node_end <= start or node_start >= end:
+                continue
+            touched.append(node)
+            prefix = value[: max(0, start - node_start)] if not placed else ""
+            suffix = value[max(0, end - node_start):] if end <= node_end else ""
+            _set_xml_text(node, prefix + (replacement if not placed else "") + suffix)
+            placed = True
+        _mark_generated_runs(touched)
+
+
+def _xml_group_of(element) -> str | None:
+    text = "".join(node.text or "" for node in element.xpath(".//w:t", namespaces=_W))
+    return _group_of(text)
+
+
+def _fill_word_xml(data: bytes, scalar_resolve, groups: dict[str, list[dict[str, str]]]) -> bytes:
+    root = etree.fromstring(data)
+    # Avoid serialising a story that contains no marker at all. Besides being
+    # faster, this keeps unrelated notes/comments byte-for-byte identical.
+    if "{{" not in "".join(node.text or "" for node in root.xpath(".//w:t", namespaces=_W)):
+        return data
+    # Deep-copy each original row. Its Word formatting XML is retained as-is.
+    for row in reversed(list(root.xpath(".//w:tr", namespaces=_W))):
+        group = _xml_group_of(row)
+        if group is None:
+            continue
+        parent, position = row.getparent(), row.getparent().index(row)
+        for offset, item in enumerate(groups.get(group, [])):
+            clone = copy.deepcopy(row)
+            parent.insert(position + offset, clone)
+            resolver = _group_resolver(group, item)
+            for paragraph in clone.xpath(".//w:p", namespaces=_W):
+                _replace_xml_paragraph(paragraph, resolver)
+        parent.remove(row)
+    for paragraph in reversed(list(root.xpath(".//w:p[not(ancestor::w:tr)]", namespaces=_W))):
+        group = _xml_group_of(paragraph)
+        if group is None:
+            continue
+        parent, position = paragraph.getparent(), paragraph.getparent().index(paragraph)
+        for offset, item in enumerate(groups.get(group, [])):
+            clone = copy.deepcopy(paragraph)
+            parent.insert(position + offset, clone)
+            _replace_xml_paragraph(clone, _group_resolver(group, item))
+        parent.remove(paragraph)
+    for paragraph in root.xpath(".//w:p", namespaces=_W):
+        _replace_xml_paragraph(paragraph, scalar_resolve)
+    return etree.tostring(root, encoding="UTF-8", xml_declaration=True, standalone=True)
+
+
+def _fill_without_rewriting_template(data: bytes, scalars: dict[str, Any], groups: dict[str, list[dict[str, Any]]]) -> bytes:
+    clean_groups = {
+        group: [{key: "" if value is None else str(value) for key, value in item.items()} for item in items]
+        for group, items in groups.items()
+    }
+
+    def scalar_resolve(name: str, _original: str) -> str:
+        value = scalars.get(name)
+        return "—" if value in (None, "") else str(value)
+
+    source, output = io.BytesIO(data), io.BytesIO()
+    with zipfile.ZipFile(source, "r") as original, zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as copied:
+        for entry in original.infolist():
+            part = original.read(entry.filename)
+            if _is_word_text_part(entry.filename):
+                part = _fill_word_xml(part, scalar_resolve, clean_groups)
+            copied.writestr(entry, part)
+    return output.getvalue()
+
+
 def fill(data: bytes, *, scalars: dict[str, Any], groups: dict[str, list[dict[str, Any]]]) -> bytes:
+    """Replace markers without rebuilding the insurer's DOCX package."""
+    return _fill_without_rewriting_template(data, scalars, groups)
+
     """Devolve o `.docx` com as marcas substituídas."""
     document = _open(data)
     clean_groups = {g: [{k: ("" if v is None else str(v)) for k, v in item.items()} for item in items] for g, items in groups.items()}

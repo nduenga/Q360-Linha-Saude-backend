@@ -307,15 +307,42 @@ REGISTRY: dict[str, dict] = {
                     "assignment": ("string", False, "Revisões: mine ou unassigned.")},
     },
     "StatusDictionaryView.get": {"response": d.StatusDictionary},
-    "QuoteQuestionnaireListView.get": {"response": d.QuestionnaireList},
-    "QuoteMemberQuestionnaireView.get": {"response": d.QuestionnaireDetail, "notes": "Dados de saúde: cada consulta fica auditada."},
-    "QuoteMemberQuestionnaireView.put": {"response": d.QuestionnaireAnswers},
-    "QuoteMemberQuestionnaireCompleteView.post": {"response": d.QuestionnaireAnswers},
-    "QuoteMemberQuestionnaireRequestView.post": {"response": d.QuestionnaireSummary},
-    "CustomerPortalQuestionnaireListView.get": {"response": d.PortalQuestionnaireList},
-    "CustomerPortalQuestionnaireView.get": {"response": d.QuestionnaireDetail},
-    "CustomerPortalQuestionnaireView.put": {"response": d.QuestionnaireAnswers},
-    "CustomerPortalQuestionnaireCompleteView.post": {"response": d.QuestionnaireAnswers},
+    "QuoteQuestionnaireListView.get": {
+        "response": d.QuestionnaireList,
+        "notes": "Mostra o estado e progresso por pessoa segura; as respostas clínicas não são incluídas.",
+    },
+    "QuoteMemberQuestionnaireView.get": {
+        "response": d.QuestionnaireDetail,
+        "notes": "Dados de saúde: cada consulta fica auditada. Devolve a definição de perguntas guardada com o preenchimento.",
+    },
+    "QuoteMemberQuestionnaireView.put": {
+        "response": d.QuestionnaireAnswers,
+        "notes": "Grava respostas parciais. Na primeira gravação, rowVersion pode ser omitido; nas seguintes é obrigatório e aplica controlo de concorrência.",
+    },
+    "QuoteMemberQuestionnaireCompleteView.post": {
+        "response": d.QuestionnaireAnswers,
+        "notes": "Conclui apenas quando todas as perguntas obrigatórias e visíveis tiverem resposta.",
+    },
+    "QuoteMemberQuestionnaireRequestView.post": {
+        "response": d.QuestionnaireSummary,
+        "notes": "Pede o preenchimento ao cliente no Portal e envia uma notificação às contas ligadas ao tomador.",
+    },
+    "CustomerPortalQuestionnaireListView.get": {
+        "response": d.PortalQuestionnaireList,
+        "notes": "Lista apenas questionários pendentes que a seguradora pediu ao cliente.",
+    },
+    "CustomerPortalQuestionnaireView.get": {
+        "response": d.QuestionnaireDetail,
+        "notes": "Disponível apenas para o cliente autenticado, em cotações visíveis à sua conta e com pedido de preenchimento ativo.",
+    },
+    "CustomerPortalQuestionnaireView.put": {
+        "response": d.QuestionnaireAnswers,
+        "notes": "Grava respostas parciais do cliente no Portal; requer pedido ativo da seguradora.",
+    },
+    "CustomerPortalQuestionnaireCompleteView.post": {
+        "response": d.QuestionnaireAnswers,
+        "notes": "Conclui o questionário do cliente apenas quando todas as perguntas obrigatórias e visíveis tiverem resposta.",
+    },
     "ReviewBatchAssignmentView.post": {"response": d.ReviewBatchAssignment},
     "ReviewBatchDecisionView.post": {
         "request": d.ReviewBatchDecisionRequest, "response": d.ReviewBatchDecision,

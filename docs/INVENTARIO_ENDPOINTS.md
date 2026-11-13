@@ -2207,3 +2207,29 @@ A inclusão `OPTIONAL` aparece como valor da linha `inclusion` de cada cobertura
   - factos `PREMIUM_*` no início do `summary`.
 - **Comportamento:** cada plano é tarifado com `simulate_tariff` (o mesmo cálculo de `POST /products/{product_id}/tariff/simulate`). O tipo de tomador segue o segmento do plano (`INDIVIDUAL_FAMILY` → `INDIVIDUAL`, `GROUP` → `ORGANISATION`). O proponente, as pessoas, a cotação e o cálculo temporários são revertidos. Um plano que não se consegue tarifar (tarifa por publicar, idade fora dos escalões...) não falha o pedido: fica com `available: false` e `reason`.
 - **Erros:** os do GET e ainda 400 `VALIDATION-400` para uma `composition` inválida (sem pessoas, idade fora de 0–120, sexo ou frequência desconhecidos).
+
+### Atualização de 13/11/2026 — questionário clínico nas cotações e no Portal
+
+Cada pessoa segura pode ter um questionário clínico por cotação. O questionário guarda a definição e a versão usadas no início do preenchimento; alterações posteriores à configuração não mudam respostas já iniciadas. As respostas são dados de saúde: a consulta detalhada exige perfil de revisão, fica auditada e o conteúdo das respostas não é escrito na auditoria. As rotas abaixo usam o prefixo `/api/v1` (omitido na tabela).
+
+| Método | Endpoint | Quem pode | Funcionalidade |
+|---|---|---|---|
+| GET | `/quotes/{quote_id}/questionnaires` | `q360.read` | Lista estado e progresso por pessoa segura; não devolve respostas. |
+| GET | `/quotes/{quote_id}/members/{member_id}/questionnaire` | `q360.read` + `quote:review` | Obtém estado, definição versionada e respostas da pessoa segura. |
+| PUT | `/quotes/{quote_id}/members/{member_id}/questionnaire` | `q360.write` + `quote:review` | Guarda respostas parciais da equipa, com controlo de concorrência. |
+| POST | `/quotes/{quote_id}/members/{member_id}/questionnaire/complete` | `q360.write` + `quote:review` | Conclui o questionário quando todas as perguntas obrigatórias e visíveis estão respondidas. Exige `Idempotency-Key`. |
+| POST | `/quotes/{quote_id}/members/{member_id}/questionnaire/customer-request` | `q360.write` + `quote:edit` | Pede o preenchimento ao cliente no Portal e notifica as contas ligadas ao tomador. Exige `Idempotency-Key`. |
+| GET | `/customer-portal/questionnaires` | Cliente autenticado no Portal | Lista questionários pendentes que lhe foram pedidos. |
+| GET | `/customer-portal/me/quotes/{quote_number}/members/{member_id}/questionnaire` | Cliente autenticado no Portal | Obtém o questionário pedido para uma pessoa numa cotação visível à conta. |
+| PUT | `/customer-portal/me/quotes/{quote_number}/members/{member_id}/questionnaire` | Cliente autenticado no Portal | Guarda respostas parciais do cliente; requer pedido ativo da seguradora. |
+| POST | `/customer-portal/me/quotes/{quote_number}/members/{member_id}/questionnaire/complete` | Cliente autenticado no Portal | Conclui o preenchimento após validar as respostas obrigatórias. Exige `Idempotency-Key`. |
+
+#### Contratos do questionário clínico
+
+- **Definição (`schema`):** `{version, sections[]}`. Cada secção tem `key`, `label` e `questions[]`; cada pergunta tem `key`, `label`, `type`, `required` e, opcionalmente, `showIf` (`question`, `equals`) e `options`.
+- **Tipos de pergunta:** `YES_NO`, `TEXT`, `NUMBER`, `DATE`, `SELECT` e `MULTI_SELECT`. As opções são aplicáveis a `SELECT` e `MULTI_SELECT`.
+- **Respostas (`answers`):** objeto indexado pela chave da pergunta. O valor tem de corresponder ao tipo definido; enviar `null` limpa uma resposta.
+- **Guardar (`PUT`):** JSON `{answers?, currentSection?, rowVersion?}`. `rowVersion` pode ser omitido na primeira gravação; nas seguintes tem de corresponder à versão lida. Versão desatualizada → 409.
+- **Concluir (`POST .../complete`):** JSON `{rowVersion}`. Perguntas obrigatórias ainda sem resposta → 409 `QUESTIONNAIRE-INCOMPLETE`; respostas inválidas ou chaves desconhecidas → 400 `VALIDATION-400`.
+- **Resposta detalhada:** os campos de estado/progresso (`questionnaireId`, `quoteId`, `memberId`, `memberName`, `status`, `progress`, `currentSection`, `hasDeclarations`, datas, canal e `rowVersion`), mais `answers`; o GET também devolve `schema`. Estados: `NOT_STARTED`, `IN_PROGRESS`, `COMPLETED`.
+- **Portal:** só permite ler, gravar ou concluir questionários pedidos pela seguradora e pertencentes a cotações visíveis à conta autenticada. Pedido inexistente ou não autorizado → 404.

@@ -62,8 +62,19 @@ def _member_name(member) -> str:
     return " ".join(part for part in (member.first_name, member.last_name) if part) or "Pessoa segura"
 
 
+def _definition(row: ClinicalQuestionnaire | None = None) -> dict[str, Any]:
+    """A resposta usa sempre a cópia da versão com que foi iniciada."""
+    if row and row.schema_json:
+        return form.schema(row.schema_json)
+    if row:
+        return form.schema()
+    from apps.business_config.application.readers import BusinessSnapshot
+    return form.schema(BusinessSnapshot.load().get("underwriting.clinical_questionnaire"))
+
+
 def _summary(quote_member: QuoteMember, row: ClinicalQuestionnaire | None) -> dict[str, Any]:
     answers = row.answers_json if row else {}
+    definition = _definition(row)
     status = row.status if row else NOT_STARTED
     return {
         "questionnaireId": str(row.id) if row else None,
@@ -72,9 +83,9 @@ def _summary(quote_member: QuoteMember, row: ClinicalQuestionnaire | None) -> di
         "memberName": _member_name(quote_member.member),
         "status": status,
         "statusLabel": status_label("questionnaire", status),
-        "progress": form.progress(answers),
+        "progress": form.progress(answers, definition),
         "currentSection": row.current_section if row else None,
-        "hasDeclarations": form.has_declarations(answers),
+        "hasDeclarations": form.has_declarations(answers, definition),
         "requestedFromCustomerAt": row.requested_from_customer_at if row else None,
         "updatedAt": row.updated_at if row else None,
         "updatedChannel": row.updated_channel if row else None,
@@ -114,16 +125,18 @@ def detail(quote: Quote, member_id: uuid.UUID) -> dict[str, Any]:
     )
     return {
         **_summary(quote_member, row),
-        "schema": form.schema(),
+        "schema": _definition(row),
         "answers": row.answers_json if row else {},
     }
 
 
 def _create(quote: Quote, member_id: uuid.UUID, *, channel: str, **fields: Any) -> ClinicalQuestionnaire:
+    definition = fields.pop("definition", None) or _definition()
     try:
         with transaction.atomic():
             return ClinicalQuestionnaire.objects.create(
-                tenant_id=quote.tenant_id, quote=quote, member_id=member_id, schema_version=form.SCHEMA_VERSION,
+                tenant_id=quote.tenant_id, quote=quote, member_id=member_id,
+                schema_version=definition["version"], schema_json=definition,
                 updated_by=_actor_id(), updated_channel=channel, **fields,
             )
     except IntegrityError as exc:
@@ -138,7 +151,7 @@ def save(
     a abri-lo, para ninguém decidir com base em respostas por confirmar."""
     _require_editable(quote)
     quote_member = _quote_member(quote, member_id)
-    if current_section is not None and current_section not in form.SECTION_KEYS:
+    if current_section is not None and current_section not in form.section_keys(_definition(ClinicalQuestionnaire.objects.filter(quote=quote, member_id=member_id).first())):
         raise QuestionnaireInvalidError(f"A secção «{current_section}» não existe neste questionário.")
     row = ClinicalQuestionnaire.objects.filter(quote=quote, member_id=member_id).first()
     if channel == CUSTOMER:
@@ -147,12 +160,12 @@ def save(
         if row.status == COMPLETED:
             raise QuoteStateError("Este questionário já foi concluído")
     try:
-        merged = form.merge_answers(row.answers_json if row else {}, answers)
+        merged = form.merge_answers(row.answers_json if row else {}, answers, _definition(row))
     except form.QuestionnaireAnswerError as exc:
         raise QuestionnaireInvalidError(str(exc)) from exc
 
     if row is None:
-        row = _create(quote, member_id, channel=channel, answers_json=merged, current_section=current_section)
+        row = _create(quote, member_id, channel=channel, answers_json=merged, current_section=current_section, definition=_definition(row))
     else:
         if row_version is None:
             raise QuestionnaireInvalidError("Indique a versão (rowVersion) do questionário que está a alterar.")
@@ -179,7 +192,7 @@ def complete(*, quote: Quote, member_id: uuid.UUID, row_version: int, channel: s
         raise QuestionnaireIncompleteError("Este questionário ainda não tem respostas")
     if channel == CUSTOMER and row.requested_from_customer_at is None:
         raise QuoteStateError("A seguradora não pediu este questionário ao cliente")
-    missing = form.missing_labels(row.answers_json)
+    missing = form.missing_labels(row.answers_json, _definition(row))
     if missing:
         raise QuestionnaireIncompleteError("Faltam respostas obrigatórias: " + "; ".join(missing))
     actor_id = _actor_id()
@@ -244,7 +257,7 @@ def pending_for_customer(quotes) -> list[dict[str, Any]]:
             "quoteNumber": row.quote.quote_number,
             "memberId": str(row.member_id),
             "memberName": _member_name(row.member),
-            "progress": form.progress(row.answers_json),
+            "progress": form.progress(row.answers_json, _definition(row)),
             "requestedAt": row.requested_from_customer_at,
         }
         for row in rows

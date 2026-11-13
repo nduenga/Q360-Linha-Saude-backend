@@ -15,6 +15,7 @@ CONFIG_CATALOG=[
 {"key":"underwriting.acceptance_rules","category":"UNDERWRITING","label":"Regras de aceitação","priority":"HIGH","value_type":"object"},
 {"key":"underwriting.pre_existing_conditions","category":"UNDERWRITING","label":"Doenças pré-existentes","priority":"HIGH","value_type":"object"},
 {"key":"underwriting.medical_review","category":"UNDERWRITING","label":"Análise médica reforçada","priority":"HIGH","value_type":"object"},
+{"key":"underwriting.clinical_questionnaire","category":"UNDERWRITING","label":"Questionário clínico","priority":"HIGH","value_type":"object"},
 {"key":"group.rules","category":"GROUP","label":"Regras de grupo","priority":"MEDIUM","value_type":"object"},
 {"key":"renewal.rules","category":"RENEWAL","label":"Regras de renovação","priority":"MEDIUM","value_type":"object"},
 {"key":"renewal.deadlines","category":"RENEWAL","label":"Prazos de renovação","priority":"LOW","value_type":"object"},
