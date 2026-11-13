@@ -5,6 +5,7 @@ dizem sempre exatamente o mesmo."""
 from __future__ import annotations
 
 import base64
+import datetime
 import html
 import io
 from typing import Any
@@ -19,10 +20,17 @@ def variables_for(content: dict[str, Any], *, document_number: str | None, gener
     meta, client, plan, premium = content["meta"], content["client"], content["plan"], content["premium"]
     from shared.formatting import date as format_date
 
+    quote_date = _as_date(meta.get("quoteDate"))
+    valid_until = _as_date(meta.get("validUntil"))
+    validity_days = (valid_until - quote_date).days if quote_date and valid_until else None
     return {
         "quote.number": meta["quoteNumber"],
-        "quote.date": format_date(meta["quoteDate"]),
+        # The insurer's Word proposal uses dots in its compact cover block.
+        # This value is only a display variable; the original ISO dates remain
+        # intact in the structured proposal content.
+        "quote.date": quote_date.strftime("%d.%m.%Y") if quote_date else format_date(meta["quoteDate"]),
         "quote.validUntil": format_date(meta["validUntil"]),
+        "quote.validityDays": f"{validity_days} dias" if validity_days is not None else None,
         "quote.type": meta["quoteType"],
         "document.number": document_number or "(a atribuir)",
         "document.date": format_date(generated_on),
@@ -43,6 +51,19 @@ def variables_for(content: dict[str, Any], *, document_number: str | None, gener
         "scenario.name": (meta["scenario"] or {}).get("name"),
         "insured.count": len(content["population"]),
     }
+
+
+def _as_date(value: Any) -> datetime.date | None:
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, datetime.date):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
 
 
 def build_blocks(content: dict[str, Any], spec: dict[str, Any], variables: dict[str, Any]) -> list[Block]:
