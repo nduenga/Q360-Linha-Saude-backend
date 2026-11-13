@@ -407,9 +407,16 @@ def create_quote(
                 },
             )
 
-            # Se criámos um titular no mesmo request, adicionamo-lo à cotação
-            # imediatamente (a elegibilidade é avaliada em add_quote_member).
-            if created_member is not None:
+            # O titular individual tem de fazer parte da cotação, quer tenha
+            # sido criado neste pedido quer já existisse para o proponente.
+            titular = created_member
+            if titular is None and proposer.proposer_type == "INDIVIDUAL":
+                titular = InsuredMember.objects.filter(
+                    proposer=proposer,
+                    relationship_code="TITULAR",
+                    status=MemberStatus.ACTIVE.value,
+                ).order_by("created_at", "id").first()
+            if titular is not None:
                 correlation_id = None
                 try:
                     from apps.foundation.interfaces.middleware import get_correlation_id as _get_cid
@@ -417,7 +424,7 @@ def create_quote(
                     correlation_id = _get_cid()
                 except Exception:
                     correlation_id = None
-                quote = add_quote_member(quote=quote, member_id=created_member.id, correlation_id=correlation_id)
+                quote = add_quote_member(quote=quote, member_id=titular.id, correlation_id=correlation_id)
                 quote.refresh_from_db()
 
     except Exception:
@@ -790,6 +797,29 @@ def _pricing_inputs_fingerprint(quote: Quote, context: dict, member_ids: list) -
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 
 
+def _attach_sole_titular_if_quote_is_empty(*, quote: Quote, correlation_id: str | None) -> None:
+    """Cotação nova de proponente individual sem ninguém associada: o titular
+    é o próprio proponente, por isso associa-se-lhe automaticamente (se existir
+    exactamente um TITULAR activo). Sem isto o cálculo falhava com «memberIds
+    tem de conter pelo menos uma pessoa segura» mesmo com o titular criado.
+
+    Só actua em negócio novo: endossos e renovações têm a sua própria gestão
+    de pessoas (o titular já está na apólice). Se a cotação já tem pessoas,
+    ou há 0 / vários titulares, não toca em nada."""
+    if quote.quote_type != "NEW" or QuoteMember.objects.filter(quote=quote).exists():
+        return
+    proposer = Proposer.objects.filter(id=quote.proposer_id).first()
+    if proposer is None or proposer.proposer_type != "INDIVIDUAL":
+        return
+    holders = list(
+        InsuredMember.objects.filter(
+            proposer_id=proposer.id, relationship_code="TITULAR", status=MemberStatus.ACTIVE.value
+        )[:2]
+    )
+    if len(holders) == 1:
+        _add_quote_member_by_member(quote=quote, member_id=holders[0].id, correlation_id=correlation_id)
+
+
 def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
     if quote.status not in (QuoteStatus.DRAFT.value, QuoteStatus.READY.value):
         extra = ""
@@ -809,6 +839,7 @@ def price_quote(*, quote: Quote, recalculate: bool, correlation_id: str | None):
             f"Esta cotação está em {quote_status_label(quote.status)}; o cálculo do prémio só pode correr em rascunho (DRAFT) ou pronta (READY).{extra}"
         )
 
+    _attach_sole_titular_if_quote_is_empty(quote=quote, correlation_id=correlation_id)
     context, priceable_member_ids = build_pricing_context(quote)
     fingerprint = _pricing_inputs_fingerprint(quote, context, priceable_member_ids)
     if not recalculate and quote.latest_pricing_run_id and quote.latest_pricing_run.status == "CALCULATED":

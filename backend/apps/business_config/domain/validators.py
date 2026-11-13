@@ -18,6 +18,7 @@ from apps.business_config.domain.formulas import CONFIG_KEY as FORMULAS_KEY, val
 from apps.business_config.domain.errors import InvalidConfiguration
 from apps.business_config.domain.form_schemas import get_form_schema
 from apps.business_config.domain.shape import flatten
+from apps.quote.domain.clinical_questionnaire import QuestionnaireSchemaError, validate_schema
 
 # Campos cujas opções vêm de dados do sistema (planos, coberturas, países):
 # o esquema sugere valores mas não os impõe.
@@ -78,6 +79,12 @@ def _check_object(fields: list[dict[str, Any]], row: Any, path: str) -> None:
 
 
 def validate_structure(key: str, value: dict[str, Any]) -> None:
+    if key == "underwriting.clinical_questionnaire":
+        try:
+            validate_schema(value)
+        except QuestionnaireSchemaError as exc:
+            raise InvalidConfiguration(str(exc)) from exc
+        return
     if key == FORMULAS_KEY:
         # Sintaxe, variáveis declaradas, dependências e ciclos: uma fórmula
         # inválida nunca chega a ser guardada, muito menos publicada.

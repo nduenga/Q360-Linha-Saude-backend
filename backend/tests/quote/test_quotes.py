@@ -117,6 +117,22 @@ def test_create_quote_starts_as_draft(admin_client):
 
 
 @pytest.mark.django_db
+def test_create_quote_automatically_includes_existing_individual_holder(admin_client):
+    scope = _quote_scope(admin_client, code_suffix="existing-holder")
+    member_id = _member(admin_client, proposer_id=scope["proposerId"])
+
+    response = admin_client.post(
+        "/api/v1/quotes",
+        {"proposerId": scope["proposerId"], "planId": scope["planId"]},
+        format="json",
+    )
+
+    assert response.status_code == 201, response.data
+    members = admin_client.get(f"/api/v1/quotes/{response.data['id']}/members").data["items"]
+    assert [member["memberId"] for member in members] == [member_id]
+
+
+@pytest.mark.django_db
 def test_create_quote_unknown_references_is_validation_400(admin_client):
     import uuid
 
