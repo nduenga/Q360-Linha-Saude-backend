@@ -93,7 +93,16 @@ def statuses_for_quote(quote: Quote) -> dict[str, str]:
 def list_for_quote(quote: Quote) -> list[dict[str, Any]]:
     rows = {row.member_id: row for row in ClinicalQuestionnaire.objects.filter(quote=quote)}
     members = QuoteMember.objects.select_related("member").filter(quote=quote).order_by("created_at", "id")
-    return [_summary(member, rows.get(member.member_id)) for member in members]
+    return [
+        {
+            **_summary(member, row),
+            # Only the staff listing receives the request author; never expose this
+            # identificador interno nas respostas destinadas ao Portal.
+            "requestedBy": row.requested_by if row else None,
+        }
+        for member in members
+        for row in [rows.get(member.member_id)]
+    ]
 
 
 def detail(quote: Quote, member_id: uuid.UUID) -> dict[str, Any]:
