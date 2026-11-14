@@ -1,6 +1,6 @@
 # Guia de Deploy — Q360 Saúde (Backend)
 
-Guia para hospedar a API Django num servidor Linux (Ubuntu) com PostgreSQL, gunicorn e Nginx.
+Guia para hospedar a API Django num servidor Linux próprio. O caminho recomendado é Docker Compose, com PostgreSQL persistente, API em gunicorn e Nginx no host.
 
 ## Resumo
 
@@ -14,10 +14,13 @@ Guia para hospedar a API Django num servidor Linux (Ubuntu) com PostgreSQL, guni
 | Ficheiro | Para quê |
 |---|---|
 | `q360.env.example` | Modelo das variáveis de ambiente. Copiar para `/etc/q360.env` e preencher. |
-| `q360.service` | Serviço systemd que mantém o gunicorn sempre ligado. |
+| `q360.docker.env.example` | Variáveis para a instalação geral com Docker Compose. Copiar para `/etc/q360-docker.env` e preencher. |
+| `q360.service` | Serviço systemd para deploy sem Docker. |
 | `nginx-q360.conf` | Configuração do Nginx (proxy + cabeçalho HTTPS). |
 | `bootstrap.sh` | Executa os passos 6 e 7 de uma vez (migrate + dados iniciais). |
-| `../Dockerfile.prod` | Alternativa com Docker (gunicorn). O `Dockerfile` original usa `runserver` e é só para desenvolvimento. |
+| `q360-daily-docker.service` | Unit systemd para correr as tarefas diárias dentro do contentor API. |
+| `../Dockerfile.prod` | Imagem de produção com gunicorn, LibreOffice Writer e Chromium. |
+| `../docker-compose.prod.yml` | Configuração Docker Compose de produção; constrói explicitamente `Dockerfile.prod` e mantém dados em volumes. |
 | `LIBREOFFICE_PDF.md` | Como instalar e verificar o LibreOffice e as fontes, para o PDF dos modelos Word sair igual ao Word. |
 
 Os caminhos `/opt/q360/backend` e o domínio `api.seudominio.com` são exemplos. Ajuste-os ao seu servidor.
@@ -27,33 +30,53 @@ Os caminhos `/opt/q360/backend` e o domínio `api.seudominio.com` são exemplos.
 ## 1. Preparar o servidor (Ubuntu)
 
 ```bash
-sudo apt update && sudo apt install -y python3.12 python3.12-venv postgresql nginx git
+sudo apt update && sudo apt install -y nginx git certbot python3-certbot-nginx
 ```
 
-### LibreOffice e fontes (PDF dos modelos Word)
+Instale Docker Engine e o plugin Docker Compose seguindo a documentação oficial da distribuição Linux do servidor. O PostgreSQL, Python, LibreOffice, Chromium e dependências da aplicação correm em contentores; o host precisa do Nginx e Docker.
 
-Guia completo, incluindo Docker, Render, verificação e resolução de problemas: [`LIBREOFFICE_PDF.md`](LIBREOFFICE_PDF.md).
+### Conversão de propostas e documentos Word para PDF
 
-Para o PDF de uma proposta ou apólice com modelo Word sair igual ao Word (por exemplo o modelo Protteja), o servidor precisa do LibreOffice e das fontes usadas no modelo. Sem o LibreOffice, a plataforma continua a gerar o PDF, mas com o seu próprio layout, e regista um aviso no log.
+Guia completo para servidor próprio, Docker, verificação e resolução de problemas: [`LIBREOFFICE_PDF.md`](LIBREOFFICE_PDF.md).
+
+Propostas com modelo Word usam esse modelo para gerar DOCX e PDF (convertido pelo LibreOffice). Templates sem ficheiro Word usam o renderer HTML/CSS com Playwright/Chromium. A imagem Docker de produção instala ambos os motores.
+
+Com Docker Compose, estes programas já vêm na imagem `Dockerfile.prod`; não instale LibreOffice nem Python manualmente no host. Se usar a instalação sem Docker descrita mais adiante, instale os pacotes e fontes dentro desse ambiente e valide `soffice --version`.
+
+## Instalação recomendada: servidor Linux com Docker Compose
+
+O Compose de produção constrói a imagem a partir de `Dockerfile.prod`, inclui LibreOffice e Chromium, liga a API ao PostgreSQL privado e preserva a base de dados e os ficheiros enviados em volumes Docker. A API só fica exposta em `127.0.0.1:8000`; o Nginx do host publica o domínio com HTTPS.
+
+1. Instale Docker Engine e o plugin Docker Compose no servidor.
+2. Obtenha o repositório em `/opt/q360` e prepare o ficheiro de ambiente:
 
 ```bash
-# 1. LibreOffice só com o processador de texto e sem interface gráfica (~250 MB)
-sudo apt install -y --no-install-recommends libreoffice-writer-nogui fonts-dejavu-core fontconfig unzip
-
-# 2. Fontes Inter e Inter Display, versão oficial (o pacote fonts-inter não traz a Inter Display)
-curl -fsSL -o /tmp/inter.zip https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
-sudo mkdir -p /usr/local/share/fonts/inter
-sudo unzip -j -o /tmp/inter.zip 'extras/ttf/*.ttf' -d /usr/local/share/fonts/inter
-sudo fc-cache -f && rm /tmp/inter.zip
-
-# 3. Confirmar
-soffice --version
-fc-list | grep -c "Inter Display"     # deve ser maior que 0
+sudo cp /opt/q360/backend/deploy/q360.docker.env.example /etc/q360-docker.env
+sudo chmod 600 /etc/q360-docker.env
+sudo nano /etc/q360-docker.env
 ```
 
-Se o modelo de outra seguradora usar outras fontes, instale-as da mesma forma em `/usr/local/share/fonts` e corra `sudo fc-cache -f`. Se o executável não estiver no PATH, indique-o na variável `Q360_SOFFICE_PATH`. Depois de instalar, reinicie a API: `sudo systemctl restart q360`.
+Preencha três chaves secretas diferentes, os domínios e as credenciais de PostgreSQL/email. Gere segredos com `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`. Para a palavra-passe PostgreSQL, use também uma saída de `token_urlsafe`.
 
-## 2. Criar a base de dados vazia
+3. Construa e inicie a base de dados, aplique migrações e inicie a API:
+
+```bash
+cd /opt/q360/backend
+sudo docker compose --env-file /etc/q360-docker.env -f docker-compose.prod.yml build api
+sudo docker compose --env-file /etc/q360-docker.env -f docker-compose.prod.yml up -d db
+sudo docker compose --env-file /etc/q360-docker.env -f docker-compose.prod.yml run --rm api python manage.py migrate --noinput
+sudo docker compose --env-file /etc/q360-docker.env -f docker-compose.prod.yml up -d api
+```
+
+O build verifica `soffice --version`; se o LibreOffice não estiver instalado na imagem, o build falha. O `nginx-q360.conf` encaminha o tráfego para a API. Configure o certificado TLS do domínio no host antes de abrir o serviço ao público.
+
+Comandos de gestão e seed também correm no contentor API, por exemplo `sudo docker compose --env-file /etc/q360-docker.env -f docker-compose.prod.yml run --rm api python manage.py <comando>`. Não apague os volumes `q360_postgres_data` ou `q360_media`: contêm a base de dados e os documentos carregados. Inclua ambos no plano de backup.
+
+## Instalação sem Docker (alternativa)
+
+O modo manual mantém PostgreSQL, Python, LibreOffice, Chromium, gunicorn e a API diretamente no host. Use-o apenas se não for usar a instalação Compose acima.
+
+### 2. Criar a base de dados vazia
 
 ```bash
 sudo -u postgres psql -c "CREATE USER q360 WITH PASSWORD 'SENHA_FORTE';"
@@ -62,18 +85,18 @@ sudo -u postgres psql -c "CREATE DATABASE q360 OWNER q360;"
 
 Isto cria só uma base vazia. Não restaura nenhum ficheiro, e não existe nenhum para restaurar.
 
-## 3. Obter o código e instalar
+### 3. Obter o código e instalar
 
 ```bash
 git clone <url-do-repo> /opt/q360
 cd /opt/q360/backend
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.render.txt
+pip install -r requirements.production.txt
 ```
 
-O `requirements.render.txt` é a lista de dependências de produção, apesar do nome.
+O `requirements.production.txt` contém as dependências da API em produção.
 
-## 4. Definir as variáveis de ambiente
+### 4. Definir as variáveis de ambiente
 
 Crie `/etc/q360.env` a partir de `deploy/q360.env.example`:
 
@@ -114,7 +137,7 @@ CUSTOMER_PORTAL_EMAIL_FROM=<email>
 | `DATABASE_URL` | Ligação ao PostgreSQL do passo 2. |
 | `EMAIL_*`, `DEFAULT_FROM_EMAIL`, `CUSTOMER_PORTAL_EMAIL_FROM` | Usadas para enviar o código OTP do portal do cliente. |
 
-## 5. Criar as tabelas
+### 5. Criar as tabelas
 
 ```bash
 set -a; source /etc/q360.env; set +a
@@ -208,9 +231,19 @@ São repetíveis sem efeitos secundários. Se uma falhar, as seguintes correm na
 
 **Atenção:** não ative antes da confirmação jurídica. A partir da primeira execução, uma apólice com prestação vencida é resolvida sem intervenção humana, sem tolerância e sem esperar pela carta registada do art. 18.º do Decreto n.º 2/02. Estes prazos não são configuráveis.
 
-**No Render:** o `render.yaml` já declara o serviço `q360-daily-jobs`. Os serviços cron do Render não têm plano gratuito.
+**No deploy recomendado com Docker Compose:** instale a unit que executa as tarefas no contentor:
 
-**Em servidor próprio (systemd):**
+```bash
+sudo cp deploy/q360-daily-docker.service /etc/systemd/system/q360-daily.service
+sudo cp deploy/q360-daily.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now q360-daily.timer
+systemctl list-timers q360-daily.timer
+sudo systemctl start q360-daily.service   # executar já para validar
+journalctl -u q360-daily.service -n 50
+```
+
+**Instalação sem Docker:**
 
 ```bash
 sudo cp deploy/q360-daily.service deploy/q360-daily.timer /etc/systemd/system/
@@ -227,7 +260,7 @@ O `dispatch_outbox` só é preciso se ligar um broker de mensagens real; por omi
 
 ## Email (convites e códigos do Portal do Cliente)
 
-Preencha `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`, `CUSTOMER_PORTAL_EMAIL_FROM` e `CUSTOMER_PORTAL_URL`. Sem `CUSTOMER_PORTAL_URL`, o link do convite aponta para `localhost`. No Render, preencha estes valores no painel do serviço `q360-health-api`.
+Preencha `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`, `CUSTOMER_PORTAL_EMAIL_FROM` e `CUSTOMER_PORTAL_URL`. Sem `CUSTOMER_PORTAL_URL`, o link do convite aponta para `localhost`. Na instalação Docker Compose, estes valores são definidos em `/etc/q360-docker.env`.
 
 ```bash
 python manage.py check_email                         # valida a configuração e a autenticação, sem enviar
@@ -256,16 +289,31 @@ A API guarda ficheiros em `backend/media/`. **Esta pasta tem de ser persistente 
 
 ## Atualizar uma nova versão
 
+No deploy recomendado com Docker Compose, atualize a imagem e reinicie a API:
+
+```bash
+cd /opt/q360 && git pull
+cd backend
+sudo docker compose --env-file /etc/q360-docker.env -f docker-compose.prod.yml build api
+sudo docker compose --env-file /etc/q360-docker.env -f docker-compose.prod.yml run --rm api python manage.py migrate --noinput
+sudo docker compose --env-file /etc/q360-docker.env -f docker-compose.prod.yml up -d --force-recreate api
+sudo docker compose --env-file /etc/q360-docker.env -f docker-compose.prod.yml ps
+```
+
+Os volumes da base de dados e de media ficam preservados durante esta atualização.
+
+### Atualização sem Docker
+
 ```bash
 cd /opt/q360 && git pull
 cd backend && source .venv/bin/activate
-pip install -r requirements.render.txt
+pip install -r requirements.production.txt
 set -a; source /etc/q360.env; set +a
 python manage.py migrate --noinput
 sudo systemctl restart q360
 ```
 
-## Alternativa com Docker
+## Docker sem Compose (alternativa)
 
 ```bash
 cd backend

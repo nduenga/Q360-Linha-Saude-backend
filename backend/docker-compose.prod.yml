@@ -1,0 +1,47 @@
+name: q360
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - /etc/q360-docker.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-q360}
+      POSTGRES_USER: ${POSTGRES_USER:-q360}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in /etc/q360-docker.env}
+    volumes:
+      - q360_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  api:
+    image: q360-api:${Q360_IMAGE_TAG:-production}
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    env_file:
+      - /etc/q360-docker.env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      DJANGO_DEBUG: "false"
+      POSTGRES_DB: ${POSTGRES_DB:-q360}
+      POSTGRES_USER: ${POSTGRES_USER:-q360}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in /etc/q360-docker.env}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - q360_media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  q360_postgres_data:
+  q360_media:

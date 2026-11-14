@@ -23,6 +23,14 @@ def variables_for(content: dict[str, Any], *, document_number: str | None, gener
     quote_date = _as_date(meta.get("quoteDate"))
     valid_until = _as_date(meta.get("validUntil"))
     validity_days = (valid_until - quote_date).days if quote_date and valid_until else None
+    access_system = plan.get("accessSystem") or ""
+    access_mode, separator, access_description = access_system.partition(":")
+    if not separator:
+        access_mode, access_description = access_system, ""
+    access_mode = access_mode.strip()
+    access_description = access_description.strip().rstrip(".")
+    hospitalization = next((item for item in content.get("coverages", []) if item.get("code") == "HOSPITALIZATION" and item.get("contracted")), None)
+    capital_summary = (hospitalization or {}).get("summaryCapital") or {}
     return {
         "quote.number": meta["quoteNumber"],
         # The insurer's Word proposal uses dots in its compact cover block.
@@ -42,6 +50,10 @@ def variables_for(content: dict[str, Any], *, document_number: str | None, gener
         "plan.product": plan["product"],
         "plan.segment": plan["segment"],
         "plan.accessSystem": plan.get("accessSystem"),
+        "plan.accessMode": access_mode or None,
+        "plan.accessDescription": access_description or None,
+        "coverage.hospitalizationCapital": capital_summary.get("value") or "Ver coberturas",
+        "coverage.hospitalizationBasis": capital_summary.get("basis") or "Consulte os limites nas coberturas",
         "plan.networkRegions": plan.get("networkRegions"),
         "plan.tier": plan.get("tier"),
         "plan.category": plan.get("category"),
@@ -177,7 +189,18 @@ def _coverages(content, blocks):
             lines.append(coverage["notes"])
         blocks.append(("subheading", title))
         blocks.append(("bullets", lines or ["Sem limites definidos nesta proposta"]))
-    optional_rest = [c["name"] for c in content["coverages"] if not c["contracted"]]
+    optional_rest = []
+    for coverage in content["coverages"]:
+        if coverage["contracted"]:
+            continue
+        line = coverage["name"]
+        reason = coverage.get("nonContractedReason")
+        note = coverage.get("nonContractedReasonNote")
+        if reason:
+            line += f" — Não contratada: {reason}"
+            if note:
+                line += f" ({note})"
+        optional_rest.append(line)
     if optional_rest:
         blocks += [("subheading", "Coberturas opcionais disponíveis (não incluídas)"), ("bullets", optional_rest)]
 

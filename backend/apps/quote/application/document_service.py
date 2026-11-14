@@ -67,7 +67,7 @@ def create_document_template(
     try:
         with transaction.atomic():
             next_version_no = (
-                DocumentTemplateVersion.objects.filter(template_code=template_code)
+                DocumentTemplateVersion.objects.filter(tenant_id=tenant_id.value, template_code=template_code)
                 .order_by("-version_no")
                 .values_list("version_no", flat=True)
                 .first()
@@ -152,9 +152,11 @@ def retire_document_template(template: DocumentTemplateVersion) -> DocumentTempl
 def _resolve_published_template(*, template_code: str, effective_date) -> DocumentTemplateVersion | None:
     from django.db.models import Q
 
+    tenant_id = CurrentTenantProvider.require()
     return (
         DocumentTemplateVersion.objects.filter(
-            template_code=template_code, status=DocumentTemplateStatus.PUBLISHED.value, effective_from__lte=effective_date
+            tenant_id=tenant_id.value, template_code=template_code,
+            status=DocumentTemplateStatus.PUBLISHED.value, effective_from__lte=effective_date
         )
         .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=effective_date))
         .order_by("-effective_from", "-version_no")
@@ -177,8 +179,12 @@ def resolve_template_for(*, template_code: str, effective_date) -> DocumentTempl
 
 
 def template_not_found_message(*, template_code: str, effective_date) -> str:
+    tenant_id = CurrentTenantProvider.require()
     published = list(
-        DocumentTemplateVersion.objects.filter(template_code=template_code, status=DocumentTemplateStatus.PUBLISHED.value)
+        DocumentTemplateVersion.objects.filter(
+            tenant_id=tenant_id.value, template_code=template_code,
+            status=DocumentTemplateStatus.PUBLISHED.value,
+        )
         .order_by("effective_from", "version_no")
     )
     if not published:

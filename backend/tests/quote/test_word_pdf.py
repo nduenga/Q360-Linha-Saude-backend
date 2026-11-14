@@ -1,72 +1,81 @@
-"""O PDF de uma proposta com modelo Word sai do próprio Word (convertido pelo
-LibreOffice); sem LibreOffice, mantém-se o layout da plataforma."""
+"""Proposal PDF uses Chromium; DOCX remains an independent Word output."""
 from __future__ import annotations
 
-import pytest
+from pathlib import Path
 
-from apps.quote.application import docx_to_pdf, proposal_service
+from apps.quote.application import chromium_converter, docx_to_pdf, office_converter, proposal_layout, proposal_service, protteja_html
 from apps.quote.domain.proposal_template import DEFAULT_TEMPLATE
 
-FAKE_PDF = b"%PDF-1.7 convertido do Word"
+FAKE_PDF = b"%PDF-1.7 chromium proposal"
 
 
 class _Template:
-    """Modelo com Word, só com o que o `_render` lê."""
-
     def __init__(self, word: bytes):
         import json
 
         self.storage_ref = json.dumps(DEFAULT_TEMPLATE)
         self.word_key = "template.docx"
+        self.document_type = "QUOTE_PROPOSAL"
         self.settings_json = {}
         self._word = word
 
 
-@pytest.fixture
 def word_template(monkeypatch):
-    from pathlib import Path
-
     from apps.quote.application import template_files
 
     data = (Path(__file__).resolve().parents[2] / "apps/quote/seed/protteja_proposta_saude.docx").read_bytes()
     monkeypatch.setattr(template_files, "read_word", lambda template: template._word)
-    monkeypatch.setattr(template_files, "layout_for", lambda template: None)
-    monkeypatch.setattr(template_files, "read_letterhead", lambda template: None)
     return _Template(data)
 
 
-def test_pdf_comes_from_the_word_template_when_libreoffice_exists(monkeypatch, word_template):
-    received = {}
+def test_quote_pdf_uses_protteja_html_and_chromium(monkeypatch):
+    captured = {}
 
     def convert(data):
-        received["docx"] = data
+        captured["html"] = data
         return FAKE_PDF
 
-    monkeypatch.setattr(docx_to_pdf, "convert", convert)
+    monkeypatch.setattr(chromium_converter, "html_to_pdf", convert)
+    monkeypatch.setattr(office_converter, "docx_to_pdf", lambda _data: (_ for _ in ()).throw(AssertionError("LibreOffice não deve converter propostas")))
     data, content_type = proposal_service._render(  # noqa: SLF001
-        proposal_service.sample_content(), word_template, "PDF", document_number="DOC-1"
+        proposal_service.sample_content(), word_template(monkeypatch), "PDF", document_number="DOC-1"
     )
+
     assert (data, content_type) == (FAKE_PDF, "application/pdf")
-    assert received["docx"][:2] == b"PK", "o que se converte é o Word preenchido"
+    html = captured["html"].decode("utf-8")
+    assert "brand-banner" in html and "protteja-header.png" not in html
+    assert "data:image/png;base64," in html
+    assert "Pessoas seguras" in html
 
 
-def test_pdf_falls_back_to_the_platform_layout_without_libreoffice(monkeypatch, word_template):
-    monkeypatch.setattr(docx_to_pdf, "convert", lambda data: None)
+def test_quote_docx_still_uses_the_uploaded_word_template(monkeypatch):
+    template = word_template(monkeypatch)
     data, content_type = proposal_service._render(  # noqa: SLF001
-        proposal_service.sample_content(), word_template, "PDF", document_number="DOC-1"
+        proposal_service.sample_content(), template, "DOCX", document_number="DOC-1"
     )
-    assert content_type == "application/pdf" and data.startswith(b"%PDF") and data != FAKE_PDF
+    assert content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    assert data.startswith(b"PK")
+
+
+def test_html_handles_long_households_and_escapes_customer_text():
+    content = proposal_service.sample_content()
+    marker = "Cliente " + ("Agregado familiar extenso " * 8) + "<script>alert(1)</script>"
+    member = dict(content["population"][0])
+    content["population"] = [dict(member, name=f"Pessoa segura {index}: {marker}") for index in range(30)]
+    content["client"]["name"] = marker
+    variables = proposal_layout.variables_for(
+        content, document_number="DOC-1", generated_on=content["meta"]["generatedOn"]
+    )
+    blocks = proposal_layout.build_blocks(content, DEFAULT_TEMPLATE, variables)
+    rendered = protteja_html.render(blocks, title="Proposta DOC-1").decode("utf-8")
+
+    assert marker.replace("<script>", "&lt;script&gt;").replace("</script>", "&lt;/script&gt;") in rendered
+    assert "<script>" not in rendered
+    assert rendered.count("Pessoa segura ") >= 30
+    assert "break-inside: avoid" in rendered and "@page { size: A4" in rendered
+    assert rendered.count("data:image/png;base64,") == 3
 
 
 def test_missing_libreoffice_is_reported_not_raised(monkeypatch):
     monkeypatch.setattr(docx_to_pdf, "soffice_path", lambda: None)
     assert docx_to_pdf.convert(b"PK qualquer coisa") is None
-
-
-@pytest.mark.skipif(not docx_to_pdf.is_available(), reason="LibreOffice não instalado nesta máquina")
-def test_real_conversion_of_the_protteja_template():
-    from pathlib import Path
-
-    data = (Path(__file__).resolve().parents[2] / "apps/quote/seed/protteja_proposta_saude.docx").read_bytes()
-    pdf = docx_to_pdf.convert(data)
-    assert pdf is not None and pdf.startswith(b"%PDF")

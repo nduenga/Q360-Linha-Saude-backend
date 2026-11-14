@@ -89,6 +89,10 @@ class Command(BaseCommand):
                 )
                 existing_digest = ((existing.settings_json or {}).get("word") or {}).get("checksum") if existing else None
                 if existing_digest == digest:
+                    if options["publish"] and existing.status == "DRAFT":
+                        document_service.publish_document_template(existing)
+                        self.stdout.write(self.style.SUCCESS(f"Publicado: {template_code}"))
+                        continue
                     self.stdout.write(f"Ignorado (já instalado): {template_code}")
                     continue
 

@@ -51,7 +51,10 @@ def _configure(client, scope):
 
 
 @pytest.mark.django_db
-def test_generate_a_pdf_proposal_with_the_default_template(admin_client):
+def test_generate_a_pdf_proposal_with_the_default_template(admin_client, monkeypatch):
+    from apps.quote.application import chromium_converter
+
+    monkeypatch.setattr(chromium_converter, "html_to_pdf", lambda _html: b"%PDF-1.7 test-render")
     scope = _scope(admin_client)
     created = _generate(admin_client, scope)
     assert created.status_code == 201, created.data
@@ -174,7 +177,10 @@ def test_selected_scenario_drives_the_proposal(admin_client):
 
 
 @pytest.mark.django_db
-def test_stale_or_foreign_scenarios_do_not_produce_proposals(admin_client):
+def test_stale_or_foreign_scenarios_do_not_produce_proposals(admin_client, monkeypatch):
+    from apps.quote.application import chromium_converter
+
+    monkeypatch.setattr(chromium_converter, "html_to_pdf", lambda _html: b"%PDF-1.7 test-render")
     scope = _scope(admin_client)
     scenario = admin_client.post(f"/api/v1/quotes/{scope['quoteId']}/scenarios", {"name": "Base"}, format="json").data
     hospital = _benefit(admin_client, "HOSPITALIZATION")
@@ -245,21 +251,19 @@ def test_cancelled_quotes_have_no_proposals(admin_client):
 
 @pytest.mark.django_db
 def test_failed_generation_is_recorded_and_can_be_retried(admin_client, monkeypatch):
-    from apps.quote.application import proposal_layout
+    from apps.quote.application import chromium_converter
 
     scope = _scope(admin_client)
-    original = proposal_layout.RENDERERS["PDF"]
-
-    def boom(blocks, *, title, layout=None):
+    def boom(_html):
         raise RuntimeError("falha de renderização simulada")
 
-    monkeypatch.setitem(proposal_layout.RENDERERS, "PDF", (boom, original[1], original[2]))
+    monkeypatch.setattr(chromium_converter, "html_to_pdf", boom)
     failed = _generate(admin_client, scope)
     assert failed.status_code == 200 and failed.data["status"] == "FAILED" and "simulada" in failed.data["failure"]
     assert failed.data["downloadUrl"] is None
     assert admin_client.get(f"/api/v1/documents/{failed.data['id']}/download").status_code == 409
 
-    monkeypatch.setitem(proposal_layout.RENDERERS, "PDF", original)
+    monkeypatch.setattr(chromium_converter, "html_to_pdf", lambda _html: b"%PDF-1.7 retry")
     retried = admin_client.post(f"/api/v1/documents/{failed.data['id']}/retry", {}, format="json")
     assert retried.status_code == 200 and retried.data["status"] == "GENERATED" and retried.data["documentNumber"]
     assert admin_client.get(retried.data["downloadUrl"]).content.startswith(b"%PDF")
@@ -290,7 +294,10 @@ def test_readers_can_download_but_not_generate(admin_client, tenant):
 
 
 @pytest.mark.django_db
-def test_proposal_generation_is_audited(admin_client, tenant):
+def test_proposal_generation_is_audited(admin_client, tenant, monkeypatch):
+    from apps.quote.application import chromium_converter
+
+    monkeypatch.setattr(chromium_converter, "html_to_pdf", lambda _html: b"%PDF-1.7 test-render")
     scope = _scope(admin_client)
     doc = _generate(admin_client, scope).data
     auditor = make_client(tenant_id=tenant.id, roles=[], scope="q360.read q360.audit")

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="pt-AO">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }}</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --petrol: #06464a;
+      --deep: #003b40;
+      --aqua: #48a6a6;
+      --pale: #c9e2e8;
+      --pale-strong: #b4dadc;
+      --ink: #283335;
+      --muted: #60777a;
+      --line: #a9c5c7;
+      --card: #293233;
+      --card-ink: #b5d9dd;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 210mm; color: #d3dfe0; background: #252727; }
+    body { font-family: Inter, Arial, Helvetica, sans-serif; font-size: 9pt; line-height: 1.35; }
+    @page {
+      size: A4; margin: 23mm 0 18mm;
+      @top-left {
+        content: ""; height: 13mm; margin-left: 15mm;
+        background: #fff url("{{ logo_data }}") no-repeat left center / 25mm auto;
+      }
+      @top-center { content: "{{ header_label }}"; height: 13mm; background: #fff; color: #60777a; font: 7pt Inter, Arial, sans-serif; text-align: right; }
+      @top-right {
+        content: "{{ quote_number }}"; width: 37mm; height: 8mm; margin-right: 15mm; padding: 2mm;
+        background: #b4dadc; color: #003b40;
+        font: 700 7pt Inter, Arial, sans-serif; text-align: center;
+      }
+      @bottom-left {
+        content: "Protteja Seguros, S.A. · NIF 5417166103 · Capital Social AOA 1.000.000.000,00 · Registo Comercial Nº 0037-11/110110 · Certificado de Licença Nº 13/ISS/MF/12 · Rua Direita da Estrada da Samba, nº 406, Ed. LGT, Luanda · (+244) 933 100 149 / 940 191 215 · geral@prottejaseguros.co.ao · www.prottejaseguros.co.ao";
+        width: 180mm; height: 8mm; margin-left: 15mm; padding: 3.3mm 1mm 0;
+        background: url("{{ footer_data }}") no-repeat left bottom / 180mm 7.5mm, #252727;
+        color: #9ab5b7; font: 4.2pt/1.1 Inter, Arial, sans-serif;
+      }
+      @bottom-right { content: "Página " counter(page) " / " counter(pages); height: 8mm; margin-right: 15mm; padding-top: 3mm; background: #252727; color: #b4dadc; font: 6pt Inter, Arial, sans-serif; text-align: right; }
+    }
+    main { width: 180mm; margin: 0 auto; }
+    .cover {
+      margin: 0 0 8mm; padding: 9mm 9mm 8mm; background: var(--pale);
+      page-break-inside: avoid; break-inside: avoid;
+    }
+    .cover-topline { display: table; width: 100%; color: #2c8589; font-size: 7pt; font-weight: 700; letter-spacing: .25em; }
+    .cover-topline > span { display: table-cell; vertical-align: middle; }
+    .cover-reference { text-align: right; letter-spacing: .04em; color: var(--deep); }
+    .cover h1 {
+      margin: 2mm 0 2mm; color: #283c70; font-family: "Inter Display", Inter, Arial, sans-serif;
+      font-size: 32pt; line-height: 1.04; font-weight: 750; letter-spacing: -.025em;
+    }
+    .cover-tags { display: table; border-spacing: 2mm 0; margin: 0 -2mm 3mm; }
+    .cover-tags span { display: table-cell; padding: .7mm 1.4mm; background: #9dcbd0; color: var(--deep); font-size: 6.5pt; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
+    .cover-intro { margin: 3mm 0 8mm; font-size: 9pt; color: #33494c; }
+    .cover-meta { width: 100%; border-collapse: collapse; border-top: .7pt solid #9abec1; table-layout: fixed; }
+    .cover-meta td { width: 33.33%; padding: 2.2mm 5mm 0 0; vertical-align: top; }
+    .cover-meta td span, .card-label, .eyebrow { display: block; color: #398e92; font-size: 6.5pt; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; }
+    .cover-meta td strong { display: block; margin-top: .4mm; color: #233a66; font-size: 7.5pt; line-height: 1.15; }
+    .summary-cards { width: 100%; border-collapse: separate; border-spacing: 2mm 0; table-layout: fixed; margin: 0 -2mm 5mm; }
+    .summary-cards td { width: 33.33%; height: 28mm; padding: 2.5mm 3mm; vertical-align: top; border-top: 2pt solid var(--aqua); background: var(--card); color: var(--card-ink); }
+    .card-label { min-height: 6mm; color: #a6c0c3; letter-spacing: .15em; font-size: 6.2pt; line-height: 1.12; }
+    .card-value { margin: 1mm 0 .5mm; color: var(--card-ink); font-family: "Inter Display", Inter, Arial, sans-serif; font-size: 15pt; line-height: 1.03; font-weight: 750; }
+    .card-detail { color: #c1d0d1; font-size: 7pt; line-height: 1.15; }
+    .tier-caption { margin: 0 0 1mm; color: #819da0; font-size: 6pt; font-weight: 700; letter-spacing: .24em; }
+    .tier-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .tier-table td { width: 25%; padding: 2mm 1mm; background: var(--card); text-align: center; color: #789295; }
+    .tier-table td.active { background: var(--pale-strong); color: #193c43; }
+    .tier-table span { display: block; font-size: 5.8pt; letter-spacing: .2em; }
+    .tier-table strong { display: block; font-size: 7pt; line-height: 1.15; }
+    .opening-section { margin: 7mm 0 5mm; }
+    .eyebrow { margin-bottom: .8mm; letter-spacing: .26em; page-break-after: avoid; break-after: avoid; }
+    h2 { margin: 0 0 2mm; color: #b2d6da; font-family: "Inter Display", Inter, Arial, sans-serif; font-size: 16pt; line-height: 1.1; font-weight: 700; page-break-after: avoid; break-after: avoid; }
+    .opening-section > p { margin: 1mm 0 3mm; color: #d3dfe0; font-size: 8pt; }
+    .content-section { margin: 5mm 0 4mm; }
+    .content-section h2 { margin-bottom: 2mm; color: #b2d6da; font-size: 14pt; }
+    h3 { margin: 3mm 0 1mm; color: #b2d6da; font-family: "Inter Display", Inter, Arial, sans-serif; font-size: 10pt; page-break-after: avoid; break-after: avoid; }
+    p { margin: 1.5mm 0 2.2mm; }
+    .key-value, .data-table { width: 100%; margin: 2mm 0 4mm; border-collapse: collapse; table-layout: fixed; font-size: 7.4pt; }
+    .key-value th, .key-value td { padding: 1.2mm 1mm; border-bottom: .55pt solid #46585a; text-align: left; vertical-align: top; }
+    .key-value th { width: 31%; color: #9cb8bb; font-size: 6pt; font-weight: 700; letter-spacing: .15em; }
+    .data-table th, .data-table td { padding: 1.5mm 1.7mm; border-bottom: .6pt solid #46585a; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    .data-table thead th { color: #30595d; background: var(--pale-strong); font-size: 6.5pt; letter-spacing: .08em; }
+    .data-table tbody tr:nth-child(even) { background: #2d3334; }
+    .data-table tr, .key-value tr { page-break-inside: avoid; break-inside: avoid; }
+    .detail-list { margin: 1mm 0 3mm; padding-left: 5mm; }
+    .detail-list li { margin: .8mm 0; padding-left: .5mm; font-size: 7.5pt; break-inside: avoid; }
+    .note { color: #a6b6b8; font-size: 7pt; }
+    .signature-table { width: 100%; margin-top: 9mm; border-collapse: collapse; table-layout: fixed; }
+    .signature-table td { width: 50%; padding: 0 7mm 0 0; vertical-align: bottom; font-size: 7pt; }
+    .signature-line { height: 13mm; margin-bottom: 2mm; border-bottom: .7pt solid var(--ink); }
+    @media screen {
+      html { background: #e6eeee; }
+      body { background: #252727; }
+      main { margin: 12mm auto; padding: 12mm 0; background: #252727; box-shadow: 0 1mm 7mm #16363822; }
+    }
+    @media print {
+      html, body { width: 210mm; margin: 0; background: #252727; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .cover, .summary-cards, .tier-table, .data-table thead { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .cover { page-break-after: avoid; break-after: avoid; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    {{ cover|safe }}
+    {{ proposal_body|safe }}
+  </main>
+</body>
+</html>

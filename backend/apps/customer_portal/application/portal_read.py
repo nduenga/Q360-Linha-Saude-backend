@@ -361,6 +361,15 @@ def list_my_payments(*, status: str | None = None) -> dict:
 
 
 # ------------------------------------------------------------- documents
+def _pdf_file_name(name: str | None, fallback: str) -> str:
+    candidate = name or fallback
+    if candidate.lower().endswith(".pdf"):
+        return candidate
+    if "." in candidate:
+        candidate = candidate.rsplit(".", 1)[0]
+    return f"{candidate}.pdf"
+
+
 def list_my_documents() -> list[dict]:
     """Document centre (PDF section 9): quote proposals and the digital policy
     of each issued policy. Statements and receipts are generated on request
@@ -370,7 +379,8 @@ def list_my_documents() -> list[dict]:
         return []
     documents = list(
         Document.objects.filter(
-            quote__proposer_id__in=proposer_ids, status="GENERATED", file_name__isnull=False
+            quote__proposer_id__in=proposer_ids, status="GENERATED", file_name__isnull=False,
+            format__iexact="PDF",
         )
         .exclude(quote__status=QuoteStatus.DRAFT.value)
         .select_related("quote")
@@ -384,7 +394,7 @@ def list_my_documents() -> list[dict]:
             "quoteNumber": d.quote.quote_number,
             "policyNumber": None,
             "format": d.format,
-            "fileName": d.file_name,
+            "fileName": _pdf_file_name(d.file_name, f"proposta-{d.quote.quote_number or d.id}"),
             "generatedAt": d.generated_at,
         }
         for d in documents
@@ -415,7 +425,9 @@ def _policy_document_items() -> list[dict]:
 def open_my_document(document_id: uuid.UUID) -> tuple[bytes, str, str | None]:
     proposer_ids = _scoped_proposer_ids()
     document = (
-        Document.objects.filter(id=document_id, quote__proposer_id__in=proposer_ids, status="GENERATED")
+        Document.objects.filter(
+            id=document_id, quote__proposer_id__in=proposer_ids, status="GENERATED", format__iexact="PDF"
+        )
         .exclude(quote__status=QuoteStatus.DRAFT.value)
         .first()
         if proposer_ids
@@ -426,7 +438,11 @@ def open_my_document(document_id: uuid.UUID) -> tuple[bytes, str, str | None]:
         if policy is None:
             raise PortalResourceNotFoundError("Documento não encontrado")
         return policy_document.policy_document(policy, "PDF")
-    return proposal_service.read_file(document), document.content_type or "application/octet-stream", document.file_name
+    data = proposal_service.read_file(document)
+    if not data.startswith(b"%PDF-"):
+        raise PortalResourceNotFoundError("Documento PDF não encontrado")
+    fallback = f"proposta-{document.quote.quote_number or document.id}"
+    return data, "application/pdf", _pdf_file_name(document.file_name, fallback)
 
 
 # --------------------------------------------------------------- profile
@@ -548,8 +564,8 @@ def list_my_state_history(policy_number: str) -> list[dict]:
     ]
 
 
-def my_policy_document(policy_number: str, fmt: str = "PDF") -> tuple[bytes, str, str]:
-    return policy_document.policy_document(resolve_my_policy(policy_number), fmt)
+def my_policy_document(policy_number: str) -> tuple[bytes, str, str]:
+    return policy_document.policy_document(resolve_my_policy(policy_number), "PDF")
 
 
 def my_policy_statement(policy_number: str, *, kind: str, installment_no: int | None) -> tuple[bytes, str, str]:
