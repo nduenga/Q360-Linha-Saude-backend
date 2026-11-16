@@ -22,7 +22,9 @@ Duas camadas independentes, ambas idempotentes (podem correr-se várias vezes):
 Exemplos:
     manage.py seed_full_database                       # tudo (ambiente de dev)
     manage.py seed_full_database --profile reference \\
-        --admin-email admin@seguradora.ao --admin-password '...'   # produção
+        --prod-tenant-code protteja --prod-tenant-name 'Protteja Seguros' \\
+        --include-protteja --protteja-approver-email admin@protteja.ao \\
+        --publish-protteja-example-tariff --admin-email admin@protteja.ao   # produção (tarifa de teste)
     manage.py seed_full_database --profile demo --customers 80 --random-seed 7
 """
 from __future__ import annotations
@@ -261,6 +263,12 @@ class Command(BaseCommand):
         parser.add_argument("--no-isolation-tenant", action="store_true")
         parser.add_argument("--no-actuarial", action="store_true",
                             help="Não publica o modelo atuarial (fica em rascunho para aprovação do actuário).")
+        parser.add_argument("--include-protteja", action="store_true",
+                            help="Inclui os 8 produtos/planos Protteja e os respetivos modelos DOCX no tenant de referência.")
+        parser.add_argument("--protteja-approver-email",
+                            help="Conta ADMIN ativa que aprova tarifa e modelos Protteja (obrigatória com --include-protteja).")
+        parser.add_argument("--publish-protteja-example-tariff", action="store_true",
+                            help="Confirma que aceita publicar como tarifa de teste os valores indicativos extraídos das propostas Protteja.")
 
     # ------------------------------------------------------------------ main
     def handle(self, *args, **opts):
@@ -272,6 +280,16 @@ class Command(BaseCommand):
             )
         if opts["customers"] < 0:
             raise CommandError("--customers não pode ser negativo")
+        if opts["include_protteja"]:
+            if profile not in ("reference", "all"):
+                raise CommandError("--include-protteja só pode ser usado com --profile reference ou all.")
+            if not opts["protteja_approver_email"]:
+                raise CommandError("Indique --protteja-approver-email para aprovação por uma conta diferente do seed.")
+            if not opts["publish_protteja_example_tariff"]:
+                raise CommandError(
+                    "A tarifa disponível nas propostas é indicativa. Para publicá-la conscientemente em produção, "
+                    "confirme com --publish-protteja-example-tariff."
+                )
         self.rng = random.Random(opts["random_seed"])
         _ReferencePricing.publish_actuarial = not opts["no_actuarial"]
         self.report: list[str] = []
@@ -292,12 +310,37 @@ class Command(BaseCommand):
         self._seed_pricing_config(tenant)
         self._seed_system_parameters(tenant)
         self._seed_authority_policy(tenant)
-        self.report.append(f"Tenant de referência: {code} ({tenant.id}) — planos: {', '.join(plan_codes)}")
         if opts["admin_email"]:
+            # Bootstrap the tenant admin first so a fresh Protteja tenant can
+            # use that separately authenticated account for the four-eyes
+            # approval required by the Protteja catalog seeder.
             self._ensure_admin(tenant, opts)
         else:
             self.report.append("Nenhum ADMIN criado no tenant de referência (use --admin-email/--admin-password).")
+        if opts["include_protteja"]:
+            self._seed_protteja(tenant, opts)
+        self.report.append(f"Tenant de referência: {code} ({tenant.id}) — planos: {', '.join(plan_codes)}")
         self._smoke_test_pricing(tenant)
+
+    def _seed_protteja(self, tenant: Tenant, opts) -> None:
+        """Carrega gama, configurações aprovadas e oito DOCX Protteja no mesmo tenant.
+
+        A aprovação é atribuída a uma conta ADMIN distinta. Os preços da fonte
+        são indicativos e a flag obrigatória do CLI regista a intenção explícita.
+        """
+        from apps.product.management.commands.seed_protteja_products import Command as ProttejaCommand
+
+        self.stdout.write(self.style.MIGRATE_HEADING("[PROTTEJA] produtos, planos, tarifa de teste e modelos DOCX"))
+        command = ProttejaCommand(stdout=self.stdout, stderr=self.stderr)
+        command.handle(
+            tenant_code=tenant.code,
+            effective_from=EARLIEST_EFFECTIVE_FROM,
+            approve_as=opts["protteja_approver_email"],
+            activate=False,
+        )
+        self.report.append(
+            "Protteja: tarifa indicativa publicada explicitamente para testes; confirmar valores oficiais antes de emitir negócio real."
+        )
 
     def _actor(self, tenant: Tenant, subject: str = "system-seed", roles=frozenset()) -> Actor:
         return Actor(actor_id=subject, tenant_id=TenantId.parse(tenant.id), roles=frozenset(roles),

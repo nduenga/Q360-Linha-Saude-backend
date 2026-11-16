@@ -30,11 +30,13 @@ from apps.foundation.application.outbox_service import get_outbox_service
 from apps.foundation.domain.problem import DomainProblem
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.quote.application import (
+    chromium_converter,
     document_service,
     letterhead,
     office_converter,
     proposal_content,
     proposal_layout,
+    protteja_html,
     scenario_service,
     simulator_service,
     template_files,
@@ -50,6 +52,31 @@ _audit = AuditService(DjangoAuditRepositoryAdapter())
 _outbox = get_outbox_service()
 _BLOCKED = (QuoteStatus.CANCELLED.value, QuoteStatus.REJECTED.value, QuoteStatus.EXPIRED.value)
 FORMATS = tuple(proposal_layout.RENDERERS)
+
+_PROTTEJA_TEMPLATE_LABELS = {
+    "PROTTEJA_BUSINESS_INDIVIDUAL": "BUSINESS · INDIVIDUAL",
+    "PROTTEJA_BUSINESS_GRUPO": "BUSINESS · GRUPO",
+    "PROTTEJA_BUSINESS_PLUS_INDIVIDUAL": "BUSINESS PLUS · INDIVIDUAL",
+    "PROTTEJA_BUSINESS_PLUS_GRUPO": "BUSINESS PLUS · GRUPO",
+    "PROTTEJA_PREMIUM_INDIVIDUAL": "PREMIUM · INDIVIDUAL",
+    "PROTTEJA_PREMIUM_GRUPO": "PREMIUM · GRUPO",
+    "PROTTEJA_PREMIUM_PLUS_INDIVIDUAL": "PREMIUM PLUS · INDIVIDUAL",
+    "PROTTEJA_PREMIUM_PLUS_GRUPO": "PREMIUM PLUS · GRUPO",
+}
+_PROTTEJA_SAMPLE_QUOTE_NUMBERS = {
+    "PROTTEJA_BUSINESS_INDIVIDUAL": "SIM-SAU-2026-BUS-I013",
+    "PROTTEJA_BUSINESS_GRUPO": "SIM-SAU-2026-BUS-G017",
+    "PROTTEJA_BUSINESS_PLUS_INDIVIDUAL": "SIM-SAU-2026-BUP-I023",
+    "PROTTEJA_BUSINESS_PLUS_GRUPO": "SIM-SAU-2026-BUP-G027",
+    "PROTTEJA_PREMIUM_INDIVIDUAL": "SIM-SAU-2026-PRE-I033",
+    "PROTTEJA_PREMIUM_GRUPO": "SIM-SAU-2026-PRE-G037",
+    "PROTTEJA_PREMIUM_PLUS_INDIVIDUAL": "SIM-SAU-2026-PPL-I043",
+    "PROTTEJA_PREMIUM_PLUS_GRUPO": "SIM-SAU-2026-PPL-G047",
+}
+
+
+def _template_header_label(template: DocumentTemplateVersion, content: dict[str, Any]) -> str:
+    return _PROTTEJA_TEMPLATE_LABELS.get(template.template_code, content["plan"].get("name") or "")
 
 
 class ProposalError(DomainProblem):
@@ -117,9 +144,16 @@ def _render(content: dict[str, Any], template: DocumentTemplateVersion, fmt: str
     spec = parse_template(template.storage_ref)
     generated_on = content["meta"]["generatedOn"]
     variables = proposal_layout.variables_for(content, document_number=document_number, generated_on=generated_on)
-    if fmt in ("DOCX", "PDF") and template.word_key:
-        # Opção B: o Word do GTE com as marcas {{variável}} substituídas.
+    variables["document.templateLabel"] = _template_header_label(template, content)
+    if fmt in {"DOCX", "PDF"} and template.word_key:
+        # O DOCX importado é a fonte de layout para Word e PDF; assim a
+        # pré-visualização aprovada pelo subscritor corresponde ao documento
+        # final e preserva a identidade visual da seguradora.
         client = content["client"]
+        insurer_total = word_template.format_insurer_money(
+            content.get("premium", {}).get("total"),
+            content.get("premium", {}).get("currency"),
+        )
         scalars = {
             **variables,
             "client.email": client.get("email"),
@@ -127,27 +161,27 @@ def _render(content: dict[str, Any], template: DocumentTemplateVersion, fmt: str
             "plan.accessSystem": content["plan"].get("accessSystem"),
             "plan.tier": content["plan"].get("tier"),
             "plan.category": content["plan"].get("category"),
-            "premium.totalText": content["premium"].get("totalText"),
+            "premium.totalText": insurer_total,
+            "premium.total": insurer_total,
         }
         docx_data = word_template.fill(
             template_files.read_word(template), scalars=scalars, groups=word_template.groups_from_content(content)
         )
         if fmt == "DOCX":
             return docx_data, word_template.DOCX_CONTENT_TYPE
-            return docx_data, word_template.DOCX_CONTENT_TYPE
         pdf_data = office_converter.docx_to_pdf(docx_data)
         letter = template_files.read_letterhead(template)
         return (letterhead.apply(pdf_data, letter) if letter else pdf_data), "application/pdf"
     blocks = proposal_layout.build_blocks(content, spec, variables)
-    renderer, content_type, _ext = proposal_layout.RENDERERS[fmt]
     from apps.quote.domain.proposal_template import render_text
 
     title = render_text(spec["title"], variables)
+    if fmt == "HTML":
+        return protteja_html.render(blocks, title=title, variables=variables), "text/html; charset=utf-8"
     if fmt == "PDF":
-        # Opção A: o texto cai dentro da área livre do papel timbrado do GTE.
-        data = renderer(blocks, title=title, layout=template_files.layout_for(template))
-        letter = template_files.read_letterhead(template)
-        return (letterhead.apply(data, letter) if letter else data), content_type
+        html_data = protteja_html.render(blocks, title=title, variables=variables)
+        return chromium_converter.html_to_pdf(html_data), "application/pdf"
+    renderer, content_type, _ext = proposal_layout.RENDERERS[fmt]
     return renderer(blocks, title=title), content_type
 
 
@@ -259,7 +293,7 @@ def sample_content() -> dict[str, Any]:
         "population": [{"memberId": "x", "name": "Pessoa Exemplo", "relationship": "Titular", "age": 40, "status": "INCLUDED",
                         "clinicalQuestionnaireRequired": False, "medicalExamRequired": False, "preExisting": None}],
         "coverages": [{"code": "HOSPITALIZATION", "name": "Hospitalização", "category": "BASE", "inclusion": "INCLUDED", "contracted": True,
-                       "limits": ["Capital anual por pessoa: 25.000.000 Kz"], "participation": ["Rede convencionada: sem participação do segurado"],
+                       "limits": ["Capital anual por pessoa: 25.000.000 Kz"], "summaryCapital": {"value": "25.000.000 Kz", "basis": "por Pessoa Segura e por anuidade"}, "participation": ["Rede convencionada: sem participação do segurado"],
                        "waiting": "sem carência", "requiresPriorApproval": False, "destinations": [], "closedDiseaseList": [], "currency": "AOA",
                        "maxDaysPerYear": None, "timeDeductibleDays": None, "excludedItems": [], "notes": None, "indicative": True}],
         "participationOption": None,
@@ -299,12 +333,20 @@ def _sample_policy_word_data(content: dict[str, Any]) -> tuple[dict[str, Any], d
 
 def preview_template(*, template: DocumentTemplateVersion, fmt: str = "HTML") -> tuple[bytes, str]:
     content = sample_content()
-    if template.word_key and fmt in ("DOCX", "PDF"):
+    content["meta"]["quoteNumber"] = _PROTTEJA_SAMPLE_QUOTE_NUMBERS.get(
+        template.template_code, content["meta"]["quoteNumber"]
+    )
+    if template.word_key and fmt in {"DOCX", "PDF"}:
         if template.document_type == "POLICY":
             scalars, groups = _sample_policy_word_data(content)
         else:
             variables = proposal_layout.variables_for(
                 content, document_number="DOC-EXEMPLO", generated_on=content["meta"]["generatedOn"]
+            )
+            variables["document.templateLabel"] = _template_header_label(template, content)
+            insurer_total = word_template.format_insurer_money(
+                content.get("premium", {}).get("total"),
+                content.get("premium", {}).get("currency"),
             )
             scalars = {
                 **variables,
@@ -313,7 +355,8 @@ def preview_template(*, template: DocumentTemplateVersion, fmt: str = "HTML") ->
                 "plan.accessSystem": content["plan"].get("accessSystem"),
                 "plan.tier": content["plan"].get("tier"),
                 "plan.category": content["plan"].get("category"),
-                "premium.totalText": content["premium"].get("totalText"),
+                "premium.totalText": insurer_total,
+                "premium.total": insurer_total,
             }
             groups = word_template.groups_from_content(content)
         docx_data = word_template.fill(template_files.read_word(template), scalars=scalars, groups=groups)

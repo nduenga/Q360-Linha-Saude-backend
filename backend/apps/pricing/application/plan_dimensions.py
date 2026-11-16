@@ -34,6 +34,14 @@ from apps.product.infrastructure.models import Plan, PlanBenefit
 
 _CAPITAL_KINDS = ("ANNUAL_PER_PERSON", "HOUSEHOLD_SHARED", "BIENNIAL", "FIXED_AMOUNT")
 
+OPTIONAL_COVERAGE_REASON_LABELS = {
+    "NOT_NEEDED": "Não necessita desta cobertura",
+    "ALREADY_COVERED": "Já tem cobertura equivalente",
+    "PRICE": "Prémio acima do orçamento",
+    "COVERAGE_SCOPE": "Cobertura não adequada às necessidades",
+    "OTHER": "Outro motivo",
+}
+
 
 @dataclass(frozen=True)
 class ParticipationOption:
@@ -120,6 +128,33 @@ def resolve_plan_pricing_context(
         )
     chosen_codes = tuple(sorted(set(chosen)))
 
+    # Motivos comerciais para não incluir coberturas opcionais. São dados da
+    # cotação (não da tarifa), não alteram o cálculo do prémio e ficam no
+    # snapshot para serem reproduzidos no documento emitido.
+    raw_reasons = selection.get("optionalBenefitReasons") or {}
+    if not isinstance(raw_reasons, dict):
+        raise ReferencedEntityNotFoundError("selection.optionalBenefitReasons tem de ser um objeto indexado pelo código da cobertura")
+    optional_reasons: dict[str, dict[str, str]] = {}
+    for code, raw_reason in sorted(raw_reasons.items()):
+        if code not in optional_codes:
+            raise ReferencedEntityNotFoundError(f"selection.optionalBenefitReasons: '{code}' não é uma cobertura opcional deste plano")
+        if code in chosen_codes:
+            raise ReferencedEntityNotFoundError(f"selection.optionalBenefitReasons: '{code}' está contratada e não pode ter motivo de recusa")
+        if not isinstance(raw_reason, dict):
+            raise ReferencedEntityNotFoundError(f"selection.optionalBenefitReasons.{code} tem de conter reason e note")
+        reason = raw_reason.get("reason")
+        note = raw_reason.get("note", "")
+        if not isinstance(reason, str) or reason not in OPTIONAL_COVERAGE_REASON_LABELS:
+            raise ReferencedEntityNotFoundError(
+                f"selection.optionalBenefitReasons.{code}.reason tem de ser um de {sorted(OPTIONAL_COVERAGE_REASON_LABELS)}"
+            )
+        if not isinstance(note, str) or len(note.strip()) > 250:
+            raise ReferencedEntityNotFoundError(f"selection.optionalBenefitReasons.{code}.note tem de ser texto até 250 caracteres")
+        note = note.strip()
+        if reason == "OTHER" and not note:
+            raise ReferencedEntityNotFoundError(f"Indique o motivo em texto para a cobertura opcional '{code}'")
+        optional_reasons[code] = {"reason": reason, **({"note": note} if note else {})}
+
     dims: dict[str, str] = {}
     for key in ("segment", "tier", "category", "accessSystem", "costSharingModel"):
         if settings.get(key):
@@ -161,6 +196,9 @@ def resolve_plan_pricing_context(
             "category": plan_benefits[code].benefit.benefit_type,
             "inclusion": config.get("inclusion", "INCLUDED"),
             "contracted": config.get("inclusion", "INCLUDED") == "INCLUDED" or code in chosen_codes,
+            "nonContractedReason": OPTIONAL_COVERAGE_REASON_LABELS[optional_reasons[code]["reason"]]
+            if code in optional_reasons else None,
+            "nonContractedReasonNote": optional_reasons.get(code, {}).get("note"),
             "configuration": config,
         }
         for code, config in sorted(coverages.items())
@@ -171,6 +209,8 @@ def resolve_plan_pricing_context(
         normalised_selection["coverageOverrides"] = normalised_overrides
     if chosen_codes:
         normalised_selection["optionalBenefitCodes"] = list(chosen_codes)
+    if optional_reasons:
+        normalised_selection["optionalBenefitReasons"] = optional_reasons
     if option_code:
         normalised_selection["participationOption"] = option_code
     # Grupos de opções e campos do produto (configuração por produto): validados

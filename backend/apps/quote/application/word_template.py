@@ -6,8 +6,8 @@ Duas espécies de marcas:
 * **Valores simples** — `{{client.name}}`, `{{policy.number}}`… trocam-se pelo valor.
 * **Listas** — `{{insured.name}}`, `{{coverage.limits}}`, `{{installment.amount}}`…
   Uma **linha de tabela** (ou um **parágrafo**) que tenha uma marca de lista
-  repete-se uma vez por elemento: escreva a linha-modelo uma só vez e o sistema
-  cria as restantes.
+  repete-se uma vez por elemento. Várias linhas-modelo consecutivas podem
+  definir estilos alternados; listas de opções podem ocupar células lado a lado.
 
 Limites: escreva cada marca de seguida, sem mudar de formato a meio; as marcas
 dentro de caixas de texto e formas não são substituídas.
@@ -18,6 +18,7 @@ import copy
 import io
 import re
 import zipfile
+from decimal import Decimal
 from typing import Any, Iterable
 
 from lxml import etree
@@ -37,6 +38,10 @@ COMMON_SCALARS = {
     "plan.product": "Nome do produto",
     "plan.segment": "Segmento (Individual e Familiar / Grupo)",
     "plan.accessSystem": "Sistema de acesso (rede / reembolso / misto)",
+    "plan.accessMode": "Modalidade resumida de acesso (rede / reembolso / misto)",
+    "plan.accessDescription": "Descrição do regime de acesso",
+    "coverage.hospitalizationCapital": "Capital contratado para hospitalização",
+    "coverage.hospitalizationBasis": "Base do capital de hospitalização",
     "premium.total": "Prémio total (com moeda)",
     "premium.currency": "Moeda",
     "document.number": "Número do documento",
@@ -49,6 +54,7 @@ COMMON_SCALARS = {
 }
 PROPOSAL_SCALARS = {
     **COMMON_SCALARS,
+    "document.templateLabel": "Nome comercial do modelo de proposta",
     **{k: v for k, v in PROPOSAL_VARIABLES.items() if k not in COMMON_SCALARS},
 }
 POLICY_SCALARS = {
@@ -79,11 +85,11 @@ GROUPS: dict[str, dict[str, Any]] = {
         "label": "Coberturas contratadas",
         "fields": {"name": "Cobertura", "limits": "Capitais e limites", "participation": "Participação/franquia", "waiting": "Carência", "priorApproval": "Aprovação prévia (Sim/Não)", "category": "Categoria", "inclusion": "Tipo de inclusão", "regime": "Regime", "networkCopay": "Copagamento na rede", "reimbursementCopay": "Copagamento em reembolso", "networkCoinsurancePct": "Comparticipação da seguradora na rede (%)", "reimbursementCoinsurancePct": "Comparticipação da seguradora em reembolso (%)", "networkAnnualDeductible": "Franquia anual na rede", "reimbursementAnnualDeductible": "Franquia anual em reembolso", "destinations": "Destinos", "closedDiseaseList": "Lista de doenças cobertas", "maxDaysPerYear": "Dias máximos por ano", "timeDeductibleDays": "Franquia temporal em dias", "currency": "Moeda", "notes": "Notas", "excludedItems": "Itens exclu\u00eddos da cobertura", "indicative": "Valor indicativo"},
     },
-    "coverageOption": {"label": "Disponibilidade das coberturas", "fields": {"name": "Cobertura", "category": "Categoria", "inclusion": "Tipo de inclusão", "contracted": "Contratada"}},
-    "premiumMember": {"label": "Pr\u00e9mio por pessoa", "fields": {"name": "Pessoa", "relationship": "Categoria de parentesco", "total": "Pr\u00e9mio calculado para a pessoa"}},
+    "coverageOption": {"label": "Disponibilidade das coberturas", "fields": {"name": "Cobertura", "category": "Categoria", "inclusion": "Tipo de inclusão", "contracted": "Contratada", "nonContractedReason": "Motivo para não contratar a cobertura opcional", "nonContractedReasonNote": "Detalhe do motivo"}},
+    "premiumMember": {"label": "Pr\u00e9mio por pessoa", "fields": {"name": "Pessoa", "relationship": "Categoria de parentesco", "age": "Idade", "ageBand": "Escalão etário", "total": "Pr\u00e9mio calculado para a pessoa"}},
     "premiumCategory": {"label": "Pr\u00e9mio por categoria", "fields": {"relationship": "Categoria de parentesco", "count": "Quantidade de pessoas", "total": "Pr\u00e9mio agregado da categoria"}},
     "pricingLine": {"label": "Linhas do c\u00e1lculo do pr\u00e9mio", "fields": {"member": "Pessoa", "code": "C\u00f3digo do componente", "type": "Tipo", "base": "Base", "factor": "Fator", "adjustment": "Ajuste", "result": "Resultado acumulado", "ageBand": "Faixa et\u00e1ria efetivamente usada", "source": "Origem", "sourceVersion": "Vers\u00e3o da origem"}},
-    "paymentOption": {"label": "Op\u00e7\u00f5es indicativas de pagamento", "fields": {"frequency": "Periodicidade", "count": "N\u00famero de presta\u00e7\u00f5es", "amount": "Valor por presta\u00e7\u00e3o", "total": "Total nesta periodicidade", "loadingPct": "Acr\u00e9scimo por fracionamento", "indicative": "Simula\u00e7\u00e3o indicativa"}},
+    "paymentOption": {"label": "Op\u00e7\u00f5es indicativas de pagamento", "fields": {"frequency": "Periodicidade", "count": "N\u00famero de presta\u00e7\u00f5es", "amount": "Valor por presta\u00e7\u00e3o", "total": "Total nesta periodicidade", "loadingPct": "Acr\u00e9scimo por fracionamento", "paymentSummary": "Resumo do fracionamento", "indicative": "Simula\u00e7\u00e3o indicativa"}},
     "adjustment": {"label": "Ajustes do pr\u00e9mio", "fields": {"text": "Ajuste aplicado"}},
     "participationOption": {"label": "Op\u00e7\u00e3o de participa\u00e7\u00e3o", "fields": {"code": "C\u00f3digo", "name": "Nome", "annualDeductible": "Franquia anual", "copayPerConsultation": "Copagamento por consulta", "reimbursementPct": "Percentagem de reembolso", "premiumAdjustmentPct": "Ajuste no pr\u00e9mio (%)", "hospitalOnly": "Aplic\u00e1vel apenas a hospitaliza\u00e7\u00e3o"}},
     "requiredDocument": {"label": "Documentos necess\u00e1rios", "fields": {"documentType": "Tipo de documento", "description": "Descri\u00e7\u00e3o"}},
@@ -96,7 +102,43 @@ GROUPS: dict[str, dict[str, Any]] = {
     "condition": {"label": "Condições", "fields": {"text": "Texto"}},
     "waiting": {"label": "Períodos de carência", "fields": {"coverage": "Cobertura", "text": "Carência"}},
 }
+GROUPS["coverage"]["fields"].update({
+    "capital": "Capital seguro resumido",
+    "details": "Detalhe da cobertura",
+    "coinsurance": "Comparticipação formatada",
+    "copay": "Co-pagamento resumido",
+})
+GROUPS["premiumCategory"]["fields"].update({
+    "profile": "Perfil da categoria segura",
+    "perCapita": "Prémio médio por pessoa da categoria",
+})
 GROUP_FIELDS = {f"{g}.{f}" for g, spec in GROUPS.items() for f in spec["fields"]}
+
+
+def format_insurer_money(value: Any, currency: str | None = "AOA") -> str:
+    """Format monetary values in the Protteja template convention (amount, Kz)."""
+    if value in (None, ""):
+        return "—"
+    code = (currency or "AOA").upper()
+    amount = Decimal(str(value))
+    digits = 0 if amount == amount.to_integral_value() else 2
+    from shared.formatting import number
+
+    return f"{number(amount, digits)} {'Kz' if code == 'AOA' else code}"
+
+
+def _format_insurer_money_text(value: Any, currency: str | None = "AOA") -> Any:
+    """Reformat a money string already localized by the quote content layer."""
+    if not isinstance(value, str):
+        return value
+    symbol = "Kz" if (currency or "AOA").upper() == "AOA" else (currency or "AOA").upper()
+    match = re.fullmatch(rf"\s*{re.escape(symbol)}\s+([\d.]+)(?:,([\d]{{1,2}}))?\s*", value)
+    if not match:
+        return value
+    raw = match.group(1).replace(".", "")
+    if match.group(2):
+        raw += "." + match.group(2)
+    return format_insurer_money(raw, currency)
 
 
 def allowed_names(document_type: str) -> set[str]:
@@ -283,37 +325,86 @@ def _text_of_row(row) -> str:
     return " ".join(_paragraph_text(p) for cell in row.cells for p in cell.paragraphs)
 
 
-def _group_resolver(group: str, item: dict[str, str]):
+def _group_resolver(group: str, item: dict[str, str], *, empty_value: str = "—"):
     def resolve(name: str, original: str) -> str:
         head, _, field = name.partition(".")
         if head == group:
             value = item.get(field)
-            return "—" if value in (None, "") else str(value)
+            return empty_value if value in (None, "") else str(value)
         return original  # outras marcas ficam para a passagem dos valores simples
 
     return resolve
+
+
+def _unique_row_cells(row):
+    cells = []
+    seen = set()
+    for cell in row.cells:
+        if id(cell._tc) in seen:
+            continue
+        seen.add(id(cell._tc))
+        cells.append(cell)
+    return cells
 
 
 def _expand_lists(document, groups: dict[str, list[dict[str, str]]]) -> None:
     from docx.oxml.ns import qn
     from docx.text.paragraph import Paragraph
 
-    # Linhas de tabela
+    # Linhas de tabela. Process all rows of a group in one pass so templates
+    # can retain multiple row styles (for example alternating coverage bands).
     for table in list(_iter_tables(document)):
+        rows_by_group: dict[str, list] = {}
         for row in list(table.rows):
             group = _group_of(_text_of_row(row))
-            if group is None:
-                continue
-            tr = row._tr
-            parent = tr.getparent()
-            position = parent.index(tr)
-            for offset, item in enumerate(groups.get(group, [])):
-                clone = copy.deepcopy(tr)
-                parent.insert(position + 1 + offset, clone)
-                resolve = _group_resolver(group, item)
-                for p in clone.iter(qn("w:p")):
-                    _replace_in_paragraph(Paragraph(p, None), resolve)
-            parent.remove(tr)
+            if group is not None:
+                rows_by_group.setdefault(group, []).append(row)
+
+        for group, template_rows in rows_by_group.items():
+            items = groups.get(group, [])
+            parent = template_rows[0]._tr.getparent()
+            position = parent.index(template_rows[0]._tr)
+            cells_by_row = [_unique_row_cells(row) for row in template_rows]
+            marked_cell_indices = [
+                [index for index, cell in enumerate(cells) if _group_of(" ".join(_paragraph_text(p) for p in cell.paragraphs)) == group]
+                for cells in cells_by_row
+            ]
+
+            # The insurer's model uses one row of four cells for payment
+            # frequencies and two columns for exclusions. Fill these matrices
+            # horizontally while preserving the original table geometry.
+            is_matrix = group in {"paymentOption", "exclusion"} and len(template_rows) == 1 and len(marked_cell_indices[0]) > 1
+            generated_rows = []
+            if is_matrix:
+                template = template_rows[0]._tr
+                columns = marked_cell_indices[0]
+                row_count = (len(items) + len(columns) - 1) // len(columns)
+                for row_index in range(row_count):
+                    clone = copy.deepcopy(template)
+                    generated_rows.append(clone)
+                    # Resolve each marked cell against the corresponding item.
+                    row_cells = list(clone.iter(qn("w:tc")))
+                    for column_index, source_index in enumerate(columns):
+                        target_tc = row_cells[source_index]
+                        item_index = row_index * len(columns) + column_index
+                        item = items[item_index] if item_index < len(items) else {}
+                        resolve = _group_resolver(group, item)
+                        for p in target_tc.iter(qn("w:p")):
+                            _replace_in_paragraph(Paragraph(p, None), resolve)
+            else:
+                for item_index, item in enumerate(items):
+                    source = template_rows[item_index % len(template_rows)]._tr
+                    clone = copy.deepcopy(source)
+                    generated_rows.append(clone)
+                    resolve = _group_resolver(group, item)
+                    for p in clone.iter(qn("w:p")):
+                        _replace_in_paragraph(Paragraph(p, None), resolve)
+
+            template_elements = [row._tr for row in template_rows]
+            for element in template_elements:
+                parent.remove(element)
+            for offset, element in enumerate(generated_rows):
+                parent.insert(position + offset, element)
     # Parágrafos fora de tabelas
     for paragraph in list(document.paragraphs):
         group = _group_of(_paragraph_text(paragraph))
@@ -407,19 +498,59 @@ def _fill_word_xml(data: bytes, scalar_resolve, groups: dict[str, list[dict[str,
     # faster, this keeps unrelated notes/comments byte-for-byte identical.
     if "{{" not in "".join(node.text or "" for node in root.xpath(".//w:t", namespaces=_W)):
         return data
-    # Deep-copy each original row. Its Word formatting XML is retained as-is.
-    for row in reversed(list(root.xpath(".//w:tr", namespaces=_W))):
-        group = _xml_group_of(row)
-        if group is None:
-            continue
-        parent, position = row.getparent(), row.getparent().index(row)
-        for offset, item in enumerate(groups.get(group, [])):
-            clone = copy.deepcopy(row)
-            parent.insert(position + offset, clone)
-            resolver = _group_resolver(group, item)
-            for paragraph in clone.xpath(".//w:p", namespaces=_W):
-                _replace_xml_paragraph(paragraph, resolver)
-        parent.remove(row)
+    # Expand each group once per table. Multiple model rows can define
+    # alternating band styles; copy those rows cyclically for the data.
+    for table in root.xpath(".//w:tbl", namespaces=_W):
+        rows_by_group: dict[str, list] = {}
+        for row in table.xpath("./w:tr", namespaces=_W):
+            group = _xml_group_of(row)
+            if group is not None:
+                rows_by_group.setdefault(group, []).append(row)
+
+        for group, template_rows in rows_by_group.items():
+            items = groups.get(group, [])
+            parent = template_rows[0].getparent()
+            position = parent.index(template_rows[0])
+            marked_cell_indices = [
+                [index for index, cell in enumerate(row.xpath("./w:tc", namespaces=_W))
+                 if _xml_group_of(cell) == group]
+                for row in template_rows
+            ]
+            is_matrix = (
+                group in {"paymentOption", "exclusion"}
+                and len(template_rows) == 1
+                and len(marked_cell_indices[0]) > 1
+            )
+            generated_rows = []
+            if is_matrix:
+                template = template_rows[0]
+                columns = marked_cell_indices[0]
+                row_count = (len(items) + len(columns) - 1) // len(columns)
+                for row_index in range(row_count):
+                    clone = copy.deepcopy(template)
+                    generated_rows.append(clone)
+                    cells = clone.xpath("./w:tc", namespaces=_W)
+                    for column_index, cell_index in enumerate(columns):
+                        item_index = row_index * len(columns) + column_index
+                        item = items[item_index] if item_index < len(items) else {}
+                        resolver = _group_resolver(
+                            group, item,
+                            empty_value="" if item_index >= len(items) else "—",
+                        )
+                        for paragraph in cells[cell_index].xpath(".//w:p", namespaces=_W):
+                            _replace_xml_paragraph(paragraph, resolver)
+            else:
+                for item_index, item in enumerate(items):
+                    clone = copy.deepcopy(template_rows[item_index % len(template_rows)])
+                    generated_rows.append(clone)
+                    resolver = _group_resolver(group, item)
+                    for paragraph in clone.xpath(".//w:p", namespaces=_W):
+                        _replace_xml_paragraph(paragraph, resolver)
+
+            for row in template_rows:
+                parent.remove(row)
+            for offset, row in enumerate(generated_rows):
+                parent.insert(position + offset, row)
     for paragraph in reversed(list(root.xpath(".//w:p[not(ancestor::w:tr)]", namespaces=_W))):
         group = _xml_group_of(paragraph)
         if group is None:
@@ -482,6 +613,7 @@ def fill(data: bytes, *, scalars: dict[str, Any], groups: dict[str, list[dict[st
 def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, str] | None = None) -> dict[str, list[dict[str, Any]]]:
     """Listas a partir do conteúdo estruturado da proposta/apólice."""
     import json
+    from shared.formatting import money
 
     def display(value: Any) -> str | None:
         if value is None:
@@ -490,6 +622,17 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
             return "Sim" if value else "Não"
         if isinstance(value, (dict, list)):
             return json.dumps(value, ensure_ascii=False, sort_keys=True)
+        return str(value)
+
+    def age_band_label(value: Any) -> str | None:
+        if value in (None, ""):
+            return None
+        match = re.fullmatch(r"(\d+)-(\d+)", str(value))
+        if match:
+            return f"{match.group(1)}–{match.group(2)} anos"
+        match = re.fullmatch(r"(\d+)\+", str(value))
+        if match:
+            return f"{match.group(1)} ou mais anos"
         return str(value)
 
     status_labels = {
@@ -517,11 +660,36 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
              "preExistingLoadingPct": pre_existing.get("loadingPct"),
              "preExistingSublimit": pre_existing.get("sublimitAmount")}
         )
-    coverage = [
-        {
+    coverage = []
+    for c in content.get("coverages", []):
+        contracted = bool(c.get("contracted"))
+        non_contracted_label = "Não contratada"
+        if c.get("nonContractedReason"):
+            non_contracted_label += f": {c['nonContractedReason']}"
+        if c.get("nonContractedReasonNote"):
+            non_contracted_label += f" ({c['nonContractedReasonNote']})"
+        network_pct = c.get("networkCoinsurancePct")
+        reimbursement_pct = c.get("reimbursementCoinsurancePct")
+        coinsurance = network_pct if network_pct not in (None, "") else reimbursement_pct
+        if coinsurance not in (None, ""):
+            coinsurance = f"{Decimal(str(coinsurance)).normalize():f}%"
+        network_copay = c.get("networkCopay")
+        reimbursement_copay = c.get("reimbursementCopay")
+        copay = network_copay or reimbursement_copay
+        capital_summary = c.get("summaryCapital") or {}
+        limits = c.get("limits") or []
+        inclusion_label = "Cobertura base" if c.get("inclusion") == "INCLUDED" else "Cobertura opcional"
+        coverage.append({
             "name": c.get("name"),
-            "limits": "; ".join(c.get("limits") or []),
-            "participation": "; ".join(c.get("participation") or []),
+            "capital": (
+                "Não contratada" if not contracted else
+                capital_summary.get("value") or (limits[0] if limits else "Conforme plano")
+            ),
+            "details": c.get("notes") or inclusion_label,
+            "coinsurance": coinsurance if contracted and coinsurance else ("—" if not contracted else "Conforme plano"),
+            "copay": _format_insurer_money_text(copay, c.get("currency")) if contracted and copay else ("—" if not contracted else "Conforme plano"),
+            "limits": "; ".join(c.get("limits") or []) if contracted else "—",
+            "participation": "; ".join(c.get("participation") or []) if contracted else "—",
             "waiting": c.get("waiting"),
             "priorApproval": "Sim" if c.get("requiresPriorApproval") else "Não",
             "networkCopay": c.get("networkCopay"), "reimbursementCopay": c.get("reimbursementCopay"),
@@ -530,27 +698,33 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
             "networkAnnualDeductible": c.get("networkAnnualDeductible"),
             "reimbursementAnnualDeductible": c.get("reimbursementAnnualDeductible"),
             "category": c.get("category"), "inclusion": c.get("inclusion"),
-            "regime": c.get("participationRegime"), "destinations": display(c.get("destinations")),
+            "regime": c.get("participationRegime") if contracted else non_contracted_label,
+            "destinations": display(c.get("destinations")) if contracted else "—",
             "closedDiseaseList": display(c.get("closedDiseaseList")),
             "maxDaysPerYear": c.get("maxDaysPerYear"),
             "timeDeductibleDays": c.get("timeDeductibleDays"), "currency": c.get("currency"),
             "notes": c.get("notes"), "excludedItems": display(c.get("excludedItems")), "indicative": display(c.get("indicative")),
-        }
-        for c in content.get("coverages", [])
-        if c.get("contracted")
-    ]
+        })
     coverage_options = [
         {"name": c.get("name"), "category": c.get("category"), "inclusion": c.get("inclusion"),
-         "contracted": display(c.get("contracted"))}
+         "contracted": display(c.get("contracted")),
+         "nonContractedReason": c.get("nonContractedReason"),
+         "nonContractedReasonNote": c.get("nonContractedReasonNote")}
         for c in content.get("coverages", [])
     ]
     population_by_id = {p.get("memberId"): p for p in content.get("population", [])}
     premium_members = content.get("premium", {}).get("members", [])
-    premium_by_member = [
-        {"name": item.get("name"), "relationship": population_by_id.get(item.get("memberId"), {}).get("relationship"),
-         "total": item.get("total")}
-        for item in premium_members
-    ]
+    premium_by_member = []
+    for item in premium_members:
+        person = population_by_id.get(item.get("memberId"), {})
+        age_band = next((line.get("ageBand") for line in item.get("lines", []) if line.get("ageBand")), None)
+        premium_by_member.append({
+            "name": item.get("name"),
+            "relationship": person.get("relationship"),
+            "age": person.get("age"),
+            "ageBand": age_band_label(age_band),
+            "total": format_insurer_money(item.get("total"), content.get("premium", {}).get("currency")),
+        })
     pricing_lines = []
     for line in content.get("premium", {}).get("quoteLevel", []):
         pricing_lines.append({"member": None, "code": line.get("code"), "type": line.get("type"),
@@ -577,8 +751,6 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
         {"title": row.get("title"), "text": row.get("text")}
         for row in content.get("businessTexts", [])
     ]
-    from shared.formatting import money
-
     currency = content.get("premium", {}).get("currency") or "AOA"
     payment_frequency_labels = {
         "ANUAL": "Anual",
@@ -586,23 +758,56 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
         "TRIMESTRAL": "Trimestral",
         "MENSAL": "Mensal",
     }
-    payment_options = [
-        {
+    payment_options = []
+    for row in content.get("premium", {}).get("paymentOptions", []):
+        loading = row.get("loadingPct")
+        count = row.get("count")
+        summary = "fracção única" if count == 1 else f"× {count} fracções"
+        if loading not in (None, "", "0", "0.0", "0.00"):
+            summary += f" · +{display(loading)}%"
+        payment_options.append({
             "frequency": payment_frequency_labels.get(row.get("frequency"), row.get("frequency")),
-            "count": row.get("count"),
-            "amount": money(row.get("installmentAmount"), currency),
-            "total": money(row.get("totalAmount"), currency),
-            "loadingPct": row.get("loadingPct"),
+            "count": count,
+            "amount": format_insurer_money(row.get("installmentAmount"), currency),
+            "total": format_insurer_money(row.get("totalAmount"), currency),
+            "loadingPct": loading,
+            "paymentSummary": summary,
             "indicative": "Indicativo" if row.get("indicative") else "Não indicativo",
-        }
-        for row in content.get("premium", {}).get("paymentOptions", [])
-    ]
+        })
+    premium_categories = []
+    ages_by_relationship: dict[str, list[int]] = {}
+    for person in content.get("population", []):
+        relationship = str(person.get("relationship") or "")
+        if relationship and person.get("age") is not None:
+            ages_by_relationship.setdefault(relationship, []).append(int(person["age"]))
+    for row in content.get("premium", {}).get("byRelationship", []):
+        relationship = str(row.get("relationship") or "")
+        normalized = relationship.casefold()
+        if "titular" in normalized or "tomador" in normalized or "employee" in normalized:
+            category = "Colaboradores (titulares)"
+        elif "cônjuge" in normalized or "conjuge" in normalized or "spouse" in normalized:
+            category = "Cônjuges"
+        elif "filho" in normalized or "child" in normalized:
+            category = "Filhos"
+        else:
+            category = relationship
+        ages = ages_by_relationship.get(relationship, [])
+        profile = f"Idade média {round(sum(ages) / len(ages))} anos" if ages else "Conforme dados da cotação"
+        count = int(row.get("count") or 0)
+        total = Decimal(str(row.get("total") or "0"))
+        premium_categories.append({
+            "relationship": category,
+            "profile": profile,
+            "count": count,
+            "perCapita": format_insurer_money(total / count, currency) if count else "—",
+            "total": format_insurer_money(total, currency),
+        })
     return {
         "insured": insured,
         "coverage": coverage,
         "coverageOption": coverage_options,
         "premiumMember": premium_by_member,
-        "premiumCategory": [{"relationship": row.get("relationship"), "count": row.get("count"), "total": row.get("total")} for row in content.get("premium", {}).get("byRelationship", [])],
+        "premiumCategory": premium_categories,
         "pricingLine": pricing_lines,
         "paymentOption": payment_options,
         "participationOption": participation_options,

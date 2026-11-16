@@ -1,0 +1,11 @@
+# Instala como /etc/systemd/system/q360-daily.service
+# Ajuste o caminho do checkout se não estiver em /opt/q360.
+[Unit]
+Description=Q360 Saúde - tarefas diárias (Docker)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/q360/backend
+ExecStart=/usr/bin/docker compose --env-file /etc/q360-docker.env -f docker-compose.prod.yml run --rm api python manage.py run_daily_jobs

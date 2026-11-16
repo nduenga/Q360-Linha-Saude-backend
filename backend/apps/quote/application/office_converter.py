@@ -21,8 +21,23 @@ class OfficeConversionError(DomainProblem):
 
 
 def _binary() -> str | None:
-    configured = getattr(settings, "OFFICE_CONVERTER_BIN", None) or os.environ.get("OFFICE_CONVERTER_BIN")
-    return configured or shutil.which("soffice") or shutil.which("soffice.exe")
+    # Accept the setting used by Django and both documented environment names.
+    # Q360_SOFFICE_PATH is retained for existing deployments and macOS installs.
+    configured = (
+        getattr(settings, "OFFICE_CONVERTER_BIN", None)
+        or os.environ.get("OFFICE_CONVERTER_BIN")
+        or os.environ.get("Q360_SOFFICE_PATH")
+    )
+    if configured:
+        return configured if Path(configured).is_file() else None
+
+    on_path = shutil.which("soffice") or shutil.which("libreoffice") or shutil.which("soffice.exe")
+    if on_path:
+        return on_path
+
+    # macOS desktop installs do not normally add the app's executable to PATH.
+    macos_app = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
+    return str(macos_app) if macos_app.is_file() else None
 
 
 def docx_to_pdf(docx_bytes: bytes) -> bytes:

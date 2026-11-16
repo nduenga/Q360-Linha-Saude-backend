@@ -57,10 +57,13 @@ def _file(data: bytes, content_type: str, name: str) -> HttpResponse:
 
 
 class CustomerPortalPolicyDocumentView(_PortalView):
-    """A apólice digital."""
+    """Entrega a apólice digital exclusivamente em PDF."""
 
     def get(self, request, policy_number: str):
-        return _file(*portal_read.my_policy_document(policy_number, request.query_params.get("fileType", "pdf")))
+        file_type = request.query_params.get("fileType", "pdf").lower()
+        if file_type != "pdf":
+            raise ValidationError({"fileType": "O portal do cliente disponibiliza documentos apenas em PDF."})
+        return _file(*portal_read.my_policy_document(policy_number))
 
 
 class CustomerPortalPolicyStatementView(_PortalView):

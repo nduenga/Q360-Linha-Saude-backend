@@ -42,6 +42,7 @@ VARIABLES: dict[str, str] = {
     "quote.number": "Número da cotação",
     "quote.date": "Data da cotação",
     "quote.validUntil": "Válida até",
+    "quote.validityDays": "Prazo de validade em dias",
     "quote.type": "Tipo (Novo negócio / Renovação)",
     "document.number": "Número do documento",
     "document.date": "Data de emissão",

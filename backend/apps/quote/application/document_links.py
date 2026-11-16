@@ -40,6 +40,8 @@ def create_link(*, document_id: uuid.UUID) -> dict:
     document = proposal_service.get_document(document_id)
     if document.status != "GENERATED":
         raise proposal_service.ProposalError(f"O documento {document.id} não tem ficheiro gerado ({document.status})")
+    if str(document.format).upper() != "PDF":
+        raise InvalidDocumentLinkError("Só é permitido partilhar propostas em PDF com o cliente.")
     ttl = int(system_parameter_service.get_value(TTL_PARAMETER))
     expires = timezone.now() + datetime.timedelta(seconds=ttl)
     token = signing.dumps(
@@ -76,13 +78,20 @@ def open_link(token: str) -> tuple[bytes, str, str | None]:
     bound = CurrentActorProvider.bind(actor)
     try:
         document = proposal_service.get_document(uuid.UUID(payload["d"]))
+        if str(document.format).upper() != "PDF":
+            raise InvalidDocumentLinkError("Só é permitido descarregar documentos PDF através de uma ligação partilhada.")
         data = proposal_service.read_file(document)
+        if not data.startswith(b"%PDF-"):
+            raise InvalidDocumentLinkError("O ficheiro associado não é um PDF válido.")
         _audit.record(
             action="document.signed_url_opened",
             entity_type="Document",
             entity_id=str(document.id),
             metadata={"checksum": document.checksum},
         )
-        return data, document.content_type or "application/octet-stream", document.file_name
+        name = document.file_name or f"proposta-{document.id}.pdf"
+        if not name.lower().endswith(".pdf"):
+            name = f"{name.rsplit('.', 1)[0]}.pdf" if "." in name else f"{name}.pdf"
+        return data, "application/pdf", name
     finally:
         CurrentActorProvider.reset(bound)

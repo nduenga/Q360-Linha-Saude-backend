@@ -5,6 +5,7 @@ dizem sempre exatamente o mesmo."""
 from __future__ import annotations
 
 import base64
+import datetime
 import html
 import io
 from typing import Any
@@ -19,10 +20,25 @@ def variables_for(content: dict[str, Any], *, document_number: str | None, gener
     meta, client, plan, premium = content["meta"], content["client"], content["plan"], content["premium"]
     from shared.formatting import date as format_date
 
+    quote_date = _as_date(meta.get("quoteDate"))
+    valid_until = _as_date(meta.get("validUntil"))
+    validity_days = (valid_until - quote_date).days if quote_date and valid_until else None
+    access_system = plan.get("accessSystem") or ""
+    access_mode, separator, access_description = access_system.partition(":")
+    if not separator:
+        access_mode, access_description = access_system, ""
+    access_mode = access_mode.strip()
+    access_description = access_description.strip().rstrip(".")
+    hospitalization = next((item for item in content.get("coverages", []) if item.get("code") == "HOSPITALIZATION" and item.get("contracted")), None)
+    capital_summary = (hospitalization or {}).get("summaryCapital") or {}
     return {
         "quote.number": meta["quoteNumber"],
-        "quote.date": format_date(meta["quoteDate"]),
+        # The insurer's Word proposal uses dots in its compact cover block.
+        # This value is only a display variable; the original ISO dates remain
+        # intact in the structured proposal content.
+        "quote.date": quote_date.strftime("%d.%m.%Y") if quote_date else format_date(meta["quoteDate"]),
         "quote.validUntil": format_date(meta["validUntil"]),
+        "quote.validityDays": f"{validity_days} dias" if validity_days is not None else None,
         "quote.type": meta["quoteType"],
         "document.number": document_number or "(a atribuir)",
         "document.date": format_date(generated_on),
@@ -34,6 +50,10 @@ def variables_for(content: dict[str, Any], *, document_number: str | None, gener
         "plan.product": plan["product"],
         "plan.segment": plan["segment"],
         "plan.accessSystem": plan.get("accessSystem"),
+        "plan.accessMode": access_mode or None,
+        "plan.accessDescription": access_description or None,
+        "coverage.hospitalizationCapital": capital_summary.get("value") or "Ver coberturas",
+        "coverage.hospitalizationBasis": capital_summary.get("basis") or "Consulte os limites nas coberturas",
         "plan.networkRegions": plan.get("networkRegions"),
         "plan.tier": plan.get("tier"),
         "plan.category": plan.get("category"),
@@ -43,6 +63,19 @@ def variables_for(content: dict[str, Any], *, document_number: str | None, gener
         "scenario.name": (meta["scenario"] or {}).get("name"),
         "insured.count": len(content["population"]),
     }
+
+
+def _as_date(value: Any) -> datetime.date | None:
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, datetime.date):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.date.fromisoformat(value[:10])
+        except ValueError:
+            return None
+    return None
 
 
 def build_blocks(content: dict[str, Any], spec: dict[str, Any], variables: dict[str, Any]) -> list[Block]:
@@ -156,7 +189,18 @@ def _coverages(content, blocks):
             lines.append(coverage["notes"])
         blocks.append(("subheading", title))
         blocks.append(("bullets", lines or ["Sem limites definidos nesta proposta"]))
-    optional_rest = [c["name"] for c in content["coverages"] if not c["contracted"]]
+    optional_rest = []
+    for coverage in content["coverages"]:
+        if coverage["contracted"]:
+            continue
+        line = coverage["name"]
+        reason = coverage.get("nonContractedReason")
+        note = coverage.get("nonContractedReasonNote")
+        if reason:
+            line += f" — Não contratada: {reason}"
+            if note:
+                line += f" ({note})"
+        optional_rest.append(line)
     if optional_rest:
         blocks += [("subheading", "Coberturas opcionais disponíveis (não incluídas)"), ("bullets", optional_rest)]
 

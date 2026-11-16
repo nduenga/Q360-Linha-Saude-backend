@@ -96,6 +96,11 @@ from shared.pagination import Q360PageNumberPagination
 # Cotações por página na lista (`GET /quotes`) quando o pedido não envia `size`.
 QUOTE_PAGE_SIZE = 12
 
+
+def _get_tenant_document_template(template_id):
+    tenant = CurrentTenantProvider.require()
+    return get_object_or_404(DocumentTemplateVersion, id=template_id, tenant_id=tenant.value)
+
 _DECISION_PERMISSION = {
     QuoteDecisionType.APPROVE.value: Permission.QUOTE_APPROVE,
     QuoteDecisionType.REJECT.value: Permission.QUOTE_REJECT,
@@ -496,7 +501,8 @@ class DocumentTemplateListCreateView(APIView):
         return [permission() for permission in self.permission_classes]
 
     def get(self, request):
-        queryset = DocumentTemplateVersion.objects.order_by("template_code", "-version_no")
+        tenant = CurrentTenantProvider.require()
+        queryset = DocumentTemplateVersion.objects.filter(tenant_id=tenant.value).order_by("template_code", "-version_no")
         template_code = request.query_params.get("templateCode")
         if template_code:
             queryset = queryset.filter(template_code=template_code)
@@ -525,7 +531,7 @@ class DocumentTemplatePublishView(APIView):
     permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
 
     def post(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         published = document_service.publish_document_template(template)
         return Response(DocumentTemplateHeaderSerializer(published).data)
 
@@ -538,11 +544,11 @@ class DocumentTemplateDetailView(APIView):
     permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
 
     def get(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         return Response(DocumentTemplateDetailSerializer(template).data)
 
     def patch(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         body = DocumentTemplateUpdateRequestSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         updated = document_service.update_document_template(
@@ -551,7 +557,7 @@ class DocumentTemplateDetailView(APIView):
         return Response(DocumentTemplateHeaderSerializer(updated).data)
 
     def delete(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         document_service.delete_document_template(template)
         return Response(status=204)
 
@@ -565,7 +571,7 @@ class DocumentTemplateRetireView(APIView):
     permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
 
     def post(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         retired = document_service.retire_document_template(template)
         return Response(DocumentTemplateHeaderSerializer(retired).data)
 
@@ -1142,8 +1148,9 @@ class QuoteProposalPreviewView(APIView):
     """Preview a proposal without saving it.
 
     ``fileType`` accepts ``html`` (the legacy default), ``docx`` and ``pdf``.
-    A DOCX preview is the faithful way to inspect an insurer Word template;
-    PDF needs LibreOffice on the server.
+    DOCX previews use the uploaded Word model. When a Word model is selected,
+    proposal PDFs are converted from that same model with LibreOffice. The
+    generic HTML/CSS renderer is used only for templates without a Word file.
     """
 
     permission_classes = [require_scope(Scope.READ)]
@@ -1206,7 +1213,7 @@ class DocumentTemplatePreviewView(APIView):
     permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
 
     def get(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         # A Word model must be inspected as Word by default. The former HTML
         # default is still retained for JSON/HTML templates and remains
         # explicitly available through ?fileType=html.
@@ -1225,7 +1232,7 @@ class DocumentTemplateLetterheadView(APIView):
     permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
 
     def post(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         body = TemplateLetterheadUploadSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         data = body.validated_data
@@ -1235,14 +1242,14 @@ class DocumentTemplateLetterheadView(APIView):
         return Response(DocumentTemplateHeaderSerializer(updated).data)
 
     def get(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         data = template_files.read_letterhead(template)
         if data is None:
             raise Http404
         return _file_response(data, "application/pdf")
 
     def delete(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         return Response(DocumentTemplateHeaderSerializer(template_files.delete_letterhead(template)).data)
 
 
@@ -1255,21 +1262,21 @@ class DocumentTemplateWordView(APIView):
     permission_classes = [require_scope(Scope.ADMIN), require_permission(Permission.PRODUCT_MANAGE)]
 
     def post(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         body = TemplateWordUploadSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         updated, _report = template_files.save_word(template, body.validated_data["file"])
         return Response(DocumentTemplateHeaderSerializer(updated).data)
 
     def get(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         data = template_files.read_word(template)
         if data is None:
             raise Http404
         return _file_response(data, word_template.DOCX_CONTENT_TYPE)
 
     def delete(self, request, template_id):
-        template = get_object_or_404(DocumentTemplateVersion, id=template_id)
+        template = _get_tenant_document_template(template_id)
         return Response(DocumentTemplateHeaderSerializer(template_files.delete_word(template)).data)
 
 

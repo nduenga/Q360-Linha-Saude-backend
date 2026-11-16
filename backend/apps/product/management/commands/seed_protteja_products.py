@@ -82,6 +82,7 @@ class Command(BaseCommand):
                     self._configurations(products, opts["effective_from"] or timezone.localdate(), approver_id)
                     self._tenant_checks(approver_id)
                     self._proposal_template(publish=bool(approver_id))
+                    self._prepared_proposal_templates(publish=bool(approver_id))
                 if opts["approve_as"]:
                     self._activate()
         finally:
@@ -258,6 +259,20 @@ class Command(BaseCommand):
                 f"Modelo de proposta {PROPOSAL_TEMPLATE_CODE} criado em rascunho: confira-o e publique-o em "
                 "Administração › Documentos."
             )
+
+    def _prepared_proposal_templates(self, *, publish: bool) -> None:
+        """Instala os oito modelos DOCX como opções selecionáveis na cotação."""
+        from apps.quote.management.commands.install_protteja_quote_templates import _default_source_dir
+
+        args = ["--tenant-id", str(self.tenant.id), "--effective-from", timezone.localdate().isoformat(),
+                "--source-dir", str(_default_source_dir())]
+        if publish:
+            args.append("--publish")
+        from django.core.management import call_command
+
+        call_command("install_protteja_quote_templates", *args, stdout=self.stdout, stderr=self.stderr)
+        state = "publicados e disponíveis na geração de propostas" if publish else "instalados em rascunho"
+        self.notes.append(f"Oito modelos DOCX Protteja {state}.")
 
     # ---------------------------------------------------------- ativação
     def _activate(self) -> None:

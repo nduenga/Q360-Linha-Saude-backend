@@ -88,6 +88,29 @@ def _limit_text(limit: dict[str, Any], currency: str) -> str:
     return f"{prefix}: {money(limit['amount'], currency)}{suffix}"
 
 
+def _coverage_summary_capital(limits: list[dict[str, Any]], currency: str) -> dict[str, str] | None:
+    """Return the main annual hospitalization capital for the cover card."""
+    preferred = ("ANNUAL_PER_PERSON", "HOUSEHOLD_SHARED", "BIENNIAL", "FIXED_AMOUNT")
+    limit = next((item for kind in preferred for item in limits if item.get("kind") == kind and item.get("amount") is not None), None)
+    if not limit:
+        return None
+    from decimal import Decimal, InvalidOperation
+
+    from shared.formatting import number
+
+    amount = Decimal(str(limit["amount"]))
+    rounded = amount == amount.to_integral_value()
+    value = number(amount, digits=0 if rounded else 2)
+    currency_label = "Kz" if (currency or "AOA").upper() == "AOA" else (currency or "AOA").upper()
+    basis = {
+        "ANNUAL_PER_PERSON": "por Pessoa Segura e por anuidade",
+        "HOUSEHOLD_SHARED": "por agregado familiar e por anuidade",
+        "BIENNIAL": "por Pessoa Segura a cada dois anos",
+        "FIXED_AMOUNT": "capital fixo",
+    }.get(limit.get("kind"), "conforme condições da cobertura")
+    return {"value": f"{value} {currency_label}", "basis": basis}
+
+
 def _participation_lines(participation: dict[str, Any], currency: str) -> list[str]:
     lines: list[str] = []
     for block in ("NETWORK", "REIMBURSEMENT"):
@@ -236,7 +259,10 @@ def build_content(
                 "category": coverage["category"],
                 "inclusion": coverage["inclusion"],
                 "contracted": coverage["contracted"],
+                "nonContractedReason": coverage.get("nonContractedReason"),
+                "nonContractedReasonNote": coverage.get("nonContractedReasonNote"),
                 "limits": [_limit_text(limit, cov_currency) for limit in config.get("limits", [])],
+                "summaryCapital": _coverage_summary_capital(config.get("limits", []), cov_currency),
                 "participation": _participation_lines(config.get("participation") or {}, cov_currency),
                 "networkCopay": _participation_detail("NETWORK", "copayAmount"),
                 "reimbursementCopay": _participation_detail("REIMBURSEMENT", "copayAmount"),
