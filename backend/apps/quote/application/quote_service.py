@@ -1026,8 +1026,10 @@ def delete_quote(*, quote: Quote) -> None:
         # apagamos tudo explicitamente antes da Quote:
         QuoteMember.objects.filter(quote=quote).delete()
         QuoteAdjustment.objects.filter(quote=quote).delete()
-        ReviewTask.objects.filter(quote=quote).delete()
+        # QuoteDecision.review_task usa DO_NOTHING no banco. Eliminar primeiro
+        # a tarefa viola a FK enquanto a decisão ainda apontar para ela.
         QuoteDecision.objects.filter(quote=quote).delete()
+        ReviewTask.objects.filter(quote=quote).delete()
         QuoteSnapshot.objects.filter(quote=quote).delete()
         QuoteStateHistory.objects.filter(quote=quote).delete()
         # Cenários (QuoteScenario) tem on_delete CASCADE no modelo.
@@ -1337,6 +1339,14 @@ def decide_quote(
                 quote_fields["quote_number"] = next_continuous_value(sequence_code="QUOTE_NUMBER", prefix="COT-")
         elif decision == QuoteDecisionType.REJECT.value:
             quote_fields.update(rejected_by=actor_id, rejected_at=timezone_now())
+        elif (
+            decision == QuoteDecisionType.RETURN.value
+            and quote.valid_until is not None
+            and quote.valid_until < timezone_localdate()
+        ):
+            # Devolver uma cotação caducada reabre o prazo para que possa ser
+            # corrigida, recalculada e submetida novamente à revisão.
+            quote_fields["valid_until"] = _default_valid_until(timezone_localdate())
         updated = Quote.objects.filter(id=quote.id, status=QuoteStatus.IN_REVIEW.value, row_version=row_version).update(
             **quote_fields
         )
