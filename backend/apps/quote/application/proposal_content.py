@@ -202,6 +202,7 @@ def build_content(
     quote_members = list(quote.members.select_related("member").order_by("created_at", "id"))
     names = {str(qm.member_id): _member_name(qm.member) for qm in quote_members}
     categories = {rc.code: rc.label for rc in RelationshipCode.objects.all()}
+    relationship_kinds = {rc.code: rc.category for rc in RelationshipCode.objects.all()}
     requirements = requirements_service.evaluate_requirements(quote)
 
     # ---------------------------------------------------------- population
@@ -216,6 +217,8 @@ def build_content(
                 "memberId": str(member.id),
                 "name": names[str(member.id)],
                 "relationship": categories.get(member.relationship_code, member.relationship_code),
+                "relationshipCategory": relationship_kinds.get(member.relationship_code),
+                "sex": member.sex_code,
                 "age": _age(member.date_of_birth, quote.reference_date),
                 "status": qm.status,
                 "clinicalQuestionnaireRequired": info.get("clinicalQuestionnaireRequired", False),
@@ -242,6 +245,8 @@ def build_content(
     coverages = []
     for coverage in plan_context.coverages:
         config = coverage["configuration"]
+        if config.get("hideInProposal"):
+            continue
         cov_currency = config.get("currency", "AOA")
         participation = config.get("participation") or {}
 
@@ -255,7 +260,17 @@ def build_content(
         coverages.append(
             {
                 "code": coverage["code"],
-                "name": coverage["name"],
+                "name": config.get("displayName") or coverage["name"],
+                "displayTag": config.get("displayTag"),
+                "displayDescription": config.get("displayDescription"),
+                "displayOrder": config.get("displayOrder"),
+                "regimeLabel": config.get("regimeLabel"),
+                "participationConfigured": bool(config.get("participation")),
+                "networkParticipationType": ((config.get("participation") or {}).get("NETWORK") or {}).get("type"),
+                "coinsurancePct": next(
+                    (str(limit.get("pct")) for limit in config.get("limits", []) if limit.get("kind") == "COINSURANCE_PCT"),
+                    None,
+                ),
                 "category": coverage["category"],
                 "inclusion": coverage["inclusion"],
                 "contracted": coverage["contracted"],
@@ -287,6 +302,14 @@ def build_content(
                 "indicative": bool(config.get("indicative")),
             }
         )
+
+    # Ordem da seguradora quando o plano a define; senão, a do plano.
+    coverages = [
+        c for _index, c in sorted(
+            enumerate(coverages),
+            key=lambda item: (item[1]["displayOrder"] is None, item[1]["displayOrder"] or 0, item[0]),
+        )
+    ]
 
     # ------------------------------------------------------------- premium
     by_member: dict[str, list[dict[str, Any]]] = {}
@@ -464,6 +487,7 @@ def build_content(
             "product": plan.product.name,
             "name": plan.name,
             "segment": SEGMENT_TEXT.get(segment, segment),
+            "segmentCode": segment,
             "tier": TIER_TEXT.get(settings.get("tier")),
             "category": settings.get("category"),
             "accessSystem": ACCESS_SYSTEM_TEXT.get(settings.get("accessSystem")),
@@ -483,7 +507,7 @@ def build_content(
             "members": premium_members,
             "byRelationship": premium_by_relationship,
             "quoteLevel": [
-                {"code": c["code"], "type": c["type"], "base": c.get("baseAmount"),
+                {"code": c["code"], "type": c["type"], "base": c.get("baseAmount"), "label": c.get("note"),
                  "factor": c.get("factorValue"), "adjustment": c.get("adjustmentAmount"),
                  "result": c["resultAmount"], "source": c.get("sourceCode"),
                  "sourceVersion": c.get("sourceVersion")}

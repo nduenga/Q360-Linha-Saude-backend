@@ -62,6 +62,8 @@ VARIABLES: dict[str, str] = {
     "premium.currency": "Moeda",
     "scenario.name": "Nome do cenário",
     "insured.count": "Número de pessoas seguras",
+    "premium.monthly": "Equivalente mensal do prémio total",
+    "premium.monthlyPerHolder": "Equivalente mensal por colaborador titular",
 }
 
 DEFAULT_DISCLAIMER = (

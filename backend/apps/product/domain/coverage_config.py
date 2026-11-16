@@ -41,6 +41,10 @@ _ALLOWED_KEYS = {
     "inclusion", "currency", "limits", "participation", "waitingDays", "requiresPriorApproval", "maxDaysPerYear",
     "timeDeductibleDays", "destinations", "closedDiseaseList", "excludedItems", "exclusions", "notes", "indicative",
     "mandatoryInEveryPlan",
+    # Só apresentação na proposta (modelo da seguradora): nome, etiqueta,
+    # descrição, ordem e regime como a seguradora os escreve; `hideInProposal`
+    # esconde uma cobertura base que a seguradora apresenta dentro de outra.
+    "displayName", "displayTag", "displayDescription", "displayOrder", "regimeLabel", "hideInProposal",
     # Campo "flat" que os formulários do frontend enviam em vez de agrupar em `limits[]`
     # ou `participation.{NETWORK,REIMBURSEMENT}.*`. Aceitamos para que o GTE consiga
     # parametrizar coberturas sem ter que conhecer a estrutura aninhada do validador;

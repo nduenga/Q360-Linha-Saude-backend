@@ -64,6 +64,9 @@ class Command(BaseCommand):
         parser.add_argument("--approve-as", help="Email de uma conta da seguradora que aprova já (staging/testes).")
         parser.add_argument("--activate", action="store_true",
                             help="Ativa os planos Protteja cuja tarifa já está publicada.")
+        parser.add_argument("--refresh-proposal-display", action="store_true",
+                            help="Atualiza só a apresentação das coberturas na proposta (nome, etiqueta, descrição, "
+                                 "ordem e regime) nos planos Protteja que já existem. Não mexe em capitais nem tarifa.")
 
     def handle(self, *args, **opts):
         tenant = Tenant.objects.filter(code=opts["tenant_code"]).first()
@@ -75,6 +78,9 @@ class Command(BaseCommand):
         try:
             if opts["activate"]:
                 self._activate()
+            elif opts["refresh_proposal_display"]:
+                with transaction.atomic():
+                    self._refresh_proposal_display()
             else:
                 with transaction.atomic():
                     products = self._products_and_plans()
@@ -131,6 +137,7 @@ class Command(BaseCommand):
             )
             for coverage in plan_spec["coverages"]:
                 configure_plan_benefit(plan=plan, benefit=benefits[coverage["code"]], configuration=coverage["config"])
+            self._hide_base_coverages(plan, benefits)
             Plan.objects.filter(id=plan.id).update(status="INACTIVE")  # só depois de a tarifa estar publicada
             report = validate_plan(plan=plan)
             if not report["valid"]:
@@ -141,6 +148,36 @@ class Command(BaseCommand):
         if kept:
             self.notes.append(f"Planos que já existiam e não foram alterados: {', '.join(kept)}")
         return products
+
+    def _hide_base_coverages(self, plan: Plan, benefits: dict[str, Benefit]) -> None:
+        """A Protteja apresenta urgências e cirurgia de ambulatório dentro da
+        Hospitalização: as coberturas base do catálogo não aparecem à parte."""
+        for code in data.HIDDEN_BASE_COVERAGES:
+            if code in benefits:
+                configure_plan_benefit(plan=plan, benefit=benefits[code], configuration=data.hidden_base_config(code))
+
+    def _refresh_proposal_display(self) -> None:
+        from apps.product.infrastructure.models import PlanBenefit
+
+        ensure_market_catalog(self.tenant.id)
+        benefits = {b.code: b for b in Benefit.objects.all()}
+        updated = []
+        for plan_spec in data.plans():
+            plan = Plan.objects.filter(code=plan_spec["code"]).first()
+            if plan is None:
+                continue
+            level_key = plan_spec["code"].split("-")[1]
+            for row in PlanBenefit.objects.filter(plan=plan).select_related("benefit"):
+                code = row.benefit.code
+                if code in data.DISPLAY:
+                    merged = {**(row.configuration_json or {}), **data.display_config(code, level_key)}
+                    configure_plan_benefit(plan=plan, benefit=row.benefit, configuration=merged)
+            self._hide_base_coverages(plan, benefits)
+            updated.append(plan.code)
+        self.notes.append(
+            "Apresentação das coberturas atualizada (capitais e tarifa não foram alterados): "
+            + (", ".join(updated) or "nenhum plano Protteja encontrado")
+        )
 
     # ------------------------------------------------------- configurações
     def _configurations(self, products: dict[str, Product], effective_from: datetime.date, approver_id: str | None) -> None:

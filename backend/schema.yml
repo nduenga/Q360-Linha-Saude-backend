@@ -5202,7 +5202,7 @@ paths:
   /api/v1/customer-portal/policies/{policy_number}/document:
     get:
       operationId: getCustomerPortalPolicyDocument
-      description: 'A apólice digital.
+      description: 'Entrega a apólice digital exclusivamente em PDF.
 
 
         A apólice digital.'
@@ -5792,10 +5792,7 @@ paths:
 
         RuleVersionCreateView) so the admin/configurador UI has something to
 
-        render before publishing a new template version.
-
-
-        Requer: scope q360.read.'
+        render before publishing a new template version.'
       summary: Listar document template list create
       parameters:
       - in: query
@@ -17282,9 +17279,11 @@ paths:
 
         ``fileType`` accepts ``html`` (the legacy default), ``docx`` and ``pdf``.
 
-        A DOCX preview is the faithful way to inspect an insurer Word template;
+        DOCX previews use the uploaded Word model. When a Word model is selected,
 
-        PDF needs LibreOffice on the server.
+        proposal PDFs are converted from that same model with LibreOffice. The
+
+        generic HTML/CSS renderer is used only for templates without a Word file.
 
 
         Requer: scope q360.read.'

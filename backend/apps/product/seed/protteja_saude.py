@@ -94,6 +94,51 @@ COVERAGES: dict[str, dict[str, Any]] = {
                                       "PRE": (600_000, 100, None), "PPL": (1_000_000, 100, None)}},
 }
 
+# Como a Protteja apresenta cada cobertura na proposta: nome, etiqueta, descrição,
+# ordem e regime (texto das propostas comerciais). A descrição pode variar por nível.
+DISPLAY: dict[str, dict[str, Any]] = {
+    "HOSPITALIZATION": {"name": "Hospitalização", "tag": "BASE · CE B", "order": 1, "regime": "Rede",
+                        "description": "Internamento, honorários, MCDT, quimio e radioterapia"},
+    "OUTPATIENT": {"name": "Ambulatório", "tag": "BASE · CE A", "order": 2, "regime": "Rede · Reembolso",
+                   "description": "Consultas, exames auxiliares de diagnóstico, tratamentos"},
+    "PHARMACY": {"name": "Medicamentos", "tag": "CE D", "order": 3, "regime": "Rede de farmácias",
+                 "description": "Prescritos e classificados pelo Ministério da Saúde"},
+    "MATERNITY": {"name": "Parto, Cesariana e IIG", "tag": "OPCIONAL", "order": 4, "regime": "Rede",
+                  "description": "Interrupção involuntária da gravidez incluída"},
+    "DENTAL": {"name": "Estomatologia", "tag": "CE C", "order": 5, "regime": "Rede",
+               "description": "Consultas, obturações, extracções, limpezas"},
+    "OPTICAL": {"name": "Óculos, Próteses e Ortóteses", "tag": "CE E", "order": 6, "regime": "Reembolso",
+                "description": "Armações, lentes graduadas e ortóteses"},
+    "MEDICAL_EVACUATION": {"name": "Evacuação Médica de Emergência", "tag": "OPCIONAL", "order": 7, "regime": "Assistência",
+                           "description": {"BPL": "Território nacional", "PRE": "Angola, África do Sul e Namíbia",
+                                           "PPL": "Inclui Portugal e repatriamento"}},
+    "CHRONIC_CONDITION": {"name": "Condição Médica Crónica", "tag": "OPCIONAL", "order": 8, "regime": "Rede",
+                          "description": "Acompanhamento de doença crónica declarada"},
+    "FUNERAL_EXPENSES": {"name": "Despesas de Funeral", "tag": "OPCIONAL", "order": 9, "regime": "Reembolso",
+                         "description": "Despesas de funeral da Pessoa Segura"},
+}
+# Coberturas base do catálogo que a Protteja inclui na Hospitalização e não apresenta à parte.
+HIDDEN_BASE_COVERAGES = {
+    "AMBULATORY_SURGERY": "Incluída na Hospitalização (cirurgia de ambulatório).",
+    "EMERGENCY": "Incluída na Hospitalização e no Ambulatório (urgências e transporte).",
+}
+
+
+def display_config(code: str, level_key: str) -> dict[str, Any]:
+    spec = DISPLAY[code]
+    description = spec["description"]
+    if isinstance(description, dict):
+        description = description.get(level_key, "")
+    return {
+        "displayName": spec["name"], "displayTag": spec["tag"], "displayDescription": description,
+        "displayOrder": spec["order"], "regimeLabel": spec["regime"],
+    }
+
+
+def hidden_base_config(code: str) -> dict[str, Any]:
+    return {"inclusion": "INCLUDED", "hideInProposal": True, "notes": HIDDEN_BASE_COVERAGES[code]}
+
+
 # Art. 21.º — carências em dias; acidente ou doença súbita com internamento: sem carência.
 WAITING_DAYS = {
     "DISEASE": {"days": 30},
@@ -170,6 +215,7 @@ def coverage_config(code: str, level_key: str) -> dict[str, Any] | None:
         config["destinations"] = [t for t in _level(level_key)["territory"] if t != "Angola"] or ["A definir"]
     if spec.get("notes"):
         config["notes"] = spec["notes"]
+    config.update(display_config(code, level_key))
     return config
 
 
@@ -267,7 +313,7 @@ def reference_premiums(group: bool) -> dict[str, Any]:
 def custom_rules(group: bool) -> dict[str, Any]:
     if group:
         rule = {
-            "name": f"Desconto comercial de grupo — mais de {GROUP_DISCOUNT['more_than']} pessoas seguras",
+            "name": f"Desconto comercial de grupo · mais de {GROUP_DISCOUNT['more_than']} Pessoas Seguras ({GROUP_DISCOUNT['percent']}%)",
             "active": True, "scope": "QUOTE", "field": "members_count", "operator": "GT",
             "value": str(GROUP_DISCOUNT["more_than"]), "field_2": "segment", "operator_2": "EQ", "value_2": "GROUP",
             "action": "DISCOUNT_PERCENT", "amount": GROUP_DISCOUNT["percent"], "order": 10,
@@ -275,7 +321,7 @@ def custom_rules(group: bool) -> dict[str, Any]:
         }
     else:
         rule = {
-            "name": f"Desconto comercial — agregado com {FAMILY_DISCOUNT['min_members']} ou mais pessoas",
+            "name": f"Desconto comercial · Agregado Familiar com {FAMILY_DISCOUNT['min_members']} ou mais Pessoas Seguras ({FAMILY_DISCOUNT['percent']}%)",
             "active": True, "scope": "QUOTE", "field": "members_count", "operator": "GTE",
             "value": str(FAMILY_DISCOUNT["min_members"]), "field_2": "segment", "operator_2": "EQ",
             "value_2": "INDIVIDUAL_FAMILY", "action": "DISCOUNT_PERCENT", "amount": FAMILY_DISCOUNT["percent"],

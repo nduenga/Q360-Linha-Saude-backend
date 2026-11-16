@@ -91,6 +91,7 @@ GROUPS: dict[str, dict[str, Any]] = {
     "pricingLine": {"label": "Linhas do c\u00e1lculo do pr\u00e9mio", "fields": {"member": "Pessoa", "code": "C\u00f3digo do componente", "type": "Tipo", "base": "Base", "factor": "Fator", "adjustment": "Ajuste", "result": "Resultado acumulado", "ageBand": "Faixa et\u00e1ria efetivamente usada", "source": "Origem", "sourceVersion": "Vers\u00e3o da origem"}},
     "paymentOption": {"label": "Op\u00e7\u00f5es indicativas de pagamento", "fields": {"frequency": "Periodicidade", "count": "N\u00famero de presta\u00e7\u00f5es", "amount": "Valor por presta\u00e7\u00e3o", "total": "Total nesta periodicidade", "loadingPct": "Acr\u00e9scimo por fracionamento", "paymentSummary": "Resumo do fracionamento", "indicative": "Simula\u00e7\u00e3o indicativa"}},
     "adjustment": {"label": "Ajustes do pr\u00e9mio", "fields": {"text": "Ajuste aplicado"}},
+    "premiumBreakdown": {"label": "Prémio comercial e descontos", "fields": {"label": "Descrição", "amount": "Valor"}},
     "participationOption": {"label": "Op\u00e7\u00e3o de participa\u00e7\u00e3o", "fields": {"code": "C\u00f3digo", "name": "Nome", "annualDeductible": "Franquia anual", "copayPerConsultation": "Copagamento por consulta", "reimbursementPct": "Percentagem de reembolso", "premiumAdjustmentPct": "Ajuste no pr\u00e9mio (%)", "hospitalOnly": "Aplic\u00e1vel apenas a hospitaliza\u00e7\u00e3o"}},
     "requiredDocument": {"label": "Documentos necess\u00e1rios", "fields": {"documentType": "Tipo de documento", "description": "Descri\u00e7\u00e3o"}},
     "businessText": {"label": "Informa\u00e7\u00f5es do produto", "fields": {"title": "T\u00edtulo", "text": "Texto"}},
@@ -492,7 +493,72 @@ def _xml_group_of(element) -> str | None:
     return _group_of(text)
 
 
-def _fill_word_xml(data: bytes, scalar_resolve, groups: dict[str, list[dict[str, str]]]) -> bytes:
+VALUE_COLORS_PROPERTY = "q360.valueColors"
+_MARKER_FIELD = re.compile(r"\{\{\s*([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\s*\}\}")
+
+
+def value_color_rules(data: bytes) -> dict[str, list[dict[str, Any]]]:
+    """Regras de cor por valor guardadas no próprio Word (propriedade
+    personalizada `q360.valueColors`, JSON). Exemplo, por lista:
+    `{"coverage": [{"field": "copay", "equals": ["Isento"], "color": "0F8A8C",
+    "otherwise": "14272A"}]}` — a cor do texto da célula passa a depender do
+    valor, como no modelo da seguradora, em vez de ficar presa à linha-modelo.
+    `fields` (opcional) aplica a cor a outras células da mesma linha."""
+    import json
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as package:
+            if "docProps/custom.xml" not in package.namelist():
+                return {}
+            root = etree.fromstring(package.read("docProps/custom.xml"))
+    except (zipfile.BadZipFile, etree.XMLSyntaxError):
+        return {}
+    for prop in root:
+        if prop.get("name") == VALUE_COLORS_PROPERTY:
+            try:
+                rules = json.loads("".join(prop.itertext()))
+            except ValueError:
+                return {}
+            return rules if isinstance(rules, dict) else {}
+    return {}
+
+
+def _runs_by_field(element, group: str) -> dict[str, list]:
+    found: dict[str, list] = {}
+    for node in element.xpath(".//w:t", namespaces=_W):
+        for match in _MARKER_FIELD.finditer(node.text or ""):
+            if match.group(1) == group:
+                found.setdefault(match.group(2), []).append(node.getparent())
+    return found
+
+
+def _set_run_color(run, color: str) -> None:
+    properties = run.find(f"{{{_W['w']}}}rPr")
+    if properties is None:
+        properties = etree.SubElement(run, f"{{{_W['w']}}}rPr")
+        run.remove(properties)
+        run.insert(0, properties)
+    node = properties.find(f"{{{_W['w']}}}color")
+    if node is None:
+        node = etree.SubElement(properties, f"{{{_W['w']}}}color")
+    node.set(f"{{{_W['w']}}}val", color)
+    for theme_attr in ("themeColor", "themeShade", "themeTint"):
+        node.attrib.pop(f"{{{_W['w']}}}{theme_attr}", None)
+
+
+def _apply_value_colors(runs: dict[str, list], item: dict[str, str], rules: list[dict[str, Any]]) -> None:
+    for rule in rules:
+        hit = item.get(rule.get("field")) in (rule.get("equals") or [])
+        color = rule.get("color") if hit else rule.get("otherwise")
+        if not color:
+            continue
+        for field in rule.get("fields") or [rule.get("field")]:
+            for run in runs.get(field, []):
+                _set_run_color(run, color)
+
+
+def _fill_word_xml(data: bytes, scalar_resolve, groups: dict[str, list[dict[str, str]]], color_rules=None) -> bytes:
+    color_rules = color_rules or {}
     root = etree.fromstring(data)
     # Avoid serialising a story that contains no marker at all. Besides being
     # faster, this keeps unrelated notes/comments byte-for-byte identical.
@@ -543,9 +609,12 @@ def _fill_word_xml(data: bytes, scalar_resolve, groups: dict[str, list[dict[str,
                 for item_index, item in enumerate(items):
                     clone = copy.deepcopy(template_rows[item_index % len(template_rows)])
                     generated_rows.append(clone)
+                    runs = _runs_by_field(clone, group) if color_rules.get(group) else {}
                     resolver = _group_resolver(group, item)
                     for paragraph in clone.xpath(".//w:p", namespaces=_W):
                         _replace_xml_paragraph(paragraph, resolver)
+                    if runs:
+                        _apply_value_colors(runs, item, color_rules[group])
 
             for row in template_rows:
                 parent.remove(row)
@@ -576,12 +645,13 @@ def _fill_without_rewriting_template(data: bytes, scalars: dict[str, Any], group
         value = scalars.get(name)
         return "—" if value in (None, "") else str(value)
 
+    color_rules = value_color_rules(data)
     source, output = io.BytesIO(data), io.BytesIO()
     with zipfile.ZipFile(source, "r") as original, zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as copied:
         for entry in original.infolist():
             part = original.read(entry.filename)
             if _is_word_text_part(entry.filename):
-                part = _fill_word_xml(part, scalar_resolve, clean_groups)
+                part = _fill_word_xml(part, scalar_resolve, clean_groups, color_rules)
             copied.writestr(entry, part)
     return output.getvalue()
 
@@ -610,6 +680,56 @@ def fill(data: bytes, *, scalars: dict[str, Any], groups: dict[str, list[dict[st
 
 
 # --------------------------------------------------------------- dados
+def _percent(value: Any) -> str:
+    """«3.00» -> «3%»; «2.5» -> «2,5%» (vírgula decimal, sem zeros a mais)."""
+    number = Decimal(str(value)).normalize()
+    text = f"{number:f}"
+    if "." in text:
+        text = text.rstrip("0").rstrip(".").replace(".", ",")
+    return f"{text}%"
+
+
+def _short_relationship(person: dict[str, Any], content: dict[str, Any]) -> str | None:
+    """Relação como a seguradora a escreve na tabela de prémios."""
+    category = person.get("relationshipCategory")
+    sex = (person.get("sex") or "").upper()
+    if category == "TITULAR":
+        individual = (content.get("plan") or {}).get("segmentCode") != "GROUP"
+        return "Tomador do Seguro / Pessoa Segura" if individual else "Titular"
+    if category == "COLLABORATOR":
+        return "Colaborador"
+    if category == "SPOUSE":
+        return "Cônjuge"
+    if category in ("CHILD", "DESCENDANT"):
+        return {"F": "Filha", "M": "Filho"}.get(sex, "Filho(a)")
+    return person.get("relationship")
+
+
+def premium_breakdown(content: dict[str, Any]) -> list[dict[str, str]]:
+    """Prémio comercial e descontos/agravamentos da cotação, nas linhas da tabela
+    de prémios. Sem ajustes à cotação a lista fica vazia e as linhas saem."""
+    premium = content.get("premium") or {}
+    currency = premium.get("currency") or "AOA"
+    adjustments = [line for line in premium.get("quoteLevel", []) if line.get("adjustment") not in (None, "", "0", "0.00")]
+    if not adjustments:
+        return []
+    gross = sum((Decimal(str(m.get("total") or "0")) for m in premium.get("members", [])), Decimal("0"))
+    people = len(content.get("population", []))
+    group = (content.get("plan") or {}).get("segmentCode") == "GROUP"
+    rows = [{
+        "label": f"Prémio comercial · {people} Pessoas Seguras" if group else "Prémio comercial",
+        "amount": format_insurer_money(gross, currency),
+    }]
+    for line in adjustments:
+        amount = Decimal(str(line["adjustment"]))
+        sign = "– " if amount < 0 else "+ "
+        rows.append({
+            "label": line.get("label") or line.get("code") or "Ajuste",
+            "amount": sign + format_insurer_money(abs(amount), currency),
+        })
+    return rows
+
+
 def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, str] | None = None) -> dict[str, list[dict[str, Any]]]:
     """Listas a partir do conteúdo estruturado da proposta/apólice."""
     import json
@@ -670,24 +790,37 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
             non_contracted_label += f" ({c['nonContractedReasonNote']})"
         network_pct = c.get("networkCoinsurancePct")
         reimbursement_pct = c.get("reimbursementCoinsurancePct")
-        coinsurance = network_pct if network_pct not in (None, "") else reimbursement_pct
+        coinsurance = c.get("coinsurancePct")
+        if coinsurance in (None, ""):
+            coinsurance = network_pct if network_pct not in (None, "") else reimbursement_pct
+        configured = bool(c.get("participationConfigured"))
         if coinsurance not in (None, ""):
-            coinsurance = f"{Decimal(str(coinsurance)).normalize():f}%"
+            coinsurance = _percent(coinsurance)
+        elif configured:
+            # Participação configurada sem percentagem: a seguradora paga a totalidade.
+            coinsurance = "100%"
         network_copay = c.get("networkCopay")
         reimbursement_copay = c.get("reimbursementCopay")
         copay = network_copay or reimbursement_copay
+        if copay:
+            copay = f"{_format_insurer_money_text(copay, c.get('currency'))} / consulta"
+        elif configured:
+            copay = "Isento"
         capital_summary = c.get("summaryCapital") or {}
         limits = c.get("limits") or []
         inclusion_label = "Cobertura base" if c.get("inclusion") == "INCLUDED" else "Cobertura opcional"
+        category_label = c.get("displayTag") or {"BASE": "Base", "COMPLEMENTARY": "Complementar"}.get(
+            c.get("category"), c.get("category")
+        )
         coverage.append({
             "name": c.get("name"),
             "capital": (
                 "Não contratada" if not contracted else
                 capital_summary.get("value") or (limits[0] if limits else "Conforme plano")
             ),
-            "details": c.get("notes") or inclusion_label,
+            "details": c.get("displayDescription") or c.get("notes") or inclusion_label,
             "coinsurance": coinsurance if contracted and coinsurance else ("—" if not contracted else "Conforme plano"),
-            "copay": _format_insurer_money_text(copay, c.get("currency")) if contracted and copay else ("—" if not contracted else "Conforme plano"),
+            "copay": copay if contracted and copay else ("—" if not contracted else "Conforme plano"),
             "limits": "; ".join(c.get("limits") or []) if contracted else "—",
             "participation": "; ".join(c.get("participation") or []) if contracted else "—",
             "waiting": c.get("waiting"),
@@ -697,8 +830,9 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
             "reimbursementCoinsurancePct": c.get("reimbursementCoinsurancePct"),
             "networkAnnualDeductible": c.get("networkAnnualDeductible"),
             "reimbursementAnnualDeductible": c.get("reimbursementAnnualDeductible"),
-            "category": c.get("category"), "inclusion": c.get("inclusion"),
-            "regime": c.get("participationRegime") if contracted else non_contracted_label,
+            "category": category_label, "inclusion": c.get("inclusion"),
+            "regime": (c.get("regimeLabel") or c.get("participationRegime")) if contracted else "—",
+            "status": "Contratada" if contracted else non_contracted_label,
             "destinations": display(c.get("destinations")) if contracted else "—",
             "closedDiseaseList": display(c.get("closedDiseaseList")),
             "maxDaysPerYear": c.get("maxDaysPerYear"),
@@ -720,7 +854,7 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
         age_band = next((line.get("ageBand") for line in item.get("lines", []) if line.get("ageBand")), None)
         premium_by_member.append({
             "name": item.get("name"),
-            "relationship": person.get("relationship"),
+            "relationship": _short_relationship(person, content),
             "age": person.get("age"),
             "ageBand": age_band_label(age_band),
             "total": format_insurer_money(item.get("total"), content.get("premium", {}).get("currency")),
@@ -753,22 +887,24 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
     ]
     currency = content.get("premium", {}).get("currency") or "AOA"
     payment_frequency_labels = {
-        "ANUAL": "Anual",
-        "SEMESTRAL": "Semestral",
-        "TRIMESTRAL": "Trimestral",
-        "MENSAL": "Mensal",
+        "ANUAL": "ANUAL",
+        "SEMESTRAL": "SEMESTRAL",
+        "TRIMESTRAL": "TRIMESTRAL",
+        "MENSAL": "MENSAL",
     }
+    currency_symbol = "Kz" if currency.upper() == "AOA" else currency.upper()
     payment_options = []
     for row in content.get("premium", {}).get("paymentOptions", []):
         loading = row.get("loadingPct")
         count = row.get("count")
-        summary = "fracção única" if count == 1 else f"× {count} fracções"
-        if loading not in (None, "", "0", "0.0", "0.00"):
-            summary += f" · +{display(loading)}%"
+        # Como no modelo da seguradora: o valor sem moeda e, por baixo, «Kz × 2 fracções · +3%».
+        summary = f"{currency_symbol} · fracção única" if count == 1 else f"{currency_symbol} × {count} fracções"
+        if loading not in (None, "") and Decimal(str(loading)) != 0:
+            summary += f" · +{_percent(loading)}"
         payment_options.append({
             "frequency": payment_frequency_labels.get(row.get("frequency"), row.get("frequency")),
             "count": count,
-            "amount": format_insurer_money(row.get("installmentAmount"), currency),
+            "amount": format_insurer_money(row.get("installmentAmount"), currency).removesuffix(f" {currency_symbol}"),
             "total": format_insurer_money(row.get("totalAmount"), currency),
             "loadingPct": loading,
             "paymentSummary": summary,
@@ -783,7 +919,7 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
     for row in content.get("premium", {}).get("byRelationship", []):
         relationship = str(row.get("relationship") or "")
         normalized = relationship.casefold()
-        if "titular" in normalized or "tomador" in normalized or "employee" in normalized:
+        if "titular" in normalized or "tomador" in normalized or "employee" in normalized or "colaborador" in normalized:
             category = "Colaboradores (titulares)"
         elif "cônjuge" in normalized or "conjuge" in normalized or "spouse" in normalized:
             category = "Cônjuges"
@@ -814,6 +950,7 @@ def groups_from_content(content: dict[str, Any], *, policy_members: dict[str, st
         "requiredDocument": required_documents,
         "businessText": business_texts,
         "adjustment": [{"text": text} for text in content.get("premium", {}).get("adjustments", [])],
+        "premiumBreakdown": premium_breakdown(content),
         "exclusion": [{"text": t} for t in content.get("exclusions", [])],
         "condition": [{"text": t} for t in content.get("conditions", [])],
         "waiting": [{"coverage": w.get("coverage"), "text": w.get("text")} for w in content.get("waiting", [])],
