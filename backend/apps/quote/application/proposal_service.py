@@ -74,9 +74,35 @@ _PROTTEJA_SAMPLE_QUOTE_NUMBERS = {
     "PROTTEJA_PREMIUM_PLUS_GRUPO": "SIM-SAU-2026-PPL-G047",
 }
 
+_PROTTEJA_TEMPLATE_PLAN_CODES = {
+    "PROTTEJA_BUSINESS_INDIVIDUAL": "PROTTEJA-BUS-IND",
+    "PROTTEJA_BUSINESS_GRUPO": "PROTTEJA-BUS-GRP",
+    "PROTTEJA_BUSINESS_PLUS_INDIVIDUAL": "PROTTEJA-BPL-IND",
+    "PROTTEJA_BUSINESS_PLUS_GRUPO": "PROTTEJA-BPL-GRP",
+    "PROTTEJA_PREMIUM_INDIVIDUAL": "PROTTEJA-PRE-IND",
+    "PROTTEJA_PREMIUM_GRUPO": "PROTTEJA-PRE-GRP",
+    "PROTTEJA_PREMIUM_PLUS_INDIVIDUAL": "PROTTEJA-PPL-IND",
+    "PROTTEJA_PREMIUM_PLUS_GRUPO": "PROTTEJA-PPL-GRP",
+}
+
 
 def _template_header_label(template: DocumentTemplateVersion, content: dict[str, Any]) -> str:
     return _PROTTEJA_TEMPLATE_LABELS.get(template.template_code, content["plan"].get("name") or "")
+
+
+def _validate_template_plan(*, quote: Quote, template: DocumentTemplateVersion) -> None:
+    """Prevent branding a quote with a Protteja template for a different plan.
+
+    Selecting a document template changes its layout and wording; it must not
+    silently change the quote's actual product, benefits, or premium.
+    """
+    expected_plan_code = _PROTTEJA_TEMPLATE_PLAN_CODES.get(template.template_code)
+    if expected_plan_code and quote.plan.code != expected_plan_code:
+        raise ProposalRequestError(
+            f"O modelo {template.template_code} corresponde ao plano {expected_plan_code}, "
+            f"mas esta cotação usa {quote.plan.code} ({quote.plan.name}). "
+            "Selecione uma cotação do produto/plano Protteja correspondente e recalcule o prémio."
+        )
 
 
 class ProposalError(DomainProblem):
@@ -133,8 +159,9 @@ def _content_for(quote: Quote, scenario: QuoteScenario | None, render: Callable)
 
 def preview(*, quote: Quote, scenario_id, template_code: str | None, fmt: str, render: Callable) -> tuple[bytes, str]:
     scenario = _scenario_for(quote, scenario_id)
-    content = _content_for(quote, scenario, render)
     template = resolve_template(code=template_code or document_service.DEFAULT_TEMPLATE_CODE, effective_date=quote.reference_date)
+    _validate_template_plan(quote=quote, template=template)
+    content = _content_for(quote, scenario, render)
     return _render(content, template, fmt, document_number=None)
 
 
@@ -191,8 +218,9 @@ def generate(
     if fmt not in proposal_layout.RENDERERS:
         raise ProposalRequestError(f"O formato tem de ser um de {list(FORMATS)}")
     scenario = _scenario_for(quote, scenario_id)
-    content = _content_for(quote, scenario, render)
     template = resolve_template(code=template_code or document_service.DEFAULT_TEMPLATE_CODE, effective_date=quote.reference_date)
+    _validate_template_plan(quote=quote, template=template)
+    content = _content_for(quote, scenario, render)
 
     actor = CurrentActorProvider.get()
     actor_id = actor.actor_id if actor else "unknown"

@@ -209,10 +209,17 @@ class _ReferencePricing(DefaultPricingCommand):
         return capitals, list(waiting.values())
 
     def _seed_business_config(self) -> None:
+        supported_plan_codes = tuple(code for code in self.plan_codes if code in PLAN_MULTIPLIER)
+        unsupported_plan_codes = tuple(code for code in self.plan_codes if code not in PLAN_MULTIPLIER)
+        if unsupported_plan_codes:
+            self.stdout.write(self.style.WARNING(
+                "Planos existentes sem tarifa de referência definida foram preservados e ignorados: "
+                + ", ".join(unsupported_plan_codes)
+            ))
         premiums = [
             {"plan": code, "age_from": lo, "age_to": hi,
              "annual_premium": str((Decimal(base) * Decimal(PLAN_MULTIPLIER[code])).quantize(Decimal("1")))}
-            for code in self.plan_codes for lo, hi, base in AGE_BANDS
+            for code in supported_plan_codes for lo, hi, base in AGE_BANDS
         ]
         self._publish("pricing.reference_premiums", {"currency_code": "AOA", "premiums": premiums})
         self._publish("pricing.factors", {"factors": [
