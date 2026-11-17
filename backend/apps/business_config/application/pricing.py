@@ -143,8 +143,23 @@ _RELATIONSHIP_ALIASES = {"COLLABORATOR": "TITULAR"}
 def resolve_reference_premium(
     *, pricing: PublishedBusinessPricing, plan, age: int, relationship: str | None = None,
 ) -> Decimal:
-    """Prémio anual de referência da pessoa. Uma linha com `relationship`
-    (p. ex. CHILD 0–24) prevalece sobre a linha só por idade do mesmo plano."""
+    """Prémio anual de referência da pessoa (ver `match_reference_premium`)."""
+    row = match_reference_premium(pricing=pricing, plan=plan, age=age, relationship=relationship)
+    return Decimal(str(row["annual_premium"]))
+
+
+def reference_age_band(row: dict[str, Any]) -> str:
+    """Escalão etário da linha de tarifa usada: «36-50» ou «66+»."""
+    if row.get("age_to") in (None, ""):
+        return f"{int(row['age_from'])}+"
+    return f"{int(row['age_from'])}-{int(row['age_to'])}"
+
+
+def match_reference_premium(
+    *, pricing: PublishedBusinessPricing, plan, age: int, relationship: str | None = None,
+) -> dict[str, Any]:
+    """Linha da tarifa de referência que vale para a pessoa. Uma linha com
+    `relationship` (p. ex. CHILD 0–24) prevalece sobre a linha só por idade."""
     rows = pricing.reference_premiums.get("premiums")
     if not isinstance(rows, list) or not rows:
         raise PricingConfigError("'pricing.reference_premiums.premiums' deve conter pelo menos uma tarifa.")
@@ -185,7 +200,7 @@ def resolve_reference_premium(
             f"foram encontradas {len(matches)}."
         )
 
-    return Decimal(str(matches[0]["annual_premium"]))
+    return matches[0]
 
 
 def resolve_factors(*, pricing: PublishedBusinessPricing, context: dict[str, Any]) -> list[dict[str, Any]]:

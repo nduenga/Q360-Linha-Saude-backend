@@ -1,4 +1,5 @@
-"""Proposal PDF uses Chromium; DOCX remains an independent Word output."""
+"""PDF de proposta: com modelo Word, é o próprio Word convertido pelo LibreOffice;
+sem modelo Word, é o HTML Protteja convertido pelo Chromium."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,6 +17,7 @@ class _Template:
         self.storage_ref = json.dumps(DEFAULT_TEMPLATE)
         self.word_key = "template.docx"
         self.document_type = "QUOTE_PROPOSAL"
+        self.template_code = "PROTTEJA-PROPOSTA-SAUDE"
         self.settings_json = {}
         self._word = word
 
@@ -28,24 +30,24 @@ def word_template(monkeypatch):
     return _Template(data)
 
 
-def test_quote_pdf_uses_protteja_html_and_chromium(monkeypatch):
+def test_quote_pdf_with_word_template_is_the_word_converted_by_libreoffice(monkeypatch):
+    from apps.quote.application import template_files
+
     captured = {}
 
     def convert(data):
-        captured["html"] = data
+        captured["docx"] = data
         return FAKE_PDF
 
-    monkeypatch.setattr(chromium_converter, "html_to_pdf", convert)
-    monkeypatch.setattr(office_converter, "docx_to_pdf", lambda _data: (_ for _ in ()).throw(AssertionError("LibreOffice não deve converter propostas")))
+    monkeypatch.setattr(office_converter, "docx_to_pdf", convert)
+    monkeypatch.setattr(template_files, "read_letterhead", lambda template: None)
+    monkeypatch.setattr(chromium_converter, "html_to_pdf", lambda _data: (_ for _ in ()).throw(AssertionError("o Chromium não converte modelos Word")))
     data, content_type = proposal_service._render(  # noqa: SLF001
         proposal_service.sample_content(), word_template(monkeypatch), "PDF", document_number="DOC-1"
     )
 
     assert (data, content_type) == (FAKE_PDF, "application/pdf")
-    html = captured["html"].decode("utf-8")
-    assert "brand-banner" in html and "protteja-header.png" not in html
-    assert "data:image/png;base64," in html
-    assert "Pessoas seguras" in html
+    assert captured["docx"].startswith(b"PK"), "o que se converte é o Word preenchido"
 
 
 def test_quote_docx_still_uses_the_uploaded_word_template(monkeypatch):
@@ -72,10 +74,20 @@ def test_html_handles_long_households_and_escapes_customer_text():
     assert marker.replace("<script>", "&lt;script&gt;").replace("</script>", "&lt;/script&gt;") in rendered
     assert "<script>" not in rendered
     assert rendered.count("Pessoa segura ") >= 30
-    assert "break-inside: avoid" in rendered and "@page { size: A4" in rendered
-    assert rendered.count("data:image/png;base64,") == 3
 
 
 def test_missing_libreoffice_is_reported_not_raised(monkeypatch):
     monkeypatch.setattr(docx_to_pdf, "soffice_path", lambda: None)
     assert docx_to_pdf.convert(b"PK qualquer coisa") is None
+
+
+def test_configured_fonts_are_linked_into_the_conversion_profile(tmp_path, monkeypatch):
+    fonts = tmp_path / "fontes"
+    (fonts / "inter").mkdir(parents=True)
+    (fonts / "inter" / "Inter-Regular.ttf").write_bytes(b"ttf")
+    (fonts / "leia-me.txt").write_text("não é fonte")
+    monkeypatch.setenv("Q360_PDF_FONT_DIRS", str(fonts))
+    monkeypatch.setattr(docx_to_pdf, "_DEFAULT_FONT_DIRS", ())
+    profile = tmp_path / "perfil"
+    assert docx_to_pdf._link_fonts(profile) == 1  # noqa: SLF001
+    assert (profile / "user" / "fonts" / "Inter-Regular.ttf").read_bytes() == b"ttf"

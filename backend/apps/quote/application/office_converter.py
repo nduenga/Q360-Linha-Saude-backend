@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 
 from django.conf import settings
@@ -12,7 +13,25 @@ from django.conf import settings
 from apps.foundation.domain.problem import DomainProblem
 
 MAX_OUTPUT_BYTES = 50 * 1024 * 1024
-CONVERSION_TIMEOUT_SECONDS = 45
+CONVERSION_TIMEOUT_SECONDS = 120
+
+# O LibreOffice demora ~10 s a criar um perfil novo. Cada processo da API usa um
+# perfil próprio, criado uma vez e reutilizado; o cadeado impede duas conversões
+# em simultâneo no mesmo perfil (cada worker do gunicorn é um processo à parte).
+_PROFILE_LOCK = threading.Lock()
+_PROFILE_DIR: Path | None = None
+
+
+def _profile_dir() -> Path:
+    global _PROFILE_DIR
+    if _PROFILE_DIR is None or not _PROFILE_DIR.is_dir():
+        _PROFILE_DIR = Path(tempfile.mkdtemp(prefix=f"q360-office-profile-{os.getpid()}-"))
+        from apps.quote.application.docx_to_pdf import _link_fonts
+
+        # Sem isto, o LibreOffice ignora as fontes do utilizador (ex.: Inter da
+        # Protteja em ~/Library/Fonts) e troca-as, mudando o aspeto do PDF.
+        _link_fonts(_PROFILE_DIR)
+    return _PROFILE_DIR
 
 
 class OfficeConversionError(DomainProblem):
@@ -55,7 +74,7 @@ def _binary() -> str | None:
 
 
 def docx_to_pdf(docx_bytes: bytes) -> bytes:
-    """Converte DOCX sem shell, perfil ou diretório de saída partilhados."""
+    """Converte DOCX sem shell e com diretório de saída próprio; o perfil é o do processo."""
     binary = _binary()
     if not binary:
         raise OfficeConversionError(
@@ -63,14 +82,13 @@ def docx_to_pdf(docx_bytes: bytes) -> bytes:
         )
 
     try:
-        with tempfile.TemporaryDirectory(prefix="q360-office-") as temporary:
+        with _PROFILE_LOCK, tempfile.TemporaryDirectory(prefix="q360-office-") as temporary:
             root = Path(temporary)
             source_dir = root / "source"
             output_dir = root / "output"
-            profile_dir = root / "profile"
+            profile_dir = _profile_dir()
             source_dir.mkdir()
             output_dir.mkdir()
-            profile_dir.mkdir()
             source = source_dir / "document.docx"
             output = output_dir / "document.pdf"
             source.write_bytes(docx_bytes)

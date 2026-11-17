@@ -3,6 +3,12 @@ from .base import *
 DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
+# Local development makes frequent API calls while rendering quote forms and
+# previews. Keep the global production request guard disabled in this
+# settings module; production continues to use the base limit / deployment
+# configuration.
+RATE_LIMIT_REQUESTS = 0
+
 # S01-PERSISTENCE-001 (see OPEN_DECISIONS.md): PostgreSQL is mandatory, not
 # optional, in every environment. The foundation migration
 # (apps/foundation/infrastructure/migrations/0001_foundation_baseline.py)

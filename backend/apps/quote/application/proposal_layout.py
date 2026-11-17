@@ -60,8 +60,31 @@ def variables_for(content: dict[str, Any], *, document_number: str | None, gener
         "premium.total": premium["totalText"],
         "premium.totalText": premium["totalText"],
         "premium.currency": premium["currency"],
+        **_monthly_variables(content),
         "scenario.name": (meta["scenario"] or {}).get("name"),
         "insured.count": len(content["population"]),
+    }
+
+
+def _monthly_variables(content: dict[str, Any]) -> dict[str, Any]:
+    """Equivalente mensal do prémio anual (por agregado e por colaborador titular),
+    arredondado ao kwanza, como nas propostas das seguradoras."""
+    from decimal import ROUND_HALF_UP, Decimal
+
+    from apps.quote.application.word_template import format_insurer_money
+
+    premium = content["premium"]
+    total = Decimal(str(premium.get("total") or "0"))
+    holders = sum(
+        1 for person in content.get("population", [])
+        if person.get("relationshipCategory") in ("TITULAR", "COLLABORATOR")
+    ) or 1
+    currency = premium.get("currency")
+    monthly = (total / 12).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    per_holder = (total / holders / 12).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    return {
+        "premium.monthly": format_insurer_money(monthly, currency),
+        "premium.monthlyPerHolder": format_insurer_money(per_holder, currency),
     }
 
 

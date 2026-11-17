@@ -114,7 +114,14 @@ class PricingComponentSerializer(serializers.Serializer):
     # Expose only the user-facing tariff fact needed by proposals, not the
     # component's internal metadata/configuration payload.
     ageBand = serializers.SerializerMethodField()
+    note = serializers.SerializerMethodField()
     installmentAmounts = serializers.SerializerMethodField()
+
+    def get_note(self, obj) -> str | None:
+        """Nome da regra que gerou um ajuste (ex.: o desconto comercial), para a proposta."""
+        metadata = obj.metadata_json or {}
+        value = metadata.get("rule") or metadata.get("message")
+        return str(value) if value not in (None, "") else None
 
     def get_ageBand(self, obj) -> str | None:
         value = (obj.metadata_json or {}).get("ageBand")

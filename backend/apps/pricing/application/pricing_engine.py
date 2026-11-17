@@ -85,6 +85,8 @@ from apps.business_config.application.pricing import (
     resolve_adjustments as resolve_business_adjustments,
     resolve_factors as resolve_business_factors,
     resolve_published_business_pricing,
+    match_reference_premium,
+    reference_age_band,
     resolve_reference_premium,
     resolve_actuarial_coverage_premiums,
     resolve_actuarial_commercial_discount,
@@ -611,6 +613,7 @@ def _run_calculation(
     # (same input -> same component order -> same output, S4-02 AC).
     for member_id in member_ids:
         member = members_by_id[str(member_id)]
+        reference_band = None
         # Plan/selection dimensions first, the member's own values win.
         member_context = {
             **plan_context.dimensions,
@@ -724,14 +727,15 @@ def _run_calculation(
                 )
                 order += 1
         elif business_pricing is not None:
-            running_amount = round_amount(
-                resolve_reference_premium(
-                    pricing=business_pricing,
-                    plan=plan,
-                    age=member_context["age"],
-                    relationship=relationship_categories.get(member.relationship_code),
-                )
+            reference_row = match_reference_premium(
+                pricing=business_pricing,
+                plan=plan,
+                age=member_context["age"],
+                relationship=relationship_categories.get(member.relationship_code),
             )
+            running_amount = round_amount(Decimal(str(reference_row["annual_premium"])))
+            # O escalão usado fica no componente: a proposta mostra-o («36–50 anos»).
+            reference_band = reference_age_band(reference_row)
         else:
             if base_premium is None:
                 raise PricingConfigError("A tarifação legada exige BASE_PREMIUM.")
@@ -747,6 +751,7 @@ def _run_calculation(
                 component_type=PricingComponentType.BASE.value,
                 base_amount=running_amount,
                 result_amount=running_amount,
+                metadata_json={"ageBand": reference_band} if reference_band else {},
             )
             trace(
                 "BASE_APPLIED",
