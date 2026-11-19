@@ -353,7 +353,7 @@ def test_waiting_periods_evacuation_terms_and_network_warning(admin_client):
     terms = next(i for i in result["info"] if i["code"] == "EVACUATION_TERMS")
     assert terms["destinations"] == ["Portugal", "Brasil"] and terms["currency"] == "USD" and "risco cambial" in terms["message"]
     waiting = {w["coverage"]: w for w in result["waitingPeriods"]}
-    assert waiting["HOSPITALIZATION"] == {"coverage": "HOSPITALIZATION", "days": 90, "scheduledSurgeryDays": 180, "accidentWaived": True}
+    assert waiting["HOSPITALIZATION"] == {"coverage": "HOSPITALIZATION", "coverageName": "Hospitalização", "days": 90, "scheduledSurgeryDays": 180, "accidentWaived": True}
     assert waiting["MEDICAL_EVACUATION"]["days"] == 180
 
 

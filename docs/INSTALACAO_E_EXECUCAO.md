@@ -15,7 +15,7 @@ Complementa `backend/DEV_SETUP.md` (modos dev/produção) e `GUIA_TESTES.md`
 ```bash
 python -m venv ../.venv          # a partir de backend/: o venv fica na raiz do repositório
 ../.venv/bin/python -m pip install -r requirements.txt          # dev + testes (versões fixas)
-# produção (Render / Dockerfile.prod): requirements.render.txt
+# produção (Dockerfile.prod): requirements.production.txt
 ```
 
 `requirements.txt` foi convertido de UTF-16 para UTF-8 (era gerado pelo

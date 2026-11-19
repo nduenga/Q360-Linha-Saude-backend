@@ -1063,6 +1063,7 @@ class RequirementsMember(s.Serializer):
 
 class WaitingPeriod(s.Serializer):
     coverage = s.CharField()
+    coverageName = s.CharField(help_text="Nome da cobertura, para mostrar no ecrã.")
     days = s.IntegerField(allow_null=True)
     scheduledSurgeryDays = s.IntegerField(allow_null=True)
     accidentWaived = s.BooleanField()

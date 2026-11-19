@@ -421,6 +421,7 @@ def evaluate_requirements(quote: Quote, *, claims_months_available: int | None =
             waiting.append(
                 {
                     "coverage": coverage["code"],
+                    "coverageName": coverage.get("name") or coverage["code"],
                     "days": days.get(key),
                     "scheduledSurgeryDays": days.get("scheduledSurgery"),
                     "accidentWaived": days.get("accidentWaived", settings.get("waitingRules", {}).get("accidentWaived", True)),

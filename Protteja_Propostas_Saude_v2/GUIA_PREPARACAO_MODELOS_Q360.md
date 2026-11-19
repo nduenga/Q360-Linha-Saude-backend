@@ -11,6 +11,8 @@ Este guia aplica-se aos oito ficheiros Word desta pasta. Os ficheiros originais 
 | Premium | `Protteja_Saude_Premium_Individual.docx` | `Protteja_Saude_Premium_Grupo.docx` |
 | Premium Plus | `Protteja_Saude_Premium_Plus_Individual.docx` | `Protteja_Saude_Premium_Plus_Grupo.docx` |
 
+Na geração da proposta, a interface mostra nomes legíveis como **Protteja Saúde · Business Plus · Individual e Familiar** e **Protteja Saúde · Business Plus · Grupo**. Os códigos internos continuam estáveis para o backend.
+
 Os PDFs correspondentes são referências visuais. O PDF só deve ser carregado como fundo/papel timbrado se estiver sem dados do exemplo e sem conteúdo que se sobreponha ao texto gerado.
 
 ## O que é substituído automaticamente
@@ -44,12 +46,15 @@ Exemplo de texto: `Proposta {{quote.number}} para {{client.name}}, válida até 
 
 ### Tabelas de conteúdo variável
 
-Para cada lista, mantenha no documento uma única linha-modelo com os marcadores. O Q360 duplica essa linha para cada item e preenche os campos:
+Para cada lista vertical, mantenha uma linha-modelo com os marcadores. O Q360 duplica a linha para cada item; linhas-modelo consecutivas podem definir as faixas alternadas do modelo. Nas quatro células do fracionamento e nas duas colunas de exclusões, os itens são distribuídos horizontalmente para preservar a disposição original:
 
 | Lista | Marcadores disponíveis |
 | --- | --- |
 | Pessoas seguras | `{{insured.name}}`, `{{insured.relationship}}`, `{{insured.age}}`, `{{insured.status}}` |
-| Coberturas contratadas | `{{coverage.name}}`, `{{coverage.limits}}`, `{{coverage.participation}}`, `{{coverage.waiting}}`, `{{coverage.priorApproval}}` |
+| Coberturas contratadas | `{{coverage.name}}`, `{{coverage.capital}}`, `{{coverage.coinsurance}}`, `{{coverage.copay}}`, `{{coverage.regime}}` |
+| Prémios individuais/familiares | `{{premiumMember.name}}`, `{{premiumMember.relationship}}`, `{{premiumMember.age}}`, `{{premiumMember.ageBand}}`, `{{premiumMember.total}}` |
+| Prémios de grupo | `{{premiumCategory.relationship}}`, `{{premiumCategory.profile}}`, `{{premiumCategory.count}}`, `{{premiumCategory.perCapita}}`, `{{premiumCategory.total}}` |
+| Fracionamento | `{{paymentOption.frequency}}`, `{{paymentOption.amount}}`, `{{paymentOption.paymentSummary}}` |
 | Carências | `{{waiting.coverage}}`, `{{waiting.text}}` |
 | Exclusões | `{{exclusion.text}}` |
 | Condições | `{{condition.text}}` |
@@ -75,7 +80,22 @@ O Q360 preenche marcadores em parágrafos, cabeçalhos, rodapés, tabelas, caixa
 
 Cada variante deve ter uma versão própria preparada e um código de modelo inequívoco (por exemplo, `PROTTEJA_BUSINESS_INDIVIDUAL` e `PROTTEJA_BUSINESS_GRUPO`). Carregue cada DOCX num rascunho do tipo **Proposta de cotação** na Administração de modelos de documentos, associe o código correspondente e use a pré-visualização antes de publicar.
 
-O nome do ficheiro não faz o Q360 selecionar automaticamente o modelo. A cotação tem de pedir o código de modelo correspondente. A seleção automática por produto/plano exige uma associação explícita entre os produtos do catálogo e os códigos dos modelos.
+O nome do ficheiro não faz o Q360 selecionar automaticamente o modelo. Depois de publicados, os oito modelos aparecem na lista **Modelo de documento** ao gerar a proposta; escolha Individual e Familiar ou Grupo e o nível correspondente. A geração envia o código interno do modelo escolhido.
+
+## Carga conjunta no tenant Protteja
+
+O seeder de referência aceita carregar produtos, planos e oito DOCX no mesmo tenant. É necessário indicar uma conta ADMIN Protteja diferente da conta técnica que executa o seed, para respeitar a aprovação por duas pessoas. Exemplo:
+
+```sh
+python3 manage.py seed_full_database --profile reference \
+  --prod-tenant-code protteja --prod-tenant-name 'Protteja Seguros' \
+  --include-protteja --protteja-approver-email admin@protteja.ao \
+  --publish-protteja-example-tariff --admin-email admin@protteja.ao
+```
+
+O ADMIN é criado antes da carga Protteja e aprova as configurações numa identidade distinta da conta técnica que executa o seeder. `--publish-protteja-example-tariff` é uma confirmação explícita: os prémios nos ficheiros de proposta são indicativos e não substituem a tarifa oficial. O comando não apaga nem altera produtos/planos existentes; cria os novos, publica as configurações de teste com a aprovação indicada e deixa os DOCX disponíveis na cotação. A tarifa Individual fornecida pelas propostas não cobre 51–65 anos; o motor continuará a recusar cálculos nessa faixa em vez de inventar um prémio.
+
+Para acrescentar produtos ou planos de teste, edite a lista declarativa e as funções de configuração em `backend/apps/product/seed/protteja_saude.py`, usando códigos únicos. O seed preserva os registos existentes e permite reexecutar a carga sem duplicar produtos, planos ou modelos.
 
 ## Verificação antes de publicar cada modelo
 

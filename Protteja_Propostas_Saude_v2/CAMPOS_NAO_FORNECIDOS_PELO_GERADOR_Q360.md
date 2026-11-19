@@ -27,18 +27,36 @@ O conteúdo da proposta e o esquema `GET /document-templates/schema` passam a di
 - **Contacto do tomador:** email e telefone quando estiverem preenchidos no cadastro.
 - **Regiões da rede:** regiões configuradas no plano; destinos de assistência/evacuação continuam a vir da configuração da cobertura.
 
-Os marcadores repetíveis adicionados incluem `{{premiumMember.name}}`, `{{premiumMember.total}}`, `{{premiumCategory.relationship}}`, `{{pricingLine.ageBand}}`, `{{paymentOption.frequency}}`, `{{coverage.networkCopay}}`, `{{coverage.reimbursementCopay}}`, `{{coverage.destinations}}`, `{{insured.eligibilityDecisionText}}` e `{{insured.preExistingText}}`. O esquema completo é a fonte autoritativa dos nomes e campos aceites.
+Os marcadores repetíveis incluem `{{premiumMember.name}}`, `{{premiumMember.relationship}}`, `{{premiumMember.age}}`, `{{premiumMember.ageBand}}`, `{{premiumMember.total}}`, `{{premiumCategory.relationship}}`, `{{premiumCategory.profile}}`, `{{premiumCategory.count}}`, `{{premiumCategory.perCapita}}`, `{{premiumCategory.total}}`, `{{paymentOption.frequency}}`, `{{paymentOption.amount}}`, `{{paymentOption.paymentSummary}}`, `{{coverage.capital}}`, `{{coverage.coinsurance}}`, `{{coverage.copay}}`, `{{coverage.regime}}`, `{{insured.eligibilityDecisionText}}` e `{{insured.preExistingText}}`. O esquema completo é a fonte autoritativa dos nomes e campos aceites.
 
 ## Campos sem fonte: separar cotação, apólice e dados partilhados
 
 ### Pertencem à cotação ou à proposta comercial
 
-Estes campos fazem sentido antes da emissão e poderiam ser associados à própria cotação, mas o backend ainda não guarda a respetiva fonte:
+Estes campos fazem sentido antes da emissão e poderiam ser associados à própria cotação:
 
-- **Mediador/corretor da cotação** e respetiva licença. Não existe atualmente uma associação do mediador à cotação nem cadastro usado pelo gerador.
-- **Motivo para não contratar uma cobertura opcional.** A disponibilidade e o estado contratado/não contratado vêm do plano e da seleção; não há um motivo comercial registado por cotação.
-- **Declaração de aceitação da proposta e comprovativo.** É um passo de aceitação da cotação, distinto da assinatura do contrato/apólice. O fluxo atual não guarda essa declaração como documento/decisão de aceitação do cliente.
-- **Prémio comercial consolidado antes dos descontos automáticos.** As linhas exatas do motor são fornecidas; não há uma regra aprovada que defina quais componentes compõem esse subtotal. Os ajustes manuais já incluem o motivo registado. Não se deve reconstruir o subtotal somando ou subtraindo linhas.
+- **Motivo para não contratar uma cobertura opcional.** A disponibilidade e o estado contratado/não contratado vêm do plano e da seleção. O motivo comercial pode ser registado opcionalmente por cobertura na cotação e aparece na proposta.
+- **Declaração de aceitação da proposta e comprovativo.** É diferente da assinatura do contrato/apólice. Não é obrigatório preencher este campo na proposta; pode ficar em branco.
+- **Prémio comercial antes dos descontos automáticos.** A fórmula depende de dados que ainda faltam: o prémio puro e os carregamentos em valor, ou o índice de despesas percentual e a confirmação de que é uma percentagem do prémio comercial. Também falta definir que custos entram nos carregamentos e em que ordem os descontos automáticos são aplicados. Até esses dados e a regra estarem configurados no motor, o subtotal não deve ser inferido das linhas de cálculo.
+
+  - Se os carregamentos forem valores: `Prémio comercial = prémio puro + soma dos carregamentos`.
+  - Se o índice `c` for uma fração do próprio prémio comercial: `Prémio comercial = prémio puro / (1 − c)`, com `0 ≤ c < 1`.
+
+### Cenário fictício para testar a fórmula (não é tarifa Protteja)
+
+Use estes valores apenas numa configuração/tenant de desenvolvimento, identificada como **DEMO — não publicar como tarifa oficial**:
+
+| Campo de teste | Valor |
+|---|---:|
+| Prémio puro/técnico antes dos carregamentos | 100.000 Kz |
+| Despesa administrativa (% do prémio comercial) | 10% |
+| Comissão de aquisição (% do prémio comercial) | 5% |
+| Margem da seguradora (% do prémio comercial) | 5% |
+| Desconto comercial automático aplicado depois dos carregamentos | 10% |
+
+Os carregamentos somam 20% do prémio comercial. Logo, o prémio comercial antes do desconto é `100.000 / (1 − 0,20) = 125.000 Kz`. Aplicando o desconto de 10% depois, o resultado antes de impostos é `112.500 Kz`. Se o desconto for aplicado noutra fase, o resultado muda; a ordem acima faz parte deste cenário de teste.
+
+Este cenário serve para confirmar que a proposta distingue o prémio antes e depois do desconto. Não deve ser carregado como valor por omissão nem publicado para uso comercial. Na tarifa real, o atuário/seguradora deve substituir cada percentagem pelos valores aprovados e confirmar a base e a ordem de aplicação.
 
 ### Pertencem à emissão ou à apólice no backend atual
 
@@ -49,19 +67,20 @@ Estes dados só são fixados quando a cotação aprovada é convertida em apóli
 - **Assinatura contratual:** nome, documento, qualidade/capacidade, data e comprovativo. O modelo `PolicySignature` pertence à apólice.
 - **Primeiro pagamento:** método, referência, data, estado e recibo pertencem à prestação/pagamento da apólice. Não devem aparecer numa proposta de cotação como se já tivessem ocorrido.
 
-### Dados institucionais partilhados por cotação e apólice
+### Dados institucionais fixos nos modelos Protteja
 
-- **Dados legais da seguradora** (denominação oficial, registo/licença e contactos legais) não estão configurados como fonte dinâmica. São necessários nos dois documentos, mas devem vir de um cadastro/configuração oficial e versionada da seguradora.
-- **Dados do mediador** também podem ser impressos na cotação e na apólice, mas primeiro é necessário criar o cadastro e associá-lo à cotação; a apólice poderá herdar esse vínculo na emissão.
+Os DOCX Protteja preparados já incluem os elementos institucionais. Devem permanecer como texto fixo do modelo: **Protteja Seguros, S.A.**, **Certificado de Licença Nº 13/ISS/MF/12**, `geral@prottejaseguros.co.ao`, `prottejaseguros.co.ao`, a referência ao **Provedor do Cliente** e à **ARSEG**. O campo de mediador também fica fixo como consta do modelo: **«A indicar na proposta de seguro.»** Não é necessário pedir esses dados na cotação Protteja.
 
 Os contactos do tomador não são uma lacuna de contrato: email e telefone são lidos do cadastro quando preenchidos e podem estar vazios quando não foram registados.
 
 ## Tratamento aplicado nas cópias preparadas
 
 - Os dados de exemplo do tomador, número de referência, datas, número de pessoas e prémio total foram substituídos por marcadores.
-- As tabelas de pessoas e coberturas foram convertidas para linhas-modelo repetíveis pelo Q360.
+- As tabelas de coberturas mantêm a grelha, larguras, cabeçalhos e estilos do modelo oficial; o sistema repete as linhas sem perder as faixas de cor alternadas.
+- A tabela de prémios mantém a composição oficial: por pessoa nos modelos individuais/familiares e por categoria nos modelos de grupo. Os valores por pessoa/categoria e o total anual vêm da cotação.
+- O fracionamento mantém os quatro blocos horizontais do modelo (anual, semestral, trimestral e mensal), preenchidos com os valores calculados para a cotação.
 - A tabela de exclusões e a linha de carências passaram a usar as listas dinâmicas disponíveis.
-- As tabelas de prémio per capita, desconto e fracionamento com valores de exemplo, bem como a estimativa mensal, foram removidas para não apresentar valores fictícios como se fossem resultado da cotação.
+- As linhas de prémio comercial e desconto de exemplo foram removidas porque o gerador não tem uma fonte aprovada para esses subtotais; o total anual continua a ser preenchido. A estimativa mensal fixa também foi removida, pois o quadro de fracionamento já mostra a opção mensal calculada.
 - As restantes descrições de produto, capitais de destaque, território, mediador, condições legais e contactos Protteja continuam como texto fixo nas cópias. Devem ser validados pela seguradora e pelo responsável do produto antes de publicação, pois o gerador atual não os personaliza.
 
 ## Trabalho ainda necessário para preencher os campos sem fonte
