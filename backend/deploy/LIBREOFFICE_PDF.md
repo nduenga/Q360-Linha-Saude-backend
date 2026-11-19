@@ -119,3 +119,20 @@ Os modelos Word são preenchidos para DOCX e convertidos pelo LibreOffice para P
 - **Playwright/Chromium:** atualizar `playwright` nas dependências e reconstruir a imagem Docker para instalar o browser compatível.
 - **Fontes Inter:** repetir o passo de instalação da fonte com o número da nova versão.
 - **Docker:** reconstruir a imagem.
+
+
+## Windows (desenvolvimento local)
+
+O Q360 deteta automaticamente o LibreOffice Writer nas pastas padrão `C:\Program Files\LibreOffice\program` e `C:\Program Files (x86)\LibreOffice\program`, mesmo quando não estão no `PATH`. Instale o LibreOffice Writer e reinicie o Django.
+
+Se a instalação estiver noutro local, adicione ao `backend/.env`:
+
+```dotenv
+Q360_SOFFICE_PATH=C:\Program Files\LibreOffice\program\soffice.com
+```
+
+Confirme a deteção no mesmo ambiente que inicia o Django:
+
+```powershell
+python -c "from apps.quote.application.office_converter import _binary; print(_binary())"
+```

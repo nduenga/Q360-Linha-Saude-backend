@@ -54,6 +54,20 @@ def _binary() -> str | None:
     if on_path:
         return on_path
 
+    # A instalação normal do LibreOffice no Windows não acrescenta a pasta
+    # `program` ao PATH. Detetar o local padrão permite ao Django em dev usar
+    # a instalação já existente sem exigir configuração manual.
+    if os.name == "nt":
+        install_roots = (
+            os.environ.get("PROGRAMFILES"),
+            os.environ.get("PROGRAMFILES(X86)"),
+        )
+        for root in filter(None, install_roots):
+            for executable in ("soffice.com", "soffice.exe"):
+                candidate = Path(root) / "LibreOffice" / "program" / executable
+                if candidate.is_file():
+                    return str(candidate)
+
     # macOS desktop installs do not normally add the app's executable to PATH.
     macos_app = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
     return str(macos_app) if macos_app.is_file() else None
