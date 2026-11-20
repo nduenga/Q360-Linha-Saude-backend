@@ -259,6 +259,7 @@ class TemplateVersion(s.Serializer):
     marketProducts = s.BooleanField()
     content = s.DictField(required=False, help_text="configurations {configKey: valor} e marketProducts (só no detalhe).")
     source = s.CharField(allow_null=True)
+    effectiveFrom = s.DateTimeField(allow_null=True, help_text="As seguradoras só veem e adotam a versão a partir desta data.")
     isLatestPublished = s.BooleanField()
     reason = s.CharField()
     createdBy = s.CharField()
@@ -276,6 +277,8 @@ class TemplateProposal(s.Serializer):
     segment = s.ChoiceField(choices=["SAU", "SAG"], required=False, allow_null=True)
     content = s.DictField(help_text="{configurations: {configKey: valor}, marketProducts: bool}")
     source = s.CharField(required=False, allow_null=True)
+    effectiveFrom = s.DateTimeField(required=False, allow_null=True,
+                                    help_text="Vigência: vazio = a partir da aprovação. Não pode estar no passado.")
     reason = s.CharField(help_text="Motivo obrigatório (mínimo 10 caracteres).")
 
 
@@ -2158,3 +2161,98 @@ class PaymentOptions(s.Serializer):
 
 class PaymentAllocationResult(s.Serializer):
     installments = s.JSONField(help_text="As prestações pagas por esta transferência.")
+
+
+
+# ------------------------------------------- plataforma: diferenças, impacto e pendentes
+class CatalogTenantUsage(s.Serializer):
+    tenantId = s.CharField()
+    tenantName = s.CharField(allow_null=True)
+    formulas = s.ListField(child=s.CharField(), required=False)
+    versions = s.ListField(child=s.IntegerField(), required=False)
+
+
+class CatalogUsage(s.Serializer):
+    tenants = CatalogTenantUsage(many=True)
+    tenantCount = s.IntegerField()
+    formulaCount = s.IntegerField(required=False)
+    note = s.CharField(required=False)
+
+
+class DiffSummary(s.Serializer):
+    added = s.IntegerField()
+    removed = s.IntegerField()
+    changed = s.IntegerField()
+    unchanged = s.IntegerField(required=False)
+
+
+class ReferenceTableDiff(s.Serializer):
+    code = s.CharField()
+    versionNo = s.IntegerField()
+    baseVersionNo = s.IntegerField(allow_null=True, help_text="Versão em vigor com que se compara (null = tabela nova).")
+    summary = DiffSummary()
+    columnsAdded = s.ListField(child=s.CharField())
+    columnsRemoved = s.ListField(child=s.CharField())
+    added = s.ListField(child=s.DictField())
+    removed = s.ListField(child=s.DictField())
+    changed = s.ListField(child=s.DictField(), help_text="[{key, changes: [{column, before, after}]}]")
+    impact = CatalogUsage()
+
+
+class TemplateDiff(s.Serializer):
+    code = s.CharField()
+    versionNo = s.IntegerField()
+    baseVersionNo = s.IntegerField(allow_null=True)
+    summary = DiffSummary()
+    configKeysAdded = s.ListField(child=s.CharField())
+    configKeysRemoved = s.ListField(child=s.CharField())
+    changed = s.ListField(child=s.DictField(), help_text="[{configKey, changeCount, changes: [{path, before, after}]}]")
+    impact = CatalogUsage()
+
+
+class TemplateCatalogConfiguration(s.Serializer):
+    key = s.CharField()
+    label = s.CharField()
+    formSchema = s.DictField()
+
+
+class TemplateCatalogKind(s.Serializer):
+    kind = s.CharField()
+    label = s.CharField()
+    description = s.CharField()
+    configurations = TemplateCatalogConfiguration(many=True)
+
+
+class TemplateCatalogSegment(s.Serializer):
+    code = s.CharField()
+    label = s.CharField()
+
+
+class TemplateCatalog(s.Serializer):
+    kinds = TemplateCatalogKind(many=True)
+    segments = TemplateCatalogSegment(many=True)
+
+
+class PlatformPendingApproval(s.Serializer):
+    area = s.ChoiceField(choices=["PARAMETER", "REFERENCE_TABLE", "TEMPLATE"])
+    areaLabel = s.CharField()
+    code = s.CharField()
+    name = s.CharField()
+    versionNo = s.IntegerField()
+    summary = s.CharField()
+    reason = s.CharField()
+    createdBy = s.CharField()
+    createdByName = s.CharField(allow_null=True)
+    createdAt = s.DateTimeField()
+    effectiveFrom = s.DateTimeField(allow_null=True)
+    impact = s.CharField()
+
+
+class PlatformParameterImpact(s.Serializer):
+    tenantCount = s.IntegerField()
+    note = s.CharField()
+
+
+class PlatformFormulaTestRequest(s.Serializer):
+    expression = s.CharField()
+    variables = s.DictField(required=False, help_text="Valores de exemplo para as variáveis da expressão.")

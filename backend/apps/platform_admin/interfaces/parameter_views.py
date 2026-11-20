@@ -317,6 +317,7 @@ class TemplateProposalSerializer(serializers.Serializer):
     segment = serializers.CharField(required=False, allow_null=True, default=None, max_length=20)
     content = serializers.JSONField()
     source = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None, max_length=1000)
+    effectiveFrom = serializers.DateTimeField(required=False, allow_null=True, default=None)
     reason = serializers.CharField(required=False, allow_null=True, allow_blank=True, default=None)
 
 
@@ -404,7 +405,7 @@ class PlatformTemplateListView(APIView):
         created = platform_templates.propose(
             code=data["code"], kind=data["kind"], name=data["name"], description=data["description"],
             segment=data["segment"], content=data["content"], source=data["source"], reason=data["reason"],
-            actor_id=_actor_id(request),
+            actor_id=_actor_id(request), effective_from=data["effectiveFrom"],
         )
         _template_audit(request, "platform_template.proposed", created)
         return Response(created, status=status.HTTP_201_CREATED)
@@ -456,3 +457,135 @@ class PlatformTemplateRejectView(APIView):
                                              note=body.validated_data["note"])
         _template_audit(request, "platform_template.rejected", rejected)
         return Response(rejected)
+
+
+# ------------------------------------------- exportar, diferenças e pendentes
+def _file(data: bytes, filename: str) -> FileResponse:
+    return FileResponse(io.BytesIO(data), as_attachment=True, filename=filename, content_type=XLSX)
+
+
+def _version_param(request) -> int | None:
+    try:
+        return int(request.query_params["version"]) if request.query_params.get("version") else None
+    except ValueError:
+        return None
+
+
+class PlatformReferenceTableExportView(APIView):
+    """Descarregar a tabela em Excel (por omissão a versão em vigor; `?version=` escolhe outra)."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request, code):
+        from apps.platform_admin.application import catalog_insights
+
+        found = catalog_insights.table_xlsx(code, _version_param(request))
+        if found is None:
+            return Response({"detail": f"Tabela de referência '{code}' desconhecida"}, status=404)
+        return _file(*found)
+
+
+class PlatformReferenceTableDiffView(APIView):
+    """Diferenças da versão face à que está em vigor, e onde a tabela é usada."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request, code, version_no):
+        from apps.platform_admin.application import catalog_insights
+
+        try:
+            return Response(catalog_insights.table_diff(code, version_no))
+        except LookupError as exc:
+            return Response({"detail": str(exc)}, status=404)
+
+
+class PlatformTemplateExportView(APIView):
+    """Descarregar o modelo em Excel (3 colunas: chave, caminho, valor)."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request, code):
+        from apps.platform_admin.application import catalog_insights
+
+        found = catalog_insights.template_xlsx(code, _version_param(request))
+        if found is None:
+            return Response({"detail": f"Modelo '{code}' desconhecido"}, status=404)
+        return _file(*found)
+
+
+class PlatformTemplateDiffView(APIView):
+    """Diferenças da versão face à última publicada, e que seguradoras o adotaram."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request, code, version_no):
+        from apps.platform_admin.application import catalog_insights
+
+        try:
+            return Response(catalog_insights.template_diff(code, version_no))
+        except LookupError as exc:
+            return Response({"detail": str(exc)}, status=404)
+
+
+class PlatformTemplateCatalogView(APIView):
+    """Tipos de modelo, segmentos e as configurações de cada tipo, com o
+    formulário de cada uma (para o assistente sem JSON)."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request):
+        from apps.platform_admin.application import catalog_insights
+
+        return Response({"kinds": catalog_insights.template_catalog(),
+                         "segments": [{"code": k, "label": v} for k, v in catalog_insights.SEGMENT_LABELS.items()]})
+
+
+class PlatformPendingApprovalsView(APIView):
+    """Tudo o que está à espera de aprovação: parâmetros gerais, tabelas de
+    referência e modelos do fornecedor, com o resumo e o impacto."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request):
+        from apps.platform_admin.application import catalog_insights
+        from apps.platform_admin.infrastructure.models import PlatformAdmin
+
+        names = {str(k): v for k, v in PlatformAdmin.objects.values_list("id", "name")}
+        return Response(catalog_insights.pending(admin_names=names))
+
+
+class PlatformParameterImpactView(APIView):
+    """Quantas seguradoras ativas uma alteração ao parâmetro afeta."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request, code):
+        from apps.platform_admin.application import catalog_insights
+
+        return Response(catalog_insights.parameter_impact(code))
+
+
+class PlatformFormulaTestSerializer(serializers.Serializer):
+    expression = serializers.CharField(max_length=500, allow_blank=False)
+    variables = serializers.DictField(child=serializers.JSONField(), required=False, default=dict)
+
+
+class PlatformFormulaTestView(APIView):
+    """Testar uma expressão com valores de exemplo, sem seguradora: usa as
+    constantes do fornecedor e as tabelas de referência em vigor e devolve o
+    cálculo passo a passo."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def post(self, request):
+        from apps.business_config.domain.formula_engine import FormulaError, explain_formula, referenced_names
+
+        body = PlatformFormulaTestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        try:
+            variables = sorted(referenced_names(data["expression"]))
+            result, steps = explain_formula(data["expression"], data["variables"])
+        except FormulaError as exc:
+            return Response({"valid": False, "error": str(exc), "variables": [], "steps": []}, status=400)
+        return Response({"valid": True, "result": str(result), "variables": variables, "steps": steps})

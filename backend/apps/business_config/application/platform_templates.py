@@ -18,7 +18,7 @@ import re
 from typing import Any
 
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from apps.business_config.application.service import create_configuration, validate
@@ -86,8 +86,13 @@ def validate_content(kind: str, content: Any) -> dict[str, Any]:
     return {"configurations": configurations, "marketProducts": market}
 
 
-def latest_published(code: str) -> Version | None:
-    return Version.objects.filter(code=code, status=Version.PUBLISHED).order_by("-version_no").first()
+def latest_published(code: str, *, effective_only: bool = False) -> Version | None:
+    """A versão publicada mais recente; com `effective_only`, só se a vigência
+    já começou (é o que as seguradoras veem e podem adotar)."""
+    qs = Version.objects.filter(code=code, status=Version.PUBLISHED)
+    if effective_only:
+        qs = qs.filter(Q(effective_from__isnull=True) | Q(effective_from__lte=timezone.now()))
+    return qs.order_by("-version_no").first()
 
 
 def version_payload(v: Version, *, with_content: bool = False, latest_no: int | None = None) -> dict[str, Any]:
@@ -104,6 +109,7 @@ def version_payload(v: Version, *, with_content: bool = False, latest_no: int | 
         "configKeys": sorted((content.get("configurations") or {})),
         "marketProducts": bool(content.get("marketProducts")),
         "source": v.source,
+        "effectiveFrom": v.effective_from.isoformat() if v.effective_from else None,
         "isLatestPublished": latest_no is not None and v.version_no == latest_no,
         "reason": v.reason,
         "createdBy": v.created_by,
@@ -121,8 +127,9 @@ def list_published() -> list[dict[str, Any]]:
     """O que os tenants veem: a versão publicada mais recente de cada modelo."""
     result = []
     for code in sorted(set(Version.objects.filter(status=Version.PUBLISHED).values_list("code", flat=True))):
-        v = latest_published(code)
-        result.append(version_payload(v, latest_no=v.version_no))
+        v = latest_published(code, effective_only=True)
+        if v is not None:
+            result.append(version_payload(v, latest_no=v.version_no))
     return result
 
 
@@ -141,7 +148,7 @@ def list_all() -> list[dict[str, Any]]:
 
 
 def describe(code: str, *, published_only: bool = False) -> dict[str, Any]:
-    current = latest_published(code)
+    current = latest_published(code, effective_only=published_only)
     if published_only:
         if current is None:
             raise UnknownPlatformParameterError(f"O modelo '{code}' não existe ou não tem versão publicada")
@@ -165,8 +172,11 @@ def list_versions(code: str) -> list[dict[str, Any]]:
 
 
 def propose(*, code: str, kind: str, name: str, content: Any, reason: str | None, actor_id: str,
-            description: str | None = None, segment: str | None = None, source: str | None = None) -> dict[str, Any]:
+            description: str | None = None, segment: str | None = None, source: str | None = None,
+            effective_from: datetime.datetime | None = None) -> dict[str, Any]:
     reason = require_reason(reason)
+    if effective_from is not None and effective_from < timezone.now() - datetime.timedelta(minutes=1):
+        raise TemplateContentError("A vigência não pode estar no passado")
     if not isinstance(code, str) or not _CODE.match(code):
         raise TemplateContentError("O código do modelo usa minúsculas, números, '-' e '_' (ex.: saude-sau-referencia)")
     if not isinstance(name, str) or not name.strip():
@@ -185,7 +195,7 @@ def propose(*, code: str, kind: str, name: str, content: Any, reason: str | None
         version = Version.objects.create(
             code=code, version_no=last + 1, kind=kind, name=name.strip(),
             description=(description or "").strip() or None, segment=segment, content_json=clean,
-            source=(source or "").strip() or None, reason=reason, created_by=actor_id,
+            source=(source or "").strip() or None, effective_from=effective_from, reason=reason, created_by=actor_id,
         )
     return version_payload(version)
 
@@ -204,11 +214,14 @@ def approve(*, code: str, version_no: int, actor_id: str, note: str | None = Non
         version = _pending(code, version_no)
         if version.created_by == actor_id:
             raise PlatformFourEyesError("Quem propôs a versão não a pode aprovar: tem de ser outra conta da plataforma")
+        now = timezone.now()
         version.status = Version.PUBLISHED
         version.decided_by = actor_id
-        version.decided_at = timezone.now()
+        version.decided_at = now
         version.decision_note = (note or "").strip() or None
-        version.save(update_fields=["status", "decided_by", "decided_at", "decision_note"])
+        if version.effective_from is None or version.effective_from < now:
+            version.effective_from = now
+        version.save(update_fields=["status", "decided_by", "decided_at", "decision_note", "effective_from"])
     return version_payload(version)
 
 
@@ -226,8 +239,8 @@ def reject(*, code: str, version_no: int, actor_id: str, note: str | None) -> di
 
 @transaction.atomic
 def adopt(request, *, code: str, effective_from: datetime.date | None = None) -> dict[str, Any]:
-    """Copia a versão publicada do modelo para rascunhos do tenant."""
-    version = latest_published(code)
+    """Copia a versão publicada (e já em vigor) do modelo para rascunhos do tenant."""
+    version = latest_published(code, effective_only=True)
     if version is None:
         raise UnknownPlatformParameterError(f"O modelo '{code}' não existe ou não tem versão publicada")
     start = effective_from or timezone.localdate()

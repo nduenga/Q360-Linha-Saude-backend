@@ -48,6 +48,9 @@ class Tenant(models.Model):
     # Dados da empresa cliente (razão social, NIF, contactos, morada), geridos
     # pela plataforma (apps.platform_admin).
     profile_json = models.JSONField(default=dict)
+    # Definições geridas pela plataforma: suspensão, identidade visual,
+    # limites e módulos (apps.platform_admin.application.tenant_settings).
+    settings_json = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     row_version = models.BigIntegerField(default=0)
@@ -351,6 +354,7 @@ class PlatformTemplateVersion(models.Model):
     segment = models.CharField(max_length=20, null=True, blank=True)
     content_json = models.JSONField()
     source = models.TextField(null=True, blank=True)
+    effective_from = models.DateTimeField(null=True, blank=True)
     reason = models.TextField()
     created_by = models.CharField(max_length=200)
     created_at = models.DateTimeField(auto_now_add=True)

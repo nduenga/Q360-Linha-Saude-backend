@@ -1,6 +1,6 @@
 """Tarefas diárias da plataforma, num único comando para o agendador.
 
-Corre por esta ordem: expirar cotações e propostas de endosso, marcar
+Corre por esta ordem: reativar as seguradoras com a suspensão terminada, expirar cotações e propostas de endosso, marcar
 prestações vencidas e resolver apólices por falta de pagamento, fechar
 renovações e expirar apólices. Cada tarefa é idempotente. Se uma falhar, as
 seguintes correm na mesma e o comando termina com erro, para o agendador
@@ -16,6 +16,7 @@ from django.core.management.base import BaseCommand, CommandError
 logger = logging.getLogger(__name__)
 
 DAILY_JOBS = (
+    "reactivate_tenants",
     "expire_quotes",
     "expire_endorsement_offers",
     "premium_overdue_scan",

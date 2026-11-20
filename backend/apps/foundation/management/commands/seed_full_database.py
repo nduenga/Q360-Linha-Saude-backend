@@ -458,8 +458,11 @@ class Command(BaseCommand):
                         proposer_id=prop.id, member_id=member.id, plan_id=plan.id, effective_date=quote.reference_date,
                         context={"angola": {}}, correlation_id="smoke",
                     )
-                    QuoteMember.objects.create(tenant_id=quote.tenant_id, quote=quote, member=member,
-                                               status="INCLUDED", eligibility_evaluation=ev)
+                    # A criação da cotação já associa o titular: atualiza-o (uq_quote_member).
+                    QuoteMember.objects.update_or_create(
+                        tenant_id=quote.tenant_id, quote=quote, member=member,
+                        defaults={"status": "INCLUDED", "eligibility_evaluation": ev},
+                    )
                     price_quote(quote=quote, recalculate=True, correlation_id="smoke-price")
                     quote.refresh_from_db()
                     total = quote.latest_pricing_run.total_amount if quote.latest_pricing_run else None

@@ -246,7 +246,7 @@ def create_coverage_change(
         plan=policy.plan, selection=policy.source_quote.selection_json or {}, effective_date=effective_date,
     ).selection
     with transaction.atomic():
-        quote = quote_service.create_quote(proposer_id=policy.proposer_id, plan_id=policy.plan_id)
+        quote = quote_service.create_quote(proposer_id=policy.proposer_id, plan_id=policy.plan_id, attach_titular=False)
         Quote.objects.filter(id=quote.id).update(
             quote_type=ENDORSEMENT,
             source_policy_id=policy.id,
@@ -290,7 +290,7 @@ def create_inclusion(*, policy_id, inclusion_date: datetime.date, member_ids: li
             f"A apólice {policy.policy_number} já tem um endosso em curso; conclua-o ou cancele-o primeiro"
         )
     with transaction.atomic():
-        quote = quote_service.create_quote(proposer_id=policy.proposer_id, plan_id=policy.plan_id)
+        quote = quote_service.create_quote(proposer_id=policy.proposer_id, plan_id=policy.plan_id, attach_titular=False)
         Quote.objects.filter(id=quote.id).update(
             quote_type=ENDORSEMENT,
             source_policy_id=policy.id,

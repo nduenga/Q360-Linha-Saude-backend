@@ -94,7 +94,8 @@ def test_demo_seeders_create_every_portal_scenario():
     empresa_policy = Policy.all_tenants.get(proposer=empresa, status="ACTIVE")
     company_first_access = _first_access(tenant, empresa_policy.policy_number, empresa.registration_number)
     assert company_first_access.status_code == 202, company_first_access.data
-    assert mail.outbox[-1].to == ["empresa.kilamba@demo.q360.local"]
+    # numa organização o código vai para o titular, nunca para o email da empresa
+    assert mail.outbox[-1].to == ["joao.domingos@demo.q360.local"]
     # por omissão o seed nunca usa caixas de correio reais
     assert {carlos.email, ana_proposer.email} == {"carlos.mendes@demo.q360.local", "ana.silva@demo.q360.local"}
 

@@ -1,5 +1,5 @@
-"""Cotação de negócio novo de proponente individual: ao calcular, se a
-cotação não tem ninguém, o titular (o próprio proponente) é associado.
+"""Cotação de negócio novo de proponente individual: o titular é associado
+logo na criação e, se a cotação ficar sem ninguém, outra vez ao calcular.
 
 Antes, `POST /quotes/{id}/price` falhava com 400 «memberIds tem de conter
 pelo menos uma pessoa segura» mesmo com o titular já criado."""
@@ -89,6 +89,9 @@ def test_pricing_attaches_the_titular_when_the_quote_is_empty(admin_client):
     proposer_id = _individual_proposer(admin_client)
     titular_id = _member(admin_client, proposer_id, "TITULAR")
     quote_id = _new_quote(admin_client, plan_id, proposer_id)
+    # A criação já associa o titular (test_quotes); se alguém o retirar, o
+    # cálculo volta a associá-lo quando a cotação fica vazia.
+    assert admin_client.delete(f"/api/v1/quotes/{quote_id}/members/{titular_id}").status_code == 204
     assert _quote_members(admin_client, quote_id) == []
 
     priced = admin_client.post(f"/api/v1/quotes/{quote_id}/price")
@@ -98,15 +101,14 @@ def test_pricing_attaches_the_titular_when_the_quote_is_empty(admin_client):
 
 @pytest.mark.django_db
 def test_explicit_flow_is_unchanged_and_duplicate_is_still_a_conflict(admin_client):
-    """Quem já associa o titular à mão antes de calcular não é afectado, e o
-    contrato 409 de duplicado mantém-se."""
+    """O titular já vem associado desde a criação: associá-lo outra vez à mão
+    continua a dar o 409 de duplicado, e o cálculo não o duplica."""
     plan_id = _plan(admin_client)
     proposer_id = _individual_proposer(admin_client)
     titular_id = _member(admin_client, proposer_id, "TITULAR")
     quote_id = _new_quote(admin_client, plan_id, proposer_id)
 
-    attach = admin_client.post(f"/api/v1/quotes/{quote_id}/members", {"memberId": titular_id}, format="json")
-    assert attach.status_code == 200, attach.data
+    assert [m["memberId"] for m in _quote_members(admin_client, quote_id)] == [titular_id]
     assert admin_client.post(f"/api/v1/quotes/{quote_id}/members", {"memberId": titular_id}, format="json").status_code == 409
 
     assert admin_client.post(f"/api/v1/quotes/{quote_id}/price").status_code == 200
@@ -130,9 +132,10 @@ def test_people_already_on_the_quote_are_never_replaced(admin_client):
     """Se o utilizador escolheu só o cônjuge, o titular não é imposto."""
     plan_id = _plan(admin_client)
     proposer_id = _individual_proposer(admin_client)
-    _member(admin_client, proposer_id, "TITULAR")
+    titular_id = _member(admin_client, proposer_id, "TITULAR")
     spouse_id = _member(admin_client, proposer_id, "CONJUGE")
     quote_id = _new_quote(admin_client, plan_id, proposer_id)
+    assert admin_client.delete(f"/api/v1/quotes/{quote_id}/members/{titular_id}").status_code == 204
     assert admin_client.post(f"/api/v1/quotes/{quote_id}/members", {"memberId": spouse_id}, format="json").status_code == 200
 
     admin_client.post(f"/api/v1/quotes/{quote_id}/price")

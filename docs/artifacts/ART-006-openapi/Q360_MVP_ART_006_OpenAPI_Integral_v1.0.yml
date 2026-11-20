@@ -5835,7 +5835,10 @@ paths:
 
         RuleVersionCreateView) so the admin/configurador UI has something to
 
-        render before publishing a new template version.'
+        render before publishing a new template version.
+
+
+        Requer: scope q360.read.'
       summary: Listar document template list create
       parameters:
       - in: query
@@ -9658,6 +9661,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/alerts:
+    get:
+      operationId: getPlatformAlerts
+      description: Acessos falhados repetidos, contas bloqueadas e alterações legais recentes.
+      summary: Obter platform alerts
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlatformAlert'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/platform/audit:
     get:
       operationId: getPlatformAudit
@@ -9702,6 +9736,160 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PlatformAuditEvent'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/platform/audit/export:
+    get:
+      operationId: getPlatformAuditExport
+      description: 'Exporta a auditoria filtrada em Excel (`fileType=xlsx`) ou PDF (`fileType=pdf`).
+
+
+        Até 5000 eventos. A exportação fica registada na auditoria.'
+      summary: Obter platform audit export
+      parameters:
+      - in: query
+        name: action
+        schema:
+          type: string
+        description: Parte do nome da ação.
+      - in: query
+        name: actorId
+        schema:
+          type: string
+        description: Autor.
+      - in: query
+        name: dateFrom
+        schema:
+          type: string
+        description: AAAA-MM-DD.
+      - in: query
+        name: dateTo
+        schema:
+          type: string
+        description: AAAA-MM-DD.
+      - in: query
+        name: fileType
+        schema:
+          type: string
+        description: xlsx (por omissão) ou pdf.
+      - in: query
+        name: source
+        schema:
+          type: string
+        description: PLATFORM, TENANT ou ALL.
+      - in: query
+        name: tenantId
+        schema:
+          type: string
+        description: Seguradora.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/platform/audit/search:
+    get:
+      operationId: getPlatformAuditSearch
+      description: 'Pesquisa na auditoria da plataforma e das seguradoras, com páginas.
+
+
+        Cada evento traz `changes` (campo, antes, depois). Consultar a auditoria de uma seguradora fica registado.'
+      summary: Obter platform audit search
+      parameters:
+      - in: query
+        name: action
+        schema:
+          type: string
+        description: Parte do nome da ação.
+      - in: query
+        name: actorId
+        schema:
+          type: string
+        description: Autor.
+      - in: query
+        name: dateFrom
+        schema:
+          type: string
+        description: AAAA-MM-DD.
+      - in: query
+        name: dateTo
+        schema:
+          type: string
+        description: AAAA-MM-DD.
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Página (1…).
+      - in: query
+        name: size
+        schema:
+          type: integer
+        description: Até 200 (por omissão 50).
+      - in: query
+        name: source
+        schema:
+          type: string
+        description: PLATFORM, TENANT ou ALL (por omissão).
+      - in: query
+        name: tenantId
+        schema:
+          type: string
+        description: Seguradora.
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditSearchPage'
           description: Sucesso.
         '400':
           content:
@@ -9793,6 +9981,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/platform/formula-engine/test:
+    post:
+      operationId: postPlatformFormulaTest
+      description: 'Testar uma expressão com valores de exemplo, sem seguradora: usa as
+
+        constantes do fornecedor e as tabelas de referência em vigor e devolve o
+
+        cálculo passo a passo.'
+      summary: Criar platform formula test
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformFormulaTestRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FormulaTestResult'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/platform/me:
     get:
       operationId: getPlatformMe
@@ -9870,6 +10109,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/pending-approvals:
+    get:
+      operationId: getPlatformPendingApprovals
+      description: 'Tudo o que está à espera de aprovação: parâmetros gerais, tabelas de
+
+        referência e modelos do fornecedor, com o resumo e o impacto.'
+      summary: Obter platform pending approvals
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlatformPendingApproval'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/platform/reference-tables:
     get:
       operationId: getPlatformReferenceTableList
@@ -10163,6 +10435,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/reference-tables/{code}/versions/{version_no}/diff:
+    get:
+      operationId: getPlatformReferenceTableDiff
+      description: Diferenças da versão face à que está em vigor, e onde a tabela é usada.
+      summary: Obter platform reference table diff
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: version_no
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferenceTableDiff'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/platform/reference-tables/{code}/versions/{version_no}/reject:
     post:
       operationId: postPlatformReferenceTableReject
@@ -10231,6 +10549,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/reference-tables/{code}/xlsx:
+    get:
+      operationId: getPlatformReferenceTableExport
+      description: Descarregar a tabela em Excel (por omissão a versão em vigor; `?version=` escolhe outra).
+      summary: Obter platform reference table export
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: version
+        schema:
+          type: integer
+        description: Versão (por omissão a que está em vigor).
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/platform/system-parameters:
     get:
       operationId: getPlatformParameterList
@@ -10304,6 +10669,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlatformParameter'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/platform/system-parameters/{code}/impact:
+    get:
+      operationId: getPlatformParameterImpact
+      description: Quantas seguradoras ativas uma alteração ao parâmetro afeta.
+      summary: Obter platform parameter impact
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformParameterImpact'
           description: Sucesso.
         '401':
           content:
@@ -10730,6 +11136,37 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/templates/catalog:
+    get:
+      operationId: getPlatformTemplateCatalog
+      description: 'Tipos de modelo, segmentos e as configurações de cada tipo, com o
+
+        formulário de cada uma (para o assistente sem JSON).'
+      summary: Obter platform template catalog
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateCatalog'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/platform/templates/import-preview:
     post:
       operationId: postPlatformTemplateImportPreview
@@ -10927,6 +11364,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/templates/{code}/versions/{version_no}/diff:
+    get:
+      operationId: getPlatformTemplateDiff
+      description: Diferenças da versão face à última publicada, e que seguradoras o adotaram.
+      summary: Obter platform template diff
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: version_no
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateDiff'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/platform/templates/{code}/versions/{version_no}/reject:
     post:
       operationId: postPlatformTemplateReject
@@ -10995,6 +11478,53 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/templates/{code}/xlsx:
+    get:
+      operationId: getPlatformTemplateExport
+      description: 'Descarregar o modelo em Excel (3 colunas: chave, caminho, valor).'
+      summary: Obter platform template export
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: version
+        schema:
+          type: integer
+        description: Versão (por omissão a última publicada).
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
   /api/v1/platform/tenants:
     get:
       operationId: getPlatformTenantListCreate
@@ -11302,6 +11832,232 @@ paths:
               schema:
                 $ref: '#/components/schemas/TemporaryPasswordResponse'
           description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/tenants/{tenant_id}/health:
+    get:
+      operationId: getPlatformTenantHealth
+      description: 'Painel de saúde da seguradora e lista de arranque.
+
+
+        Último acesso, utilizadores ativos, cotações e apólices do mês, configuração em falta e lista de arranque.
+        A consulta fica na auditoria (platform.tenant_viewed).'
+      summary: Obter platform tenant health
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantHealth'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/platform/tenants/{tenant_id}/logo:
+    get:
+      operationId: getPlatformTenantLogo
+      description: 'GET: o logótipo da seguradora. POST: carregar um logótipo novo (PNG/JPEG, até 1 MB).
+
+
+        Logótipo da seguradora (PNG ou JPEG); 404 sem logótipo.'
+      summary: Obter platform tenant logo
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    post:
+      operationId: postPlatformTenantLogo
+      description: 'GET: o logótipo da seguradora. POST: carregar um logótipo novo (PNG/JPEG, até 1 MB).'
+      summary: Criar platform tenant logo
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TenantLogoUpload'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/tenants/{tenant_id}/settings:
+    patch:
+      operationId: patchPlatformTenantSettings
+      description: 'PATCH: cores da marca, número máximo de utilizadores e módulos ativos.
+
+
+        Cores da marca (usadas nas propostas e emails quando a seguradora não publicou a sua), máximo de utilizadores
+        (null = sem limite) e módulos ativos.'
+      summary: Alterar platform tenant settings
+      parameters:
+      - in: header
+        name: Idempotency-Key
+        schema:
+          type: string
+        description: 'Chave de idempotência: o mesmo pedido repetido devolve a resposta gravada; payload diferente
+          devolve IDEMP-REPLAY.'
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUpdateTenantSettings'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantResponse'
+          description: Sucesso.
         '400':
           content:
             application/problem+json:
@@ -27795,7 +28551,7 @@ components:
       type: object
       properties:
         severity:
-          $ref: '#/components/schemas/SeverityEnum'
+          $ref: '#/components/schemas/RequirementItemSeverityEnum'
         code:
           type: string
         message:
@@ -29342,9 +30098,12 @@ components:
       type: object
       properties:
         code:
-          type: string
-          maxLength: 50
-          pattern: ^[a-z0-9][a-z0-9_-]{2,49}$
+          oneOf:
+          - type: string
+            maxLength: 50
+            pattern: ^[a-z0-9][a-z0-9_-]{2,49}$
+          - type: string
+            maxLength: 0
         name:
           type: string
           maxLength: 200
@@ -29354,7 +30113,6 @@ components:
           $ref: '#/components/schemas/TenantAdmin'
       required:
       - admin
-      - code
       - name
     PatchedUpdatePlatformAdminStatus:
       type: object
@@ -29371,6 +30129,16 @@ components:
           $ref: '#/components/schemas/TenantProfile'
         status:
           $ref: '#/components/schemas/TenantStatusEnum'
+        suspensionReason:
+          type: string
+          description: Obrigatório ao suspender (mínimo 10 caracteres).
+          maxLength: 1000
+        reactivateOn:
+          type:
+          - string
+          - 'null'
+          format: date
+          description: Data em que a seguradora volta a ficar ativa (opcional).
     PlatformLogin:
       type: object
       properties:
@@ -29495,12 +30263,13 @@ components:
     TenantProfile:
       type: object
       properties:
-        legalName:
-          type: string
-          maxLength: 200
         nif:
-          type: string
-          maxLength: 40
+          oneOf:
+          - type: string
+            maxLength: 10
+            pattern: ^\d{10}$
+          - type: string
+            maxLength: 0
         email:
           oneOf:
           - type: string
@@ -29749,6 +30518,8 @@ components:
           type: string
         profile:
           $ref: '#/components/schemas/TenantProfile'
+        settings:
+          description: Suspensão, identidade visual (hasLogo), limites e módulos.
         createdAt:
           type: string
           format: date-time
@@ -29761,6 +30532,7 @@ components:
       - id
       - name
       - profile
+      - settings
       - status
       - updatedAt
     PlatformAdminStatusEnum:
@@ -32681,6 +33453,12 @@ components:
           type:
           - string
           - 'null'
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: 'Vigência: vazio = a partir da aprovação. Não pode estar no passado.'
         reason:
           type: string
           description: Motivo obrigatório (mínimo 10 caracteres).
@@ -32727,6 +33505,12 @@ components:
           type:
           - string
           - 'null'
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: As seguradoras só veem e adotam a versão a partir desta data.
         isLatestPublished:
           type: boolean
         reason:
@@ -32760,6 +33544,7 @@ components:
       - decidedBy
       - decisionNote
       - description
+      - effectiveFrom
       - isLatestPublished
       - kind
       - kindLabel
@@ -33056,7 +33841,7 @@ components:
         label:
           type: string
         area:
-          $ref: '#/components/schemas/AreaEnum'
+          $ref: '#/components/schemas/PendingApprovalItemAreaEnum'
         areaLabel:
           type: string
         versionNo:
@@ -37728,6 +38513,595 @@ components:
       description: '* `NUMBER` - NUMBER
 
         * `TEXT` - TEXT'
+    AuditChange:
+      type: object
+      properties:
+        field:
+          type: string
+        before:
+          oneOf:
+          - {}
+          - type: 'null'
+        after:
+          oneOf:
+          - {}
+          - type: 'null'
+      required:
+      - after
+      - before
+      - field
+    AuditSearchEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        source:
+          $ref: '#/components/schemas/AuditSearchEventSourceEnum'
+        tenantId:
+          type:
+          - string
+          - 'null'
+        tenantName:
+          type:
+          - string
+          - 'null'
+        actorId:
+          type:
+          - string
+          - 'null'
+        actorName:
+          type:
+          - string
+          - 'null'
+        actorType:
+          type:
+          - string
+          - 'null'
+        action:
+          type: string
+        actionLabel:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type:
+          - string
+          - 'null'
+        occurredAt:
+          type: string
+          format: date-time
+        correlationId:
+          type:
+          - string
+          - 'null'
+        metadata: {}
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditChange'
+      required:
+      - action
+      - actionLabel
+      - actorId
+      - actorName
+      - actorType
+      - changes
+      - correlationId
+      - entityId
+      - entityType
+      - id
+      - metadata
+      - occurredAt
+      - source
+      - tenantId
+      - tenantName
+    AuditSearchEventSourceEnum:
+      enum:
+      - PLATFORM
+      - TENANT
+      type: string
+      description: '* `PLATFORM` - PLATFORM
+
+        * `TENANT` - TENANT'
+    AuditSearchPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditSearchEvent'
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+      required:
+      - items
+      - page
+      - size
+      - total
+    CatalogTenantUsage:
+      type: object
+      properties:
+        tenantId:
+          type: string
+        tenantName:
+          type:
+          - string
+          - 'null'
+        formulas:
+          type: array
+          items:
+            type: string
+        versions:
+          type: array
+          items:
+            type: integer
+      required:
+      - tenantId
+      - tenantName
+    CatalogUsage:
+      type: object
+      properties:
+        tenants:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogTenantUsage'
+        tenantCount:
+          type: integer
+        formulaCount:
+          type: integer
+        note:
+          type: string
+      required:
+      - tenantCount
+      - tenants
+    DiffSummary:
+      type: object
+      properties:
+        added:
+          type: integer
+        removed:
+          type: integer
+        changed:
+          type: integer
+        unchanged:
+          type: integer
+      required:
+      - added
+      - changed
+      - removed
+    Onboarding:
+      type: object
+      properties:
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/OnboardingStep'
+        done:
+          type: integer
+        total:
+          type: integer
+      required:
+      - done
+      - steps
+      - total
+    OnboardingStep:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        status:
+          $ref: '#/components/schemas/OnboardingStepStatusEnum'
+        detail:
+          type: string
+      required:
+      - detail
+      - key
+      - label
+      - status
+    OnboardingStepStatusEnum:
+      enum:
+      - DONE
+      - PENDING
+      - WARNING
+      type: string
+      description: '* `DONE` - DONE
+
+        * `PENDING` - PENDING
+
+        * `WARNING` - WARNING'
+    PatchedUpdateTenantSettings:
+      type: object
+      properties:
+        branding:
+          $ref: '#/components/schemas/TenantBranding'
+        limits:
+          $ref: '#/components/schemas/TenantLimits'
+    PendingApprovalItemAreaEnum:
+      enum:
+      - ORGANIZATION
+      - PRODUCTS
+      - TARIFF
+      - RULES
+      - PARAMETERS
+      - DOCUMENTS
+      type: string
+      description: '* `ORGANIZATION` - ORGANIZATION
+
+        * `PRODUCTS` - PRODUCTS
+
+        * `TARIFF` - TARIFF
+
+        * `RULES` - RULES
+
+        * `PARAMETERS` - PARAMETERS
+
+        * `DOCUMENTS` - DOCUMENTS'
+    PlatformAlert:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/PlatformAlertKindEnum'
+        severity:
+          $ref: '#/components/schemas/PlatformAlertSeverityEnum'
+        tenantId:
+          type:
+          - string
+          - 'null'
+        title:
+          type: string
+        detail:
+          type: string
+        occurredAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - detail
+      - kind
+      - occurredAt
+      - severity
+      - tenantId
+      - title
+    PlatformAlertKindEnum:
+      enum:
+      - FAILED_LOGINS
+      - LOCKED_ACCOUNT
+      - LEGAL_PARAMETER
+      type: string
+      description: '* `FAILED_LOGINS` - FAILED_LOGINS
+
+        * `LOCKED_ACCOUNT` - LOCKED_ACCOUNT
+
+        * `LEGAL_PARAMETER` - LEGAL_PARAMETER'
+    PlatformAlertSeverityEnum:
+      enum:
+      - WARNING
+      - INFO
+      type: string
+      description: '* `WARNING` - WARNING
+
+        * `INFO` - INFO'
+    PlatformFormulaTestRequest:
+      type: object
+      properties:
+        expression:
+          type: string
+        variables:
+          type: object
+          additionalProperties: {}
+          description: Valores de exemplo para as variáveis da expressão.
+      required:
+      - expression
+    PlatformParameterImpact:
+      type: object
+      properties:
+        tenantCount:
+          type: integer
+        note:
+          type: string
+      required:
+      - note
+      - tenantCount
+    PlatformPendingApproval:
+      type: object
+      properties:
+        area:
+          $ref: '#/components/schemas/PlatformPendingApprovalAreaEnum'
+        areaLabel:
+          type: string
+        code:
+          type: string
+        name:
+          type: string
+        versionNo:
+          type: integer
+        summary:
+          type: string
+        reason:
+          type: string
+        createdBy:
+          type: string
+        createdByName:
+          type:
+          - string
+          - 'null'
+        createdAt:
+          type: string
+          format: date-time
+        effectiveFrom:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        impact:
+          type: string
+      required:
+      - area
+      - areaLabel
+      - code
+      - createdAt
+      - createdBy
+      - createdByName
+      - effectiveFrom
+      - impact
+      - name
+      - reason
+      - summary
+      - versionNo
+    PlatformPendingApprovalAreaEnum:
+      enum:
+      - PARAMETER
+      - REFERENCE_TABLE
+      - TEMPLATE
+      type: string
+      description: '* `PARAMETER` - PARAMETER
+
+        * `REFERENCE_TABLE` - REFERENCE_TABLE
+
+        * `TEMPLATE` - TEMPLATE'
+    ReferenceTableDiff:
+      type: object
+      properties:
+        code:
+          type: string
+        versionNo:
+          type: integer
+        baseVersionNo:
+          type:
+          - integer
+          - 'null'
+          description: Versão em vigor com que se compara (null = tabela nova).
+        summary:
+          $ref: '#/components/schemas/DiffSummary'
+        columnsAdded:
+          type: array
+          items:
+            type: string
+        columnsRemoved:
+          type: array
+          items:
+            type: string
+        added:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        removed:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        changed:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: '[{key, changes: [{column, before, after}]}]'
+        impact:
+          $ref: '#/components/schemas/CatalogUsage'
+      required:
+      - added
+      - baseVersionNo
+      - changed
+      - code
+      - columnsAdded
+      - columnsRemoved
+      - impact
+      - removed
+      - summary
+      - versionNo
+    RequirementItemSeverityEnum:
+      enum:
+      - ERROR
+      - WARNING
+      - INFO
+      type: string
+      description: '* `ERROR` - ERROR
+
+        * `WARNING` - WARNING
+
+        * `INFO` - INFO'
+    TemplateCatalog:
+      type: object
+      properties:
+        kinds:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateCatalogKind'
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateCatalogSegment'
+      required:
+      - kinds
+      - segments
+    TemplateCatalogConfiguration:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        formSchema:
+          type: object
+          additionalProperties: {}
+      required:
+      - formSchema
+      - key
+      - label
+    TemplateCatalogKind:
+      type: object
+      properties:
+        kind:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+        configurations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateCatalogConfiguration'
+      required:
+      - configurations
+      - description
+      - kind
+      - label
+    TemplateCatalogSegment:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+      required:
+      - code
+      - label
+    TemplateDiff:
+      type: object
+      properties:
+        code:
+          type: string
+        versionNo:
+          type: integer
+        baseVersionNo:
+          type:
+          - integer
+          - 'null'
+        summary:
+          $ref: '#/components/schemas/DiffSummary'
+        configKeysAdded:
+          type: array
+          items:
+            type: string
+        configKeysRemoved:
+          type: array
+          items:
+            type: string
+        changed:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: '[{configKey, changeCount, changes: [{path, before, after}]}]'
+        impact:
+          $ref: '#/components/schemas/CatalogUsage'
+      required:
+      - baseVersionNo
+      - changed
+      - code
+      - configKeysAdded
+      - configKeysRemoved
+      - impact
+      - summary
+      - versionNo
+    TenantBranding:
+      type: object
+      properties:
+        primaryColor:
+          type:
+          - string
+          - 'null'
+          maxLength: 7
+        secondaryColor:
+          type:
+          - string
+          - 'null'
+          maxLength: 7
+    TenantHealth:
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        lastLoginAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        activeUsers:
+          type: integer
+        maxUsers:
+          type:
+          - integer
+          - 'null'
+        quotesThisMonth:
+          type: integer
+        policiesThisMonth:
+          type: integer
+        missingConfiguration:
+          type: array
+          items:
+            type: string
+        onboarding:
+          $ref: '#/components/schemas/Onboarding'
+        suspension:
+          oneOf:
+          - {}
+          - type: 'null'
+      required:
+      - activeUsers
+      - lastLoginAt
+      - maxUsers
+      - missingConfiguration
+      - onboarding
+      - policiesThisMonth
+      - quotesThisMonth
+      - status
+      - suspension
+      - tenantId
+    TenantLimits:
+      type: object
+      properties:
+        maxUsers:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        modules:
+          $ref: '#/components/schemas/TenantModules'
+    TenantLogoUpload:
+      type: object
+      properties:
+        file:
+          type: string
+          format: uri
+          description: PNG ou JPEG, até 1 MB.
+      required:
+      - file
+    TenantModules:
+      type: object
+      properties:
+        customerPortal:
+          type: boolean
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

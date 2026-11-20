@@ -109,8 +109,9 @@ def test_full_lifecycle_from_market_templates_to_portal_and_renewal(admin_client
     quote = admin_client.post(
         "/api/v1/quotes", {"proposerId": proposer["id"], "planId": medio["id"]}, format="json"
     ).data
-    for member in (holder, spouse):
-        assert admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": member["id"]}, format="json").status_code == 200
+    # o titular entra logo na criação da cotação; acrescenta-se o cônjuge
+    assert [m["memberId"] for m in admin_client.get(f"/api/v1/quotes/{quote['id']}/members").data["items"]] == [holder["id"]]
+    assert admin_client.post(f"/api/v1/quotes/{quote['id']}/members", {"memberId": spouse["id"]}, format="json").status_code == 200
     assert admin_client.post(f"/api/v1/quotes/{quote['id']}/price").status_code == 200
     # 1000 x 1,10 (capital 15M) x 1,20 (escalão Médio) = 1.320 por pessoa; opção B = 0 %
     assert _total(admin_client, quote["id"]) == Decimal("2640.00")

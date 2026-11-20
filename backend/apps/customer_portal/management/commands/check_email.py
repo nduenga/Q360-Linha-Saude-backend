@@ -10,6 +10,7 @@ from django.core.mail import get_connection, send_mail
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.customer_portal.application.email_config import email_config_problems
+from apps.customer_portal.infrastructure.email_sender import sender
 
 
 class Command(BaseCommand):
@@ -21,7 +22,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write(f"Serviço:   {settings.EMAIL_BACKEND}")
         self.stdout.write(f"Servidor:  {settings.EMAIL_HOST or '(vazio)'}:{settings.EMAIL_PORT}")
-        self.stdout.write(f"Remetente: {settings.CUSTOMER_PORTAL_EMAIL_FROM}")
+        self.stdout.write(f"Remetente: {sender('<nome do tenant>')}")
         self.stdout.write(f"Portal:    {settings.CUSTOMER_PORTAL_URL}")
 
         problems = email_config_problems()
@@ -37,7 +38,7 @@ class Command(BaseCommand):
                 send_mail(
                     subject="Teste de email do Q360",
                     message="Esta mensagem confirma que o Q360 consegue enviar email. Pode ignorá-la.",
-                    from_email=settings.CUSTOMER_PORTAL_EMAIL_FROM,
+                    from_email=sender(),
                     recipient_list=[options["to"]],
                     fail_silently=False,
                 )

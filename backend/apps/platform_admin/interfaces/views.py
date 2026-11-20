@@ -8,7 +8,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.foundation.interfaces.middleware import get_correlation_id, requires_idempotency
-from apps.platform_admin.application import admin_service, auth_service, tenant_service
+from django.http import HttpResponse
+from rest_framework.parsers import MultiPartParser
+
+from apps.platform_admin.application import admin_service, audit_query, auth_service, tenant_service, tenant_settings
+from apps.platform_admin.application.audit_service import record_platform_audit
 from apps.platform_admin.infrastructure.models import PlatformAdmin, PlatformAuditEvent
 from apps.platform_admin.interfaces.permissions import IsPlatformAdmin
 from apps.platform_admin.interfaces.serializers import (
@@ -16,8 +20,10 @@ from apps.platform_admin.interfaces.serializers import (
     CreatePlatformAdminSerializer,
     CreateTenantSerializer,
     PlatformLoginSerializer,
+    TenantLogoUploadSerializer,
     UpdatePlatformAdminStatusSerializer,
     UpdateTenantSerializer,
+    UpdateTenantSettingsSerializer,
 )
 
 NOTICE = "Esta palavra-passe é mostrada uma única vez. Guarde-a em segurança e peça ao utilizador que a altere."
@@ -25,7 +31,7 @@ NOTICE = "Esta palavra-passe é mostrada uma única vez. Guarde-a em segurança 
 
 def _tenant(t) -> dict:
     return {"id": t.id, "code": t.code, "name": t.name, "status": t.status, "profile": t.profile_json or {},
-            "createdAt": t.created_at, "updatedAt": t.updated_at}
+            "settings": tenant_settings.public_settings(t), "createdAt": t.created_at, "updatedAt": t.updated_at}
 
 
 def _admin(a) -> dict:
@@ -89,7 +95,7 @@ class PlatformTenantListCreateView(APIView):
         body.is_valid(raise_exception=True)
         d = body.validated_data
         tenant, admin, password = tenant_service.create_tenant(
-            actor_id=_actor_id(request), code=d["code"].lower(), name=d["name"].strip(), profile=d.get("profile"),
+            actor_id=_actor_id(request), code=(d.get("code") or "").lower(), name=d["name"].strip(), profile=d.get("profile"),
             admin_email=d["admin"]["email"].lower(), admin_name=d["admin"]["name"].strip(),
             correlation_id=get_correlation_id(),
         )
@@ -106,6 +112,8 @@ class PlatformTenantDetailView(APIView):
 
     def get(self, request, tenant_id):
         tenant, accounts, stats = tenant_service.tenant_detail(tenant_id=tenant_id)
+        tenant_service.record_tenant_access(actor_id=_actor_id(request), tenant_id=tenant.id, what="ficha e utilizadores",
+                                            correlation_id=get_correlation_id())
         return Response({
             "tenant": _tenant(tenant),
             "accounts": [{"id": a.id, "email": a.email, "name": a.name, "status": a.status,
@@ -120,8 +128,62 @@ class PlatformTenantDetailView(APIView):
         tenant = tenant_service.update_tenant(
             actor_id=_actor_id(request), tenant_id=tenant_id, name=d.get("name"), profile=d.get("profile"),
             status=d.get("status"), correlation_id=get_correlation_id(),
+            suspension_reason=d.get("suspensionReason"), reactivate_on=d.get("reactivateOn"),
         )
         return Response(_tenant(tenant))
+
+
+@requires_idempotency
+class PlatformTenantSettingsView(APIView):
+    """PATCH: cores da marca, número máximo de utilizadores e módulos ativos."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def patch(self, request, tenant_id):
+        body = UpdateTenantSettingsSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        tenant = tenant_service.update_tenant_settings(
+            actor_id=_actor_id(request), tenant_id=tenant_id, branding=body.validated_data.get("branding"),
+            limits=body.validated_data.get("limits"), correlation_id=get_correlation_id(),
+        )
+        return Response(_tenant(tenant))
+
+
+@requires_idempotency
+class PlatformTenantLogoView(APIView):
+    """GET: o logótipo da seguradora. POST: carregar um logótipo novo (PNG/JPEG, até 1 MB)."""
+
+    permission_classes = [IsPlatformAdmin]
+    parser_classes = [MultiPartParser]
+
+    def get(self, request, tenant_id):
+        found = tenant_settings.logo_bytes(tenant_id)
+        if found is None:
+            return Response({"detail": "Esta seguradora não tem logótipo."}, status=404)
+        return HttpResponse(found[0], content_type=found[1])
+
+    def post(self, request, tenant_id):
+        body = TenantLogoUploadSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        upload = body.validated_data["file"]
+        upload.seek(0)
+        tenant = tenant_service.upload_tenant_logo(
+            actor_id=_actor_id(request), tenant_id=tenant_id, data=upload.read(),
+            content_type=upload.content_type or "", correlation_id=get_correlation_id(),
+        )
+        return Response(_tenant(tenant))
+
+
+class PlatformTenantHealthView(APIView):
+    """Painel de saúde da seguradora e lista de arranque."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request, tenant_id):
+        health = tenant_service.tenant_health(tenant_id=tenant_id)
+        tenant_service.record_tenant_access(actor_id=_actor_id(request), tenant_id=tenant_id, what="painel de saúde",
+                                            correlation_id=get_correlation_id())
+        return Response(health)
 
 
 @requires_idempotency
@@ -262,3 +324,63 @@ def _platform_entity_labels(events) -> dict[tuple[str, str], str]:
             for key, name in sources[entity_type](keys):
                 out[(entity_type, str(key))] = name
     return out
+
+
+def _audit_filters(request) -> dict:
+    q = request.query_params
+    return {"source": q.get("source") or "ALL", "tenant_id": q.get("tenantId") or None,
+            "actor_id": q.get("actorId") or None, "action": q.get("action") or None,
+            "date_from": q.get("dateFrom") or None, "date_to": q.get("dateTo") or None}
+
+
+def _int(value, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+class PlatformAuditSearchView(APIView):
+    """Pesquisa na auditoria da plataforma e das seguradoras, com páginas."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request):
+        filters = _audit_filters(request)
+        result = audit_query.search(**filters, page=_int(request.query_params.get("page"), 1),
+                                    size=_int(request.query_params.get("size"), 50))
+        if filters["tenant_id"] and filters["source"] in ("TENANT", "ALL"):
+            record_platform_audit(actor_id=_actor_id(request), action="platform.tenant_audit_viewed",
+                                  entity_type="Tenant", entity_id=str(filters["tenant_id"]),
+                                  correlation_id=get_correlation_id(), metadata={"filters": filters})
+        return Response(result)
+
+
+class PlatformAuditExportView(APIView):
+    """Exporta a auditoria filtrada em Excel (`fileType=xlsx`) ou PDF (`fileType=pdf`)."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request):
+        filters = _audit_filters(request)
+        fmt = (request.query_params.get("fileType") or "xlsx").lower()
+        if fmt not in ("xlsx", "pdf"):
+            return Response({"detail": "O formato tem de ser xlsx ou pdf."}, status=400)
+        data = audit_query.export_xlsx(**filters) if fmt == "xlsx" else audit_query.export_pdf(**filters)
+        record_platform_audit(actor_id=_actor_id(request), action="platform.audit_exported", entity_type="Audit",
+                              correlation_id=get_correlation_id(), metadata={"format": fmt, "filters": filters},
+                              tenant_id=filters["tenant_id"])
+        content_type = ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if fmt == "xlsx"
+                        else "application/pdf")
+        response = HttpResponse(data, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="auditoria-q360.{fmt}"'
+        return response
+
+
+class PlatformAlertsView(APIView):
+    """Acessos falhados repetidos, contas bloqueadas e alterações legais recentes."""
+
+    permission_classes = [IsPlatformAdmin]
+
+    def get(self, request):
+        return Response(audit_query.alerts())

@@ -276,7 +276,7 @@ def test_organisation_member_family_test_workbook_imports_thirty_people(admin_cl
         Path(__file__).resolve().parents[3]
         / "docs"
         / "modelos_importacao"
-        / "12_Exemplo_Colaboradores_e_Familiares_TESTE.xlsx"
+        / "Modelo__exemplar_Colaboradores_e_Familiares_TESTE.xlsx"
     )
     uploaded_file = SimpleUploadedFile(
         path.name,

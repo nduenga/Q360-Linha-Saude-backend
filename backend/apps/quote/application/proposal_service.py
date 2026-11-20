@@ -203,13 +203,30 @@ def _render(content: dict[str, Any], template: DocumentTemplateVersion, fmt: str
     from apps.quote.domain.proposal_template import render_text
 
     title = render_text(spec["title"], variables)
-    if fmt == "HTML":
-        return protteja_html.render(blocks, title=title, variables=variables), "text/html; charset=utf-8"
-    if fmt == "PDF":
-        html_data = protteja_html.render(blocks, title=title, variables=variables)
-        return chromium_converter.html_to_pdf(html_data), "application/pdf"
+    if _uses_protteja_layout(template, content):
+        if fmt == "HTML":
+            return protteja_html.render(blocks, title=title, variables=variables), "text/html; charset=utf-8"
+        if fmt == "PDF":
+            html_data = protteja_html.render(blocks, title=title, variables=variables)
+            return chromium_converter.html_to_pdf(html_data), "application/pdf"
     renderer, content_type, _ext = proposal_layout.RENDERERS[fmt]
+    if fmt == "PDF":
+        # Layout genérico: o texto cai dentro da área livre do papel timbrado.
+        data = renderer(blocks, title=title, layout=template_files.layout_for(template))
+        letter = template_files.read_letterhead(template)
+        return (letterhead.apply(data, letter) if letter else data), content_type
     return renderer(blocks, title=title), content_type
+
+
+def _uses_protteja_layout(template: DocumentTemplateVersion, content: dict[str, Any]) -> bool:
+    """O layout com a marca Protteja (logótipo, «Protteja Seguros, S.A.»,
+    gama Business…Premium Plus) só serve a Protteja: os seus modelos
+    `PROTTEJA_*` ou uma seguradora cuja marca configurada é a Protteja.
+    As restantes seguradoras usam o layout genérico com a sua própria marca."""
+    if template.template_code.startswith("PROTTEJA_"):
+        return True
+    company = str((content.get("branding") or {}).get("company") or "")
+    return "protteja" in company.casefold()
 
 
 def generate(

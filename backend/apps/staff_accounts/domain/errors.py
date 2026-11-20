@@ -39,3 +39,10 @@ class InvalidRefreshTokenError(DomainProblem):
 
     http_status = 401
     problem_code = "AUTH-401"
+
+
+class StaffAccountLimitReachedError(DomainProblem):
+    """A plataforma fixou um número máximo de utilizadores para esta seguradora."""
+
+    http_status = 409
+    problem_code = "STAFF-LIMIT"

@@ -51,6 +51,11 @@ def _bind_anonymous_customer_actor(tenant_id) -> None:
     `customer_account_id` yet (that is what the request is trying to
     resolve). `ActorContextCleanupMiddleware` unbinds it after the
     response regardless."""
+    from apps.customer_portal.domain.errors import PortalModuleDisabledError
+    from apps.platform_admin.application.tenant_settings import module_enabled
+
+    if not module_enabled(tenant_id, "customerPortal"):
+        raise PortalModuleDisabledError("O Portal do Cliente não está disponível para esta seguradora")
     CurrentActorProvider.bind(
         Actor(
             actor_id="anonymous-portal-login",

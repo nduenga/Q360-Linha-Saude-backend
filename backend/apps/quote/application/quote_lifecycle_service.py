@@ -64,7 +64,7 @@ def clone_quote(*, quote: Quote, reason: str | None) -> Quote:
     skipped: list[str] = []
     with transaction.atomic():
         # A cópia é uma cotação nova: data de criação e validade próprias.
-        copy = quote_service.create_quote(proposer_id=quote.proposer_id, plan_id=quote.plan_id)
+        copy = quote_service.create_quote(proposer_id=quote.proposer_id, plan_id=quote.plan_id, attach_titular=False)
         for qm in quote.members.order_by("created_at", "id"):
             try:
                 quote_service.add_quote_member(quote=copy, member_id=qm.member_id, correlation_id=None)
@@ -172,7 +172,7 @@ def create_renewal(
     skipped: list[dict[str, str]] = []
 
     with transaction.atomic():
-        renewal = quote_service.create_quote(proposer_id=policy.proposer_id, plan_id=target_plan_id)
+        renewal = quote_service.create_quote(proposer_id=policy.proposer_id, plan_id=target_plan_id, attach_titular=False)
         effective_settings = effective_plan_settings(renewal.plan, renewal_date)
         deadlines = effective_settings.get("renewalDeadlines") or {}
         rules = effective_settings.get("renewal") or {}

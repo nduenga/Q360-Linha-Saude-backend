@@ -249,6 +249,10 @@ def create_quote(
     proposer_input: dict[str, Any] | None = None,
     titular_member_input: dict[str, Any] | None = None,
     source_channel: str | None = None,
+    # Negócio novo: o titular individual entra logo na cotação. Renovações,
+    # endossos e cópias passam False: escolhem elas as pessoas (da apólice,
+    # só as incluídas, ou as da cotação de origem).
+    attach_titular: bool = True,
 ) -> Quote:
     tenant_id = CurrentTenantProvider.require()
     actor = CurrentActorProvider.get()
@@ -410,7 +414,7 @@ def create_quote(
             # O titular individual tem de fazer parte da cotação, quer tenha
             # sido criado neste pedido quer já existisse para o proponente.
             titular = created_member
-            if titular is None and proposer.proposer_type == "INDIVIDUAL":
+            if titular is None and attach_titular and proposer.proposer_type == "INDIVIDUAL":
                 titular = InsuredMember.objects.filter(
                     proposer=proposer,
                     relationship_code="TITULAR",

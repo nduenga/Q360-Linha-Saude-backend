@@ -48,6 +48,10 @@ class CustomerPortalJwtAuthentication(authentication.BaseAuthentication):
 
         if tenant_status.is_blocked(actor.tenant_id.value):
             raise exceptions.AuthenticationFailed("O tenant está suspenso ou inativo.")
+        from apps.platform_admin.application.tenant_settings import module_enabled
+
+        if not module_enabled(actor.tenant_id.value, "customerPortal"):
+            raise exceptions.AuthenticationFailed("O Portal do Cliente não está disponível para esta seguradora.")
         CurrentActorProvider.bind(actor)
         return ActorUser(actor), token
 

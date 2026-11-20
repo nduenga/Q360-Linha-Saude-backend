@@ -208,18 +208,23 @@ def test_branding_texts_and_signed_links(admin_client, approver, tenant):
     html = admin_client.get(f"/api/v1/quotes/{scope['quoteId']}/proposals/preview").content.decode()
     for expected in ("Seguradora Exemplo", "#112233", "Saúde sempre", "Rodapé oficial", "Aviso do negócio", "Texto publicado pelo negócio"):
         assert expected in html
+    generated = {}
     for fmt, magic in (("PDF", b"%PDF"), ("DOCX", b"PK")):
         doc = admin_client.post(f"/api/v1/quotes/{scope['quoteId']}/proposals", {"format": fmt}, format="json").data
         assert doc["status"] == "GENERATED"
         assert admin_client.get(doc["downloadUrl"]).content.startswith(magic)
+        generated[fmt] = doc
 
+    # Só se partilham PDF com o cliente.
+    assert admin_client.post(f"/api/v1/documents/{generated['DOCX']['id']}/signed-url", {}, format="json").status_code == 403
+    doc = generated["PDF"]
     link = admin_client.post(f"/api/v1/documents/{doc['id']}/signed-url", {}, format="json")
     assert link.status_code == 201 and link.data["expiresInSeconds"] == 900
     from rest_framework.test import APIClient
 
     anonymous = APIClient()
     opened = anonymous.get(link.data["url"])
-    assert opened.status_code == 200 and opened.content.startswith(b"PK")
+    assert opened.status_code == 200 and opened.content.startswith(b"%PDF")
     tampered = anonymous.get(link.data["url"][:-4] + "xxxx")
     assert tampered.status_code == 403
     assert anonymous.get(doc["downloadUrl"]).status_code in (401, 403)  # o descarregamento normal exige sessão
@@ -228,7 +233,7 @@ def test_branding_texts_and_signed_links(admin_client, approver, tenant):
 @pytest.mark.django_db
 def test_expired_signed_link_is_refused(admin_client, monkeypatch):
     scope = _scope(admin_client, members=1)
-    doc = admin_client.post(f"/api/v1/quotes/{scope['quoteId']}/proposals", {"format": "HTML"}, format="json").data
+    doc = admin_client.post(f"/api/v1/quotes/{scope['quoteId']}/proposals", {"format": "PDF"}, format="json").data
     admin_client.put("/api/v1/system-parameters/documents.signed_url_ttl_seconds", {"value": 60, "rowVersion": 0, "reason": "Prazo curto para teste"}, format="json")
     link = admin_client.post(f"/api/v1/documents/{doc['id']}/signed-url", {}, format="json").data
     assert link["expiresInSeconds"] == 60

@@ -77,6 +77,10 @@ _STAFF = (
 # códigos de acesso e as notificações da demo nunca cheguem a pessoas reais.
 # Quem quiser receber os códigos na sua caixa de correio define
 # Q360_DEMO_EMAIL_ANA / Q360_DEMO_EMAIL_CARLOS antes de correr o seed.
+# Numa organização, o código do portal vai para o titular, não para a empresa.
+EMPRESA_TITULAR_EMAIL = "joao.domingos@demo.q360.local"
+
+
 def demo_email(person: str) -> str:
     """`person` = "ANA" ou "CARLOS"; lido em cada execução do seed."""
     default = {"ANA": "ana.silva@demo.q360.local", "CARLOS": "carlos.mendes@demo.q360.local"}[person]
@@ -500,7 +504,8 @@ class Command(BaseCommand):
             email="empresa.kilamba@demo.q360.local",
             phone="+244 900 000 003",
         )
-        holder = self._ensure_member(proposer, "DEMO-EMPRESA-TITULAR", "TITULAR", "João", "Domingos", "1993-06-08")
+        holder = self._ensure_member(proposer, "DEMO-EMPRESA-TITULAR", "TITULAR", "João", "Domingos", "1993-06-08",
+                                     email=EMPRESA_TITULAR_EMAIL)
         spouse = self._ensure_member(proposer, "DEMO-EMPRESA-CONJUGE", "CONJUGE", "Teresa", "Domingos", "1995-07-11")
         existing = Policy.objects.filter(proposer=proposer, status="ACTIVE", plan=plan).order_by("created_at").first()
         if existing:
@@ -622,9 +627,18 @@ class Command(BaseCommand):
         first_name: str,
         last_name: str,
         birth_date: str,
+        email: str | None = None,
     ) -> InsuredMember:
         member = InsuredMember.objects.filter(proposer=proposer, external_reference=external_reference).first()
         if member is not None:
+            if email and (
+                (member.attributes_json or {}).get("email") != email or member.relationship_code != relationship_code
+            ):
+                # Bases semeadas antes, em que o titular da organização ficava
+                # COLABORADOR e sem email: passa a TITULAR e recebe os códigos do portal.
+                member.attributes_json = {**(member.attributes_json or {}), "email": email}
+                member.relationship_code = relationship_code
+                member.save(update_fields=["attributes_json", "relationship_code"])
             return member
         return create_member(
             proposer=proposer,
@@ -634,7 +648,8 @@ class Command(BaseCommand):
             date_of_birth=datetime.date.fromisoformat(birth_date),
             sex_code=None,
             external_reference=external_reference,
-            attributes={"seed": "demo"},
+            attributes={"seed": "demo", **({"email": email} if email else {})},
+            allow_organisation_titular=relationship_code == "TITULAR",
         )
 
     def _create_quote_with_evaluations(self, *, proposer: Proposer, plan: Plan, members):
@@ -648,12 +663,16 @@ class Command(BaseCommand):
                 context=context,
                 correlation_id=f"demo-eligibility-{member.external_reference}",
             )
-            QuoteMember.objects.create(
+            # A criação da cotação já associa o titular individual: atualiza-o
+            # em vez de o inserir outra vez (uq_quote_member).
+            QuoteMember.objects.update_or_create(
                 tenant_id=quote.tenant_id,
                 quote=quote,
                 member=member,
-                status=self._quote_member_status(evaluation.decision),
-                eligibility_evaluation=evaluation,
+                defaults={
+                    "status": self._quote_member_status(evaluation.decision),
+                    "eligibility_evaluation": evaluation,
+                },
             )
         return quote
 

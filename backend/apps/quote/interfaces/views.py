@@ -502,7 +502,9 @@ class DocumentTemplateListCreateView(APIView):
             # local quote flow on the production READ scope matrix.
             from django.conf import settings
 
-            if settings.DEBUG:
+            # O contrato OpenAPI (swagger_fake_view) descreve sempre a regra
+            # de produção, para não mudar consoante o DEBUG de quem o gera.
+            if settings.DEBUG and not getattr(self, "swagger_fake_view", False):
                 return [IsAuthenticated()]
             return [require_scope(Scope.READ)()]
         return [permission() for permission in self.permission_classes]

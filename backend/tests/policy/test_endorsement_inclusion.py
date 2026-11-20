@@ -49,6 +49,8 @@ def test_inclusion_prorata_approval_and_client_acceptance(admin_client, tenant):
     assert sum(Decimal(i["amount"]) for i in calc["installments"]) == Decimal(calc["totalCharged"])
     assert all(i["dueDate"] >= inclusion.isoformat() for i in calc["installments"])
     qid = created.data["quoteId"]
+    # o endosso de inclusão só tem as pessoas novas: o titular já está na apólice
+    assert [m["memberId"] for m in admin_client.get(f"/api/v1/quotes/{qid}/members").data["items"]] == [child]
     assert admin_client.post(url, {"inclusionDate": inclusion.isoformat()}, format="json").status_code == 409
 
     ready = admin_client.get(f"/api/v1/quotes/{qid}").data

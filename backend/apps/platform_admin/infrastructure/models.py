@@ -29,6 +29,8 @@ class PlatformAuditEvent(models.Model):
     occurred_at = models.DateTimeField(auto_now_add=True)
     correlation_id = models.CharField(max_length=100, null=True, blank=True)
     metadata_json = models.JSONField(default=dict)
+    # Seguradora a que o evento diz respeito (None: evento só da plataforma).
+    tenant_id = models.UUIDField(null=True, blank=True)
     class Meta:
         managed = False
         db_table = "platform_audit_event"

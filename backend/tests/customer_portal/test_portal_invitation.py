@@ -216,3 +216,20 @@ def test_organisation_first_access_code_goes_to_the_titular(admin_client, tenant
             )
     assert [message.to for message in mail.outbox] == [["marta@convite.ao"]]
     assert masked.startswith("m")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_emails_come_from_q360_and_the_tenant_name(admin_client, tenant, settings):
+    """O remetente aparece como «Q360 - <nome do tenant>»."""
+    settings.CUSTOMER_PORTAL_EMAIL_FROM = "Antigo <no-reply@q360.ao>"
+    mail.outbox.clear()
+    _create(admin_client, email="remetente@convite.ao", nif="023239343LA094")
+    assert mail.outbox[-1].from_email == f"Q360 - {tenant.name} <no-reply@q360.ao>"
+
+    # o código de definir a palavra-passe também (pedido sem sessão, tenant do URL)
+    APIClient().post(f"{BASE}/{tenant.id}/auth/password-reset/request", {"email": "remetente@convite.ao"}, format="json")
+    assert mail.outbox[-1].from_email == f"Q360 - {tenant.name} <no-reply@q360.ao>"
+
+    from apps.customer_portal.infrastructure.email_sender import sender
+
+    assert sender() == "Q360 <no-reply@q360.ao>"  # sem tenant no contexto

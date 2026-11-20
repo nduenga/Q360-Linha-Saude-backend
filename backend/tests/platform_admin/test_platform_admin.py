@@ -39,7 +39,7 @@ def _client(email="root@q360.test"):
 NEW_TENANT = {
     "code": "acme-seguros",
     "name": "Acme Seguros",
-    "profile": {"legalName": "Acme Seguros, S.A.", "nif": "5417000000", "email": "geral@acme.ao", "country": "Angola"},
+    "profile": {"nif": "5417000000", "email": "geral@acme.ao", "country": "Angola"},
     "admin": {"name": "Ana Admin", "email": "ana@acme.ao"},
 }
 
@@ -119,7 +119,9 @@ def test_suspending_a_tenant_blocks_existing_tokens_and_new_logins():
     staff.credentials(HTTP_AUTHORIZATION=f"Bearer {logged.data['accessToken']}")
     assert staff.get("/api/v1/admin/staff-accounts").status_code == 200
 
-    suspended = client.patch(f"/api/v1/platform/tenants/{tenant_id}", {"status": "SUSPENDED"}, format="json")
+    suspended = client.patch(f"/api/v1/platform/tenants/{tenant_id}",
+                             {"status": "SUSPENDED", "suspensionReason": "Contrato suspenso por falta de pagamento"},
+                             format="json")
     assert suspended.status_code == 200 and suspended.data["status"] == "SUSPENDED"
     assert staff.get("/api/v1/admin/staff-accounts").status_code == 401
     assert _staff_login("ana@acme.ao", made["temporaryPassword"]).status_code == 401
@@ -212,3 +214,21 @@ def test_a_staff_account_is_never_treated_as_a_super_admin():
     staff = _staff_login("ana@acme.ao", made["temporaryPassword"])
     assert staff.status_code == 200 and staff.data["accountType"] == "STAFF" and staff.data["refreshToken"]
     assert _staff_login("ana@acme.ao", "errada").status_code == 401
+
+
+@pytest.mark.django_db
+def test_tenant_code_comes_from_the_name_and_the_nif_has_ten_digits():
+    _admin()
+    client = _client()
+    body = {"name": "Protteja Saúde, S.A.", "profile": {"nif": "5417000001", "email": "geral@protteja.ao"},
+            "admin": {"name": "Admin", "email": "admin@protteja.ao"}}
+    created = client.post("/api/v1/platform/tenants", body, format="json")
+    assert created.status_code == 201, created.content
+    assert created.data["tenant"]["code"] == "protteja-saude-s-a"
+    assert created.data["tenant"]["profile"]["email"] == "geral@protteja.ao"
+    again = client.post("/api/v1/platform/tenants", {**body, "admin": {"name": "B", "email": "b@protteja.ao"}}, format="json")
+    assert again.status_code == 201 and again.data["tenant"]["code"] == "protteja-saude-s-a-2"
+
+    wrong = client.post("/api/v1/platform/tenants", {**body, "profile": {"nif": "123456789LA012"},
+                                                     "admin": {"name": "C", "email": "c@protteja.ao"}}, format="json")
+    assert wrong.status_code == 400 and "10 dígitos" in str(wrong.content.decode())

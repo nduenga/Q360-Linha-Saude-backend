@@ -86,3 +86,10 @@ class PortalLegacyLoginDisabledError(DomainProblem):
 
     http_status = 404
     problem_code = "NOT-FOUND"
+
+
+class PortalModuleDisabledError(DomainProblem):
+    """A plataforma desligou o Portal do Cliente para esta seguradora."""
+
+    http_status = 404
+    problem_code = "PORTAL-DISABLED"

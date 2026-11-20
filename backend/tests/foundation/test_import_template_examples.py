@@ -121,13 +121,13 @@ def _package_file(name: str) -> SimpleUploadedFile:
 def test_package_member_claims_and_premium_examples_import_without_errors(admin_client):
     proposer_id = _organisation(admin_client)
     uploaded = admin_client.post("/api/v1/member-imports",
-                                 {"proposerId": proposer_id, "file": _package_file("02_Exemplo_Membros_TESTE.xlsx")},
+                                 {"proposerId": proposer_id, "file": _package_file("Modelo__exemplar_Colaboradores_e_Familiares_TESTE.xlsx")},
                                  format="multipart").data
     assert uploaded["invalidRows"] == 0 and uploaded["validRows"] >= 30
     assert admin_client.post(f"/api/v1/member-imports/{uploaded['id']}/commit", {"confirm": True},
                              format="json").data["status"] == "COMPLETED"
-    for kind, name in (("CLAIMS", "04_Exemplo_Historico_Sinistros_36_Meses_TESTE.xlsx"),
-                       ("PREMIUMS", "06_Exemplo_Historico_Premios_36_Meses_TESTE.xlsx")):
+    for kind, name in (("CLAIMS", "Modelo_exemplar_Historico_Sinistros_36_Meses_TESTE.xlsx"),
+                       ("PREMIUMS", "Modelo_exemplar_Historico_Premios_36_Meses_TESTE.xlsx")):
         response = admin_client.post("/api/v1/claims/imports",
                                      {"file": _package_file(name), "kind": kind, "proposerId": proposer_id},
                                      format="multipart")
@@ -138,10 +138,10 @@ def test_package_member_claims_and_premium_examples_import_without_errors(admin_
 @pytest.mark.django_db
 def test_package_benefit_and_reference_examples_are_valid(admin_client):
     response = admin_client.post("/api/v1/benefits/import",
-                                 {"file": _package_file("08_Exemplo_Coberturas_TESTE.xlsx"), "dryRun": "true"},
+                                 {"file": _package_file("Modelo_exemplar_Coberturas_TESTE.xlsx"), "dryRun": "true"},
                                  format="multipart")
     assert response.data["errors"] == [] and len(response.data["created"]) == 10
-    parsed = platform_reference_service.parse_workbook_preview((PACKAGE / "10_Exemplo_Tabela_Referencia_TESTE.xlsx").read_bytes())
+    parsed = platform_reference_service.parse_workbook_preview((PACKAGE / "Modelo_exemplar_Tabela_Referencia_TESTE.xlsx").read_bytes())
     assert len(parsed["rows"]) == 18
     platform_reference_service.validate_table(
         code="provincias", name="Províncias", key_column="provincia",

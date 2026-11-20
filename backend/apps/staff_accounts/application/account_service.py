@@ -19,7 +19,7 @@ from rest_framework.exceptions import NotFound
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
-from apps.staff_accounts.domain.errors import DuplicateStaffAccountEmailError
+from apps.staff_accounts.domain.errors import DuplicateStaffAccountEmailError, StaffAccountLimitReachedError
 from apps.staff_accounts.infrastructure.models import StaffAccount, StaffAccountRole, StaffRefreshToken
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
@@ -52,6 +52,22 @@ def _roles_by_account(account_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[str]
     return roles_by_account
 
 
+def ensure_user_limit(tenant_id) -> None:
+    """Recusa uma conta nova quando a seguradora já tem o máximo de
+    utilizadores ativos fixado pela plataforma (sem limite por omissão)."""
+    from apps.platform_admin.application.tenant_settings import max_users
+
+    limit = max_users(tenant_id)
+    if limit is None:
+        return
+    active = StaffAccount.all_tenants.filter(tenant_id=tenant_id, status=StaffAccount.ACTIVE).count()
+    if active >= limit:
+        raise StaffAccountLimitReachedError(
+            f"Esta seguradora já tem {active} utilizador(es) ativo(s), o máximo contratado ({limit}). "
+            "Desative uma conta ou peça à plataforma para aumentar o limite."
+        )
+
+
 def list_accounts() -> list[StaffAccountView]:
     accounts = list(StaffAccount.objects.all().order_by("email"))
     roles_by_account = _roles_by_account([a.id for a in accounts])
@@ -63,6 +79,7 @@ def create_account(*, email: str, name: str, roles: list[str], password: str | N
     time the plaintext value ever exists) so the admin can hand it to the
     new user out of band; never logged, never stored anywhere but the hash."""
     tenant_id = CurrentTenantProvider.require().value
+    ensure_user_limit(tenant_id)
     generated_password = None
     if password is None:
         generated_password = secrets.token_urlsafe(12)

@@ -251,19 +251,21 @@ def test_cancelled_quotes_have_no_proposals(admin_client):
 
 @pytest.mark.django_db
 def test_failed_generation_is_recorded_and_can_be_retried(admin_client, monkeypatch):
-    from apps.quote.application import chromium_converter
+    from apps.quote.application import proposal_layout
 
     scope = _scope(admin_client)
-    def boom(_html):
+    original = proposal_layout.RENDERERS["PDF"]
+
+    def boom(blocks, *, title, layout=None):
         raise RuntimeError("falha de renderização simulada")
 
-    monkeypatch.setattr(chromium_converter, "html_to_pdf", boom)
+    monkeypatch.setitem(proposal_layout.RENDERERS, "PDF", (boom, original[1], original[2]))
     failed = _generate(admin_client, scope)
     assert failed.status_code == 200 and failed.data["status"] == "FAILED" and "simulada" in failed.data["failure"]
     assert failed.data["downloadUrl"] is None
     assert admin_client.get(f"/api/v1/documents/{failed.data['id']}/download").status_code == 409
 
-    monkeypatch.setattr(chromium_converter, "html_to_pdf", lambda _html: b"%PDF-1.7 retry")
+    monkeypatch.setitem(proposal_layout.RENDERERS, "PDF", original)
     retried = admin_client.post(f"/api/v1/documents/{failed.data['id']}/retry", {}, format="json")
     assert retried.status_code == 200 and retried.data["status"] == "GENERATED" and retried.data["documentNumber"]
     assert admin_client.get(retried.data["downloadUrl"]).content.startswith(b"%PDF")

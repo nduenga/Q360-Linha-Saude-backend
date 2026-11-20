@@ -585,6 +585,48 @@ REGISTRY.update(
         "PlatformTemplateVersionsView.get": {"response": d.TemplateVersion, "many": True},
         "PlatformTemplateApproveView.post": {"request": d.PlatformParameterDecision, "response": d.TemplateVersion},
         "PlatformTemplateRejectView.post": {"request": d.PlatformParameterDecision, "response": d.TemplateVersion},
+        "PlatformTenantSettingsView.patch": {
+            "request": _pl.UpdateTenantSettingsSerializer, "response": _pl.TenantResponseSerializer,
+            "notes": "Cores da marca (usadas nas propostas e emails quando a seguradora não publicou a sua), "
+                     "máximo de utilizadores (null = sem limite) e módulos ativos.",
+        },
+        "PlatformTenantLogoView.get": {"media": "image/png", "notes": "Logótipo da seguradora (PNG ou JPEG); 404 sem logótipo."},
+        "PlatformTenantLogoView.post": {"request": _pl.TenantLogoUploadSerializer, "response": _pl.TenantResponseSerializer},
+        "PlatformTenantHealthView.get": {
+            "response": _pl.TenantHealthSerializer,
+            "notes": "Último acesso, utilizadores ativos, cotações e apólices do mês, configuração em falta e lista de "
+                     "arranque. A consulta fica na auditoria (platform.tenant_viewed).",
+        },
+        "PlatformAuditSearchView.get": {
+            "response": _pl.AuditSearchPageSerializer,
+            "queries": {"source": ("string", False, "PLATFORM, TENANT ou ALL (por omissão)."),
+                        "tenantId": ("string", False, "Seguradora."), "actorId": ("string", False, "Autor."),
+                        "action": ("string", False, "Parte do nome da ação."),
+                        "dateFrom": ("string", False, "AAAA-MM-DD."), "dateTo": ("string", False, "AAAA-MM-DD."),
+                        "page": ("integer", False, "Página (1…)."), "size": ("integer", False, "Até 200 (por omissão 50).")},
+            "notes": "Cada evento traz `changes` (campo, antes, depois). Consultar a auditoria de uma seguradora fica registado.",
+        },
+        "PlatformAuditExportView.get": {
+            "media": "application/octet-stream",
+            "queries": {"fileType": ("string", False, "xlsx (por omissão) ou pdf."),
+                        "source": ("string", False, "PLATFORM, TENANT ou ALL."), "tenantId": ("string", False, "Seguradora."),
+                        "actorId": ("string", False, "Autor."), "action": ("string", False, "Parte do nome da ação."),
+                        "dateFrom": ("string", False, "AAAA-MM-DD."), "dateTo": ("string", False, "AAAA-MM-DD.")},
+            "notes": "Até 5000 eventos. A exportação fica registada na auditoria.",
+        },
+        "PlatformAlertsView.get": {"response": _pl.PlatformAlertSerializer, "many": True},
+        "PlatformReferenceTableExportView.get": {
+            "media": XLSX, "queries": {"version": ("integer", False, "Versão (por omissão a que está em vigor).")},
+        },
+        "PlatformReferenceTableDiffView.get": {"response": d.ReferenceTableDiff},
+        "PlatformTemplateExportView.get": {
+            "media": XLSX, "queries": {"version": ("integer", False, "Versão (por omissão a última publicada).")},
+        },
+        "PlatformTemplateDiffView.get": {"response": d.TemplateDiff},
+        "PlatformTemplateCatalogView.get": {"response": d.TemplateCatalog},
+        "PlatformPendingApprovalsView.get": {"response": d.PlatformPendingApproval, "many": True},
+        "PlatformParameterImpactView.get": {"response": d.PlatformParameterImpact},
+        "PlatformFormulaTestView.post": {"request": d.PlatformFormulaTestRequest, "response": d.FormulaTestResult},
         "PlatformAuditView.get": {
             "response": _pl.PlatformAuditEventSerializer, "many": True,
             "queries": {"action": ("string", False, "Ação."), "entityType": ("string", False, "Tipo de entidade."),

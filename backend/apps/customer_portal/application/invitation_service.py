@@ -72,6 +72,10 @@ def invite_proposer(proposer: Proposer, *, recipient_email: str | None = None) -
     if "@" not in email:
         return None
     tenant_id = CurrentTenantProvider.require().value
+    from apps.platform_admin.application.tenant_settings import module_enabled
+
+    if not module_enabled(tenant_id, "customerPortal"):
+        return None  # Portal desligado pela plataforma: não há convite
     account = CustomerAccount.objects.filter(email__iexact=email).first()
     # Conta já ligada a este proponente (reenvio de um convite) conta como nova:
     # o cliente continua a precisar de definir a palavra-passe, não de provar o documento.
@@ -133,6 +137,10 @@ def invitation_status(proposer: Proposer) -> dict:
 
 def resend_invitation(proposer: Proposer) -> dict:
     """Volta a enviar o convite para o cliente individual ou para o titular da organização."""
+    from apps.platform_admin.application.tenant_settings import module_enabled
+
+    if not module_enabled(CurrentTenantProvider.require().value, "customerPortal"):
+        raise HouseholdValidationError("O Portal do Cliente não está ativo para esta seguradora.")
     recipient = None
     if proposer.proposer_type == "ORGANISATION":
         recipient = titular_email(proposer)
