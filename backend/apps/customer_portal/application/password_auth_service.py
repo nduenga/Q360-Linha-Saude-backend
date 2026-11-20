@@ -1,7 +1,8 @@
 """Login por email + palavra-passe do Portal Cliente.
 
 Primeiro acesso: o cliente indica a referência (apólice ou cotação) e o
-documento; o código vai para o email **já guardado no proponente** — nunca
+documento; o código vai para o email **já guardado no proponente** (numa
+organização, o do titular, nunca o da empresa) — nunca
 para um email escrito por quem pede. Quem controla essa caixa de correio e
 conhece referência + documento define a palavra-passe. «Esqueci-me» usa o
 mesmo código, pedido só com o email.
@@ -22,6 +23,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.client.infrastructure.models import Proposer
+from apps.customer_portal.application.invitation_service import portal_email
 from apps.customer_portal.domain.errors import (
     InvalidPortalCredentialsError,
     PortalAccountLockedError,
@@ -44,7 +46,6 @@ from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
 from apps.policy.infrastructure.models import Policy
-from apps.quote.domain.enums import QuoteStatus
 from apps.quote.infrastructure.models import Quote
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
@@ -63,12 +64,13 @@ def _tenant_id() -> uuid.UUID:
 
 
 def _resolve_proposer(*, reference: str, registration_number: str) -> Proposer:
-    """A policy number or a (non-draft) quote number, plus the holder's document."""
+    """A policy number or a quote number, plus the holder's document."""
     reference = reference.strip()
     proposer_id = (
         Policy.objects.filter(policy_number=reference).values_list("proposer_id", flat=True).first()
+        # Inclui rascunhos: o convite envia o número da cotação logo na criação.
+        # O código continua a ir só para o email registado do cliente/titular.
         or Quote.objects.filter(quote_number=reference)
-        .exclude(status=QuoteStatus.DRAFT.value)
         .values_list("proposer_id", flat=True)
         .first()
     )
@@ -158,8 +160,12 @@ class CustomerPortalPasswordAuthService:
     def first_access_request(self, *, reference: str, registration_number: str, correlation_id: str | None) -> str:
         """Sends the code to the proposer's email on file; returns it masked."""
         proposer = _resolve_proposer(reference=reference, registration_number=registration_number)
-        email = _normalise(proposer.email or "")
+        email = portal_email(proposer)
         if "@" not in email:
+            if proposer.proposer_type == "ORGANISATION":
+                raise PortalNoEmailOnFileError(
+                    "Esta organização ainda não tem um titular com email registado; contacte o seu mediador"
+                )
             raise PortalNoEmailOnFileError("Não há nenhum email registado para este cliente; contacte o seu mediador")
         with transaction.atomic():
             account = _account_for(email) or CustomerAccount.objects.create(tenant_id=_tenant_id(), email=email)
@@ -179,7 +185,7 @@ class CustomerPortalPasswordAuthService:
         self, *, reference: str, registration_number: str, otp: str, password: str, correlation_id: str | None
     ) -> tuple[str, int]:
         proposer = _resolve_proposer(reference=reference, registration_number=registration_number)
-        email = _normalise(proposer.email or "")
+        email = portal_email(proposer)
         account = _account_for(email) if "@" in email else None
         if account is None:
             raise InvalidPortalCredentialsError("Não foi feito nenhum pedido de acesso para este cliente: peça primeiro um novo código")

@@ -29,6 +29,37 @@ _SENT = "customer_portal.invitation_sent"
 _FAILED = "customer_portal.invitation_failed"
 
 
+def titular_email(proposer: Proposer) -> str:
+    """Email do titular ativo de uma organização ('' se não houver). Numa
+    organização, é o titular quem recebe o convite e o código do portal,
+    nunca o email de contacto da empresa."""
+    titular = InsuredMember.objects.filter(proposer=proposer, relationship_code="TITULAR", status="ACTIVE").first()
+    return ((titular.attributes_json or {}).get("email") or "").strip().lower() if titular else ""
+
+
+def portal_email(proposer: Proposer) -> str:
+    """Email que recebe o convite e os códigos do portal para este proponente."""
+    if proposer.proposer_type == "ORGANISATION":
+        return titular_email(proposer)
+    return (proposer.email or "").strip().lower()
+
+
+def _latest_references(proposer: Proposer) -> tuple[str | None, str | None]:
+    """Número da cotação mais recente e da apólice mais recente do proponente,
+    para o cliente saber que referência usar no «Primeiro acesso»."""
+    from apps.policy.infrastructure.models import Policy
+    from apps.quote.infrastructure.models import Quote
+
+    quote_number = (
+        Quote.objects.filter(proposer=proposer).exclude(quote_number__isnull=True).exclude(quote_number="")
+        .order_by("-created_at").values_list("quote_number", flat=True).first()
+    )
+    policy_number = (
+        Policy.objects.filter(proposer=proposer).order_by("-created_at").values_list("policy_number", flat=True).first()
+    )
+    return quote_number, policy_number
+
+
 def invite_proposer(proposer: Proposer, *, recipient_email: str | None = None) -> str | None:
     """Liga o proponente a uma conta do portal e envia o convite depois do
     commit. `recipient_email` permite convidar o titular importado de uma
@@ -64,8 +95,13 @@ def invite_proposer(proposer: Proposer, *, recipient_email: str | None = None) -
         # A auditoria só diz «enviado» depois de o servidor de email aceitar a mensagem.
         metadata = {"email": email, "existingAccount": existing, "linked": not existing}
         try:
+            # Lido depois do commit: a cotação criada no mesmo pedido já existe.
+            quote_number, policy_number = _latest_references(proposer)
+            if quote_number:
+                metadata["quoteNumber"] = quote_number
             send_portal_invitation_email(to_email=email, client_name=proposer.display_name, insurer_name=insurer,
-                                         link=link, existing_account=existing)
+                                         link=link, existing_account=existing,
+                                         quote_number=quote_number, policy_number=policy_number)
         except Exception as exc:  # noqa: BLE001 - o registo do cliente não depende do servidor de email
             logger.exception("Falha ao enviar o convite do portal para o proponente %s", proposer.id)
             _audit.record(action=_FAILED, entity_type="Proposer", entity_id=str(proposer.id),
@@ -99,8 +135,7 @@ def resend_invitation(proposer: Proposer) -> dict:
     """Volta a enviar o convite para o cliente individual ou para o titular da organização."""
     recipient = None
     if proposer.proposer_type == "ORGANISATION":
-        titular = InsuredMember.objects.filter(proposer=proposer, relationship_code="TITULAR", status="ACTIVE").first()
-        recipient = ((titular.attributes_json or {}).get("email") or "") if titular else ""
+        recipient = titular_email(proposer)
         if not recipient:
             raise HouseholdValidationError("Indique primeiro o titular da organização, com o e-mail dele.")
     if invite_proposer(proposer, recipient_email=recipient) is None:

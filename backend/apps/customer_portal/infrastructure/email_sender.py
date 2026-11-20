@@ -45,12 +45,21 @@ def send_set_password_email(*, to_email: str, otp: str) -> None:
 
 
 def send_portal_invitation_email(*, to_email: str, client_name: str, insurer_name: str, link: str,
-                                 existing_account: bool) -> None:
+                                 existing_account: bool, quote_number: str | None = None,
+                                 policy_number: str | None = None) -> None:
     """Convite enviado quando a seguradora regista um proponente com email."""
+    references = []
+    if quote_number:
+        references.append(f"Número da cotação: {quote_number}")
+    if policy_number:
+        references.append(f"Número da apólice: {policy_number}")
+    reference_block = ("\n".join(references) + "\n\n") if references else ""
     if existing_account:
+        which = ("o número da cotação indicado acima" if quote_number
+                 else "o número da apólice indicado acima" if policy_number
+                 else "o número da cotação ou apólice que vai receber")
         steps = ("Já existe uma conta no Portal do Cliente com este email. Para ver também este registo, "
-                 f"use «Primeiro acesso» em {link} com o número da cotação ou apólice que vai receber "
-                 "e o documento do cliente.")
+                 f"use «Primeiro acesso» em {link} com {which} e o documento do cliente.")
     else:
         steps = (f"Para criar a sua palavra-passe, abra {link} e peça o código: enviamo-lo para "
                  "este email. Depois entra com o email e a palavra-passe que escolher.")
@@ -60,6 +69,7 @@ def send_portal_invitation_email(*, to_email: str, client_name: str, insurer_nam
             f"Olá {client_name},\n\n"
             f"A {insurer_name} registou-o(a) como cliente. No Portal do Cliente pode acompanhar "
             "as suas cotações, apólices, pagamentos e pedidos.\n\n"
+            f"{reference_block}"
             f"{steps}\n\n"
             "Se não reconhece este registo, ignore este email."
         ),

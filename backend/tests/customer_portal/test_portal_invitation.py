@@ -2,6 +2,7 @@
 Cliente e consegue criar a palavra-passe sem ter ainda apólice nem cotação."""
 from __future__ import annotations
 
+import contextlib
 from unittest import mock
 
 import pytest
@@ -83,6 +84,19 @@ def test_no_email_no_invitation():
     assert invite_proposer(proposer) is None
 
 
+@contextlib.contextmanager
+def _as_tenant(tenant):
+    from apps.foundation.application.context import CurrentActorProvider
+    from apps.foundation.domain.actor import Actor
+    from apps.foundation.domain.tenant import TenantId
+
+    token = CurrentActorProvider.bind(Actor(actor_id="test", tenant_id=TenantId(tenant.id), roles=frozenset()))
+    try:
+        yield
+    finally:
+        CurrentActorProvider.reset(token)
+
+
 _ORG_TITULAR = {"firstName": "Marta", "lastName": "Neto", "dateOfBirth": "1985-03-02", "sexCode": "F",
                 "email": "marta@convite.ao", "phone": "+244923111222"}
 
@@ -155,3 +169,50 @@ def test_failed_invitation_is_shown_and_resending_sends_the_password_link(admin_
     assert resent.data["status"] == "SENT"
     # a conta já ficou ligada ao cliente: o convite continua a levar a definir a palavra-passe
     assert "/recuperar?" in mail.outbox[0].body and "/primeiro?" not in mail.outbox[0].body
+
+
+@pytest.mark.django_db
+def test_invitation_tells_the_quote_and_policy_numbers(admin_client, tenant, django_capture_on_commit_callbacks):
+    """O convite diz a referência a usar no «Primeiro acesso»."""
+    from apps.client.infrastructure.models import Proposer
+    from apps.customer_portal.application.invitation_service import invite_proposer
+    from tests.customer_portal.test_self_service_api import _set_quote, _setup_active_policy_with_member
+
+    scope = _setup_active_policy_with_member(admin_client, tenant, policy_number="APO-C-001",
+                                             registration_number="953333333LA033")
+    _set_quote(scope, status="DRAFT", quote_number="COT-C-001")
+    mail.outbox.clear()
+    with _as_tenant(tenant), django_capture_on_commit_callbacks(execute=True):
+        invite_proposer(Proposer.objects.get(id=scope["proposerId"]))
+    assert "Número da cotação: COT-C-001" in mail.outbox[-1].body
+    assert "Número da apólice: APO-C-001" in mail.outbox[-1].body
+
+
+@pytest.mark.django_db
+def test_first_access_accepts_the_draft_quote_number_sent_in_the_invitation(admin_client, tenant):
+    from tests.customer_portal.test_password_login_api import _first_access
+    from tests.customer_portal.test_self_service_api import _set_quote, _setup_active_policy_with_member
+
+    scope = _setup_active_policy_with_member(admin_client, tenant, policy_number="APO-C-002",
+                                             registration_number="954444444LA044")
+    _set_quote(scope, status="DRAFT", quote_number="COT-C-002")
+    assert _first_access(tenant, scope, reference="COT-C-002").status_code == 200
+
+
+@pytest.mark.django_db(transaction=True)
+def test_organisation_first_access_code_goes_to_the_titular(admin_client, tenant):
+    """Numa organização, o código para definir a palavra-passe vai para o
+    titular, nunca para o email de contacto da empresa."""
+    from apps.client.infrastructure.models import Proposer
+    from apps.customer_portal.application.password_auth_service import CustomerPortalPasswordAuthService
+
+    response = admin_client.post("/api/v1/proposers", _organisation_body(titular=_ORG_TITULAR), format="json")
+    mail.outbox.clear()
+    with _as_tenant(tenant):
+        proposer = Proposer.objects.get(id=response.data["id"])
+        with mock.patch("apps.customer_portal.application.password_auth_service._resolve_proposer", return_value=proposer):
+                masked = CustomerPortalPasswordAuthService().first_access_request(
+                reference="COT-1", registration_number=proposer.registration_number, correlation_id=None
+            )
+    assert [message.to for message in mail.outbox] == [["marta@convite.ao"]]
+    assert masked.startswith("m")
