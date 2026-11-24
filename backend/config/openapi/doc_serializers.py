@@ -1678,6 +1678,181 @@ class PortalToken(s.Serializer):
     accessToken = s.CharField()
     tokenType = s.CharField(help_text="Bearer.")
     expiresIn = s.IntegerField(help_text="Segundos até o token expirar.")
+    refreshToken = s.CharField(required=False, help_text="Só quando o pedido trouxe `device` (app móvel). Cada uso devolve um novo.")
+    refreshExpiresIn = s.IntegerField(required=False, help_text="Segundos até o token de renovação expirar sem uso (90 dias).")
+
+
+# ------------------------------------------- portal: app móvel (roadmap_mobile.md)
+class PortalDevice(s.Serializer):
+    deviceId = s.CharField(help_text="Identificador estável da instalação da app.")
+    deviceName = s.CharField(required=False)
+    platform = s.ChoiceField(choices=["IOS", "ANDROID", "WEB", "OTHER"], required=False)
+    appVersion = s.CharField(required=False)
+
+
+class PortalDeviceLogin(s.Serializer):
+    email = s.EmailField()
+    password = s.CharField()
+    device = PortalDevice(required=False, help_text="Só a app móvel: devolve também `refreshToken`.")
+
+
+class PortalDeviceFirstAccessConfirm(s.Serializer):
+    reference = s.CharField(help_text="Número da apólice ou da cotação.")
+    registrationNumber = s.CharField()
+    otp = s.CharField(help_text="Código de 6 dígitos recebido por email.")
+    password = s.CharField()
+    device = PortalDevice(required=False)
+
+
+class PortalDevicePasswordResetConfirm(s.Serializer):
+    email = s.EmailField()
+    otp = s.CharField()
+    password = s.CharField()
+    device = PortalDevice(required=False)
+
+
+class PortalInsurerBranding(s.Serializer):
+    tenantId = s.UUIDField()
+    name = s.CharField()
+    primaryColor = s.CharField(allow_null=True, help_text="#RRGGBB.")
+    secondaryColor = s.CharField(allow_null=True, help_text="#RRGGBB.")
+    logoUrl = s.CharField(allow_null=True, help_text="URL absoluto do logótipo (PNG/JPEG), ou nulo.")
+    portalEnabled = s.BooleanField(help_text="Falso: o Portal do Cliente está desligado ou a seguradora suspensa.")
+
+
+class PortalDiscoverRequest(s.Serializer):
+    email = s.EmailField()
+
+
+class PortalDiscoverResult(s.Serializer):
+    insurers = PortalInsurerBranding(many=True, help_text="Uma seguradora quando o email tem conta numa só; vazia nos outros casos (com várias, seguem por email).")
+
+
+class PortalRefreshRequest(s.Serializer):
+    refreshToken = s.CharField()
+    appVersion = s.CharField(required=False)
+
+
+class PortalLogoutRequest(s.Serializer):
+    refreshToken = s.CharField()
+
+
+class PortalConnectedSession(s.Serializer):
+    id = s.UUIDField()
+    deviceName = s.CharField()
+    platform = s.CharField()
+    appVersion = s.CharField()
+    createdAt = s.DateTimeField()
+    lastUsedAt = s.DateTimeField()
+    current = s.BooleanField(help_text="A sessão do dispositivo que fez o pedido.")
+
+
+class PortalConnectedSessions(s.Serializer):
+    sessions = PortalConnectedSession(many=True)
+
+
+class PortalPushDeviceRegister(s.Serializer):
+    expoToken = s.CharField(help_text="ExponentPushToken[...]")
+    platform = s.ChoiceField(choices=["IOS", "ANDROID", "WEB", "OTHER"], required=False)
+
+
+class PortalPushDevice(s.Serializer):
+    id = s.UUIDField()
+    platform = s.CharField()
+    active = s.BooleanField()
+
+
+class PortalPushPreference(s.Serializer):
+    category = s.CharField(help_text="PAYMENTS, QUOTES, REQUESTS, MESSAGES ou POLICIES.")
+    label = s.CharField(required=False)
+    enabled = s.BooleanField()
+
+
+class PortalPushPreferences(s.Serializer):
+    preferences = PortalPushPreference(many=True)
+
+
+class PortalPushPreferencesUpdate(s.Serializer):
+    preferences = PortalPushPreference(many=True, help_text="Só as categorias a mudar; `label` é ignorado.")
+
+
+class PortalAppConfig(s.Serializer):
+    minVersion = s.CharField(allow_null=True)
+    latestVersion = s.CharField(allow_null=True)
+    updateRequired = s.BooleanField(help_text="Só com o cabeçalho X-App-Version: a versão da app é inferior à mínima.")
+    storeUrls = s.DictField(child=s.CharField(allow_null=True), help_text="ios e android.")
+
+
+class PortalCareProvider(s.Serializer):
+    id = s.UUIDField()
+    name = s.CharField()
+    type = s.ChoiceField(choices=["HOSPITAL", "CLINIC", "LAB", "PHARMACY", "IMAGING", "DENTAL", "OTHER"])
+    specialties = s.ListField(child=s.CharField())
+    province = s.CharField()
+    municipality = s.CharField()
+    address = s.CharField()
+    phone = s.CharField()
+    openingHours = s.CharField()
+    emergency = s.BooleanField()
+    latitude = s.FloatField(allow_null=True)
+    longitude = s.FloatField(allow_null=True)
+    active = s.BooleanField()
+    distanceKm = s.FloatField(allow_null=True, help_text="Só quando o pedido traz lat e lng.")
+
+
+class PortalCareProviders(s.Serializer):
+    providers = PortalCareProvider(many=True)
+
+
+class CareProviderWrite(s.Serializer):
+    name = s.CharField()
+    type = s.ChoiceField(choices=["HOSPITAL", "CLINIC", "LAB", "PHARMACY", "IMAGING", "DENTAL", "OTHER"], required=False)
+    specialties = s.ListField(child=s.CharField(), required=False)
+    province = s.CharField(required=False)
+    municipality = s.CharField(required=False)
+    address = s.CharField(required=False)
+    phone = s.CharField(required=False)
+    openingHours = s.CharField(required=False)
+    emergency = s.BooleanField(required=False)
+    latitude = s.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    longitude = s.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    active = s.BooleanField(required=False)
+
+
+class PortalLanguage(s.Serializer):
+    language = s.ChoiceField(choices=["pt", "en"])
+
+
+class PortalDeleteAccount(s.Serializer):
+    password = s.CharField(help_text="Confirmação: a palavra-passe da conta.")
+
+
+class PortalUsageEvent(s.Serializer):
+    name = s.ChoiceField(choices=["APP_OPEN", "SCREEN_VIEW", "PUSH_OPENED", "BIOMETRIC_UNLOCK", "CARD_OFFLINE_VIEW", "DOCUMENT_UPLOAD"])
+    screen = s.CharField(required=False, help_text="Nome do ecrã (sem dados pessoais).")
+
+
+class PortalUsageEvents(s.Serializer):
+    events = PortalUsageEvent(many=True, help_text="Até 50 por pedido; os inválidos são ignorados.")
+    appVersion = s.CharField(required=False)
+    platform = s.ChoiceField(choices=["IOS", "ANDROID", "WEB", "OTHER"], required=False)
+
+
+class PortalUsageEventsResult(s.Serializer):
+    accepted = s.IntegerField()
+
+
+class PortalAppMetrics(s.Serializer):
+    days = s.IntegerField()
+    activations = s.IntegerField(help_text="Clientes que já abriram sessão na app.")
+    activeDevices = s.IntegerField()
+    logins = s.IntegerField(help_text="Sessões abertas no período.")
+    devicesByPlatform = s.ListField(child=s.DictField())
+    appVersions = s.ListField(child=s.DictField())
+    events = s.ListField(child=s.DictField())
+    topScreens = s.ListField(child=s.DictField())
+    opensByDay = s.ListField(child=s.DictField())
+
 
 
 class PortalMaskedEmail(s.Serializer):

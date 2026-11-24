@@ -9,12 +9,22 @@ from apps.staff_accounts.interfaces.admin_views import (
     StaffAccountRolesView,
     StaffAccountStatusView,
 )
-from apps.staff_accounts.interfaces.views import LoginView, LogoutView, RefreshView
+from apps.staff_accounts.interfaces.views import (
+    ChangePasswordView,
+    ForgotPasswordView,
+    LoginView,
+    LogoutView,
+    RefreshView,
+    ResetPasswordView,
+)
 
 urlpatterns = [
     path("auth/login", LoginView.as_view(), name="staff-login"),
     path("auth/refresh", RefreshView.as_view(), name="staff-refresh"),
     path("auth/logout", LogoutView.as_view(), name="staff-logout"),
+    path("auth/forgot-password", ForgotPasswordView.as_view(), name="staff-forgot-password"),
+    path("auth/reset-password", ResetPasswordView.as_view(), name="staff-reset-password"),
+    path("auth/change-password", ChangePasswordView.as_view(), name="staff-change-password"),
     path("admin/staff-accounts", StaffAccountListCreateView.as_view(), name="staff-accounts-list-create"),
     path(
         "admin/staff-accounts/<uuid:account_id>/roles",

@@ -14,8 +14,12 @@ from apps.foundation.interfaces.middleware import get_correlation_id
 from apps.platform_admin.application import auth_service as platform_auth
 from apps.staff_accounts.infrastructure.models import StaffAccount
 from apps.staff_accounts.application.auth_service import StaffAccountAuthService
-from apps.staff_accounts.interfaces.rate_limit import is_login_rate_limited
+from apps.staff_accounts.application import password_service
+from apps.staff_accounts.interfaces.rate_limit import is_login_rate_limited, is_recovery_rate_limited
 from apps.staff_accounts.interfaces.serializers import (
+    ChangePasswordRequestSerializer,
+    ForgotPasswordRequestSerializer,
+    ResetPasswordRequestSerializer,
     LoginRequestSerializer,
     LogoutRequestSerializer,
     RefreshRequestSerializer,
@@ -116,3 +120,52 @@ class LogoutView(APIView):
         body.is_valid(raise_exception=True)
         _auth_service.logout(refresh_token=body.validated_data["refreshToken"])
         return Response(status=204)
+
+
+class ForgotPasswordView(APIView):
+    """POST /auth/forgot-password: envia a ligação de recuperação por email.
+    Responde sempre 202, exista ou não a conta (nunca confirma emails)."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        body = ForgotPasswordRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        email = body.validated_data["email"]
+        if is_recovery_rate_limited(remote_addr=request.META.get("REMOTE_ADDR") or "unknown", email=email):
+            return _too_many_requests()
+        password_service.request_recovery(email=email, correlation_id=get_correlation_id())
+        return Response(status=202)
+
+
+class ResetPasswordView(APIView):
+    """POST /auth/reset-password: define a nova palavra-passe com a ligação recebida por email."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        body = ResetPasswordRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        if is_recovery_rate_limited(remote_addr=request.META.get("REMOTE_ADDR") or "unknown", email="reset"):
+            return _too_many_requests()
+        password_service.reset_with_token(
+            token=body.validated_data["token"], new_password=body.validated_data["newPassword"],
+            correlation_id=get_correlation_id(),
+        )
+        return Response(status=204)
+
+
+class ChangePasswordView(APIView):
+    """POST /auth/change-password (autenticado): o utilizador muda a sua palavra-passe
+    (p.ex. a temporária recebida por email). Devolve uma sessão nova."""
+
+    def post(self, request):
+        body = ChangePasswordRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        result = password_service.change_own_password(
+            account_id=request.user.actor.actor_id, current=body.validated_data["currentPassword"],
+            new=body.validated_data["newPassword"], correlation_id=get_correlation_id(),
+        )
+        return _token_response(result)

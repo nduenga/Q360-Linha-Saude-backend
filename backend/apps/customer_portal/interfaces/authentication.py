@@ -9,6 +9,8 @@ DEFAULT_AUTHENTICATION_CLASSES`.
 """
 from __future__ import annotations
 
+import uuid
+
 from rest_framework import authentication, exceptions
 
 from apps.foundation.application.context import CurrentActorProvider
@@ -52,6 +54,19 @@ class CustomerPortalJwtAuthentication(authentication.BaseAuthentication):
 
         if not module_enabled(actor.tenant_id.value, "customerPortal"):
             raise exceptions.AuthenticationFailed("O Portal do Cliente não está disponível para esta seguradora.")
+        session_id = claims.get("sid")
+        if session_id:
+            # Token de um telemóvel: vale só enquanto a sessão não for terminada
+            # («Dispositivos ligados», fim de sessão, palavra-passe alterada).
+            from apps.customer_portal.application import device_session_service
+
+            try:
+                active = device_session_service.is_active(uuid.UUID(session_id), uuid.UUID(claims["sub"]))
+            except ValueError:
+                active = False
+            if not active:
+                raise exceptions.AuthenticationFailed("A sessão foi terminada. Inicie sessão de novo.")
+        request.portal_session_id = uuid.UUID(session_id) if session_id else None
         CurrentActorProvider.bind(actor)
         return ActorUser(actor), token
 

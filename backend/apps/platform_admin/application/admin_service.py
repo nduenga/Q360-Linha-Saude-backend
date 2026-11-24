@@ -12,6 +12,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.db import IntegrityError, transaction
 
 from apps.platform_admin.application.audit_service import record_platform_audit
+from apps.staff_accounts.application import credential_mail
 from apps.platform_admin.domain.errors import PlatformConflictError, PlatformNotFoundError, PlatformRuleError
 from apps.platform_admin.infrastructure.models import PlatformAdmin
 
@@ -46,6 +47,10 @@ def create_admin(*, actor_id: str, email: str, name: str, correlation_id: str | 
         actor_id=actor_id, action="platform.admin_created", entity_type="PlatformAdmin", entity_id=str(admin.id),
         correlation_id=correlation_id, metadata={"email": admin.email},
     )
+    credential_mail.send_welcome_email(
+        to_email=admin.email, name=admin.name, password=password, tenant_name=None,
+        account_id=str(admin.id), entity="PlatformAdmin",
+    )
     return admin, password
 
 
@@ -77,6 +82,10 @@ def reset_password(*, actor_id: str, admin_id, correlation_id: str | None) -> tu
     record_platform_audit(
         actor_id=actor_id, action="platform.admin_password_reset", entity_type="PlatformAdmin", entity_id=str(admin.id),
         correlation_id=correlation_id,
+    )
+    credential_mail.send_password_reset_email(
+        to_email=admin.email, name=admin.name, password=password, tenant_name=None,
+        account_id=str(admin.id), entity="PlatformAdmin",
     )
     return admin, password
 

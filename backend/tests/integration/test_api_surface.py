@@ -15,13 +15,15 @@ from tests.integration.test_tenant_isolation import _make_tenant, _oidc_static_k
 
 METHODS = ("get", "post", "put", "patch", "delete")
 PUBLIC = {
-    "api/v1/health/live", "api/v1/health/ready", "api/v1/auth/login", "api/v1/platform/auth/login", "api/v1/auth/refresh", "api/v1/auth/logout",
+    "api/v1/health/live", "api/v1/health/ready", "api/v1/auth/login", "api/v1/platform/auth/login", "api/v1/auth/refresh", "api/v1/auth/logout", "api/v1/auth/forgot-password", "api/v1/auth/reset-password",
     "api/v1/auth/dev-login", "api/v1/schema",
 }
 PORTAL_PUBLIC_SUFFIXES = (
     "/auth/request-access", "/auth/verify-otp", "/auth/login",
     "/auth/first-access/request", "/auth/first-access/confirm",
     "/auth/password-reset/request", "/auth/password-reset/confirm",
+    "/auth/refresh", "/auth/logout", "/branding", "/branding/logo", "customer-portal/discover",
+    "customer-portal/app-config",
 )
 
 

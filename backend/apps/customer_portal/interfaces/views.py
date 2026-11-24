@@ -17,9 +17,10 @@ from rest_framework.views import APIView
 from django.conf import settings
 
 from apps.customer_portal.application.auth_service import CustomerPortalAuthService
+from apps.customer_portal.application.device_session_service import DeviceInfo, SessionTokens
 from apps.customer_portal.application.password_auth_service import CustomerPortalPasswordAuthService
 from apps.customer_portal.domain.errors import PortalLegacyLoginDisabledError
-from apps.customer_portal.interfaces.rate_limit import is_ip_rate_limited, is_rate_limited
+from apps.customer_portal.interfaces.rate_limit import is_device_rate_limited, is_ip_rate_limited, is_rate_limited
 from apps.customer_portal.interfaces.serializers import (
     FirstAccessConfirmSerializer,
     FirstAccessMaskedEmailSerializer,
@@ -151,6 +152,28 @@ def _token_response(token: str, ttl_seconds: int) -> Response:
     return Response(PortalTokenResponseSerializer({"accessToken": token, "expiresIn": ttl_seconds}).data, status=200)
 
 
+def session_response(session: SessionTokens) -> Response:
+    """Web: só o token de acesso, como sempre. App móvel: também o de renovação."""
+    payload = {"accessToken": session.access_token, "expiresIn": session.expires_in}
+    if session.refresh_token:
+        payload.update({"refreshToken": session.refresh_token, "refreshExpiresIn": session.refresh_expires_in})
+    return Response(PortalTokenResponseSerializer(payload).data, status=200)
+
+
+def _device_info(data: dict) -> DeviceInfo | None:
+    device = data.get("device")
+    if not device:
+        return None
+    return DeviceInfo(
+        device_id=device["deviceId"], device_name=device.get("deviceName", ""),
+        platform=device.get("platform", "OTHER"), app_version=device.get("appVersion", ""),
+    )
+
+
+def _device_limited(tenant_id, device: DeviceInfo | None) -> bool:
+    return device is not None and is_device_rate_limited(tenant_id=str(tenant_id), device_key=device.device_id)
+
+
 def _remote_addr(request) -> str:
     return request.META.get("REMOTE_ADDR") or "unknown"
 
@@ -189,12 +212,15 @@ class FirstAccessConfirmView(_PublicAuthView):
         data = body.validated_data
         if is_rate_limited(tenant_id=str(tenant_id), remote_addr=_remote_addr(request), email=data["reference"]):
             return _too_many_requests()
+        device = _device_info(data)
+        if _device_limited(tenant_id, device):
+            return _too_many_requests()
         _bind_anonymous_customer_actor(tenant_id)
-        token, ttl = _password_service.first_access_confirm(
+        session = _password_service.first_access_confirm(
             reference=data["reference"], registration_number=data["registrationNumber"], otp=data["otp"],
-            password=data["password"], correlation_id=get_correlation_id(),
+            password=data["password"], correlation_id=get_correlation_id(), device=device,
         )
-        return _token_response(token, ttl)
+        return session_response(session)
 
 
 class PasswordLoginView(_PublicAuthView):
@@ -204,11 +230,14 @@ class PasswordLoginView(_PublicAuthView):
         data = body.validated_data
         if is_rate_limited(tenant_id=str(tenant_id), remote_addr=_remote_addr(request), email=data["email"].lower()):
             return _too_many_requests()
+        device = _device_info(data)
+        if _device_limited(tenant_id, device):
+            return _too_many_requests()
         _bind_anonymous_customer_actor(tenant_id)
-        token, ttl = _password_service.login(
-            email=data["email"], password=data["password"], correlation_id=get_correlation_id()
+        session = _password_service.login(
+            email=data["email"], password=data["password"], correlation_id=get_correlation_id(), device=device
         )
-        return _token_response(token, ttl)
+        return session_response(session)
 
 
 class PasswordResetRequestView(_PublicAuthView):
@@ -232,8 +261,12 @@ class PasswordResetConfirmView(_PublicAuthView):
         data = body.validated_data
         if is_rate_limited(tenant_id=str(tenant_id), remote_addr=_remote_addr(request), email=data["email"].lower()):
             return _too_many_requests()
+        device = _device_info(data)
+        if _device_limited(tenant_id, device):
+            return _too_many_requests()
         _bind_anonymous_customer_actor(tenant_id)
-        token, ttl = _password_service.password_reset_confirm(
-            email=data["email"], otp=data["otp"], password=data["password"], correlation_id=get_correlation_id()
+        session = _password_service.password_reset_confirm(
+            email=data["email"], otp=data["otp"], password=data["password"], correlation_id=get_correlation_id(),
+            device=device,
         )
-        return _token_response(token, ttl)
+        return session_response(session)

@@ -31,6 +31,10 @@ Q360_JWT_SIGNING_KEY = ""
 # SMTP server.
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 CUSTOMER_PORTAL_LOGIN_RATE_LIMIT = 0  # Same rationale as RATE_LIMIT_REQUESTS = 0 above.
+CUSTOMER_PORTAL_DISCOVER_RATE_LIMIT = 0
+CUSTOMER_PORTAL_DISCOVER_RATE_LIMIT_PER_EMAIL = 0
+Q360_STAFF_RECOVERY_RATE_LIMIT = 0  # os testes do limite ligam-no.
+CUSTOMER_PORTAL_DEVICE_RATE_LIMIT = 0  # idem; os testes do limite por dispositivo ligam-no.
 
 # S01-PERSISTENCE-001 (see OPEN_DECISIONS.md): no SQLite fallback here
 # either — tests/conftest.py's `django_db_modify_db_settings` fixture

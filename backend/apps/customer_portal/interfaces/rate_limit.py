@@ -63,3 +63,47 @@ def is_ip_rate_limited(*, tenant_id: str, remote_addr: str) -> bool:
         count = _ip_buckets.get(key, 0) + 1
         _ip_buckets[key] = count
     return count > limit
+
+
+# --- App móvel (roadmap_mobile.md, Fase 1) ---------------------------------
+# Buckets próprios, com a mesma janela fixa, para a descoberta da seguradora
+# e para o limite por dispositivo.
+_extra_lock = threading.Lock()
+_extra_buckets: dict[tuple[str, int], int] = {}
+
+
+def _hit(name: str, key: str, *, limit: int, window_seconds: int) -> bool:
+    if limit <= 0:
+        return False
+    window = max(1, window_seconds)
+    bucket = int(time.monotonic() // window)
+    full_key = (f"{name}|{window}|{key}", bucket)
+    with _extra_lock:
+        global _extra_buckets
+        _extra_buckets = {k: v for k, v in _extra_buckets.items() if k[1] >= bucket - 1}
+        count = _extra_buckets.get(full_key, 0) + 1
+        _extra_buckets[full_key] = count
+    return count > limit
+
+
+def is_device_rate_limited(*, tenant_id: str, device_key: str) -> bool:
+    """Limite por dispositivo (id enviado pela app) ou por sessão, além do limite
+    por IP e por email. O id do dispositivo vem do cliente, por isso é só mais
+    uma camada: nunca substitui as outras."""
+    return _hit(
+        "device", f"{tenant_id}:{device_key}",
+        limit=settings.CUSTOMER_PORTAL_DEVICE_RATE_LIMIT, window_seconds=settings.CUSTOMER_PORTAL_DEVICE_RATE_WINDOW_SECONDS,
+    )
+
+
+def is_discover_rate_limited(*, remote_addr: str, email: str) -> bool:
+    by_ip = _hit(
+        "discover-ip", remote_addr,
+        limit=settings.CUSTOMER_PORTAL_DISCOVER_RATE_LIMIT, window_seconds=settings.CUSTOMER_PORTAL_DISCOVER_RATE_WINDOW_SECONDS,
+    )
+    by_email = _hit(
+        "discover-email", email.lower(),
+        limit=settings.CUSTOMER_PORTAL_DISCOVER_RATE_LIMIT_PER_EMAIL,
+        window_seconds=settings.CUSTOMER_PORTAL_DISCOVER_EMAIL_WINDOW_SECONDS,
+    )
+    return by_ip or by_email

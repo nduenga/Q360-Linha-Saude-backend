@@ -8,16 +8,19 @@ Duas origens, ambas idempotentes por `dedupe_key`:
     estado atual por `sync_account` sempre que o cliente abre a central —
     assim não é preciso ligar cada serviço do backoffice ao portal.
 
-Canal: portal. Email/SMS/WhatsApp dependem de integrações que ainda não
-existem (PDF: "conforme integrações").
+Canal: portal e push na app móvel (`push_service`, depois do commit, só para
+notificações novas e conforme as preferências do cliente). Email/SMS/WhatsApp
+dependem de integrações que ainda não existem (PDF: "conforme integrações").
 """
 from __future__ import annotations
 
 from shared import formatting as fmt
 
 import datetime
+import functools
 import uuid
 
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.customer_portal.application import portal_read
@@ -62,16 +65,29 @@ def _tenant_id():
 def notify_account(
     *, account_id: uuid.UUID, dedupe_key: str, code: str, title: str, body: str = "", link: str | None = None,
     at: datetime.datetime | None = None,
-) -> None:
-    PortalNotification.objects.bulk_create(
-        [
-            PortalNotification(
-                tenant_id=_tenant_id(), customer_account_id=account_id, dedupe_key=dedupe_key, code=code,
-                title=title, body=body, link=link, created_at=at or timezone.now(),
-            )
-        ],
-        ignore_conflicts=True,
+) -> bool:
+    """Cria a notificação se ainda não existir (idempotente por `dedupe_key`).
+    Devolve True só quando criou uma nova — só essas geram push."""
+    tenant_id = _tenant_id()
+    notification = PortalNotification(
+        tenant_id=tenant_id, customer_account_id=account_id, dedupe_key=dedupe_key, code=code,
+        title=title, body=body, link=link, created_at=at or timezone.now(),
     )
+    try:
+        with transaction.atomic():  # savepoint: o conflito não estraga a transação de quem chama
+            notification.save(force_insert=True)
+    except IntegrityError:
+        return False
+    from apps.customer_portal.application import push_service
+
+    transaction.on_commit(
+        functools.partial(
+            push_service.dispatch, tenant_id=tenant_id, account_id=account_id, notification_id=notification.id,
+            code=code, title=title, link=link,
+        ),
+        robust=True,
+    )
+    return True
 
 
 def sync_account(account_id: uuid.UUID, *, today: datetime.date | None = None) -> None:
@@ -113,6 +129,18 @@ def sync_account(account_id: uuid.UUID, *, today: datetime.date | None = None) -
                 code="POLICY_EXPIRING", title=f"Apólice {number} a vencer",
                 body=f"Termina em {policy.end_date}.", link=f"/portal/renovacoes/{number}",
             )
+
+    from apps.customer_portal.application.self_service import _scoped_proposer_ids
+    from apps.quote.infrastructure.models import Quote
+
+    for offer in Quote.objects.filter(
+        quote_type="ENDORSEMENT", status="APPROVED", proposer_id__in=_scoped_proposer_ids()
+    ):
+        notify_account(
+            account_id=account_id, dedupe_key=f"endorsement:{offer.id}:OFFER", code="ENDORSEMENT_PENDING",
+            title="Proposta de endosso para aceitar", body="Tem uma proposta de endosso à espera da sua resposta.",
+            link="/portal/endossos",
+        )
 
     policy_numbers = {p.id: p.policy_number for p in policies}
     soon = today + datetime.timedelta(days=PAYMENT_DUE_SOON_DAYS)

@@ -2,7 +2,12 @@
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
+from apps.customer_portal.interfaces.wellknown_views import android_asset_links, apple_app_site_association
+
 urlpatterns = [
+    # Ligações universais da app móvel do Portal Cliente (roadmap_mobile.md, Fase 1).
+    path(".well-known/apple-app-site-association", apple_app_site_association, name="apple-app-site-association"),
+    path(".well-known/assetlinks.json", android_asset_links, name="android-asset-links"),
     path("api/v1/", include("apps.foundation.interfaces.urls")),
     path("api/v1/", include("apps.product.interfaces.urls")),
     path("api/v1/", include("apps.client.interfaces.urls")),

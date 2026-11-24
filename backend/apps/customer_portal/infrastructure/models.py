@@ -35,6 +35,10 @@ class CustomerAccount(TenantScopedModel):
     password_set_at = models.DateTimeField(null=True, blank=True)
     failed_otp_attempts = models.IntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
+    # {categoria: bool} — só guarda o que o cliente mudou; omitido = ligado.
+    push_preferences = models.JSONField(default=dict)
+    language = models.CharField(max_length=5, default="pt")
+    deleted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     row_version = models.BigIntegerField(default=0)
@@ -187,3 +191,97 @@ class PortalNotification(TenantScopedModel):
     class Meta:
         managed = False
         db_table = "portal_notification"
+
+
+class CustomerDeviceSession(TenantScopedModel):
+    """Sessão de um dispositivo (app móvel): guarda só o hash do token de
+    renovação. `previous_token_hash` é o token anterior à última rotação —
+    apresentá-lo outra vez é reutilização (token roubado) e termina a sessão."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    customer_account = models.ForeignKey(
+        CustomerAccount, on_delete=models.DO_NOTHING, db_column="customer_account_id", related_name="device_sessions"
+    )
+    device_id = models.CharField(max_length=100)
+    device_name = models.CharField(max_length=120, default="")
+    platform = models.CharField(max_length=10, default="OTHER")
+    app_version = models.CharField(max_length=30, default="")
+    token_hash = models.CharField(max_length=64)
+    previous_token_hash = models.CharField(max_length=64, null=True, blank=True)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_reason = models.CharField(max_length=30, null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "customer_device_session"
+
+
+class CustomerPushDevice(TenantScopedModel):
+    """Token do Expo Push Service de um dispositivo do cliente."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    customer_account = models.ForeignKey(
+        CustomerAccount, on_delete=models.DO_NOTHING, db_column="customer_account_id", related_name="push_devices"
+    )
+    device_session = models.ForeignKey(
+        CustomerDeviceSession, on_delete=models.DO_NOTHING, db_column="device_session_id", null=True, blank=True,
+        related_name="push_devices",
+    )
+    expo_token = models.CharField(max_length=200)
+    platform = models.CharField(max_length=10, default="OTHER")
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = False
+        db_table = "customer_push_device"
+
+
+class CareProvider(TenantScopedModel):
+    """Prestador da rede convencionada (hospital, clínica, laboratório...).
+    Mantido pelo backoffice; o cliente só lê os ativos, na app, com mapa."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    name = models.CharField(max_length=200)
+    provider_type = models.CharField(max_length=20, default="CLINIC")
+    specialties = models.JSONField(default=list)
+    province = models.CharField(max_length=80, default="")
+    municipality = models.CharField(max_length=80, default="")
+    address = models.CharField(max_length=300, default="")
+    phone = models.CharField(max_length=40, default="")
+    opening_hours = models.CharField(max_length=200, default="")
+    emergency = models.BooleanField(default=False)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = False
+        db_table = "care_provider"
+
+
+class PortalUsageEvent(TenantScopedModel):
+    """Evento de uso da app (sem dados pessoais nem de saúde: só o nome do
+    evento e o ecrã). Alimenta as métricas de ativação e de uso."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.DO_NOTHING, db_column="tenant_id")
+    customer_account = models.ForeignKey(CustomerAccount, on_delete=models.DO_NOTHING, db_column="customer_account_id")
+    name = models.CharField(max_length=40)
+    screen = models.CharField(max_length=80, default="")
+    platform = models.CharField(max_length=10, default="OTHER")
+    app_version = models.CharField(max_length=30, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False
+        db_table = "portal_usage_event"

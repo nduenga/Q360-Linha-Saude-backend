@@ -29,3 +29,23 @@ def is_login_rate_limited(*, remote_addr: str, email: str) -> bool:
         count = _buckets.get(key, 0) + 1
         _buckets[key] = count
     return count > limit
+
+
+_recovery_buckets: dict[tuple[str, int], int] = {}
+
+
+def is_recovery_rate_limited(*, remote_addr: str, email: str) -> bool:
+    """Pedidos de recuperação de palavra-passe, por IP + email (evita encher
+    a caixa de correio de alguém com emails de recuperação)."""
+    limit = settings.Q360_STAFF_RECOVERY_RATE_LIMIT
+    if limit <= 0:
+        return False
+    window = max(1, settings.Q360_STAFF_RECOVERY_RATE_WINDOW_SECONDS)
+    bucket = int(time.monotonic() // window)
+    key = (f"{remote_addr}:{email.lower()}", bucket)
+    with _lock:
+        global _recovery_buckets
+        _recovery_buckets = {k: v for k, v in _recovery_buckets.items() if k[1] >= bucket - 1}
+        count = _recovery_buckets.get(key, 0) + 1
+        _recovery_buckets[key] = count
+    return count > limit

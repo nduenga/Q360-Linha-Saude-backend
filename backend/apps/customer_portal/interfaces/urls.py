@@ -36,6 +36,28 @@ from apps.customer_portal.interfaces.portal_views import (
     CustomerPortalProfileView,
     CustomerPortalQuoteDetailView,
 )
+from apps.customer_portal.interfaces.app_views import (
+    AppConfigView,
+    PortalAccountView,
+    PortalAppMetricsView,
+    PortalPreferencesView,
+    PortalProvidersView,
+    PortalUsageEventsView,
+    StaffCareProviderDetailView,
+    StaffCareProvidersView,
+)
+from apps.customer_portal.interfaces.mobile_views import (
+    ConnectedSessionDetailView,
+    ConnectedSessionsView,
+    DiscoverInsurerView,
+    InsurerBrandingLogoView,
+    InsurerBrandingView,
+    LogoutSessionView,
+    PushDeviceDetailView,
+    PushDevicesView,
+    PushPreferencesView,
+    RefreshSessionView,
+)
 from apps.customer_portal.interfaces.staff_views import (
     PortalConversationListView,
     PortalRequestDetailView,
@@ -96,6 +118,14 @@ urlpatterns = [
     path("customer-portal/<uuid:tenant_id>/auth/first-access/confirm", FirstAccessConfirmView.as_view(), name="customer-portal-first-access-confirm"),
     path("customer-portal/<uuid:tenant_id>/auth/password-reset/request", PasswordResetRequestView.as_view(), name="customer-portal-password-reset-request"),
     path("customer-portal/<uuid:tenant_id>/auth/password-reset/confirm", PasswordResetConfirmView.as_view(), name="customer-portal-password-reset-confirm"),
+    # App móvel (roadmap_mobile.md, Fase 1; mobile_views.py): descobrir a seguradora, marca
+    # pública, renovação/fim de sessão por dispositivo.
+    path("customer-portal/app-config", AppConfigView.as_view(), name="customer-portal-app-config"),
+    path("customer-portal/discover", DiscoverInsurerView.as_view(), name="customer-portal-discover"),
+    path("customer-portal/<uuid:tenant_id>/branding", InsurerBrandingView.as_view(), name="customer-portal-branding"),
+    path("customer-portal/<uuid:tenant_id>/branding/logo", InsurerBrandingLogoView.as_view(), name="customer-portal-branding-logo"),
+    path("customer-portal/<uuid:tenant_id>/auth/refresh", RefreshSessionView.as_view(), name="customer-portal-refresh"),
+    path("customer-portal/<uuid:tenant_id>/auth/logout", LogoutSessionView.as_view(), name="customer-portal-logout"),
     # Fase 1 (ROADMAP_PORTAL_CLIENTE.md) — authenticated via the portal's
     # own bearer token (CustomerPortalJwtAuthentication), which already
     # carries tenant_id, so no {tenant_id} path segment here (unlike the
@@ -128,6 +158,15 @@ urlpatterns = [
     path("customer-portal/documents", CustomerPortalDocumentsView.as_view(), name="customer-portal-documents"),
     path("customer-portal/documents/<uuid:document_id>/download", CustomerPortalDocumentDownloadView.as_view(), name="customer-portal-document-download"),
     path("customer-portal/profile", CustomerPortalProfileView.as_view(), name="customer-portal-profile"),
+    path("customer-portal/sessions", ConnectedSessionsView.as_view(), name="customer-portal-sessions"),
+    path("customer-portal/sessions/<uuid:session_id>", ConnectedSessionDetailView.as_view(), name="customer-portal-session-detail"),
+    path("customer-portal/providers", PortalProvidersView.as_view(), name="customer-portal-providers"),
+    path("customer-portal/preferences", PortalPreferencesView.as_view(), name="customer-portal-preferences"),
+    path("customer-portal/account", PortalAccountView.as_view(), name="customer-portal-account"),
+    path("customer-portal/events", PortalUsageEventsView.as_view(), name="customer-portal-events"),
+    path("customer-portal/devices", PushDevicesView.as_view(), name="customer-portal-devices"),
+    path("customer-portal/devices/<uuid:device_id>", PushDeviceDetailView.as_view(), name="customer-portal-device-detail"),
+    path("customer-portal/notification-preferences", PushPreferencesView.as_view(), name="customer-portal-notification-preferences"),
     # PDF Portal Cliente — pedidos, mensagens, notificações, renovação, comparação (comm_views.py).
     path("customer-portal/request-types", CustomerPortalRequestTypesView.as_view(), name="customer-portal-request-types"),
     path("customer-portal/requests", CustomerPortalRequestsView.as_view(), name="customer-portal-requests"),
@@ -150,6 +189,9 @@ urlpatterns = [
     path("portal-requests/<str:request_number>", PortalRequestDetailView.as_view(), name="portal-request-detail"),
     path("portal-requests/<str:request_number>/transition", PortalRequestTransitionView.as_view(), name="portal-request-transition"),
     path("portal-requests/<str:request_number>/notes", PortalRequestInternalNoteView.as_view(), name="portal-request-notes"),
+    path("care-providers", StaffCareProvidersView.as_view(), name="care-providers"),
+    path("care-providers/<uuid:provider_id>", StaffCareProviderDetailView.as_view(), name="care-provider-detail"),
+    path("portal-app/metrics", PortalAppMetricsView.as_view(), name="portal-app-metrics"),
     path("portal-conversations", PortalConversationListView.as_view(), name="portal-conversations"),
     path("portal-messages", PortalStaffMessagesView.as_view(), name="portal-messages"),
 ]

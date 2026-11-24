@@ -149,12 +149,19 @@ As operações abaixo foram implementadas depois do inventário inicial. Todas u
 | POST | `/auth/login` | Público | Autentica uma conta de staff ou administrador da plataforma por email e palavra-passe; aplica limitação de tentativas. |
 | POST | `/auth/refresh` | Público, com refresh token válido | Renova a sessão de uma conta de staff. |
 | POST | `/auth/logout` | Público, com refresh token válido | Invalida a sessão associada ao refresh token. |
+| POST | `/auth/forgot-password` | Público | Pede a recuperação da palavra-passe: envia por email uma ligação de uso único (staff ou administrador da plataforma). Responde sempre `202`, exista ou não a conta; limitado por IP e email. |
+| POST | `/auth/reset-password` | Público, com token de recuperação | Define a nova palavra-passe com o token recebido por email. Termina as sessões da conta. |
+| POST | `/auth/change-password` | Qualquer conta de staff autenticada | Muda a própria palavra-passe (p.ex. a temporária). Termina as outras sessões e devolve uma sessão nova. |
 | GET | `/admin/staff-accounts` | Administrador do tenant | Lista contas de staff do tenant. |
 | POST | `/admin/staff-accounts` | Administrador do tenant | Cria uma conta de staff, com perfis e palavra-passe definida ou temporária. |
 | PATCH | `/admin/staff-accounts/{account_id}/roles` | Administrador do tenant | Substitui os perfis atribuídos a uma conta. |
 | PATCH | `/admin/staff-accounts/{account_id}/status` | Administrador do tenant | Ativa ou desativa uma conta de staff. |
-| POST | `/admin/staff-accounts/{account_id}/reset-password` | Administrador do tenant | Gera e devolve uma palavra-passe temporária. |
+| POST | `/admin/staff-accounts/{account_id}/reset-password` | Administrador do tenant | Gera uma palavra-passe temporária, envia-a por email ao utilizador e devolve-a também na resposta. |
 | POST | `/admin/staff-accounts/{account_id}/unlock` | Administrador do tenant | Remove o bloqueio causado por tentativas falhadas, sem alterar a palavra-passe. |
+
+**Recuperação e mudança de palavra-passe.** `POST /auth/forgot-password` recebe `{email}` e devolve `202` sem corpo. O email contém `{Q360_PLATFORM_URL}/redefinir-password?token=…`, válido `Q360_STAFF_RECOVERY_TTL_MINUTES` (30) e de uso único (deixa de valer quando a palavra-passe muda). `POST /auth/reset-password` recebe `{token, newPassword}` e devolve `204`; token inválido, expirado ou já usado dá `400 VALIDATION-400`. `POST /auth/change-password` recebe `{currentPassword, newPassword}` e devolve o mesmo corpo do login (`accessToken`, `refreshToken`, …); palavra-passe atual errada, igual à nova ou fraca (mínimo 10 caracteres) dá `400`. Excesso de pedidos dá `429 RATE-LIMIT`.
+
+**Emails de credenciais.** Enviam-se por email, depois de a operação ser gravada: a palavra-passe temporária e o endereço `{Q360_PLATFORM_URL}/login` ao criar um tenant (primeiro administrador), ao adicionar um administrador ao tenant, ao criar um super administrador e ao criar um utilizador sem `password`; e a nova palavra-passe temporária ao repor a palavra-passe de uma conta de staff (pelo administrador do tenant ou pela plataforma) ou de um super administrador. Os campos `temporaryPassword` das respostas mantêm-se por compatibilidade. Uma falha no envio não desfaz a operação e fica na auditoria (`platform.*_email_failed`).
 
 `POST /auth/login` recebe `{email, password}`. Para contas de staff, a resposta tem `{accessToken, refreshToken, expiresIn, accountId, name, email, roles, accountType: "STAFF"}`. Para o administrador da plataforma, `accountType` é `"PLATFORM"` e não é emitido refresh token. `POST /auth/refresh` e `POST /auth/logout` recebem `{refreshToken}`; o logout devolve `204 No Content`.
 

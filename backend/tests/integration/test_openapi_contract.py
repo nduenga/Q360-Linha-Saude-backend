@@ -16,6 +16,9 @@ PUBLIC = {
     "/api/v1/health/live", "/api/v1/health/ready", "/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout",
     "/api/v1/auth/dev-login", "/api/v1/schema",
     "/api/v1/customer-portal/{tenant_id}/auth/request-access", "/api/v1/customer-portal/{tenant_id}/auth/verify-otp",
+    "/api/v1/customer-portal/discover", "/api/v1/customer-portal/{tenant_id}/branding",
+    "/api/v1/customer-portal/{tenant_id}/branding/logo", "/api/v1/customer-portal/{tenant_id}/auth/refresh",
+    "/api/v1/customer-portal/{tenant_id}/auth/logout", "/api/v1/customer-portal/app-config",
 }
 BODYLESS_POST = re.compile(r"/(approve|publish|retire|suspend|terminate|select|recalculate|retry|proposal|reset-password|unlock|logout|market|signed-url|portal-invitation|customer-request|assign)$")
 

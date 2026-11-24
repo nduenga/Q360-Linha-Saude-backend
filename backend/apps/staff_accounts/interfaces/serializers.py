@@ -41,6 +41,20 @@ class TokenResponseSerializer(serializers.Serializer):
     )
 
 
+class ForgotPasswordRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=320)
+
+
+class ResetPasswordRequestSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=2000)
+    newPassword = serializers.CharField(max_length=200, trim_whitespace=False)
+
+
+class ChangePasswordRequestSerializer(serializers.Serializer):
+    currentPassword = serializers.CharField(max_length=200, trim_whitespace=False)
+    newPassword = serializers.CharField(max_length=200, trim_whitespace=False)
+
+
 class StaffAccountSerializer(serializers.Serializer):
     id = serializers.CharField()
     email = serializers.EmailField()

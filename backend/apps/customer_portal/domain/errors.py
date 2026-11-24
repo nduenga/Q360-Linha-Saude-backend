@@ -93,3 +93,10 @@ class PortalModuleDisabledError(DomainProblem):
 
     http_status = 404
     problem_code = "PORTAL-DISABLED"
+
+
+class PortalAppUpdateRequiredError(DomainProblem):
+    """A versão da app é inferior à mínima suportada (cabeçalho X-App-Version)."""
+
+    http_status = 426
+    problem_code = "PORTAL-APP-UPDATE-REQUIRED"

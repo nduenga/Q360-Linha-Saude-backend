@@ -58,6 +58,7 @@ _TITLES: dict[str, str] = {
     "STAFF-LOCKED": "Conta temporariamente bloqueada",
     "STAFF-LIMIT": "Limite de utilizadores atingido",
     "PORTAL-DISABLED": "Portal do Cliente indisponível",
+    "PORTAL-APP-UPDATE-REQUIRED": "Atualização da app necessária",
     # apps.business_config — configuração de tarifação por produto (grupos de
     # opções, campos e fórmulas): dados da cotação em falta ou que não batem.
     "PRODUCT-SETUP-INPUT": "Dados do produto em falta ou inválidos",

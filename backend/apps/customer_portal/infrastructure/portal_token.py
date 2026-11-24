@@ -4,9 +4,9 @@ Deliberately NOT the staff OIDC flow (ROADMAP_PORTAL_CLIENTE.md Fase 0:
 "nunca reaproveita os scopes/roles internos"): signed with its own
 `CUSTOMER_PORTAL_JWT_SECRET`, never `settings.SECRET_KEY` or an OIDC key,
 so a leak/misconfiguration of one can never be used to forge the other.
-Short-lived (`CUSTOMER_PORTAL_TOKEN_TTL_SECONDS`) — no refresh-token flow
-in Fase 0, matching the roadmap's own phase scoping (a customer
-re-authenticates via a fresh OTP once the token expires).
+Short-lived (`CUSTOMER_PORTAL_TOKEN_TTL_SECONDS`). A web client
+re-authenticates once it expires; the mobile app renews it with a
+per-device refresh token (`application/device_session_service.py`).
 """
 from __future__ import annotations
 
@@ -27,7 +27,8 @@ class InvalidPortalTokenError(Exception):
 
 class PortalTokenService:
     def issue(
-        self, *, tenant_id: uuid.UUID, customer_account_id: uuid.UUID, proposer_ids: list[uuid.UUID]
+        self, *, tenant_id: uuid.UUID, customer_account_id: uuid.UUID, proposer_ids: list[uuid.UUID],
+        session_id: uuid.UUID | None = None,
     ) -> tuple[str, int]:
         ttl_seconds = settings.CUSTOMER_PORTAL_TOKEN_TTL_SECONDS
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -39,6 +40,10 @@ class PortalTokenService:
             "iat": int(now.timestamp()),
             "exp": int((now + datetime.timedelta(seconds=ttl_seconds)).timestamp()),
         }
+        if session_id is not None:
+            # Sessão de um dispositivo (app móvel): permite terminá-la já, sem
+            # esperar que o token de acesso expire.
+            claims["sid"] = str(session_id)
         token = jwt.encode(claims, settings.CUSTOMER_PORTAL_JWT_SECRET, algorithm=ALGORITHM)
         return token, ttl_seconds
 

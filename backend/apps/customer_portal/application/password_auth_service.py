@@ -41,7 +41,8 @@ from apps.customer_portal.infrastructure.models import (
 )
 from apps.customer_portal.infrastructure.otp import generate_otp, hash_otp
 from apps.customer_portal.infrastructure.otp import verify_otp as _matches_otp_hash
-from apps.customer_portal.infrastructure.portal_token import PortalTokenService
+from apps.customer_portal.application import device_session_service as sessions
+from apps.customer_portal.application.device_session_service import DeviceInfo, SessionTokens
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
@@ -49,7 +50,6 @@ from apps.policy.infrastructure.models import Policy
 from apps.quote.infrastructure.models import Quote
 
 _audit = AuditService(DjangoAuditRepositoryAdapter())
-_tokens = PortalTokenService()
 _PURPOSE = "SET_PASSWORD"
 # Hash fixo para gastar o mesmo tempo quando a conta não existe (não revelar emails).
 _DUMMY_HASH = make_password("q360-portal-dummy-password")
@@ -92,7 +92,8 @@ def _assert_not_locked(account: CustomerAccount) -> None:
         raise PortalAccountLockedError("Conta temporariamente bloqueada após tentativas falhadas repetidas")
 
 
-def _register_failure(account: CustomerAccount, *, audit_action: str, correlation_id: str | None) -> bool:
+def _register_failure(account: CustomerAccount, *, audit_action: str, correlation_id: str | None,
+                      extra: dict | None = None) -> bool:
     """Counts one failed attempt; returns True if it locked the account."""
     state = register_failure(
         LockoutState(failed_attempts=account.failed_otp_attempts, locked_until=account.locked_until),
@@ -105,7 +106,7 @@ def _register_failure(account: CustomerAccount, *, audit_action: str, correlatio
     )
     _audit.record(
         action=audit_action, entity_type="CustomerAccount", entity_id=str(account.id),
-        correlation_id=correlation_id, metadata={"locked": state.locked_until is not None},
+        correlation_id=correlation_id, metadata={"locked": state.locked_until is not None, **(extra or {})},
     )
     return state.locked_until is not None
 
@@ -136,7 +137,7 @@ def _consume_code(account: CustomerAccount, otp: str, *, correlation_id: str | N
 
 
 def _finish(account: CustomerAccount, challenge: CustomerLoginChallenge, password: str, *, audit_action: str,
-            correlation_id: str | None) -> tuple[str, int]:
+            correlation_id: str | None, device: DeviceInfo | None = None) -> SessionTokens:
     now = timezone.now()
     with transaction.atomic():
         CustomerLoginChallenge.objects.filter(id=challenge.id).update(consumed_at=now)
@@ -144,15 +145,20 @@ def _finish(account: CustomerAccount, challenge: CustomerLoginChallenge, passwor
             password_hash=make_password(password), password_set_at=now, email_verified=True,
             failed_otp_attempts=0, locked_until=None,
         )
-    _audit.record(action=audit_action, entity_type="CustomerAccount", entity_id=str(account.id), correlation_id=correlation_id)
-    return _issue_token(account)
-
-
-def _issue_token(account: CustomerAccount) -> tuple[str, int]:
-    proposer_ids = list(
-        CustomerAccountProposer.objects.filter(customer_account=account).values_list("proposer_id", flat=True)
+        # A palavra-passe mudou: todas as sessões dos telemóveis morrem (a do
+        # dispositivo que está a entrar agora é criada a seguir).
+        revoked = sessions.revoke_all(account.id, reason="PASSWORD_CHANGED")
+    _audit.record(
+        action=audit_action, entity_type="CustomerAccount", entity_id=str(account.id), correlation_id=correlation_id,
+        metadata={**_device_metadata(device), "revokedSessions": revoked},
     )
-    return _tokens.issue(tenant_id=_tenant_id(), customer_account_id=account.id, proposer_ids=proposer_ids)
+    return sessions.open_session(account, device)
+
+
+def _device_metadata(device: DeviceInfo | None) -> dict:
+    if device is None:
+        return {}
+    return {"deviceId": device.device_id, "platform": device.platform, "appVersion": device.app_version}
 
 
 class CustomerPortalPasswordAuthService:
@@ -182,8 +188,9 @@ class CustomerPortalPasswordAuthService:
         return mask_email(account.email)
 
     def first_access_confirm(
-        self, *, reference: str, registration_number: str, otp: str, password: str, correlation_id: str | None
-    ) -> tuple[str, int]:
+        self, *, reference: str, registration_number: str, otp: str, password: str, correlation_id: str | None,
+        device: DeviceInfo | None = None,
+    ) -> SessionTokens:
         proposer = _resolve_proposer(reference=reference, registration_number=registration_number)
         email = portal_email(proposer)
         account = _account_for(email) if "@" in email else None
@@ -191,7 +198,8 @@ class CustomerPortalPasswordAuthService:
             raise InvalidPortalCredentialsError("Não foi feito nenhum pedido de acesso para este cliente: peça primeiro um novo código")
         validate_password_strength(password, email=account.email)
         challenge = _consume_code(account, otp, correlation_id=correlation_id)
-        return _finish(account, challenge, password, audit_action="customer_portal.password_set", correlation_id=correlation_id)
+        return _finish(account, challenge, password, audit_action="customer_portal.password_set",
+                       correlation_id=correlation_id, device=device)
 
     # ----------------------------------------------------- esqueci-me
     def password_reset_request(self, *, email: str, correlation_id: str | None) -> None:
@@ -211,24 +219,28 @@ class CustomerPortalPasswordAuthService:
         )
 
     def password_reset_confirm(
-        self, *, email: str, otp: str, password: str, correlation_id: str | None
-    ) -> tuple[str, int]:
+        self, *, email: str, otp: str, password: str, correlation_id: str | None, device: DeviceInfo | None = None
+    ) -> SessionTokens:
         account = _account_for(_normalise(email))
         if account is None:
             raise InvalidPortalCredentialsError("Código inválido ou expirado")
         validate_password_strength(password, email=account.email)
         challenge = _consume_code(account, otp, correlation_id=correlation_id)
-        return _finish(account, challenge, password, audit_action="customer_portal.password_reset", correlation_id=correlation_id)
+        return _finish(account, challenge, password, audit_action="customer_portal.password_reset",
+                       correlation_id=correlation_id, device=device)
 
     # --------------------------------------------------------- entrar
-    def login(self, *, email: str, password: str, correlation_id: str | None) -> tuple[str, int]:
+    def login(
+        self, *, email: str, password: str, correlation_id: str | None, device: DeviceInfo | None = None
+    ) -> SessionTokens:
         account = _account_for(_normalise(email))
         if account is None or not account.password_hash:
             check_password(password, _DUMMY_HASH)  # same cost as a real check
             raise InvalidPortalCredentialsError("Email ou palavra-passe inválidos")
         _assert_not_locked(account)
         if not check_password(password, account.password_hash):
-            if _register_failure(account, audit_action="customer_portal.login_failed", correlation_id=correlation_id):
+            if _register_failure(account, audit_action="customer_portal.login_failed", correlation_id=correlation_id,
+                                 extra=_device_metadata(device)):
                 raise PortalAccountLockedError("Conta bloqueada após tentativas falhadas repetidas")
             raise InvalidPortalCredentialsError("Email ou palavra-passe inválidos")
         CustomerAccount.objects.filter(id=account.id).update(
@@ -236,6 +248,6 @@ class CustomerPortalPasswordAuthService:
         )
         _audit.record(
             action="customer_portal.login_succeeded", entity_type="CustomerAccount", entity_id=str(account.id),
-            correlation_id=correlation_id, metadata={"method": "password"},
+            correlation_id=correlation_id, metadata={"method": "password", **_device_metadata(device)},
         )
-        return _issue_token(account)
+        return sessions.open_session(account, device)

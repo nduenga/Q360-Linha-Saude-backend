@@ -152,3 +152,20 @@ def send_portal_invitation_email(*, to_email: str, client_name: str, insurer_nam
         recipient_list=[to_email],
         fail_silently=False,
     ) 
+
+
+def send_insurer_choice_email(*, to_email: str, insurers: list[tuple[str, str]]) -> None:
+    """O email tem conta em várias seguradoras: cada uma com a sua ligação, que
+    abre a app (ou a web) já nessa seguradora. Sem tenant: remetente «Q360»."""
+    lines = "\n".join(f"- {name}: {link}" for name, link in insurers)
+    send_mail(
+        subject="Escolha a sua seguradora",
+        message=(
+            "Pediu para entrar no Portal do Cliente e este email tem conta em mais do que uma seguradora.\n\n"
+            f"Escolha onde quer entrar:\n{lines}\n\n"
+            "Se não foi você, ignore este email."
+        ),
+        from_email=sender(),
+        recipient_list=[to_email],
+        fail_silently=False,
+    )

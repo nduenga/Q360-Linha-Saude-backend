@@ -391,6 +391,55 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/auth/change-password:
+    post:
+      operationId: postChangePassword
+      description: 'POST /auth/change-password (autenticado): o utilizador muda a sua palavra-passe
+
+        (p.ex. a temporária recebida por email). Devolve uma sessão nova.'
+      summary: Criar change password
+      tags:
+      - Identity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+        required: true
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/auth/dev-login:
     post:
       operationId: postDevLogin
@@ -409,6 +458,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DevLoginResponse'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/auth/forgot-password:
+    post:
+      operationId: postForgotPassword
+      description: 'POST /auth/forgot-password: envia a ligação de recuperação por email.
+
+        Responde sempre 202, exista ou não a conta (nunca confirma emails).
+
+
+        Responde 202 exista ou não a conta.'
+      summary: Criar forgot password
+      tags:
+      - Identity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+        required: true
+      responses:
+        '202':
           description: Sucesso.
         '400':
           content:
@@ -499,6 +581,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/TokenResponse'
           description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/auth/reset-password:
+    post:
+      operationId: postResetPassword
+      description: 'POST /auth/reset-password: define a nova palavra-passe com a ligação recebida por email.'
+      summary: Criar reset password
+      tags:
+      - Identity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+        required: true
+      responses:
+        '204':
+          description: Sem conteúdo.
         '400':
           content:
             application/problem+json:
@@ -2450,6 +2560,196 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/care-providers:
+    get:
+      operationId: getStaffCareProviders
+      description: 'GET lê (Scope.READ); POST cria (Scope.WRITE, verificado em `get_permissions`).
+
+
+        Requer: scope q360.read.
+
+
+        Inclui os inativos.'
+      summary: Obter staff care providers
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalCareProviders'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    post:
+      operationId: postStaffCareProviders
+      description: 'GET lê (Scope.READ); POST cria (Scope.WRITE, verificado em `get_permissions`).
+
+
+        Requer: scope q360.write.'
+      summary: Criar staff care providers
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CareProviderWrite'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalCareProvider'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/care-providers/{provider_id}:
+    put:
+      operationId: putStaffCareProviderDetail
+      description: 'Requer: scope q360.write.'
+      summary: Substituir staff care provider detail
+      parameters:
+      - in: path
+        name: provider_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CareProviderWrite'
+        required: true
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalCareProvider'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+    delete:
+      operationId: deleteStaffCareProviderDetail
+      description: 'Requer: scope q360.write.
+
+
+        Desativa: o prestador sai da rede visível ao cliente.'
+      summary: Remover staff care provider detail
+      parameters:
+      - in: path
+        name: provider_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.write
+      responses:
+        '204':
+          description: Sem conteúdo.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/claims/assumption-sets:
     get:
       operationId: getAssumptionSetListCreate
@@ -3740,7 +4040,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/FirstAccessConfirm'
+              $ref: '#/components/schemas/PortalDeviceFirstAccessConfirm'
         required: true
       responses:
         '200':
@@ -3831,7 +4131,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PasswordLogin'
+              $ref: '#/components/schemas/PortalDeviceLogin'
         required: true
       responses:
         '200':
@@ -3840,6 +4140,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortalToken'
           description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/customer-portal/{tenant_id}/auth/logout:
+    post:
+      operationId: postLogoutSession
+      description: 'Termina a sessão do dispositivo. Responde sempre 204 (nunca diz se o
+
+        token era válido); com o token de acesso já expirado continua a funcionar.'
+      summary: Criar logout session
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalLogoutRequest'
+        required: true
+      responses:
+        '204':
+          description: Sem conteúdo.
         '400':
           content:
             application/problem+json:
@@ -3875,7 +4218,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PasswordResetConfirm'
+              $ref: '#/components/schemas/PortalDevicePasswordResetConfirm'
         required: true
       responses:
         '200':
@@ -3924,6 +4267,59 @@ paths:
         required: true
       responses:
         '202':
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/customer-portal/{tenant_id}/auth/refresh:
+    post:
+      operationId: postRefreshSession
+      description: 'Troca o token de renovação por um par novo. O antigo deixa de servir: a
+
+        app tem de guardar o novo antes de usar o de acesso e fazer um pedido de
+
+        renovação de cada vez.
+
+
+        Roda o token de renovação: o antigo deixa de servir. Reutilizar um token já trocado termina a sessão do
+        dispositivo.'
+      summary: Criar refresh session
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalToken'
           description: Sucesso.
         '400':
           content:
@@ -4027,6 +4423,110 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/customer-portal/{tenant_id}/branding:
+    get:
+      operationId: getInsurerBranding
+      summary: Obter insurer branding
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Portal
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalInsurerBranding'
+          description: Sucesso.
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/customer-portal/{tenant_id}/branding/logo:
+    get:
+      operationId: getInsurerBrandingLogo
+      summary: Obter insurer branding logo
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Portal
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+          description: Ficheiro.
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/customer-portal/account:
+    delete:
+      operationId: deletePortalAccount
+      description: 'Apagar a conta dentro da app (exigência da Apple); pede a palavra-passe.
+
+
+        Apaga o acesso do cliente a esta seguradora: sessões, dispositivos, notificações e ligações aos proponentes.
+        A conta fica anonimizada; apólices e cotações não são tocadas.'
+      summary: Remover portal account
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '204':
+          description: Sem conteúdo.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/customer-portal/app-config:
+    get:
+      operationId: getAppConfig
+      description: 'Versão mínima/atual e lojas. Nunca é bloqueada pela versão mínima.
+
+
+        Com X-App-Version indica se a app tem de atualizar. Nunca devolve 426.'
+      summary: Obter app config
+      tags:
+      - Customer Portal
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalAppConfig'
+          description: Sucesso.
   /api/v1/customer-portal/beneficiaries:
     get:
       operationId: getCustomerPortalBeneficiaries
@@ -4168,6 +4668,131 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/customer-portal/devices:
+    post:
+      operationId: postPushDevices
+      summary: Criar push devices
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalPushDeviceRegister'
+        required: true
+      security:
+      - customerPortalBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalPushDevice'
+          description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/customer-portal/devices/{device_id}:
+    delete:
+      operationId: deletePushDeviceDetail
+      summary: Remover push device detail
+      parameters:
+      - in: path
+        name: device_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '204':
+          description: Sem conteúdo.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/customer-portal/discover:
+    post:
+      operationId: postDiscoverInsurer
+      description: 'Passo 1 da app: «em que seguradora tenho conta?». Ver as notas de
+
+        privacidade em `discovery_service`.
+
+
+        Descobre a seguradora do email. Devolve a seguradora só quando há exatamente uma; com várias, envia-as por
+        email para o próprio cliente e responde com lista vazia (igual a um email sem conta).'
+      summary: Criar discover insurer
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalDiscoverRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalDiscoverResult'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/customer-portal/documents:
     get:
       operationId: getCustomerPortalDocuments
@@ -4415,6 +5040,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/customer-portal/events:
+    post:
+      operationId: postPortalUsageEvents
+      summary: Criar portal usage events
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalUsageEvents'
+        required: true
+      security:
+      - customerPortalBearer: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalUsageEventsResult'
+          description: Aceite.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
         '409':
           content:
             application/problem+json:
@@ -4886,6 +5556,77 @@ paths:
               schema:
                 $ref: '#/components/schemas/PortalMessages'
           description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/customer-portal/notification-preferences:
+    get:
+      operationId: getPushPreferences
+      summary: Obter push preferences
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalPushPreferences'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    put:
+      operationId: putPushPreferences
+      summary: Substituir push preferences
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalPushPreferencesUpdate'
+        required: true
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalPushPreferences'
+          description: Sucesso.
         '400':
           content:
             application/problem+json:
@@ -5439,6 +6180,77 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/customer-portal/preferences:
+    get:
+      operationId: getPortalPreferences
+      summary: Obter portal preferences
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalLanguage'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    put:
+      operationId: putPortalPreferences
+      summary: Substituir portal preferences
+      tags:
+      - Customer Portal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PortalLanguage'
+        required: true
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalLanguage'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/customer-portal/profile:
     get:
       operationId: getCustomerPortalProfile
@@ -5453,6 +6265,80 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PortalProfile'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/customer-portal/providers:
+    get:
+      operationId: getPortalProviders
+      description: Prestadores ativos da rede. Com `lat` e `lng` ordena pela distância.
+      summary: Obter portal providers
+      parameters:
+      - in: query
+        name: emergency
+        schema:
+          type: boolean
+        description: 'true: só com urgência.'
+      - in: query
+        name: lat
+        schema:
+          type: string
+        description: Latitude do telemóvel; com lng ordena pela distância.
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Máximo 100 (por omissão 50).
+      - in: query
+        name: lng
+        schema:
+          type: string
+        description: Longitude do telemóvel.
+      - in: query
+        name: province
+        schema:
+          type: string
+        description: Província.
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Texto no nome, município, morada ou especialidade.
+      - in: query
+        name: radiusKm
+        schema:
+          type: string
+        description: Raio máximo a partir de lat/lng.
+      - in: query
+        name: specialty
+        schema:
+          type: string
+        description: Especialidade exata (sem distinguir maiúsculas).
+      - in: query
+        name: type
+        schema:
+          type: string
+        description: HOSPITAL, CLINIC, LAB, PHARMACY, IMAGING, DENTAL ou OTHER.
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalCareProviders'
           description: Sucesso.
         '401':
           content:
@@ -5693,6 +6579,76 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/customer-portal/sessions:
+    get:
+      operationId: getConnectedSessions
+      description: «Dispositivos ligados» no perfil.
+      summary: Obter connected sessions
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalConnectedSessions'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+  /api/v1/customer-portal/sessions/{session_id}:
+    delete:
+      operationId: deleteConnectedSessionDetail
+      summary: Remover connected session detail
+      parameters:
+      - in: path
+        name: session_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Customer Portal
+      security:
+      - customerPortalBearer: []
+      responses:
+        '204':
+          description: Sem conteúdo.
         '401':
           content:
             application/problem+json:
@@ -13292,6 +14248,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Recurso não encontrado (NOT-FOUND).
+  /api/v1/portal-app/metrics:
+    get:
+      operationId: getPortalAppMetrics
+      description: 'Requer: scope q360.read.'
+      summary: Obter portal app metrics
+      parameters:
+      - in: query
+        name: days
+        schema:
+          type: integer
+        description: Período em dias (1-365; por omissão 30).
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalAppMetrics'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
   /api/v1/portal-conversations:
     get:
       operationId: getPortalConversationList
@@ -22670,6 +23667,45 @@ components:
       required:
       - reasonCode
       - rowVersion
+    CareProviderWrite:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/TypeB88Enum'
+        specialties:
+          type: array
+          items:
+            type: string
+        province:
+          type: string
+        municipality:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        openingHours:
+          type: string
+        emergency:
+          type: boolean
+        latitude:
+          type:
+          - string
+          - 'null'
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+        longitude:
+          type:
+          - string
+          - 'null'
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+        active:
+          type: boolean
+      required:
+      - name
     CatalogTenantUsage:
       type: object
       properties:
@@ -22724,6 +23760,18 @@ components:
 
         * `MARKET` - MARKET'
     ChangePassword:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+          maxLength: 200
+        newPassword:
+          type: string
+          maxLength: 200
+      required:
+      - currentPassword
+      - newPassword
+    ChangePasswordRequest:
       type: object
       properties:
         currentPassword:
@@ -24826,28 +25874,6 @@ components:
       - currencyCode
       - policyId
       - proposerId
-    FirstAccessConfirm:
-      type: object
-      properties:
-        reference:
-          type: string
-          maxLength: 100
-        registrationNumber:
-          type: string
-          maxLength: 100
-        otp:
-          type: string
-          maxLength: 6
-          minLength: 6
-        password:
-          type: string
-          writeOnly: true
-          maxLength: 256
-      required:
-      - otp
-      - password
-      - reference
-      - registrationNumber
     FirstAccessRequest:
       type: object
       properties:
@@ -24861,6 +25887,15 @@ components:
       required:
       - reference
       - registrationNumber
+    ForgotPasswordRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+      required:
+      - email
     FormulaCreate:
       type: object
       properties:
@@ -25841,6 +26876,14 @@ components:
       - signatoryName
       - signedAt
       - termMonths
+    LanguageEnum:
+      enum:
+      - pt
+      - en
+      type: string
+      description: '* `pt` - pt
+
+        * `en` - en'
     LevelEnum:
       enum:
       - PLATFORM_MANDATORY
@@ -26333,6 +27376,26 @@ components:
       - firstName
       - relationshipCode
       - rowVersion
+    NameEnum:
+      enum:
+      - APP_OPEN
+      - SCREEN_VIEW
+      - PUSH_OPENED
+      - BIOMETRIC_UNLOCK
+      - CARD_OFFLINE_VIEW
+      - DOCUMENT_UPLOAD
+      type: string
+      description: '* `APP_OPEN` - APP_OPEN
+
+        * `SCREEN_VIEW` - SCREEN_VIEW
+
+        * `PUSH_OPENED` - PUSH_OPENED
+
+        * `BIOMETRIC_UNLOCK` - BIOMETRIC_UNLOCK
+
+        * `CARD_OFFLINE_VIEW` - CARD_OFFLINE_VIEW
+
+        * `DOCUMENT_UPLOAD` - DOCUMENT_UPLOAD'
     NullEnum:
       type: 'null'
     Onboarding:
@@ -26516,39 +27579,6 @@ components:
       required:
       - content
       - truncated
-    PasswordLogin:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-          maxLength: 320
-        password:
-          type: string
-          writeOnly: true
-          maxLength: 256
-      required:
-      - email
-      - password
-    PasswordResetConfirm:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-          maxLength: 320
-        otp:
-          type: string
-          maxLength: 6
-          minLength: 6
-        password:
-          type: string
-          writeOnly: true
-          maxLength: 256
-      required:
-      - email
-      - otp
-      - password
     PasswordResetRequest:
       type: object
       properties:
@@ -27678,6 +28708,20 @@ components:
       - id
       - metadata
       - occurredAt
+    PlatformEnum:
+      enum:
+      - IOS
+      - ANDROID
+      - WEB
+      - OTHER
+      type: string
+      description: '* `IOS` - IOS
+
+        * `ANDROID` - ANDROID
+
+        * `WEB` - WEB
+
+        * `OTHER` - OTHER'
     PlatformFormulaEngine:
       type: object
       properties:
@@ -28631,6 +29675,80 @@ components:
       description: '* `INDIVIDUAL` - INDIVIDUAL
 
         * `GROUP` - GROUP'
+    PortalAppConfig:
+      type: object
+      properties:
+        minVersion:
+          type:
+          - string
+          - 'null'
+        latestVersion:
+          type:
+          - string
+          - 'null'
+        updateRequired:
+          type: boolean
+          description: 'Só com o cabeçalho X-App-Version: a versão da app é inferior à mínima.'
+        storeUrls:
+          type: object
+          additionalProperties:
+            type:
+            - string
+            - 'null'
+          description: ios e android.
+      required:
+      - latestVersion
+      - minVersion
+      - storeUrls
+      - updateRequired
+    PortalAppMetrics:
+      type: object
+      properties:
+        days:
+          type: integer
+        activations:
+          type: integer
+          description: Clientes que já abriram sessão na app.
+        activeDevices:
+          type: integer
+        logins:
+          type: integer
+          description: Sessões abertas no período.
+        devicesByPlatform:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        appVersions:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        events:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        topScreens:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        opensByDay:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - activations
+      - activeDevices
+      - appVersions
+      - days
+      - devicesByPlatform
+      - events
+      - logins
+      - opensByDay
+      - topScreens
     PortalBeneficiaries:
       type: object
       properties:
@@ -28685,6 +29803,112 @@ components:
       - relationship
       - validFrom
       - validUntil
+    PortalCareProvider:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/TypeB88Enum'
+        specialties:
+          type: array
+          items:
+            type: string
+        province:
+          type: string
+        municipality:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        openingHours:
+          type: string
+        emergency:
+          type: boolean
+        latitude:
+          type:
+          - number
+          - 'null'
+          format: double
+        longitude:
+          type:
+          - number
+          - 'null'
+          format: double
+        active:
+          type: boolean
+        distanceKm:
+          type:
+          - number
+          - 'null'
+          format: double
+          description: Só quando o pedido traz lat e lng.
+      required:
+      - active
+      - address
+      - distanceKm
+      - emergency
+      - id
+      - latitude
+      - longitude
+      - municipality
+      - name
+      - openingHours
+      - phone
+      - province
+      - specialties
+      - type
+    PortalCareProviders:
+      type: object
+      properties:
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalCareProvider'
+      required:
+      - providers
+    PortalConnectedSession:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        deviceName:
+          type: string
+        platform:
+          type: string
+        appVersion:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+          description: A sessão do dispositivo que fez o pedido.
+      required:
+      - appVersion
+      - createdAt
+      - current
+      - deviceName
+      - id
+      - lastUsedAt
+      - platform
+    PortalConnectedSessions:
+      type: object
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalConnectedSession'
+      required:
+      - sessions
     PortalConversations:
       type: object
       properties:
@@ -28731,6 +29955,90 @@ components:
       - policies
       - quotes
       - upcoming
+    PortalDevice:
+      type: object
+      properties:
+        deviceId:
+          type: string
+          description: Identificador estável da instalação da app.
+        deviceName:
+          type: string
+        platform:
+          $ref: '#/components/schemas/PlatformEnum'
+        appVersion:
+          type: string
+      required:
+      - deviceId
+    PortalDeviceFirstAccessConfirm:
+      type: object
+      properties:
+        reference:
+          type: string
+          description: Número da apólice ou da cotação.
+        registrationNumber:
+          type: string
+        otp:
+          type: string
+          description: Código de 6 dígitos recebido por email.
+        password:
+          type: string
+        device:
+          $ref: '#/components/schemas/PortalDevice'
+      required:
+      - otp
+      - password
+      - reference
+      - registrationNumber
+    PortalDeviceLogin:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        device:
+          allOf:
+          - $ref: '#/components/schemas/PortalDevice'
+          description: 'Só a app móvel: devolve também `refreshToken`.'
+      required:
+      - email
+      - password
+    PortalDevicePasswordResetConfirm:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        otp:
+          type: string
+        password:
+          type: string
+        device:
+          $ref: '#/components/schemas/PortalDevice'
+      required:
+      - email
+      - otp
+      - password
+    PortalDiscoverRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required:
+      - email
+    PortalDiscoverResult:
+      type: object
+      properties:
+        insurers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalInsurerBranding'
+          description: Uma seguradora quando o email tem conta numa só; vazia nos outros casos (com várias, seguem
+            por email).
+      required:
+      - insurers
     PortalDocuments:
       type: object
       properties:
@@ -28742,6 +30050,39 @@ components:
           description: Hoje só propostas geradas.
       required:
       - documents
+    PortalInsurerBranding:
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        primaryColor:
+          type:
+          - string
+          - 'null'
+          description: '#RRGGBB.'
+        secondaryColor:
+          type:
+          - string
+          - 'null'
+          description: '#RRGGBB.'
+        logoUrl:
+          type:
+          - string
+          - 'null'
+          description: URL absoluto do logótipo (PNG/JPEG), ou nulo.
+        portalEnabled:
+          type: boolean
+          description: 'Falso: o Portal do Cliente está desligado ou a seguradora suspensa.'
+      required:
+      - logoUrl
+      - name
+      - portalEnabled
+      - primaryColor
+      - secondaryColor
+      - tenantId
     PortalInvitationStatus:
       type: object
       properties:
@@ -28780,6 +30121,20 @@ components:
         * `SENT` - SENT
 
         * `FAILED` - FAILED'
+    PortalLanguage:
+      type: object
+      properties:
+        language:
+          $ref: '#/components/schemas/LanguageEnum'
+      required:
+      - language
+    PortalLogoutRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+      required:
+      - refreshToken
     PortalMarkRead:
       type: object
       properties:
@@ -29188,6 +30543,62 @@ components:
       - province
       - registrationNumber
       - type
+    PortalPushDevice:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        platform:
+          type: string
+        active:
+          type: boolean
+      required:
+      - active
+      - id
+      - platform
+    PortalPushDeviceRegister:
+      type: object
+      properties:
+        expoToken:
+          type: string
+          description: ExponentPushToken[...]
+        platform:
+          $ref: '#/components/schemas/PlatformEnum'
+      required:
+      - expoToken
+    PortalPushPreference:
+      type: object
+      properties:
+        category:
+          type: string
+          description: PAYMENTS, QUOTES, REQUESTS, MESSAGES ou POLICIES.
+        label:
+          type: string
+        enabled:
+          type: boolean
+      required:
+      - category
+      - enabled
+    PortalPushPreferences:
+      type: object
+      properties:
+        preferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalPushPreference'
+      required:
+      - preferences
+    PortalPushPreferencesUpdate:
+      type: object
+      properties:
+        preferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalPushPreference'
+          description: Só as categorias a mudar; `label` é ignorado.
+      required:
+      - preferences
     PortalQuestionnaireItem:
       type: object
       properties:
@@ -29372,6 +30783,15 @@ components:
             $ref: '#/components/schemas/PortalQuote'
       required:
       - quotes
+    PortalRefreshRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+        appVersion:
+          type: string
+      required:
+      - refreshToken
     PortalRenewal:
       type: object
       properties:
@@ -29653,6 +31073,12 @@ components:
         expiresIn:
           type: integer
           description: Segundos até o token expirar.
+        refreshToken:
+          type: string
+          description: Só quando o pedido trouxe `device` (app móvel). Cada uso devolve um novo.
+        refreshExpiresIn:
+          type: integer
+          description: Segundos até o token de renovação expirar sem uso (90 dias).
       required:
       - accessToken
       - expiresIn
@@ -29667,9 +31093,46 @@ components:
           default: Bearer
         expiresIn:
           type: integer
+        refreshToken:
+          type: string
+          description: Só quando o pedido trouxe `device` (app móvel).
+        refreshExpiresIn:
+          type: integer
+          description: Segundos até o token de renovação expirar sem uso.
       required:
       - accessToken
       - expiresIn
+    PortalUsageEvent:
+      type: object
+      properties:
+        name:
+          $ref: '#/components/schemas/NameEnum'
+        screen:
+          type: string
+          description: Nome do ecrã (sem dados pessoais).
+      required:
+      - name
+    PortalUsageEvents:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalUsageEvent'
+          description: Até 50 por pedido; os inválidos são ignorados.
+        appVersion:
+          type: string
+        platform:
+          $ref: '#/components/schemas/PlatformEnum'
+      required:
+      - events
+    PortalUsageEventsResult:
+      type: object
+      properties:
+        accepted:
+          type: integer
+      required:
+      - accepted
     PreExistingDecisionRequest:
       type: object
       properties:
@@ -33169,6 +34632,18 @@ components:
       - memberId
       - memberName
       - relationshipCategory
+    ResetPasswordRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          maxLength: 2000
+        newPassword:
+          type: string
+          maxLength: 200
+      required:
+      - newPassword
+      - token
     ReviewAssignBatchRequest:
       type: object
       properties:
@@ -35450,6 +36925,29 @@ components:
       - productId
       - productName
       - quoteCount
+    TypeB88Enum:
+      enum:
+      - HOSPITAL
+      - CLINIC
+      - LAB
+      - PHARMACY
+      - IMAGING
+      - DENTAL
+      - OTHER
+      type: string
+      description: '* `HOSPITAL` - HOSPITAL
+
+        * `CLINIC` - CLINIC
+
+        * `LAB` - LAB
+
+        * `PHARMACY` - PHARMACY
+
+        * `IMAGING` - IMAGING
+
+        * `DENTAL` - DENTAL
+
+        * `OTHER` - OTHER'
     UnionBondTypeEnum:
       enum:
       - UNIAO_DE_FACTO

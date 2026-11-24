@@ -22,6 +22,7 @@ from apps.foundation.infrastructure.models import Tenant
 from apps.platform_admin.application import tenant_settings
 from apps.platform_admin.application.audit_service import record_platform_audit
 from apps.platform_admin.domain.errors import PlatformConflictError, PlatformNotFoundError
+from apps.staff_accounts.application import credential_mail
 from apps.staff_accounts.infrastructure.models import StaffAccount, StaffAccountRole
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,10 @@ def create_tenant(*, actor_id, code, name, profile, admin_email, admin_name, cor
             admin, password = _create_admin(tenant.id, admin_email, admin_name)
     except IntegrityError as exc:
         raise PlatformConflictError("O código do tenant ou o email do administrador já existe") from exc
+    credential_mail.send_welcome_email(
+        to_email=admin.email, name=admin.name, password=password, tenant_name=tenant.name,
+        account_id=str(admin.id), tenant_id=tenant.id,
+    )
     record_platform_audit(
         actor_id=actor_id, action="platform.tenant_created", entity_type="Tenant", entity_id=str(tenant.id),
         correlation_id=correlation_id,
@@ -367,6 +372,10 @@ def add_tenant_admin(*, actor_id, tenant_id, email, name, correlation_id):
 
     ensure_user_limit(tenant.id)
     admin, password = _create_admin(tenant.id, email, name)
+    credential_mail.send_welcome_email(
+        to_email=admin.email, name=admin.name, password=password, tenant_name=tenant.name,
+        account_id=str(admin.id), tenant_id=tenant.id,
+    )
     record_platform_audit(
         actor_id=actor_id, action="platform.tenant_admin_added", entity_type="Tenant", entity_id=str(tenant.id),
         correlation_id=correlation_id, metadata={"adminId": str(admin.id), "adminEmail": admin.email},
@@ -388,6 +397,10 @@ def reset_tenant_account_password(*, actor_id, tenant_id, account_id, correlatio
         actor_id=actor_id, action="platform.tenant_account_password_reset", entity_type="StaffAccount",
         entity_id=str(account.id), correlation_id=correlation_id, metadata={"tenantId": str(tenant.id)},
         tenant_id=tenant.id,
+    )
+    credential_mail.send_password_reset_email(
+        to_email=account.email, name=account.name, password=password, tenant_name=tenant.name,
+        account_id=str(account.id), tenant_id=tenant.id,
     )
     return account, password
 

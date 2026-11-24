@@ -68,6 +68,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "apps.foundation.interfaces.middleware.IdempotencyMiddleware",
     "apps.foundation.interfaces.middleware.RateLimitMiddleware",
+    "apps.customer_portal.interfaces.app_version.PortalAppVersionMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.foundation.interfaces.middleware.ActorContextCleanupMiddleware",
 ]
@@ -323,6 +324,13 @@ Q360_STAFF_MAX_FAILED_ATTEMPTS = int(os.environ.get("Q360_STAFF_MAX_FAILED_ATTEM
 Q360_STAFF_LOCKOUT_MINUTES = int(os.environ.get("Q360_STAFF_LOCKOUT_MINUTES", "30"))
 Q360_STAFF_LOGIN_RATE_LIMIT = int(os.environ.get("Q360_STAFF_LOGIN_RATE_LIMIT", "10"))
 Q360_STAFF_LOGIN_RATE_WINDOW_SECONDS = int(os.environ.get("Q360_STAFF_LOGIN_RATE_WINDOW_SECONDS", "60"))
+# Endereço público do Q360 (a aplicação web do staff): vai nos emails de nova
+# conta, reposição e recuperação de palavra-passe. Sem barra final.
+Q360_PLATFORM_URL = os.environ.get("Q360_PLATFORM_URL", "http://localhost:5173").rstrip("/")
+# Recuperação de palavra-passe do staff/plataforma: ligação de uso único.
+Q360_STAFF_RECOVERY_TTL_MINUTES = int(os.environ.get("Q360_STAFF_RECOVERY_TTL_MINUTES", "30"))
+Q360_STAFF_RECOVERY_RATE_LIMIT = int(os.environ.get("Q360_STAFF_RECOVERY_RATE_LIMIT", "5"))
+Q360_STAFF_RECOVERY_RATE_WINDOW_SECONDS = int(os.environ.get("Q360_STAFF_RECOVERY_RATE_WINDOW_SECONDS", "900"))
 
 # --- Customer Portal (ROADMAP_PORTAL_CLIENTE.md Fase 0) ----------------
 # Deliberately isolated from OIDC_*/SECRET_KEY above: a customer-portal
@@ -362,6 +370,43 @@ CUSTOMER_PORTAL_LOGIN_RATE_LIMIT_PER_IP = int(os.environ.get("CUSTOMER_PORTAL_LO
 CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS_PER_IP = int(
     os.environ.get("CUSTOMER_PORTAL_LOGIN_RATE_WINDOW_SECONDS_PER_IP", "900")
 )
+
+# --- App móvel do Portal do Cliente (roadmap_mobile.md, Fase 1) ----------
+# Token de renovação por dispositivo: o de acesso continua curto (acima); este
+# dura até 90 dias, roda a cada uso e morre quando a palavra-passe muda.
+CUSTOMER_PORTAL_REFRESH_TTL_DAYS = int(os.environ.get("CUSTOMER_PORTAL_REFRESH_TTL_DAYS", "90"))
+# Limite por dispositivo (além dos limites por IP e por email acima).
+CUSTOMER_PORTAL_DEVICE_RATE_LIMIT = int(os.environ.get("CUSTOMER_PORTAL_DEVICE_RATE_LIMIT", "20"))
+CUSTOMER_PORTAL_DEVICE_RATE_WINDOW_SECONDS = int(os.environ.get("CUSTOMER_PORTAL_DEVICE_RATE_WINDOW_SECONDS", "900"))
+# Descoberta da seguradora por email (POST /customer-portal/discover): por IP e
+# por email (o email só é enviado quando há várias seguradoras, por isso o
+# segundo limite impede usar o endpoint para encher caixas de correio).
+CUSTOMER_PORTAL_DISCOVER_RATE_LIMIT = int(os.environ.get("CUSTOMER_PORTAL_DISCOVER_RATE_LIMIT", "10"))
+CUSTOMER_PORTAL_DISCOVER_RATE_WINDOW_SECONDS = int(os.environ.get("CUSTOMER_PORTAL_DISCOVER_RATE_WINDOW_SECONDS", "900"))
+CUSTOMER_PORTAL_DISCOVER_RATE_LIMIT_PER_EMAIL = int(os.environ.get("CUSTOMER_PORTAL_DISCOVER_RATE_LIMIT_PER_EMAIL", "3"))
+CUSTOMER_PORTAL_DISCOVER_EMAIL_WINDOW_SECONDS = int(os.environ.get("CUSTOMER_PORTAL_DISCOVER_EMAIL_WINDOW_SECONDS", "3600"))
+# Ligações universais: https://app.quote360.ao abre a app se estiver instalada
+# e a web se não estiver. Vazio = usa CUSTOMER_PORTAL_URL (só o portal web).
+CUSTOMER_PORTAL_APP_URL = os.environ.get("CUSTOMER_PORTAL_APP_URL", "").rstrip("/")
+# apple-app-site-association / assetlinks.json (listas separadas por vírgula).
+CUSTOMER_PORTAL_APPLE_APP_IDS = [
+    v.strip() for v in os.environ.get("CUSTOMER_PORTAL_APPLE_APP_IDS", "").split(",") if v.strip()
+]  # «TEAMID.ao.quote360.cliente»
+CUSTOMER_PORTAL_ANDROID_PACKAGE = os.environ.get("CUSTOMER_PORTAL_ANDROID_PACKAGE", "")
+CUSTOMER_PORTAL_ANDROID_SHA256 = [
+    v.strip() for v in os.environ.get("CUSTOMER_PORTAL_ANDROID_SHA256", "").split(",") if v.strip()
+]
+# Notificações push pelo Expo Push Service (gratuito). Desligado por omissão.
+CUSTOMER_PORTAL_PUSH_ENABLED = os.environ.get("CUSTOMER_PORTAL_PUSH_ENABLED", "false").lower() == "true"
+CUSTOMER_PORTAL_EXPO_PUSH_URL = os.environ.get("CUSTOMER_PORTAL_EXPO_PUSH_URL", "https://exp.host/--/api/v2/push/send")
+CUSTOMER_PORTAL_EXPO_ACCESS_TOKEN = os.environ.get("CUSTOMER_PORTAL_EXPO_ACCESS_TOKEN", "")
+CUSTOMER_PORTAL_PUSH_TIMEOUT_SECONDS = float(os.environ.get("CUSTOMER_PORTAL_PUSH_TIMEOUT_SECONDS", "3"))
+# Versão mínima da app móvel (cabeçalho X-App-Version). Vazio = não se impõe nada.
+# Abaixo dela os pedidos ao portal respondem 426 e a app obriga a atualizar.
+CUSTOMER_PORTAL_MIN_APP_VERSION = os.environ.get("CUSTOMER_PORTAL_MIN_APP_VERSION", "")
+CUSTOMER_PORTAL_LATEST_APP_VERSION = os.environ.get("CUSTOMER_PORTAL_LATEST_APP_VERSION", "")
+CUSTOMER_PORTAL_IOS_STORE_URL = os.environ.get("CUSTOMER_PORTAL_IOS_STORE_URL", "")
+CUSTOMER_PORTAL_ANDROID_STORE_URL = os.environ.get("CUSTOMER_PORTAL_ANDROID_STORE_URL", "")
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"

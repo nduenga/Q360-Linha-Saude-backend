@@ -19,6 +19,7 @@ from rest_framework.exceptions import NotFound
 from apps.foundation.application.audit_service import AuditService
 from apps.foundation.application.context import CurrentTenantProvider
 from apps.foundation.infrastructure.audit_repository import DjangoAuditRepositoryAdapter
+from apps.staff_accounts.application import credential_mail
 from apps.staff_accounts.domain.errors import DuplicateStaffAccountEmailError, StaffAccountLimitReachedError
 from apps.staff_accounts.infrastructure.models import StaffAccount, StaffAccountRole, StaffRefreshToken
 
@@ -68,6 +69,12 @@ def ensure_user_limit(tenant_id) -> None:
         )
 
 
+def _tenant_name(tenant_id) -> str | None:
+    from apps.foundation.infrastructure.models import Tenant
+
+    return Tenant.objects.filter(id=tenant_id).values_list("name", flat=True).first()
+
+
 def list_accounts() -> list[StaffAccountView]:
     accounts = list(StaffAccount.objects.all().order_by("email"))
     roles_by_account = _roles_by_account([a.id for a in accounts])
@@ -104,6 +111,12 @@ def create_account(*, email: str, name: str, roles: list[str], password: str | N
         action="staff_account.created", entity_type="StaffAccount", entity_id=str(account.id),
         metadata={"roles": roles},
     )
+    if generated_password:
+        # Palavra-passe gerada pelo sistema: o utilizador recebe-a por email.
+        credential_mail.send_welcome_email(
+            to_email=account.email, name=account.name, password=generated_password,
+            tenant_name=_tenant_name(tenant_id), account_id=str(account.id), tenant_id=tenant_id,
+        )
     return _view(account, roles), generated_password
 
 
@@ -177,4 +190,8 @@ def reset_password(*, account_id: uuid.UUID) -> str:
             revoked_at=timezone.now()
         )
     _audit.record(action="staff_account.password_reset", entity_type="StaffAccount", entity_id=str(account.id))
+    credential_mail.send_password_reset_email(
+        to_email=account.email, name=account.name, password=new_password,
+        tenant_name=_tenant_name(account.tenant_id), account_id=str(account.id), tenant_id=account.tenant_id,
+    )
     return new_password

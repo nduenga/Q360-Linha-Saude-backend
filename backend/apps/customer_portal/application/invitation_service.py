@@ -93,7 +93,12 @@ def invite_proposer(proposer: Proposer, *, recipient_email: str | None = None) -
     # referência e o documento no «Primeiro acesso», como até aqui.
     insurer = Tenant.objects.filter(id=tenant_id).values_list("name", flat=True).first() or "Seguradora"
     path = "primeiro" if existing else "recuperar"
-    link = f"{settings.CUSTOMER_PORTAL_URL}/{path}?{urlencode({'email': email, 'convite': '1'})}"
+    query = {"email": email, "convite": "1"}
+    if settings.CUSTOMER_PORTAL_APP_URL:
+        # Ligação universal: abre a app (já nesta seguradora) ou a web, se não estiver instalada.
+        link = f"{settings.CUSTOMER_PORTAL_APP_URL}/{path}?{urlencode({**query, 'seguradora': str(tenant_id)})}"
+    else:
+        link = f"{settings.CUSTOMER_PORTAL_URL}/{path}?{urlencode(query)}"
 
     def _send() -> None:
         # A auditoria só diz «enviado» depois de o servidor de email aceitar a mensagem.
