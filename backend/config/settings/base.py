@@ -328,6 +328,11 @@ Q360_STAFF_LOGIN_RATE_WINDOW_SECONDS = int(os.environ.get("Q360_STAFF_LOGIN_RATE
 # conta, reposição e recuperação de palavra-passe. Sem barra final.
 Q360_PLATFORM_URL = os.environ.get("Q360_PLATFORM_URL", "http://localhost:5173").rstrip("/")
 # Recuperação de palavra-passe do staff/plataforma: ligação de uso único.
+# Chave que cifra os segredos geridos no painel (palavra-passe SMTP). Em
+# desenvolvimento deriva-se de SECRET_KEY; em produção é obrigatória (ver production.py).
+Q360_SECRETS_KEY = os.environ.get("Q360_SECRETS_KEY", "")
+# Backend usado com o SMTP configurado no painel (os testes trocam-no pelo locmem).
+Q360_EMAIL_CONFIG_BACKEND = os.environ.get("Q360_EMAIL_CONFIG_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
 Q360_STAFF_RECOVERY_TTL_MINUTES = int(os.environ.get("Q360_STAFF_RECOVERY_TTL_MINUTES", "30"))
 Q360_STAFF_RECOVERY_RATE_LIMIT = int(os.environ.get("Q360_STAFF_RECOVERY_RATE_LIMIT", "5"))
 Q360_STAFF_RECOVERY_RATE_WINDOW_SECONDS = int(os.environ.get("Q360_STAFF_RECOVERY_RATE_WINDOW_SECONDS", "900"))

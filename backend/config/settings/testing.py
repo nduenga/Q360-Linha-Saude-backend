@@ -33,6 +33,7 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 CUSTOMER_PORTAL_LOGIN_RATE_LIMIT = 0  # Same rationale as RATE_LIMIT_REQUESTS = 0 above.
 CUSTOMER_PORTAL_DISCOVER_RATE_LIMIT = 0
 CUSTOMER_PORTAL_DISCOVER_RATE_LIMIT_PER_EMAIL = 0
+Q360_EMAIL_CONFIG_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 Q360_STAFF_RECOVERY_RATE_LIMIT = 0  # os testes do limite ligam-no.
 CUSTOMER_PORTAL_DEVICE_RATE_LIMIT = 0  # idem; os testes do limite por dispositivo ligam-no.
 

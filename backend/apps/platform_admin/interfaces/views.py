@@ -97,10 +97,10 @@ class PlatformTenantListCreateView(APIView):
         tenant, admin, password = tenant_service.create_tenant(
             actor_id=_actor_id(request), code=(d.get("code") or "").lower(), name=d["name"].strip(), profile=d.get("profile"),
             admin_email=d["admin"]["email"].lower(), admin_name=d["admin"]["name"].strip(),
-            correlation_id=get_correlation_id(),
+            correlation_id=get_correlation_id(), email_settings_data=d.get("emailSettings"),
         )
         return Response(
-            {"tenant": _tenant(tenant), "admin": {"id": admin.id, "email": admin.email, "name": admin.name, "role": "ADMIN"},
+            {"tenant": _tenant(tenant), "emailSettingsWarning": getattr(tenant, "email_settings_warning", None), "admin": {"id": admin.id, "email": admin.email, "name": admin.name, "role": "ADMIN"},
              "temporaryPassword": password, "temporaryPasswordNotice": NOTICE},
             status=status.HTTP_201_CREATED,
         )

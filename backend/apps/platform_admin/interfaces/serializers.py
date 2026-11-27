@@ -32,12 +32,68 @@ class TenantAdminSerializer(serializers.Serializer):
     email = serializers.EmailField(max_length=320)
 
 
+class EmailSettingsInputSerializer(serializers.Serializer):
+    """Parcial: só os campos enviados mudam. Na primeira vez são obrigatórios `host` e `fromAddress`."""
+
+    host = serializers.CharField(max_length=255, required=False)
+    port = serializers.IntegerField(min_value=1, max_value=65535, required=False)
+    security = serializers.ChoiceField(choices=["STARTTLS", "SSL", "NONE"], required=False)
+    username = serializers.CharField(max_length=320, required=False, allow_blank=True)
+    password = serializers.CharField(max_length=500, required=False, allow_blank=True, trim_whitespace=False,
+                                     help_text="Omitida: mantém a atual. Vazia: apaga-a. Nunca é devolvida.")
+    fromAddress = serializers.CharField(max_length=320, required=False)
+    fromName = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    replyTo = serializers.CharField(max_length=320, required=False, allow_blank=True)
+    timeoutSeconds = serializers.IntegerField(required=False)
+    enabled = serializers.BooleanField(required=False)
+
+
+class EmailLastTestSerializer(serializers.Serializer):
+    at = serializers.DateTimeField()
+    ok = serializers.BooleanField()
+    error = serializers.CharField(allow_null=True)
+
+
+class EmailSettingsSerializer(serializers.Serializer):
+    configured = serializers.BooleanField()
+    scope = serializers.ChoiceField(choices=["PLATFORM", "TENANT"])
+    effectiveSource = serializers.ChoiceField(
+        choices=["TENANT", "PLATFORM", "ENV"],
+        help_text="Quem envia de facto: este servidor (TENANT/PLATFORM) ou as variáveis de ambiente (ENV).")
+    inheritedFrom = serializers.ChoiceField(
+        choices=["PLATFORM", "ENV"], allow_null=True,
+        help_text="Sem configuração própria: de onde vem o servidor em uso.")
+    host = serializers.CharField(allow_null=True)
+    port = serializers.IntegerField()
+    security = serializers.CharField()
+    username = serializers.CharField()
+    hasPassword = serializers.BooleanField()
+    fromAddress = serializers.CharField()
+    fromName = serializers.CharField()
+    replyTo = serializers.CharField()
+    timeoutSeconds = serializers.IntegerField()
+    enabled = serializers.BooleanField()
+    lastTest = EmailLastTestSerializer(allow_null=True)
+    updatedAt = serializers.DateTimeField(allow_null=True)
+
+
+class EmailTestRequestSerializer(serializers.Serializer):
+    to = serializers.EmailField(required=False, help_text="Obrigatório na plataforma; o admin de seguradora recebe no seu email.")
+
+
+class EmailTestResultSerializer(serializers.Serializer):
+    ok = serializers.BooleanField()
+    error = serializers.CharField(allow_null=True)
+    testedAt = serializers.DateTimeField()
+
+
 class CreateTenantSerializer(serializers.Serializer):
     # Opcional: sem código, é gerado a partir do nome (ver tenant_service.code_from_name).
     code = serializers.RegexField(regex=r"^[a-z0-9][a-z0-9_-]{2,49}$", max_length=50, required=False, allow_blank=True)
     name = serializers.CharField(max_length=200)
     profile = TenantProfileSerializer(required=False)
     admin = TenantAdminSerializer()
+    emailSettings = EmailSettingsInputSerializer(required=False, help_text="SMTP próprio da seguradora (opcional).")
 
 
 class UpdateTenantSerializer(serializers.Serializer):
@@ -174,6 +230,7 @@ class CreatedAdminSerializer(serializers.Serializer):
 
 class CreateTenantResponseSerializer(serializers.Serializer):
     tenant = TenantResponseSerializer()
+    emailSettingsWarning = serializers.CharField(required=False, allow_null=True)
     admin = CreatedAdminSerializer()
     temporaryPassword = serializers.CharField()
     temporaryPasswordNotice = serializers.CharField()

@@ -21,11 +21,26 @@ from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 
 
-def send_mail(*, subject: str, message: str, from_email: str, recipient_list: list[str], fail_silently: bool = False) -> int:
+def send_mail(*, subject: str, message: str, from_email: str, recipient_list: list[str], fail_silently: bool = False,
+              tenant_id=None) -> int:
     """Como `django.core.mail.send_mail`, mais uma versão HTML com a cor e o
     logótipo da seguradora (ficha da plataforma), quando existirem. O texto
-    simples continua a ser a mensagem principal."""
-    email = EmailMultiAlternatives(subject=subject, body=message, from_email=from_email, to=recipient_list)
+    simples continua a ser a mensagem principal.
+
+    O servidor e o endereço do remetente vêm do painel (seguradora, senão
+    plataforma, senão variáveis de ambiente): ver `platform_admin.application.
+    email_settings`. `tenant_id` omitido usa o tenant do contexto, se houver."""
+    from apps.foundation.application.context import CurrentTenantProvider
+    from apps.platform_admin.application import email_settings
+
+    if tenant_id is None:
+        current = CurrentTenantProvider.get()
+        tenant_id = current.value if current is not None else None
+    resolved = email_settings.resolve(tenant_id)
+    email = EmailMultiAlternatives(
+        subject=subject, body=message, from_email=email_settings.apply_sender(from_email, resolved), to=recipient_list,
+        connection=resolved.connection, reply_to=[resolved.reply_to] if resolved.reply_to else None,
+    )
     branding = _branding()
     if branding is not None:
         color, logo = branding

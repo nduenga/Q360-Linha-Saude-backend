@@ -34,3 +34,30 @@ class PlatformAuditEvent(models.Model):
     class Meta:
         managed = False
         db_table = "platform_audit_event"
+
+
+class EmailSettings(models.Model):
+    """Servidor SMTP configurado no painel. `tenant_id` nulo = o da plataforma
+    (por omissão para todas as seguradoras); com valor = o da seguradora."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant_id = models.UUIDField(null=True, blank=True)
+    host = models.CharField(max_length=255)
+    port = models.IntegerField(default=587)
+    security = models.CharField(max_length=10, default="STARTTLS")
+    username = models.CharField(max_length=320, blank=True, default="")
+    password_enc = models.TextField(blank=True, default="")
+    from_address = models.CharField(max_length=320)
+    from_name = models.CharField(max_length=200, blank=True, default="")
+    reply_to = models.CharField(max_length=320, blank=True, default="")
+    timeout_seconds = models.IntegerField(default=20)
+    enabled = models.BooleanField(default=True)
+    last_test_at = models.DateTimeField(null=True, blank=True)
+    last_test_ok = models.BooleanField(null=True, blank=True)
+    last_test_error = models.TextField(blank=True, default="")
+    updated_by = models.CharField(max_length=200, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        managed = False
+        db_table = "email_settings"

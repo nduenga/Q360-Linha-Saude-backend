@@ -33,7 +33,7 @@ def _deliver(*, subject: str, body: str, to_email: str, tenant_name: str | None,
     def _send() -> None:
         try:
             send_mail(subject=subject, message=body, from_email=sender(tenant_name), recipient_list=[to_email],
-                      fail_silently=False)
+                      fail_silently=False, tenant_id=tenant_id)
         except Exception as exc:  # noqa: BLE001 - o email não pode desfazer a operação
             logger.exception("Falha ao enviar o email «%s» para a conta %s", what, audit_id)
             record_platform_audit(actor_id="SYSTEM", action=f"platform.{what}_email_failed", entity_type=audit_entity,

@@ -507,6 +507,7 @@ REGISTRY: dict[str, dict] = {
 
 # Staff authentication/administration (apps.staff_accounts).
 from apps.staff_accounts.interfaces import serializers as _staff  # noqa: E402
+from apps.platform_admin.interfaces import serializers as _pl_email  # noqa: E402
 
 REGISTRY.update(
     {
@@ -525,6 +526,11 @@ REGISTRY.update(
         "StaffAccountStatusView.patch": {"response": _staff.StaffAccountSerializer},
         "StaffAccountResetPasswordView.post": {"request": d.EmptyRequest, "response": _staff.GeneratedPasswordSerializer},
         "StaffAccountUnlockView.post": {"request": d.EmptyRequest, "empty": True, "status": 204},
+        "TenantEmailSettingsView.get": {"response": _pl_email.EmailSettingsSerializer},
+        "TenantEmailSettingsView.put": {"request": _pl_email.EmailSettingsInputSerializer,
+                                        "response": _pl_email.EmailSettingsSerializer},
+        "TenantEmailSettingsView.delete": {"empty": True, "status": 204},
+        "TenantEmailTestView.post": {"request": _pl_email.EmailTestRequestSerializer, "response": _pl_email.EmailTestResultSerializer},
     }
 )
 
@@ -591,6 +597,16 @@ REGISTRY.update(
         "PlatformAdminListCreateView.get": {"response": _pl.PlatformAdminSerializer, "many": True},
         "PlatformAdminListCreateView.post": {"request": _pl.CreatePlatformAdminSerializer, "response": _pl.CreatePlatformAdminResponseSerializer, "status": 201},
         "PlatformAdminStatusView.patch": {"request": _pl.UpdatePlatformAdminStatusSerializer, "response": _pl.PlatformAdminSerializer},
+        "PlatformEmailSettingsView.get": {"response": _pl.EmailSettingsSerializer},
+        "PlatformEmailSettingsView.put": {"request": _pl.EmailSettingsInputSerializer, "response": _pl.EmailSettingsSerializer},
+        "PlatformEmailSettingsView.delete": {"empty": True, "status": 204},
+        "PlatformEmailTestView.post": {"request": _pl.EmailTestRequestSerializer, "response": _pl.EmailTestResultSerializer},
+        "PlatformTenantEmailSettingsView.get": {"response": _pl.EmailSettingsSerializer},
+        "PlatformTenantEmailSettingsView.put": {"request": _pl.EmailSettingsInputSerializer,
+                                                "response": _pl.EmailSettingsSerializer},
+        "PlatformTenantEmailSettingsView.delete": {"empty": True, "status": 204},
+        "PlatformTenantEmailTestView.post": {"request": _pl.EmailTestRequestSerializer,
+                                             "response": _pl.EmailTestResultSerializer},
         "PlatformAdminResetPasswordView.post": {"request": d.EmptyRequest, "response": _pl.TemporaryPasswordResponseSerializer},
         "PlatformFormulaEngineView.get": {
             "response": d.PlatformFormulaEngine,

@@ -33,6 +33,9 @@ if not CUSTOMER_PORTAL_JWT_SECRET:
     )
 
 
+if len(Q360_SECRETS_KEY) < 32:
+    raise RuntimeError("Q360_SECRETS_KEY must be configured (32+ characters) in production: it encrypts the SMTP password.")
+
 if not PLATFORM_ADMIN_JWT_SIGNING_KEY:
     raise RuntimeError("PLATFORM_ADMIN_JWT_SIGNING_KEY must be configured in production.")
 if len(PLATFORM_ADMIN_JWT_SIGNING_KEY) < 32:

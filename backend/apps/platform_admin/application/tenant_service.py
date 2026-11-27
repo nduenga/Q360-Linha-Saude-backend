@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from apps.foundation.application import tenant_status
 from apps.foundation.infrastructure.models import Tenant
-from apps.platform_admin.application import tenant_settings
+from apps.platform_admin.application import email_settings, tenant_settings
 from apps.platform_admin.application.audit_service import record_platform_audit
 from apps.platform_admin.domain.errors import PlatformConflictError, PlatformNotFoundError
 from apps.staff_accounts.application import credential_mail
@@ -72,7 +72,7 @@ def _create_admin(tenant_id, email: str, name: str) -> tuple[StaffAccount, str]:
 
 
 @transaction.atomic
-def create_tenant(*, actor_id, code, name, profile, admin_email, admin_name, correlation_id):
+def create_tenant(*, actor_id, code, name, profile, admin_email, admin_name, correlation_id, email_settings_data=None):
     # O login do staff é só por email: o email é único em toda a plataforma.
     if StaffAccount.all_tenants.filter(email__iexact=admin_email).exists():
         raise PlatformConflictError("O email do administrador já existe na plataforma")
@@ -85,6 +85,17 @@ def create_tenant(*, actor_id, code, name, profile, admin_email, admin_name, cor
             admin, password = _create_admin(tenant.id, admin_email, admin_name)
     except IntegrityError as exc:
         raise PlatformConflictError("O código do tenant ou o email do administrador já existe") from exc
+    tenant.email_settings_warning = None  # type: ignore[attr-defined]
+    if email_settings_data:
+        # SMTP da seguradora definido na criação: dados inválidos recusam tudo (nada fica criado);
+        # um servidor que não responde cria o tenant, deixa o SMTP sem uso e avisa.
+        saved = email_settings.save(tenant_id=tenant.id, data=email_settings_data, actor_id=actor_id,
+                                    correlation_id=correlation_id)
+        if not saved.last_test_ok:
+            tenant.email_settings_warning = (  # type: ignore[attr-defined]
+                "O servidor de email indicado não respondeu ao teste e não está a ser usado: "
+                f"{saved.last_test_error}. Corrija-o no detalhe da seguradora."
+            )
     credential_mail.send_welcome_email(
         to_email=admin.email, name=admin.name, password=password, tenant_name=tenant.name,
         account_id=str(admin.id), tenant_id=tenant.id,
@@ -207,13 +218,11 @@ def _notify_status_change(tenant: Tenant, *, old_status: str) -> None:
         body = f"Olá,\n\nO acesso de {tenant.name} ao Q360 foi desativado. Contacte a equipa da plataforma Q360."
 
     def _send() -> None:
-        from django.core.mail import send_mail
-
-        from apps.customer_portal.infrastructure.email_sender import sender
+        from apps.customer_portal.infrastructure.email_sender import send_mail, sender
 
         try:
             send_mail(subject=subject, message=body, from_email=sender(tenant.name), recipient_list=recipients,
-                      fail_silently=False)
+                      fail_silently=False, tenant_id=tenant.id)
         except Exception as exc:  # noqa: BLE001 - a mudança de estado não depende do email
             logger.exception("Falha ao avisar os administradores da seguradora %s", tenant.id)
             record_platform_audit(actor_id="SYSTEM", action="platform.tenant_notice_failed", entity_type="Tenant",
@@ -321,7 +330,7 @@ def tenant_health(*, tenant_id) -> dict[str, Any]:
         tenant_id=tenant.id, status="PUBLISHED", document_type="QUOTE_PROPOSAL"
     ).exists()
     products = Product.all_tenants.filter(tenant_id=tenant.id).count()
-    server_email_problems = email_config_problems()
+    server_email_problems = [] if email_settings.effective_source(tenant.id) != "ENV" else email_config_problems()
     portal_on = bool(settings["limits"]["modules"].get("customerPortal", True))
 
     def step(key, label, done, detail, warning=False):

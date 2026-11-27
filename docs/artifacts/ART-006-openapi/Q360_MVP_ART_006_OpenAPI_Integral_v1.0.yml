@@ -46,6 +46,156 @@ security:
 - oauth2:
   - q360.read
 paths:
+  /api/v1/admin/email-settings:
+    get:
+      operationId: getTenantEmailSettings
+      description: GET|PUT|DELETE /admin/email-settings. Sem configuração própria usa a da plataforma (`inheritedFrom`).
+      summary: Obter tenant email settings
+      tags:
+      - Administration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailSettings'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    put:
+      operationId: putTenantEmailSettings
+      description: GET|PUT|DELETE /admin/email-settings. Sem configuração própria usa a da plataforma (`inheritedFrom`).
+      summary: Substituir tenant email settings
+      tags:
+      - Administration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailSettingsInput'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailSettings'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+    delete:
+      operationId: deleteTenantEmailSettings
+      description: GET|PUT|DELETE /admin/email-settings. Sem configuração própria usa a da plataforma (`inheritedFrom`).
+      summary: Remover tenant email settings
+      tags:
+      - Administration
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '204':
+          description: Sem conteúdo.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/admin/email-settings/test:
+    post:
+      operationId: postTenantEmailTest
+      description: 'POST /admin/email-settings/test: envia uma mensagem real para o email do próprio administrador.'
+      summary: Criar tenant email test
+      tags:
+      - Administration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailTestRequest'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailTestResult'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/admin/staff-accounts:
     get:
       operationId: getStaffAccountListCreate
@@ -10896,6 +11046,156 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
           description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/email-settings:
+    get:
+      operationId: getPlatformEmailSettings
+      description: 'GET|PUT|DELETE /platform/email-settings: o servidor de email de toda a plataforma.'
+      summary: Obter platform email settings
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailSettings'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+    put:
+      operationId: putPlatformEmailSettings
+      description: 'GET|PUT|DELETE /platform/email-settings: o servidor de email de toda a plataforma.'
+      summary: Substituir platform email settings
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailSettingsInput'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailSettings'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+    delete:
+      operationId: deletePlatformEmailSettings
+      description: 'GET|PUT|DELETE /platform/email-settings: o servidor de email de toda a plataforma.'
+      summary: Remover platform email settings
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '204':
+          description: Sem conteúdo.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/email-settings/test:
+    post:
+      operationId: postPlatformEmailTest
+      description: 'POST /platform/email-settings/test: envia uma mensagem real pelo servidor da plataforma.'
+      summary: Criar platform email test
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailTestRequest'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailTestResult'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
   /api/v1/platform/formula-engine:
     get:
       operationId: getPlatformFormulaEngine
@@ -12788,6 +13088,208 @@ paths:
               schema:
                 $ref: '#/components/schemas/TemporaryPasswordResponse'
           description: Criado.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/tenants/{tenant_id}/email-settings:
+    get:
+      operationId: getPlatformTenantEmailSettings
+      description: 'GET|PUT|DELETE /platform/tenants/{id}/email-settings: o servidor próprio de uma seguradora.'
+      summary: Obter platform tenant email settings
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailSettings'
+          description: Sucesso.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+    put:
+      operationId: putPlatformTenantEmailSettings
+      description: 'GET|PUT|DELETE /platform/tenants/{id}/email-settings: o servidor próprio de uma seguradora.'
+      summary: Substituir platform tenant email settings
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailSettingsInput'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailSettings'
+          description: Sucesso.
+        '400':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Pedido inválido (VALIDATION-400).
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+    delete:
+      operationId: deletePlatformTenantEmailSettings
+      description: 'GET|PUT|DELETE /platform/tenants/{id}/email-settings: o servidor próprio de uma seguradora.'
+      summary: Remover platform tenant email settings
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '204':
+          description: Sem conteúdo.
+        '401':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Não autenticado (AUTH-401).
+        '403':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Sem autorização (AUTH-403 / SEC-403).
+        '404':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Recurso não encontrado (NOT-FOUND).
+        '409':
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+          description: Conflito, versão ou estado inválido (CONFLICT, VERSION-CONFLICT, QUOTE-STATE).
+  /api/v1/platform/tenants/{tenant_id}/email-settings/test:
+    post:
+      operationId: postPlatformTenantEmailTest
+      description: 'POST /platform/tenants/{id}/email-settings/test: idem, pelo servidor da seguradora.'
+      summary: Criar platform tenant email test
+      parameters:
+      - in: path
+        name: tenant_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Other
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailTestRequest'
+      security:
+      - oauth2:
+        - q360.read
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailTestResult'
+          description: Sucesso.
         '400':
           content:
             application/problem+json:
@@ -31114,6 +31616,10 @@ components:
           $ref: '#/components/schemas/TenantProfile'
         admin:
           $ref: '#/components/schemas/TenantAdmin'
+        emailSettings:
+          allOf:
+          - $ref: '#/components/schemas/EmailSettingsInput'
+          description: SMTP próprio da seguradora (opcional).
       required:
       - admin
       - name
@@ -31321,6 +31827,10 @@ components:
       properties:
         tenant:
           $ref: '#/components/schemas/TenantResponse'
+        emailSettingsWarning:
+          type:
+          - string
+          - 'null'
         admin:
           $ref: '#/components/schemas/CreatedAdmin'
         temporaryPassword:
@@ -39545,7 +40055,7 @@ components:
         id:
           type: string
         source:
-          $ref: '#/components/schemas/AuditSearchEventSourceEnum'
+          $ref: '#/components/schemas/SourceF9fEnum'
         tenantId:
           type:
           - string
@@ -40655,6 +41165,200 @@ components:
         * `DENTAL` - DENTAL
 
         * `OTHER` - OTHER'
+    EffectiveSourceEnum:
+      enum:
+      - TENANT
+      - PLATFORM
+      - ENV
+      type: string
+      description: '* `TENANT` - TENANT
+
+        * `PLATFORM` - PLATFORM
+
+        * `ENV` - ENV'
+    EmailLastTest:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        ok:
+          type: boolean
+        error:
+          type:
+          - string
+          - 'null'
+      required:
+      - at
+      - error
+      - ok
+    EmailSettings:
+      type: object
+      properties:
+        configured:
+          type: boolean
+        scope:
+          $ref: '#/components/schemas/ScopeF9fEnum'
+        effectiveSource:
+          allOf:
+          - $ref: '#/components/schemas/EffectiveSourceEnum'
+          description: 'Quem envia de facto: este servidor (TENANT/PLATFORM) ou as variáveis de ambiente (ENV).
+
+
+            * `TENANT` - TENANT
+
+            * `PLATFORM` - PLATFORM
+
+            * `ENV` - ENV'
+        inheritedFrom:
+          description: 'Sem configuração própria: de onde vem o servidor em uso.
+
+
+            * `PLATFORM` - PLATFORM
+
+            * `ENV` - ENV'
+          oneOf:
+          - $ref: '#/components/schemas/InheritedFromEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        host:
+          type:
+          - string
+          - 'null'
+        port:
+          type: integer
+        security:
+          type: string
+        username:
+          type: string
+        hasPassword:
+          type: boolean
+        fromAddress:
+          type: string
+        fromName:
+          type: string
+        replyTo:
+          type: string
+        timeoutSeconds:
+          type: integer
+        enabled:
+          type: boolean
+        lastTest:
+          oneOf:
+          - $ref: '#/components/schemas/EmailLastTest'
+          - type: 'null'
+        updatedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - configured
+      - effectiveSource
+      - enabled
+      - fromAddress
+      - fromName
+      - hasPassword
+      - host
+      - inheritedFrom
+      - lastTest
+      - port
+      - replyTo
+      - scope
+      - security
+      - timeoutSeconds
+      - updatedAt
+      - username
+    EmailSettingsInput:
+      type: object
+      description: 'Parcial: só os campos enviados mudam. Na primeira vez são obrigatórios `host` e `fromAddress`.'
+      properties:
+        host:
+          type: string
+          maxLength: 255
+        port:
+          type: integer
+          maximum: 65535
+          minimum: 1
+        security:
+          $ref: '#/components/schemas/SecurityEnum'
+        username:
+          type: string
+          maxLength: 320
+        password:
+          type: string
+          description: 'Omitida: mantém a atual. Vazia: apaga-a. Nunca é devolvida.'
+          maxLength: 500
+        fromAddress:
+          type: string
+          maxLength: 320
+        fromName:
+          type: string
+          maxLength: 200
+        replyTo:
+          type: string
+          maxLength: 320
+        timeoutSeconds:
+          type: integer
+        enabled:
+          type: boolean
+    EmailTestRequest:
+      type: object
+      properties:
+        to:
+          type: string
+          format: email
+          description: Obrigatório na plataforma; o admin de seguradora recebe no seu email.
+    EmailTestResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        error:
+          type:
+          - string
+          - 'null'
+        testedAt:
+          type: string
+          format: date-time
+      required:
+      - error
+      - ok
+      - testedAt
+    InheritedFromEnum:
+      enum:
+      - PLATFORM
+      - ENV
+      type: string
+      description: '* `PLATFORM` - PLATFORM
+
+        * `ENV` - ENV'
+    ScopeF9fEnum:
+      enum:
+      - PLATFORM
+      - TENANT
+      type: string
+      description: '* `PLATFORM` - PLATFORM
+
+        * `TENANT` - TENANT'
+    SecurityEnum:
+      enum:
+      - STARTTLS
+      - SSL
+      - NONE
+      type: string
+      description: '* `STARTTLS` - STARTTLS
+
+        * `SSL` - SSL
+
+        * `NONE` - NONE'
+    SourceF9fEnum:
+      enum:
+      - PLATFORM
+      - TENANT
+      type: string
+      description: '* `PLATFORM` - PLATFORM
+
+        * `TENANT` - TENANT'
 x-q360-document-id: Q360-MVP-ART-006
 x-q360-status: REVIEW
 x-q360-open-decisions:

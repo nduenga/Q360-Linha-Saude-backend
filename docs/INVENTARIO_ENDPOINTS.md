@@ -167,6 +167,29 @@ As operações abaixo foram implementadas depois do inventário inicial. Todas u
 
 As respostas de contas de staff incluem `id`, `email`, `name`, `status`, `roles`, `lastLoginAt` e `lockedUntil`. A criação recebe `{email, name, roles, password?}`; quando `password` é omitida, a resposta inclui `temporaryPassword` uma única vez. A alteração de perfis recebe `{roles}` e a alteração de estado recebe `{status: "ACTIVE" | "DISABLED"}`.
 
+### Servidor de email (SMTP) configurado no painel
+
+| Método | Endpoint | Quem pode | Funcionalidade |
+|---|---|---|---|
+| GET | `/platform/email-settings` | Super administrador | Lê o servidor de email da plataforma (o padrão de todas as seguradoras). |
+| PUT | `/platform/email-settings` | Super administrador | Grava (parcialmente) o servidor da plataforma e testa logo a ligação. |
+| DELETE | `/platform/email-settings` | Super administrador | Apaga a configuração; volta às variáveis de ambiente `EMAIL_*`. |
+| POST | `/platform/email-settings/test` | Super administrador | Envia uma mensagem real, para `{to}`, pelo servidor da plataforma. |
+| GET · PUT · DELETE | `/platform/tenants/{tenant_id}/email-settings` | Super administrador | Idem, para o servidor próprio de uma seguradora. |
+| POST | `/platform/tenants/{tenant_id}/email-settings/test` | Super administrador | Mensagem de teste, para `{to}`, pelo servidor da seguradora. |
+| GET · PUT · DELETE | `/admin/email-settings` | Administrador do tenant | O administrador gere o servidor da sua seguradora. |
+| POST | `/admin/email-settings/test` | Administrador do tenant | Mensagem de teste, sempre para o email do próprio administrador (corpo ignorado). |
+
+`POST /platform/tenants` aceita ainda `emailSettings` (mesmo corpo do PUT) para criar a seguradora já com servidor próprio; a resposta traz `emailSettingsWarning` (texto ou `null`).
+
+**Corpo do PUT (parcial: só o que se envia muda).** `{host, port (25|465|587|2525), security ("STARTTLS"|"SSL"|"NONE"), username, password, fromAddress, fromName, replyTo, timeoutSeconds (3–60), enabled}`. Na primeira gravação são obrigatórios `host` e `fromAddress`. `password` omitida mantém a atual e `""` apaga-a; **a palavra-passe nunca é devolvida** (só `hasPassword`) e fica cifrada na base de dados (chave `Q360_SECRETS_KEY`, obrigatória em produção).
+
+**Resposta (GET/PUT).** `{configured, scope ("PLATFORM"|"TENANT"), effectiveSource ("TENANT"|"PLATFORM"|"ENV"), inheritedFrom ("PLATFORM"|"ENV"|null), host, port, security, username, hasPassword, fromAddress, fromName, replyTo, timeoutSeconds, enabled, lastTest {at, ok, error}|null, updatedAt}`. Cada gravação abre sessão e autentica no servidor (sem enviar mensagem) e guarda o resultado em `lastTest`. `POST …/test` responde `{ok, error, testedAt}`.
+
+**Quem envia.** O servidor da seguradora, se estiver ativo **e** o último teste tiver corrido bem; senão o da plataforma, nas mesmas condições; senão as variáveis de ambiente. Um servidor que falhou o teste não é usado (nada se perde: os emails continuam a sair pelo seguinte). O nome do remetente continua «Q360 - <seguradora>»; só o endereço (e o `Reply-To`) vêm da configuração.
+
+**Erros.** `400 VALIDATION-400` para porta não permitida, host inválido ou que aponte para uma rede interna (fora de desenvolvimento), remetente inválido ou campos em falta; `404` para um tenant inexistente; `429 RATE-LIMIT` nos testes repetidos. Auditoria: `platform.email_settings_updated|deleted|tested` (sem segredos), com o tenant.
+
 ### Contratos de agregados familiares
 
 `POST /households` recebe `{proposerId, primaryMemberId, joinedAt}`. É opcional criar agregado: colaboradores de uma empresa podem existir sem um. Quando é criado, o titular tem obrigatoriamente de ser uma pessoa segura ativa, com relação `COLABORADOR`, da mesma empresa. Cada colaborador pode encabeçar o seu próprio agregado; a empresa não tem um titular global.

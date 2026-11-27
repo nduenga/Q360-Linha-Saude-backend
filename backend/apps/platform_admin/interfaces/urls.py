@@ -51,6 +51,13 @@ from apps.platform_admin.interfaces.views import (
     PlatformTenantListCreateView,
 )
 
+from apps.platform_admin.interfaces.email_views import (  # noqa: E402
+    PlatformEmailSettingsView,
+    PlatformEmailTestView,
+    PlatformTenantEmailSettingsView,
+    PlatformTenantEmailTestView,
+)
+
 urlpatterns = [
     path("platform/auth/login", PlatformLoginView.as_view(), name="platform-login"),
     path("platform/me", PlatformMeView.as_view(), name="platform-me"),
@@ -66,6 +73,12 @@ urlpatterns = [
     path("platform/admins", PlatformAdminListCreateView.as_view(), name="platform-admins"),
     path("platform/admins/<uuid:admin_id>", PlatformAdminStatusView.as_view(), name="platform-admin-status"),
     path("platform/admins/<uuid:admin_id>/reset-password", PlatformAdminResetPasswordView.as_view(), name="platform-admin-reset"),
+    path("platform/email-settings", PlatformEmailSettingsView.as_view(), name="platform-email-settings"),
+    path("platform/email-settings/test", PlatformEmailTestView.as_view(), name="platform-email-test"),
+    path("platform/tenants/<uuid:tenant_id>/email-settings", PlatformTenantEmailSettingsView.as_view(),
+         name="platform-tenant-email-settings"),
+    path("platform/tenants/<uuid:tenant_id>/email-settings/test", PlatformTenantEmailTestView.as_view(),
+         name="platform-tenant-email-test"),
     path("platform/audit", PlatformAuditView.as_view(), name="platform-audit"),
     path("platform/audit/search", PlatformAuditSearchView.as_view(), name="platform-audit-search"),
     path("platform/audit/export", PlatformAuditExportView.as_view(), name="platform-audit-export"),
