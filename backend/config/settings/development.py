@@ -1,7 +1,7 @@
 from .base import *
 
 DEBUG = True
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "10.0.2.2", "192.168.8.25"]
 
 # Local development makes frequent API calls while rendering quote forms and
 # previews. Keep the global production request guard disabled in this
