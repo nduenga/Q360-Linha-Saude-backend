@@ -48,6 +48,9 @@ def _check_context_type(context_type: str) -> None:
 def _resolve(context_type: str, ref: str, *, proposer_ids: list[uuid.UUID] | None):
     """The proposer a conversation belongs to, or 404. `proposer_ids=None`
     means staff (the whole tenant); otherwise the caller's own proposers."""
+    # Accept context values from clients that serialize enum names in lowercase
+    # (for example `request`) while keeping stored message types canonical.
+    context_type = (context_type or "").strip().upper()
     _check_context_type(context_type)
     model, field = {
         "QUOTE": (Quote, "quote_number"),
