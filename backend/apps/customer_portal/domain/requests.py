@@ -57,12 +57,12 @@ REQUEST_TYPES: dict[str, dict] = {
 # documento é gerado na hora a partir dos dados da apólice.
 SELF_SERVICE: dict[str, str] = {
     "DOCUMENT_COPY": (
-        "Descarregue a apólice em «Documentos» (GET /customer-portal/documents) e o cartão de cada pessoa segura "
-        "em «Cartão»: não precisa de fazer um pedido."
+        "Pode descarregar a apólice em «Documentos» e o cartão de cada pessoa segura em «Cartão», "
+        "sem precisar de fazer um pedido."
     ),
     "STATEMENT": (
-        "Descarregue a declaração de cobertura ou o comprovativo de pagamento em "
-        "GET /customer-portal/policies/{policyNumber}/statement?kind=COVERAGE|PAYMENT: não precisa de fazer um pedido."
+        "Pode descarregar a declaração de cobertura ou o comprovativo de pagamento na sua apólice, "
+        "sem precisar de fazer um pedido."
     ),
 }
 

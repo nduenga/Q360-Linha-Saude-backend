@@ -4,7 +4,7 @@ aceitar, apólice a vencer.
 
 Na web essas notificações só aparecem quando o cliente abre a central; com a
 app móvel o push tem de chegar sem ele abrir nada, por isso este comando corre
-de hora a hora (cron / agendador do servidor):
+a cada 5 minutos pelo serviço de sincronização da app:
 
     python manage.py sync_portal_notifications
 

@@ -48,6 +48,9 @@ def _check_context_type(context_type: str) -> None:
 def _resolve(context_type: str, ref: str, *, proposer_ids: list[uuid.UUID] | None):
     """The proposer a conversation belongs to, or 404. `proposer_ids=None`
     means staff (the whole tenant); otherwise the caller's own proposers."""
+    # Accept context values from clients that serialize enum names in lowercase
+    # (for example `request`) while keeping stored message types canonical.
+    context_type = (context_type or "").strip().upper()
     _check_context_type(context_type)
     model, field = {
         "QUOTE": (Quote, "quote_number"),
@@ -162,7 +165,7 @@ def staff_send(*, context_type: str, context_ref: str, body: str, actor_ref: str
             notifications_service.notify_account(
                 account_id=account_id, dedupe_key=f"message:{message.id}", code="NEW_MESSAGE",
                 title="Nova mensagem do seu mediador", body=body[:200],
-                link=f"/portal/mensagens/{context_type.lower()}/{context_ref}",
+                link=f"/portal/mensagens/{context_type}/{context_ref}",
             )
     _audit.record(
         action="customer_portal.message_sent", entity_type="PortalMessage", entity_id=str(message.id),
