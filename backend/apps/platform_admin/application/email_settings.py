@@ -125,9 +125,12 @@ def validate_payload(data: dict[str, Any], *, existing: EmailSettings | None) ->
 
 # ------------------------------------------------------------------ ligação
 def _connection(row: EmailSettings, *, fail_silently: bool = False):
+    # Utilizador e palavra-passe vazios têm de seguir como "" e não None: com None o
+    # Django usa EMAIL_HOST_USER/EMAIL_HOST_PASSWORD do .env e o servidor configurado
+    # no painel acabava a enviar com a conta do ambiente.
     return get_connection(
-        backend=settings.Q360_EMAIL_CONFIG_BACKEND, host=row.host, port=row.port, username=row.username or None,
-        password=decrypt_secret(row.password_enc) or None, use_tls=row.security == "STARTTLS",
+        backend=settings.Q360_EMAIL_CONFIG_BACKEND, host=row.host, port=row.port, username=row.username or "",
+        password=decrypt_secret(row.password_enc) or "", use_tls=row.security == "STARTTLS",
         use_ssl=row.security == "SSL", timeout=row.timeout_seconds, fail_silently=fail_silently,
     )
 
@@ -137,7 +140,12 @@ def check_connection(row: EmailSettings) -> tuple[bool, str]:
     try:
         connection = _connection(row)
         connection.open()
-        connection.close()
+        try:
+            smtp = getattr(connection, "connection", None)
+            if smtp is not None and not row.username and smtp.has_extn("auth"):
+                return False, "O servidor exige autenticação: indique o utilizador e a palavra-passe."
+        finally:
+            connection.close()
     except Exception as exc:  # noqa: BLE001 - qualquer falha SMTP é o resultado do teste
         return False, f"{type(exc).__name__}: {exc}"[:500]
     return True, ""

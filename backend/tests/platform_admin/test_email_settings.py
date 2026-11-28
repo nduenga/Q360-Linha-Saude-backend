@@ -252,3 +252,18 @@ def test_health_panel_counts_a_configured_smtp_as_email_done():
     client.put(f"/api/v1/platform/tenants/{made['tenant']['id']}/email-settings", TENANT_SMTP, format="json")
     steps = {s["key"]: s for s in client.get(health_url).data["onboarding"]["steps"]}
     assert "Servidor de email por configurar" not in steps["email"]["detail"]
+
+
+@pytest.mark.django_db
+def test_panel_smtp_never_inherits_the_env_credentials(settings):
+    settings.Q360_EMAIL_CONFIG_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    settings.EMAIL_HOST_USER = "conta-do-env@gmail.com"
+    settings.EMAIL_HOST_PASSWORD = "palavra-do-env"
+    row = email_settings.EmailSettings(host="smtp.fornecedor.ao", port=587, security="STARTTLS", username="",
+                                       password_enc="", from_address="a@fornecedor.ao", timeout_seconds=20)
+    connection = email_settings._connection(row)
+    assert connection.username == "" and connection.password == ""
+    with_login = email_settings.EmailSettings(host="smtp.fornecedor.ao", port=587, security="STARTTLS", username="api",
+                                              password_enc=email_settings.encrypt_secret("minha"),
+                                              from_address="a@fornecedor.ao", timeout_seconds=20)
+    assert (email_settings._connection(with_login).username, email_settings._connection(with_login).password) == ("api", "minha")

@@ -88,12 +88,14 @@ def _branding() -> tuple[str | None, tuple[bytes, str] | None] | None:
 def sender(tenant_name: str | None = None) -> str:
     """Remetente «Q360 - <nome do tenant>» <endereço configurado>.
 
-    O endereço vem de CUSTOMER_PORTAL_EMAIL_FROM (se já tiver um nome, só o
-    endereço é aproveitado). O nome do tenant é o do contexto atual; sem
-    tenant (p.ex. `check_email`) o nome fica só «Q360»."""
-    address = parseaddr(settings.CUSTOMER_PORTAL_EMAIL_FROM)[1] or settings.CUSTOMER_PORTAL_EMAIL_FROM.strip()
-    name = (tenant_name or _current_tenant_name() or "").strip()
-    return formataddr((f"Q360 - {name}" if name else "Q360", address))
+    O endereço vem do painel (seguradora, senão plataforma, senão variáveis de
+    ambiente). O nome do tenant é o do contexto atual; sem tenant (p.ex.
+    `check_email`) o nome fica só «Q360»."""
+    from apps.platform_admin.application import email_settings
+    resolved = email_settings.resolve()
+    address = resolved.from_address or parseaddr(settings.CUSTOMER_PORTAL_EMAIL_FROM)[1] or settings.CUSTOMER_PORTAL_EMAIL_FROM.strip()
+    name = (tenant_name or _current_tenant_name() or "Q360").strip()
+    return formataddr((name, address))
 
 
 def _current_tenant_name() -> str | None:
